@@ -79,9 +79,10 @@ class StubProvider(private val approveAfter: Int = 2) {
     var refreshError: String? = null
     var denyDevice = false
     val seenAuth = mutableListOf<String?>()
+    var deviceForm: Map<String, String> = emptyMap()
 
     init {
-        server.createContext("/device") { ex -> reply(ex, 200, """{"device_code":"dev-secret","user_code":"WDJB-MJHT","verification_uri":"$base/activate","expires_in":600,"interval":5}""") }
+        server.createContext("/device") { ex -> deviceForm = form(ex); reply(ex, 200, """{"device_code":"dev-secret","user_code":"WDJB-MJHT","verification_uri":"$base/activate","expires_in":600,"interval":5}""") }
         server.createContext("/token") { ex ->
             val form = form(ex)
             when (form["grant_type"]) {
@@ -152,6 +153,7 @@ class AccountFlowTest {
         val s = service()
         val flow = s.signIn("stub")
         assertEquals("WDJB-MJHT", flow.userCode)
+        assertTrue(stub.deviceForm["device_name"].orEmpty().startsWith("Infantry on "), "device_name sent: ${stub.deviceForm}")
         assertTrue(flow.verificationUri.endsWith("/activate"))
         assertEquals("00000000-0000-4000-8000-000000000001", flow.id, "the flow id is a UUID from the id source")
         assertFalse(s.signedIn(s.provider("stub")))

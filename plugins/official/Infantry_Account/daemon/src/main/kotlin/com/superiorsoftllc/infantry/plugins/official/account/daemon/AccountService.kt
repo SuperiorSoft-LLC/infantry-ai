@@ -57,6 +57,7 @@ class AccountService(
     private val cacheSeconds: () -> Long,
     private val now: () -> Long = System::currentTimeMillis,
     private val newId: () -> String = { UUID.randomUUID().toString() },
+    private val deviceName: () -> String = { "Infantry on " + hostName() },
 ) {
     private class Access(val token: SecretValue, val expiresAt: Long)
     private class Doc(val fetchedAt: Long, val json: JsonObject?, val error: String?)
@@ -89,7 +90,7 @@ class AccountService(
     @Synchronized
     fun signIn(providerId: String): SignInFlow {
         val p = provider(providerId)
-        val (status, body) = postForm(p.deviceAuthorizationUrl, listOf("client_id" to p.clientId, "scope" to p.scopes.joinToString(" ")))
+        val (status, body) = postForm(p.deviceAuthorizationUrl, listOf("client_id" to p.clientId, "scope" to p.scopes.joinToString(" "), "device_name" to deviceName()))
         check(status in 200..299 && body != null) { "${p.name} refused the sign-in request (${body?.str("error") ?: "HTTP $status"})" }
         val code = body.str("device_code")
         val user = body.str("user_code")
@@ -332,3 +333,8 @@ class AccountService(
         const val EXPIRY_SKEW_MS = 30_000L
     }
 }
+
+/** The machine name for the sign-in page's "Infantry on <host>" label; never throws. */
+internal fun hostName(): String =
+    (System.getenv("COMPUTERNAME") ?: System.getenv("HOSTNAME") ?: runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull())
+        ?.takeIf { it.isNotBlank() } ?: "this computer"
