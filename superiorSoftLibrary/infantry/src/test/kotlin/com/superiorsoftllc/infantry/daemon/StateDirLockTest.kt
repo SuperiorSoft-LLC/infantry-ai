@@ -136,6 +136,20 @@ class StateDirLockTest {
         }
     }
 
+    @Test fun homeWithoutStateDirWarnsAndNamesTheFix() {
+        val dflt = File("/users/x/.infantry")
+        val warning = StateDirLock.homeWithoutStateDirWarning(dflt, mapOf("INFANTRY_HOME" to "/scratch/h")::get)
+        assertNotNull(warning)
+        assertTrue("INFANTRY_STATE_DIR" in warning && dflt.absolutePath in warning && "/scratch/h" in warning, warning)
+    }
+
+    @Test fun noWarningWhenStateDirIsSetOrHomeIsNot() {
+        val dflt = File("/users/x/.infantry")
+        assertEquals(null, StateDirLock.homeWithoutStateDirWarning(dflt, mapOf("INFANTRY_HOME" to "h", "INFANTRY_STATE_DIR" to "s")::get))
+        assertEquals(null, StateDirLock.homeWithoutStateDirWarning(dflt, mapOf<String, String>()::get))
+        assertEquals(null, StateDirLock.homeWithoutStateDirWarning(dflt, mapOf("INFANTRY_HOME" to " ")::get))
+    }
+
     @Test fun aHolderThatHasNotBoundYetSaysSo() {
         val stateDir = tempStateDir()
         val held = StateDirLock.acquire(stateDir, pid = 4242L)

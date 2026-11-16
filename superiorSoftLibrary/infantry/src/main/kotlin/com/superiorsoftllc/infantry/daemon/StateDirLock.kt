@@ -90,6 +90,18 @@ object StateDirLock {
         return Held(file, channel, lock, pid).also { it.writeHolder(Holder(pid, null)) }
     }
 
+    /**
+     * DAEMON-LOCK-CLOBBER-1: `INFANTRY_HOME` moves only `commands.json` and `harnesses/`, never the state dir. A launcher that
+     * sets it hoping to isolate a throwaway daemon silently lands on [defaultDir] (the owner's). Returns the one warning
+     * line for that case, else null. [setting] reads a name the way the daemon does (property, then env).
+     */
+    fun homeWithoutStateDirWarning(defaultDir: File, setting: (String) -> String?): String? {
+        val home = setting("INFANTRY_HOME")?.takeIf { it.isNotBlank() } ?: return null
+        if (!setting("INFANTRY_STATE_DIR").isNullOrBlank()) return null
+        return "INFANTRY_HOME=$home is set but INFANTRY_STATE_DIR is not: the state dir is the default " +
+            "${defaultDir.absolutePath} (INFANTRY_HOME does not move it). Did you mean INFANTRY_STATE_DIR?"
+    }
+
     /** The holder [file] describes; unknown parts are null. Never throws. */
     fun read(file: File): Holder {
         val lines = runCatching { file.readLines() }.getOrDefault(emptyList())
