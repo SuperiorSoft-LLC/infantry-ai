@@ -99,7 +99,7 @@ fun GlobalWorkersDialog(
     AhqAlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-        modifier = Modifier.fillMaxWidth(0.92f).heightIn(max = 720.dp).testTag(GLOBAL_WORKERS_DIALOG_TAG),
+        modifier = Modifier.fillMaxSize().padding(28.dp).testTag(GLOBAL_WORKERS_DIALOG_TAG),
         wide = true,
         containerColor = Palette.Panel,
         title = { Text("Working in every project (${state.workingCount})", color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) },
@@ -107,7 +107,7 @@ fun GlobalWorkersDialog(
             if (lanes.isEmpty()) {
                 Text("No agents working.", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.padding(8.dp).testTag(GLOBAL_WORKERS_EMPTY_TAG))
             } else {
-                Row(Modifier.fillMaxWidth().height(520.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxSize().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     lanes.forEach { lane -> WorkerLaneColumn(lane, state, onOpenChat, onRemove, work) }
                 }
             }
@@ -150,7 +150,7 @@ fun GlobalWorkerChatDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onOpenSession, modifier = Modifier.testTag(GLOBAL_WORKERS_OPEN_SESSION_TAG)) { Text("Open session") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-        modifier = Modifier.fillMaxWidth(0.8f).heightIn(max = 760.dp).testTag(GLOBAL_WORKERS_CHAT_TAG),
+        modifier = Modifier.fillMaxSize().padding(28.dp).testTag(GLOBAL_WORKERS_CHAT_TAG),
         wide = true,
         containerColor = Palette.Panel,
         title = {
@@ -160,7 +160,7 @@ fun GlobalWorkerChatDialog(
             )
         },
         text = {
-            Box(Modifier.fillMaxWidth().height(600.dp)) {
+            Box(Modifier.fillMaxSize()) {
                 if (chatPanel != null) chatPanel(Modifier.fillMaxSize())
                 else Text("The chat is not loaded (Infantry_Chat is off).", color = Palette.Muted, fontSize = 12.sp)
             }
