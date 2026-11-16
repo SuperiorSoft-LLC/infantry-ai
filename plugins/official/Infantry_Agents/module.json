@@ -41,6 +41,25 @@
   ],
   "config": [
     {
+      "node": "infantry.agents",
+      "group": "Experimental",
+      "title": "Experimental",
+      "tab": "Agents",
+      "order": 900,
+      "applies": "Applies to: the Working counter at the top of the left panel.",
+      "keywords": ["experimental", "working", "workers", "projects", "lanes"],
+      "fields": [
+        {
+          "key": "ui.experimental.globalWorkers",
+          "type": "checkbox",
+          "label": "Click Working to see the agents working in every project (experimental)",
+          "default": false,
+          "order": 1,
+          "scope": "device"
+        }
+      ]
+    },
+    {
       "node": "infantry.shell.config.progressStale",
       "group": "Progress bars: stale after",
       "title": "Progress bars: stale after",

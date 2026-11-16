@@ -37,6 +37,7 @@ object InfantryProvider {
         put("id", ID)
         put("name", "Infantry AI Hosting")
         put("icon", "cloud")
+        put("description", "Servers for your sites, managed on the Infantry AI Hosting website.")
         put("signIn", buildJsonObject {
             put("method", "device_code")
             put("deviceAuthorizationUrl", "$api${HostingRoutes.DEVICE_CODE}")
@@ -75,11 +76,18 @@ class SitesDaemonPlugin : DaemonPlugin {
         }
 
         api.routes.handle("GET", "state") { reply { stateOf(api, service) } }
-        api.routes.handle("POST", "create") { call -> reply { val b = body(call); service.create(b.need("name"), b.str("sshPublicKey"), b.str("idempotencyKey")) } }
-        api.routes.handle("POST", "power") { call -> reply { val b = body(call); service.power(b.need("id"), b.need("action")); ok() } }
-        api.routes.handle("POST", "destroy") { call -> reply { service.destroy(body(call).need("id")); ok() } }
 
-        for (t in tools(service)) api.tools.register(t)
+        // SITES-SSH-1: zero-config SSH. The device key lives in this plugin's keystore entry; pins in plugin storage (public data).
+        val pins: HostKeyPins = try { StorageHostKeyPins(api.storage) } catch (e: Exception) { api.log("plugin storage unavailable: SSH host keys are pinned in memory only"); MemoryHostKeyPins() }
+        val ssh = SitesSsh(
+            servers = { service.list().mapNotNull { it as? JsonObject }.map { (it.str("id") ?: "") to (it.str("name") ?: "") }.filter { it.first.isNotEmpty() } },
+            key = DeviceKey({ api.pluginSecrets }),
+            certs = CertCache(CertIssuer { id, pub -> service.sshCertificate(id, pub) }),
+            exec = SshExec(pins) { api.log(it) },
+            limits = { limitsOf(api) },
+        )
+
+        for (t in tools(service, ssh)) api.tools.register(t)
     }
 
     override fun stop() {
@@ -117,7 +125,7 @@ class SitesDaemonPlugin : DaemonPlugin {
         return try {
             val servers = service.list()
             val limit = (provider["limits"] as? JsonObject)?.get("servers.max")
-            state("ready") { put("servers", servers); limit?.let { put("limit", it) } }
+            state("ready") { put("servers", servers); limit?.let { put("limit", it) }; api.endpoint(SITE_ENDPOINT)?.takeIf { it.isNotBlank() }?.let { put("siteUrl", it.trimEnd('/') + "/hosting") } }
         } catch (e: SitesException) {
             if (e.kind == SitesException.NOT_ENTITLED || e.kind == SitesException.SIGNED_OUT) refreshAccount()
             val until = if (e.kind == SitesException.NOT_ENTITLED) reclaim() else null
@@ -125,16 +133,45 @@ class SitesDaemonPlugin : DaemonPlugin {
         }
     }
 
-    // ---- agent tools: write / destructive, declared in module.json `daemon.tools` ------------------------------------
+    // ---- agent tools: read only, declared in module.json `daemon.tools` ------------------------------------
 
-    private fun tools(service: SitesService): List<DaemonTool> = listOf(
+    internal fun tools(service: SitesService, ssh: SitesSsh): List<DaemonTool> = listOf(
         tool("infantry_sites_list", "List your hosting servers (id, name, status, ip, region, size, createdAt, destroyAt).", obj(), read = true) { service.list() },
-        tool("infantry_sites_create", "Create a hosting server. Counts against your plan's server limit.",
-            obj("name" to "string", "sshPublicKey" to "string", "idempotencyKey" to "string", required = listOf("name"))) { service.create(it.need("name"), it.str("sshPublicKey"), it.str("idempotencyKey")) },
-        tool("infantry_sites_start", "Power on one of your hosting servers.", obj("id" to "string", required = listOf("id"))) { service.power(it.need("id"), "start"); ok() },
-        tool("infantry_sites_stop", "Shut down one of your hosting servers.", obj("id" to "string", required = listOf("id"))) { service.power(it.need("id"), "stop"); ok() },
-        tool("infantry_sites_destroy", "Permanently destroy one of your hosting servers and its data.", obj("id" to "string", required = listOf("id")), destructive = true) { service.destroy(it.need("id")); ok() },
+        tool(SSH_EXEC, "Run a shell command on one of your hosting servers over SSH (no setup: this PC's key and a short-lived certificate). Returns exitCode, stdout, stderr (capped). 'server' is a name or id from infantry_sites_list, optional when you have one server.",
+            obj("server" to "string", "command" to "string", "timeoutSec" to "integer", required = listOf("command"))) { a ->
+            val timeout = a.str("timeoutSec")?.toLongOrNull()?.coerceAtMost(maxExecSec)
+            val (name, r) = ssh.run(a.str("server"), a.need("command"), timeout)
+            execAnswer(name, r)
+        },
+        tool(SSH_UPLOAD, "Write a small text file on one of your hosting servers over SSH (creates parent folders, replaces the file). 'server' as in $SSH_EXEC.",
+            obj("server" to "string", "path" to "string", "content" to "string", required = listOf("path", "content"))) { a ->
+            val content = (a["content"] as? JsonPrimitive)?.contentOrNull ?: throw IllegalArgumentException("'content' is required")
+            val (name, r) = ssh.upload(a.str("server"), a.need("path"), content)
+            execAnswer(name, r)
+        },
     )
+
+    private var maxExecSec = SshLimits.DEFAULT_EXEC_TIMEOUT_MAX_SEC
+
+    private fun execAnswer(server: String, r: SshExecResult): JsonObject = buildJsonObject {
+        put("server", server)
+        r.exitCode?.let { put("exitCode", it) }
+        put("stdout", r.stdout)
+        put("stderr", r.stderr)
+        if (r.truncated) put("truncated", true)
+        if (r.timedOut) put("timedOut", true)
+    }
+
+    private fun limitsOf(api: DaemonApi): SshLimits {
+        fun n(key: String, def: Long) = api.config(key)?.trim()?.toLongOrNull()?.takeIf { it > 0 } ?: def
+        maxExecSec = n(SshLimits.EXEC_TIMEOUT_MAX_KEY, SshLimits.DEFAULT_EXEC_TIMEOUT_MAX_SEC)
+        return SshLimits(
+            connectTimeoutMs = n(SshLimits.CONNECT_TIMEOUT_KEY, SshLimits.DEFAULT_CONNECT_TIMEOUT_SEC) * 1000,
+            execTimeoutMs = n(SshLimits.EXEC_TIMEOUT_KEY, SshLimits.DEFAULT_EXEC_TIMEOUT_SEC) * 1000,
+            maxOutputBytes = n(SshLimits.MAX_OUTPUT_KEY, SshLimits.DEFAULT_MAX_OUTPUT_BYTES.toLong()).toInt(),
+            maxUploadBytes = n(SshLimits.MAX_UPLOAD_KEY, SshLimits.DEFAULT_MAX_UPLOAD_BYTES.toLong()).toInt(),
+        )
+    }
 
     private fun tool(toolName: String, desc: String, schema: JsonObject, read: Boolean = false, destructive: Boolean = false, run: (JsonObject) -> JsonElement): DaemonTool = object : DaemonTool {
         override val name = toolName
@@ -184,6 +221,8 @@ class SitesDaemonPlugin : DaemonPlugin {
         /** module.json `daemon.endpoints` names: the hosting API (with its /api prefix) and the plans/billing site. */
         const val API_ENDPOINT = "api"
         const val SITE_ENDPOINT = "site"
+        const val SSH_EXEC = "infantry_sites_ssh_exec"
+        const val SSH_UPLOAD = "infantry_sites_ssh_upload"
     }
 }
 

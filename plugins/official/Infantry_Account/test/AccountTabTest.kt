@@ -9,6 +9,7 @@ import com.superiorsoftllc.infantry.ui.plugin.TabContainers
 import com.superiorsoftllc.infantry.ui.plugin.TabFactory
 import com.superiorsoftllc.infantry.ui.plugin.TabProvider
 import com.superiorsoftllc.infantry.ui.plugin.tabIcon
+import com.superiorsoftllc.infantry.ui.model.AppState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -16,28 +17,44 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AccountTabTest {
-    /** A tiny stand-in for another plugin's service: it adds one section to the Account tab and knows nothing else about it. */
-    private val acme = InfantryModule(
-        ModuleManifest(name = "Acme_Section", version = "1.0.0", author = "Acme", description = "A test provider section.", tabs = listOf(TabDeclaration("acme.account.section", TabContainers.CENTER))),
-        listOf(
-            TabProvider(
-                id = "acme.account.section", container = TabContainers.CENTER, order = ACCOUNT_SECTION_ORDER_BASE + 10,
-                title = { "Acme" }, icon = tabIcon("acme", { moveTo(1f, 1f); lineTo(2f, 2f) }), testTag = "center-tab-ACME", parent = ACCOUNT_TAB_ID,
-            ) { },
-        ),
-    )
+    private val acmeDashboard = TabProvider(
+        id = "acme.account.section", container = TabContainers.CENTER, order = 30,
+        title = { "Acme" }, icon = tabIcon("acme", { moveTo(1f, 1f); lineTo(2f, 2f) }), testTag = "center-tab-ACME", parent = ACCOUNT_TAB_ID,
+    ) { }
 
     @Test
-    fun `the Account tab draws Overview and Billing, and a second plugin's section joins them without any setting`() {
+    fun `the tab is labelled Services and a second plugin's dashboard section joins it without any setting`() {
         val alone = TabFactory(listOf(InfantryAccount))
-        assertTrue(alone.grouped(ACCOUNT_TAB_ID), "the sections are on by default")
-        assertEquals(listOf(ACCOUNT_OVERVIEW_TAB_ID, ACCOUNT_BILLING_TAB_ID), alone.children(ACCOUNT_TAB_ID).map { it.id })
-        assertEquals(listOf(ACCOUNT_TAB_ID), alone.tabs(TabContainers.CENTER).map { it.id }, "only the Account tab is in the strip")
-
-        val both = TabFactory(listOf(InfantryAccount, acme))
-        assertEquals(listOf(ACCOUNT_OVERVIEW_TAB_ID, ACCOUNT_BILLING_TAB_ID, "acme.account.section"), both.children(ACCOUNT_TAB_ID).map { it.id })
-        assertEquals(ACCOUNT_TAB_ID, both.hostOf("acme.account.section"))
+        assertEquals(listOf(ACCOUNT_TAB_ID), alone.tabs(TabContainers.CENTER).map { it.id })
+        assertEquals("Services", alone.find(ACCOUNT_TAB_ID)!!.title(AppState()))
+        val both = TabFactory(listOf(InfantryAccount, InfantryModule(
+            ModuleManifest(name = "Acme_Section", version = "1.0.0", author = "Acme", description = "x", tabs = listOf(TabDeclaration("acme.account.section", TabContainers.CENTER))),
+            listOf(acmeDashboard),
+        )))
+        assertEquals(listOf("acme.account.section"), both.children(ACCOUNT_TAB_ID).map { it.id })
         assertEquals(listOf(ACCOUNT_TAB_ID), both.tabs(TabContainers.CENTER).map { it.id })
+    }
+
+    @Test
+    fun `a second fake provider shows in the list, Sign in until a token exists, then Connected with its dashboard`() {
+        fun list(signedIn: Boolean) = AccountParser.parse(
+            """{"providers":[
+              {"id":"infantry","name":"Hosting","signedIn":true,"services":[{"id":"h","name":"Hosting","entitled":true,"section":"infantry.sites"}]},
+              {"id":"acme","name":"Acme Cloud","description":"Acme things","signedIn":$signedIn,"services":[{"id":"w","name":"W","entitled":false,"section":"acme.account.section"}]},
+              {"id":"plain","name":"No dash","signedIn":true,"services":[]}]}""",
+        )!!
+        val out = list(false)
+        assertEquals(listOf("infantry", "acme", "plain"), out.map { it.id })
+        assertEquals("Acme things", out[1].description)
+        val loaded = { id: String -> id == "acme.account.section" || id == "infantry.sites" }
+        assertEquals(false, out[1].signedIn, "no token: the card shows Sign in")
+        assertEquals(false, canOpenDashboard(out[1], loaded), "a signed-out card opens nothing")
+        val on = list(true)
+        assertEquals(true, on[1].signedIn, "token: the card shows Connected")
+        assertEquals("acme.account.section", on[1].dashboardTabId)
+        assertEquals(true, canOpenDashboard(on[1], loaded))
+        assertEquals(false, canOpenDashboard(on[1]) { false }, "dashboard plugin not loaded: nothing opens")
+        assertEquals(false, canOpenDashboard(on[2], loaded), "a provider with no dashboard: Connected only")
     }
 
     @Test

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "apiVersion": 2,
   "author": "Infantry AI",
-  "description": "The Account tab: sign in to any service that registers as an account provider (device code), see your plan and billing, and let permitted plugins ask for entitlements and tokens.",
+  "description": "The Services tab (id infantry.account): list services, sign in to any service that registers as an account provider (device code), see your plan and billing, and let permitted plugins ask for entitlements and tokens.",
   "tier": "official",
   "sequence": [],
   "entry": "com.superiorsoftllc.infantry.plugins.official.account.AccountPlugin",
@@ -22,7 +22,7 @@
     "config": [
       {
         "node": "infantry.account.service", "group": "Account", "title": "Account", "tab": "Plugins", "order": 920,
-        "applies": "Applies to: how long the Account tab keeps each provider's account document.",
+        "applies": "Applies to: how long the Services tab keeps each provider's account document.",
         "keywords": ["account", "provider", "sign in", "plan", "billing"],
         "fields": [
           { "key": "account.cacheSeconds", "type": "number", "label": "Keep the account document for (seconds)", "default": 30, "min": 0, "max": 3600, "step": 1, "scope": "daemon", "order": 1 }
@@ -78,9 +78,7 @@
     }
   ],
   "tabs": [
-    { "id": "infantry.account", "container": "center" },
-    { "id": "infantry.account.overview", "container": "center" },
-    { "id": "infantry.account.billing", "container": "center" }
+    { "id": "infantry.account", "container": "center" }
   ],
   "config": [
     {
@@ -91,7 +89,7 @@
       "order": 70,
       "keywords": ["account", "tabs", "sections", "sub-tabs"],
       "fields": [
-        { "key": "children.grouped", "type": "checkbox", "label": "Show the Account sections (Overview, Billing and the ones plugins add) inside the Account tab", "default": true }
+        { "key": "children.grouped", "type": "checkbox", "label": "Show a service's dashboard section inside the Services tab", "default": true }
       ]
     }
   ]

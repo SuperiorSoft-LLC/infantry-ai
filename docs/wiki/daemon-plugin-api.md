@@ -199,7 +199,8 @@ environment, and reads them with `api.endpoint(name)`:
   `infantryEnv` (or `INFANTRY_ENV` while building), passed to the JVM as `-Dinfantry.env` (the headless archive also carries an
   `ENVIRONMENT` file). `gradle run` / `runDaemon` and a plain local build are `dev`; the project `build` script passes its
   `env` arg (default `staging`); release and nightly builds are `prod`. Core knows the names only as strings.
-- **Resolution** (`ServiceEndpoints`): the exact environment, else `prod`, else null.
+- **Resolution** (`ServiceEndpoints`): the exact environment, else (in any environment but `prod`) `dev`, else `prod`, else
+  null. A test build such as `staging` never falls through to the real service when the module has a `dev` address.
 - **Load check:** every address must be http(s) and a `prod` address https, or the daemon half is refused with the reason.
 - **Developer override:** `INFANTRY_ENDPOINT_<MODULE>_<NAME>` (upper case, other characters `_`, e.g.
   `INFANTRY_ENDPOINT_INFANTRY_SITES_API`) replaces one resolved address; `INFANTRY_ENV` at run time replaces the baked

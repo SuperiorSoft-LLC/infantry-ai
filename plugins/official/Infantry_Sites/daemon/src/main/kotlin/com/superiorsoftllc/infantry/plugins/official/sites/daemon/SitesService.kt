@@ -26,6 +26,9 @@ class SitesException(val kind: String, message: String) : RuntimeException(messa
         const val NOT_FOUND = "not_found"
         const val UNAVAILABLE = "unavailable"
         const val EMAIL_UNVERIFIED = "email_unverified"
+        const val NOT_RUNNING = "not_running"
+        const val HOST_KEY = "host_key_mismatch"
+        const val AUTH_FAILED = "auth_failed"
     }
 }
 
@@ -41,6 +44,7 @@ object HostingRoutes {
     const val SERVERS = "/hosting/v1/servers"
     fun server(id: String) = "$SERVERS/$id"
     fun action(id: String, name: String) = "$SERVERS/$id/actions/$name"
+    fun sshCertificate(id: String) = "$SERVERS/$id/ssh/certificate"
 }
 
 /** The hosting API's token, asked from the Account hub as this plugin. It is used for one request and never stored or returned. */
@@ -63,33 +67,42 @@ class SitesService(
         return JsonArray(arr.mapNotNull { (it as? JsonObject)?.let(::server) })
     }
 
-    fun create(name: String, sshPublicKey: String?, idempotencyKey: String? = null): JsonObject {
-        require(NAME.matches(name)) { "name must be 1 to 40 characters: lowercase letters, digits and '-', starting with a letter or digit" }
-        val key = sshPublicKey?.trim()?.takeIf { it.isNotEmpty() }
-        require(key == null || SSH_KEY.matches(key)) { "sshPublicKey must be one line of a public key (ssh-ed25519 AAAA...)" }
-        val idem = idempotencyKey ?: newKey()
-        requireUuid(idem, "idempotencyKey")
-        val payload = buildJsonObject { put("name", name); if (key != null) put("sshPublicKey", key) }
-        val answer = call("POST", HostingRoutes.SERVERS, payload.toString(), mapOf("Idempotency-Key" to idem))
-        return server((answer as? JsonObject)?.let { (it["server"] as? JsonObject) ?: it } ?: JsonObject(emptyMap()))
-    }
-
-    /** [action] is `start`, `stop` or `refresh` (refresh re-reads the real status and ip; poll it after create and start). */
-    fun power(id: String, action: String) {
-        requireUuid(id, "id")
-        require(action == "start" || action == "stop" || action == "refresh") { "action must be start, stop or refresh" }
-        call("POST", HostingRoutes.action(id, action))
-    }
-
-    fun destroy(id: String) {
-        requireUuid(id, "id")
-        call("DELETE", HostingRoutes.server(id))
-    }
-
     /** The account's `reclaimableUntil` (epoch ms): set when the paid period ended and the servers are still in the reclaim window; null otherwise. */
     fun reclaimableUntil(): Long? {
         val o = call("GET", HostingRoutes.ACCOUNT) as? JsonObject ?: return null
         return (o["reclaimableUntil"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
+    }
+
+    /**
+     * SITES-SSH-1: a short-lived SSH user certificate for the device key (WS-SSH-1 contract). Its own error map: on this route
+     * 409 means "not running", not "server limit". The certificate is returned to the SSH client only, never to an agent.
+     */
+    fun sshCertificate(id: String, publicKey: String): SshCert {
+        requireUuid(id, "server id")
+        val base = baseUrl().trim().trimEnd('/')
+        if (base.isEmpty()) throw SitesException(SitesException.NOT_CONFIGURED, "no hosting service is configured")
+        if (!urlOk(base)) throw SitesException(SitesException.NOT_CONFIGURED, "the hosting service address must be https")
+        val body = buildJsonObject { put("publicKey", publicKey) }.toString()
+        val path = HostingRoutes.sshCertificate(id)
+        val first = send(base, "POST", path, body, emptyMap())
+        val r = if (first.status == 401) send(base, "POST", path, body, emptyMap()) else first
+        val json = r.body.takeIf { it.isNotBlank() }?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() } as? JsonObject
+        fun str(o: JsonObject?, k: String) = (o?.get(k) as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+        when (r.status) {
+            in 200..299 -> {}
+            400 -> throw SitesException(SitesException.BAD_REQUEST, "the hosting service refused this PC's SSH key")
+            401 -> throw SitesException(SitesException.SIGNED_OUT, "sign in again")
+            403 -> throw SitesException(SitesException.NOT_ENTITLED, "your account may not open SSH to servers (permission hosting.servers.ssh)")
+            404 -> throw SitesException(SitesException.NOT_FOUND, "no such server on your account")
+            409 -> throw SitesException(SitesException.NOT_RUNNING, "the server is not running; start it on the site")
+            503 -> throw SitesException(SitesException.NOT_CONFIGURED, "SSH access is not configured on the hosting service yet")
+            else -> { answer(r); throw SitesException(SitesException.UNAVAILABLE, "the hosting service answered HTTP ${r.status}") } // 429, 5xx: the shared map
+        }
+        val cert = str(json, "certificate") ?: throw SitesException(SitesException.UNAVAILABLE, "the hosting service sent no certificate")
+        val validBefore = str(json, "validBefore")?.toLongOrNull() ?: throw SitesException(SitesException.UNAVAILABLE, "the hosting service sent no certificate expiry")
+        val c = json?.get("connection") as? JsonObject
+        val host = str(c, "host") ?: throw SitesException(SitesException.UNAVAILABLE, "the hosting service sent no server address")
+        return SshCert(cert, validBefore, SshConnection(host, str(c, "port")?.toIntOrNull() ?: DEFAULT_SSH_PORT, str(c, "user") ?: throw SitesException(SitesException.UNAVAILABLE, "the hosting service sent no SSH user"), str(c, "hostKeyFingerprint")))
     }
 
     private fun call(method: String, path: String, body: String? = null, extra: Map<String, String> = emptyMap()): JsonElement? {
@@ -148,9 +161,8 @@ class SitesService(
     }
 
     companion object {
+        const val DEFAULT_SSH_PORT = 22
         private val UUID_RE = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-        private val NAME = Regex("[a-z0-9][a-z0-9-]{0,39}")
-        private val SSH_KEY = Regex("(ssh-[a-z0-9]+|ecdsa-sha2-[a-z0-9]+|sk-[a-z0-9@.-]+) [A-Za-z0-9+/=]+( [^\\r\\n]*)?")
 
         fun isUuid(v: String) = UUID_RE.matches(v)
         fun requireUuid(v: String, what: String) = require(isUuid(v)) { "$what must be a UUID" }

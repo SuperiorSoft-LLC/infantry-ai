@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "apiVersion": 2,
   "author": "Infantry AI",
-  "description": "The Sites section of the Account tab: your hosting servers (list, create, start, stop, destroy) with Infantry AI Hosting, and the tools for agents to do the same.",
+  "description": "The Infantry AI Hosting dashboard (opened from the Services tab): your hosting servers (read-only: online or offline) with Infantry AI Hosting, and a tool for agents to list them.",
   "tier": "official",
   "dependencies": [{ "id": "Infantry_Account", "version": "^1.0" }],
   "sequence": [],
@@ -13,9 +13,6 @@
   "services": ["daemon"],
   "routes": [
     "GET /plugins/Infantry_Sites/state",
-    "POST /plugins/Infantry_Sites/create",
-    "POST /plugins/Infantry_Sites/power",
-    "POST /plugins/Infantry_Sites/destroy",
     "POST /plugins/Infantry_Account/signin"
   ],
   "daemon": {
@@ -24,19 +21,19 @@
     "apiAtLeast": "1.63.0",
     "tools": [
       { "name": "infantry_sites_list", "action": "sites.servers.read", "kind": "read", "description": "List your hosting servers (id, name, status, ip, region, size, createdAt, destroyAt)." },
-      { "name": "infantry_sites_create", "action": "sites.servers.create", "kind": "write", "description": "Create a hosting server. Counts against your plan's server limit." },
-      { "name": "infantry_sites_start", "action": "sites.servers.power", "kind": "write", "description": "Power on one of your hosting servers." },
-      { "name": "infantry_sites_stop", "action": "sites.servers.power", "kind": "write", "description": "Shut down one of your hosting servers." },
-      { "name": "infantry_sites_destroy", "action": "sites.servers.destroy", "kind": "destructive", "description": "Permanently destroy one of your hosting servers and its data." }
+      { "name": "infantry_sites_ssh_exec", "action": "sites.servers.ssh", "kind": "write", "description": "Run a shell command on one of your hosting servers over SSH (no setup: device key + short-lived certificate)." },
+      { "name": "infantry_sites_ssh_upload", "action": "sites.servers.ssh", "kind": "write", "description": "Write a small text file on one of your hosting servers over SSH." }
     ],
     "endpoints": {
       "api": {
         "prod": "https://api.superiorsoftllc.tech/api/superiorsoft",
-        "dev": "http://127.0.0.1:18953/api/superiorsoft"
+        "dev": "http://127.0.0.1:18953/api/superiorsoft",
+        "staging": "http://127.0.0.1:18953/api/superiorsoft"
       },
       "site": {
         "prod": "https://superiorsoftllc.tech",
-        "dev": "http://localhost:5173"
+        "dev": "http://127.0.0.1:18953",
+        "staging": "http://localhost:5173"
       }
     }
   },

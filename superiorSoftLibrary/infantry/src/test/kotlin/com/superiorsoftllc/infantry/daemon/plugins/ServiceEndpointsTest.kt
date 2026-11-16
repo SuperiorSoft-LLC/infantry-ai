@@ -18,14 +18,17 @@ class ServiceEndpointsTest {
     )
     private val noEnv: (String) -> String? = { null }
 
-    @Test fun `the exact environment wins, then prod, and an undeclared name is null`() {
+    @Test fun `the exact environment wins, then dev outside prod, then prod, and an undeclared name is null`() {
         assertEquals("http://127.0.0.1:18953/v1", ServiceEndpoints.resolve(table, "Acme_Host", "api", "dev", noEnv))
         assertEquals("https://staging.example.com/v1", ServiceEndpoints.resolve(table, "Acme_Host", "api", "staging", noEnv))
         assertEquals("https://api.example.com/v1", ServiceEndpoints.resolve(table, "Acme_Host", "api", "prod", noEnv), "trailing slash trimmed")
         assertEquals("https://example.com", ServiceEndpoints.resolve(table, "Acme_Host", "site", "dev", noEnv), "no dev entry: prod")
-        assertEquals("https://api.example.com/v1", ServiceEndpoints.resolve(table, "Acme_Host", "api", "qa", noEnv), "an unknown environment: prod")
+        // M1-OWNER-1: a test build with no entry of its own went to the real (prod) service; it now takes the dev address.
+        assertEquals("http://127.0.0.1:18953/v1", ServiceEndpoints.resolve(table, "Acme_Host", "api", "qa", noEnv), "an unknown test environment: dev, never prod")
+        assertEquals("http://127.0.0.1:18953/v1", ServiceEndpoints.resolve(mapOf("api" to mapOf("prod" to "https://p", "dev" to "http://127.0.0.1:18953/v1")), "Acme_Host", "api", "staging", noEnv), "staging with no staging entry: dev")
+        assertEquals("https://example.com", ServiceEndpoints.resolve(table, "Acme_Host", "site", "qa", noEnv), "no dev entry at all: prod is the only address")
         assertNull(ServiceEndpoints.resolve(table, "Acme_Host", "billing", "prod", noEnv))
-        assertNull(ServiceEndpoints.resolve(mapOf("x" to mapOf("dev" to "http://h")), "Acme_Host", "x", "staging", noEnv), "no exact and no prod")
+        assertNull(ServiceEndpoints.resolve(mapOf("x" to mapOf("dev" to "http://h")), "Acme_Host", "x", "prod", noEnv), "prod never takes a dev address")
     }
 
     @Test fun `the developer override variable wins over the table, and a non-http override is ignored`() {

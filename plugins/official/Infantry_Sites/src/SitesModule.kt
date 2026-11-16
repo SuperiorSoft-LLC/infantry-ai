@@ -30,13 +30,13 @@ private fun sitesIcon() = tabIcon(
 private fun sitesTab() = TabProvider(
     id = SITES_TAB_ID, container = TabContainers.CENTER, order = SITES_SECTION_ORDER,
     title = { "Sites" }, icon = sitesIcon(), testTag = "center-tab-SITES", parent = SITES_ACCOUNT_PARENT,
-    routes = listOf("GET state", "POST create", "POST power", "POST destroy"),
+    routes = listOf("GET state"),
 ) { SitesServers(it) }
 
 val InfantrySites = InfantryModule(
     ModuleManifest(
         name = "Infantry_Sites", version = "1.0.0", author = "Infantry AI",
-        description = "The Sites section of the Account tab: hosting servers.",
+        description = "The Infantry AI Hosting dashboard in the Services tab: hosting servers.",
         tabs = listOf(TabDeclaration(SITES_TAB_ID, TabContainers.CENTER)),
     ),
     listOf(sitesTab()),

@@ -19,7 +19,7 @@ import kotlinx.serialization.json.jsonObject
 data class SiteServer(val id: String, val name: String, val status: String, val ip: String, val region: String, val size: String, val createdAt: String, val destroyAt: String)
 
 /** What the Servers section draws: [state] is `ready`, `signed_out`, `not_entitled`, `limit`, `not_configured`, `unavailable` or `not_found`. */
-data class SitesState(val state: String, val servers: List<SiteServer>, val limit: Int?, val message: String?, val signUpUrl: String?, val reclaimableUntil: Long? = null, val planStatus: String? = null)
+data class SitesState(val state: String, val servers: List<SiteServer>, val limit: Int?, val message: String?, val signUpUrl: String?, val reclaimableUntil: Long? = null, val planStatus: String? = null, val siteUrl: String? = null)
 
 object SitesParser {
     fun parse(text: String?): SitesState? {
@@ -27,7 +27,7 @@ object SitesParser {
         val o = runCatching { Json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return null
         val state = o.str("state") ?: return null
         val servers = (o["servers"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.let(::server) }
-        return SitesState(state, servers, (o["limit"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(), o.str("message"), o.str("signUpUrl"), (o["reclaimableUntil"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull(), o.str("planStatus"))
+        return SitesState(state, servers, (o["limit"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(), o.str("message"), o.str("signUpUrl"), (o["reclaimableUntil"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull(), o.str("planStatus"), o.str("siteUrl"))
     }
 
     private fun server(o: JsonObject): SiteServer? {
@@ -88,17 +88,7 @@ class SitesClient(private val daemon: DaemonAccess?) {
         }
     }
 
-    /** Null when it worked, else the reason to show. */
-    suspend fun create(name: String, sshPublicKey: String, idempotencyKey: String): String? =
-        post("create", JsonObject(buildMap {
-            put("name", JsonPrimitive(name)); put("idempotencyKey", JsonPrimitive(idempotencyKey))
-            if (sshPublicKey.isNotBlank()) put("sshPublicKey", JsonPrimitive(sshPublicKey.trim()))
-        }))
-
-    suspend fun power(id: String, type: String): String? = post("power", JsonObject(mapOf("id" to JsonPrimitive(id), "action" to JsonPrimitive(type))))
-    suspend fun destroy(id: String): String? = post("destroy", JsonObject(mapOf("id" to JsonPrimitive(id))))
-
-    /** Hands off to Infantry_Account: starts its device-code sign-in; the code shows in Account > Overview. Null when it started. */
+    /** Hands off to Infantry_Account: starts its device-code sign-in; the code shows in the Services tab. Null when it started. */
     suspend fun startSignIn(): String? {
         val d = daemon ?: return "The daemon is not reachable from here."
         val body = JsonObject(mapOf("provider" to JsonPrimitive("infantry"))).toString()

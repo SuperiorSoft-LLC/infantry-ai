@@ -7,7 +7,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -16,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +41,7 @@ import com.superiorsoftllc.infantry.ui.Mono
 import com.superiorsoftllc.infantry.ui.OutlinedButton
 import com.superiorsoftllc.infantry.ui.Palette
 import com.superiorsoftllc.infantry.ui.TextButton
+import com.superiorsoftllc.infantry.ui.clickable
 import com.superiorsoftllc.infantry.ui.plugin.TabContext
 import com.superiorsoftllc.infantry.ui.progress.ProgressBar
 import kotlinx.datetime.Instant
@@ -94,9 +100,12 @@ internal class AccountLive(val client: AccountClient) {
 /**
  * What every section draws. The layout always renders (the guide, the cards, or a note); a failure is a small card inside it, never the
  * whole view. The section re-reads every [ACCOUNT_WAIT_POLL_MS] while a sign-in waits, else every [ACCOUNT_IDLE_POLL_MS].
+ *
+ * [scrolls] false: the section fills the height and does not scroll, so a child that scrolls by itself (another plugin's dashboard)
+ * gets a bounded height. Nesting it in this scroll measures it with an infinite height, which Compose refuses (SIGNIN-APP-1).
  */
 @Composable
-private fun AccountSection(context: TabContext, content: @Composable (AccountLive, List<AccountProvider>) -> Unit) {
+private fun AccountSection(context: TabContext, scrolls: Boolean = true, content: @Composable ColumnScope.(AccountLive, List<AccountProvider>) -> Unit) {
     val live = remember { AccountLive(AccountClient(context.services.get(Services.DAEMON))) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
@@ -112,7 +121,8 @@ private fun AccountSection(context: TabContext, content: @Composable (AccountLiv
             }
         }
     }
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val layout = if (scrolls) Modifier.fillMaxWidth().verticalScroll(rememberScrollState()) else Modifier.fillMaxSize()
+    Column(layout.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         live.problem?.let { ErrorCard(it) { scope.launch { live.reload(refresh = true) } } }
         live.actionProblem?.let { Text(it, color = Palette.Danger, fontSize = 12.sp) }
         val providers = live.providers
@@ -143,16 +153,16 @@ private fun ErrorCard(detail: String, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun CardBox(tag: String, content: @Composable () -> Unit) {
+private fun CardBox(tag: String, extra: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(
-        Modifier.fillMaxWidth().testTag(tag).background(Palette.Panel, RoundedCornerShape(8.dp)).border(BorderStroke(1.dp, Palette.Border), RoundedCornerShape(8.dp)).padding(14.dp),
+        Modifier.fillMaxWidth().testTag(tag).then(extra).background(Palette.Panel, RoundedCornerShape(8.dp)).border(BorderStroke(1.dp, Palette.Border), RoundedCornerShape(8.dp)).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) { content() }
 }
 
 @Composable
-private fun Chip(text: String, color: Color) {
-    Text(text, color = color, fontSize = 11.sp, modifier = Modifier.border(BorderStroke(1.dp, color), RoundedCornerShape(10.dp)).padding(horizontal = 8.dp, vertical = 2.dp))
+private fun Chip(text: String, color: Color, modifier: Modifier = Modifier) {
+    Text(text, color = color, fontSize = 11.sp, modifier = modifier.border(BorderStroke(1.dp, color), RoundedCornerShape(10.dp)).padding(horizontal = 8.dp, vertical = 2.dp))
 }
 
 private fun planColor(status: String?): Color = when (status) {
@@ -174,101 +184,97 @@ internal fun signInUrl(flow: AccountFlow): String =
     if (flow.userCode.isBlank() || "user_code=" in flow.verificationUri) flow.verificationUri
     else flow.verificationUri + (if ('?' in flow.verificationUri) "&" else "?") + "user_code=" + flow.userCode
 
+const val SERVICES_BACK_TAG = "services-back"
+const val SERVICES_OPEN_TAG_PREFIX = "services-open-"
+const val SERVICES_CONNECTED_TAG_PREFIX = "services-connected-"
+const val SERVICES_BILLING_TAG = "services-billing"
+const val SERVICES_DASHBOARD_TAG_PREFIX = "services-dashboard-"
+
+/** Whether a card for [p] opens a dashboard: connected, and the provider names a dashboard tab that is loaded. */
+internal fun canOpenDashboard(p: AccountProvider, loaded: (String) -> Boolean): Boolean = p.signedIn && p.dashboardTabId?.let(loaded) == true
+
 /**
- * The one signed-out card (Overview and Billing share it): "Sign in" and a single button. Pressing it opens the browser and the card
- * then shows the code and a self-updating wait; the section flips to signed in by itself when the browser approves.
+ * The Services tab: one bordered card per registered provider (the list comes from the daemon, nothing is named here). Not signed in:
+ * a Sign in button that opens the provider's own site; the card then shows the code and flips to Connected by itself. Connected: the
+ * card opens that service's own dashboard (a tab its plugin contributes), with a back to the list.
  */
 @Composable
-internal fun SignInCard(live: AccountLive, p: AccountProvider) {
-    val scope = rememberCoroutineScope()
-    val uri = LocalUriHandler.current
-    val flow = p.flow
-    CardBox(ACCOUNT_GUIDE_TAG) {
-        Text("Sign in", color = Palette.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        if (flow != null && flow.state == "pending") {
-            Text("Finish signing in in your browser.", color = Palette.Muted, fontSize = 12.sp)
-            Text(flow.userCode, color = Palette.Text, fontFamily = Mono, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag(ACCOUNT_CODE_TAG_PREFIX + p.id))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                TextButton({ uri.openUri(signInUrl(flow)) }, Modifier.testTag(ACCOUNT_CHECK_NOW_TAG)) { Text("Open the page again", fontSize = 12.sp) }
-                TextButton({ scope.launch { live.act { live.client.signOut(p.id) } } }, Modifier.testTag(ACCOUNT_CANCEL_TAG)) { Text("Cancel", fontSize = 12.sp) }
-                Text("Waiting for approval...", color = Palette.Muted, fontSize = 12.sp)
-            }
-            ProgressBar(null, Modifier.fillMaxWidth())
-        } else {
-            if (flow != null) Text(flow.error ?: "The sign-in ${flow.state}.", color = Palette.Warn, fontSize = 12.sp)
-            else Text("Sign in to see and manage your services.", color = Palette.Muted, fontSize = 12.sp)
-            Button({
-                scope.launch {
-                    live.act { live.client.signIn(p.id) }
-                    live.providers?.firstOrNull { it.id == p.id }?.flow?.takeIf { it.state == "pending" }?.let { uri.openUri(signInUrl(it)) }
-                }
-            }, Modifier.testTag(ACCOUNT_SIGN_IN_TAG_PREFIX + p.id)) { Text(if (flow == null) "Sign in" else "Try again") }
-        }
-    }
+fun ServicesHub(context: TabContext) {
+    // Hoisted: an open dashboard scrolls by itself, so the section around it must not (see AccountSection's scrolls).
+    var openId by remember { mutableStateOf<String?>(null) }
+    AccountSection(context, scrolls = openId == null) { live, providers -> ServicesHubBody(live, providers, context, openId) { openId = it } }
 }
 
-/** Overview: the guide until setup is done, then one card per signed-in provider with the plan, what it includes and its services. */
 @Composable
-fun AccountOverview(context: TabContext) = AccountSection(context) { live, providers ->
+private fun ColumnScope.ServicesHubBody(live: AccountLive, providers: List<AccountProvider>, context: TabContext, openId: String?, setOpen: (String?) -> Unit) {
+    val factory = com.superiorsoftllc.infantry.ui.LocalTabFactory.current
     val scope = rememberCoroutineScope()
     val uri = LocalUriHandler.current
     var confirmOut by remember { mutableStateOf<AccountProvider?>(null) }
-    if (providers.none { it.signedIn }) SignInCard(live, providers.first())
-    for (p in providers.filter { it.signedIn }) CardBox(ACCOUNT_CARD_TAG_PREFIX + p.id) {
+    val open = providers.firstOrNull { it.id == openId && canOpenDashboard(it) { t -> factory.find(t) != null } }
+    // The opened service signed out or its dashboard went away: back to the (scrolling) list.
+    if (openId != null && open == null) SideEffect { setOpen(null) }
+    if (open != null) {
+        val tabId = open.dashboardTabId!!
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(p.name, color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Chip("Signed in", Palette.Ok)
+            TextButton({ setOpen(null) }, Modifier.testTag(SERVICES_BACK_TAG)) { Text("< Services") }
+            Text(open.name, color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Chip("Connected", Palette.Ok)
+            Spacer(Modifier.weight(1f))
+            open.billingUrl?.let { url -> OutlinedButton({ uri.openUri(url) }, Modifier.testTag(SERVICES_BILLING_TAG)) { Text("Billing") } }
+            OutlinedButton({ confirmOut = open }, Modifier.testTag(ACCOUNT_SIGN_OUT_TAG_PREFIX + open.id)) { Text("Sign out") }
         }
-        val who = listOfNotNull(p.userName, p.userEmail).joinToString("  ")
-        if (who.isNotBlank()) Text(who, color = Palette.Muted, fontSize = 12.sp)
-        p.error?.let { Text(it, color = Palette.Warn, fontSize = 11.sp) }
-        OutlinedButton({ confirmOut = p }, Modifier.testTag(ACCOUNT_SIGN_OUT_TAG_PREFIX + p.id)) { Text("Sign out") }
-    }
-    for (p in providers.filter { it.signedIn }) {
-        Text("Your services", color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        if (p.services.isEmpty()) Text("No service is offered yet.", color = Palette.Muted, fontSize = 12.sp)
-        for (s in p.services) CardBox("account-service-${s.id}") {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(s.name, color = Palette.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                if (s.entitled) Chip("Active", Palette.Ok)
-            }
-            if (!s.entitled) {
-                Text("${s.name} needs a plan.", color = Palette.Muted, fontSize = 12.sp)
-                planNotice(p)?.let { Text(it, color = Palette.Warn, fontSize = 12.sp) }
-                p.signUpUrl?.let { url -> Button({ uri.openUri(url) }) { Text(if (p.planStatus == "canceled") "Resubscribe" else "Subscribe") } }
-            }
-        }
+        planNotice(open)?.let { Text(it, color = Palette.Warn, fontSize = 12.sp) }
+        // weight: the dashboard gets the height that is left, a bounded one, so its own scroll works.
+        Box(Modifier.fillMaxWidth().weight(1f).testTag(SERVICES_DASHBOARD_TAG_PREFIX + open.id)) { factory.Content(tabId, context) }
+    } else {
+        for (p in providers) ServiceCard(live, p, canOpenDashboard(p) { factory.find(it) != null }) { setOpen(p.id) }
     }
     confirmOut?.let { p ->
         AhqAlertDialog(
             onDismissRequest = { confirmOut = null },
             title = { Text("Sign out of ${p.name}?") },
             text = { Text("Plugins that use this account stop working until you sign in again.") },
-            confirmButton = { TextButton({ confirmOut = null; scope.launch { live.act { live.client.signOut(p.id) } } }) { Text("Sign out") } },
+            confirmButton = { TextButton({ confirmOut = null; setOpen(null); scope.launch { live.act { live.client.signOut(p.id) } } }) { Text("Sign out") } },
             dismissButton = { TextButton({ confirmOut = null }) { Text("Cancel") } },
         )
     }
 }
 
-/** Billing: the guide pointing at Step 1 until signed in, then the plan, its status and Manage. No card or price is held here. */
 @Composable
-fun AccountBilling(context: TabContext) = AccountSection(context) { live, providers ->
+private fun ServiceCard(live: AccountLive, p: AccountProvider, hasDashboard: Boolean, onOpen: () -> Unit) {
+    val scope = rememberCoroutineScope()
     val uri = LocalUriHandler.current
-    if (providers.none { it.signedIn }) {
-        SignInCard(live, providers.first())
-        return@AccountSection
-    }
-    for (p in providers.filter { it.signedIn }) CardBox("account-billing-" + p.id) {
+    val flow = p.flow
+    val pending = flow != null && flow.state == "pending"
+    CardBox(ACCOUNT_CARD_TAG_PREFIX + p.id, if (p.signedIn && hasDashboard) Modifier.clickable(onClick = onOpen).testTag(SERVICES_OPEN_TAG_PREFIX + p.id) else Modifier) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(p.name, color = Palette.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            p.planStatus?.let { Chip(it.replace('_', ' '), planColor(it)) }
+            if (p.signedIn) Chip("Connected", Palette.Ok, Modifier.testTag(SERVICES_CONNECTED_TAG_PREFIX + p.id))
         }
-        if (p.hasPlan) Text("Plan: ${AccountWords.planLabel(p) ?: "your plan"}", color = Palette.Text, fontSize = 12.sp)
-        else Text("No plan yet.", color = Palette.Muted, fontSize = 12.sp)
-        planNotice(p)?.let { Text(it, color = Palette.Warn, fontSize = 12.sp) }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (p.billingUrl != null && p.hasPlan) OutlinedButton({ uri.openUri(p.billingUrl) }) { Text("Manage") }
-            if (p.signUpUrl != null && (!p.hasPlan || p.planStatus == "canceled")) Button({ uri.openUri(p.signUpUrl) }) { Text(if (p.hasPlan) "Resubscribe" else "Subscribe") }
+        p.description?.let { Text(it, color = Palette.Muted, fontSize = 12.sp) }
+        p.error?.let { Text(it, color = Palette.Warn, fontSize = 11.sp) }
+        when {
+            p.signedIn -> if (hasDashboard) Text("Open its dashboard", color = Palette.Muted, fontSize = 12.sp)
+            pending -> {
+                Text("Finish signing in in your browser.", color = Palette.Muted, fontSize = 12.sp)
+                Text(flow!!.userCode, color = Palette.Text, fontFamily = Mono, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag(ACCOUNT_CODE_TAG_PREFIX + p.id))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton({ uri.openUri(signInUrl(flow)) }, Modifier.testTag(ACCOUNT_CHECK_NOW_TAG)) { Text("Open the page again", fontSize = 12.sp) }
+                    TextButton({ scope.launch { live.act { live.client.signOut(p.id) } } }, Modifier.testTag(ACCOUNT_CANCEL_TAG)) { Text("Cancel", fontSize = 12.sp) }
+                    Text("Waiting for approval...", color = Palette.Muted, fontSize = 12.sp)
+                }
+                ProgressBar(null, Modifier.fillMaxWidth())
+            }
+            else -> {
+                if (flow != null) Text(flow.error ?: "The sign-in ${flow.state}.", color = Palette.Warn, fontSize = 12.sp)
+                Button({
+                    scope.launch {
+                        live.act { live.client.signIn(p.id) }
+                        live.providers?.firstOrNull { it.id == p.id }?.flow?.takeIf { it.state == "pending" }?.let { uri.openUri(signInUrl(it)) }
+                    }
+                }, Modifier.testTag(ACCOUNT_SIGN_IN_TAG_PREFIX + p.id)) { Text(if (flow == null) "Sign in" else "Try again") }
+            }
         }
     }
 }

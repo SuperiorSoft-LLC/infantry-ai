@@ -3,6 +3,10 @@
 package com.superiorsoftllc.infantry.plugins.official
 
 import com.superiorsoftllc.infantry.plugin.api.ConfigDeclaration
+import com.superiorsoftllc.infantry.plugin.api.ConfigFieldDeclaration
+import com.superiorsoftllc.infantry.plugins.official.agents.GLOBAL_WORKERS_KEY
+import com.superiorsoftllc.infantry.plugins.official.agents.GLOBAL_WORKERS_NODE
+import kotlinx.serialization.json.JsonPrimitive
 import com.superiorsoftllc.infantry.plugin.api.ModuleManifest
 import com.superiorsoftllc.infantry.plugins.official.agents.AgentsSection
 import com.superiorsoftllc.infantry.plugin.api.PanelDeclaration
@@ -23,6 +27,15 @@ val InfantryAgents = InfantryModule(
         name = "Infantry_Agents", version = "1.0.0", author = "Infantry AI", description = "The left panel's agents list.",
         panels = listOf(PanelDeclaration("infantry.agents", Panels.LEFT)),
         config = listOf(
+            // WORKERS-GLOBAL-1: the experimental all-projects Working view, off by default.
+            ConfigDeclaration(
+                node = GLOBAL_WORKERS_NODE, group = "Experimental", tab = "Agents", order = 900, title = "Experimental",
+                applies = "Applies to: the Working counter at the top of the left panel.",
+                keywords = listOf("experimental", "working", "workers", "projects", "lanes"),
+                fields = listOf(
+                    ConfigFieldDeclaration(GLOBAL_WORKERS_KEY, "checkbox", "Click Working to see the agents working in every project (experimental)", JsonPrimitive(false), order = 1, scope = "device"),
+                ),
+            ),
             ConfigDeclaration(node = "infantry.shell.config.progressStale", group = "Progress bars: stale after", tab = "General", order = 80, title = "Progress bars: stale after", keywords = listOf("progress", "stale", "minutes"), block = "infantry.shell.config.progressStale"),
             ConfigDeclaration(node = "infantry.shell.config.cliLocations", group = "CLI locations", tab = "Agents", order = 100, title = "CLI locations", keywords = listOf("harness", "install", "path", "cli"), block = "infantry.shell.config.cliLocations"),
         ),

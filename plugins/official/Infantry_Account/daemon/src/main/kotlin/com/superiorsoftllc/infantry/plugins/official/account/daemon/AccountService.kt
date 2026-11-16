@@ -252,6 +252,7 @@ class AccountService(
             put("name", p.name)
             put("icon", p.icon)
             put("signedIn", signedIn)
+            p.description?.let { put("description", it) }
             p.billingUrl?.let { put("billingUrl", it) }
             p.signUpUrl?.let { put("signUpUrl", it) }
             json?.str("email")?.let { e -> put("user", buildJsonObject { put("email", maskEmail(e)) }) }
@@ -269,6 +270,7 @@ class AccountService(
                 for (s in p.services) add(buildJsonObject {
                     put("id", s.id)
                     put("name", s.name)
+                    s.section?.let { put("section", it) }
                     put("entitled", signedIn && planActive(json) && holds(json, s.entitlement))
                 })
             })
@@ -316,7 +318,8 @@ class AccountService(
         val r = try {
             http.request(HttpSpec(url, method = "POST", headers = mapOf("Content-Type" to "application/x-www-form-urlencoded", "Accept" to "application/json"), body = body))
         } catch (e: Exception) {
-            throw IllegalStateException("could not reach the account server")
+            // SIGNIN-APP-1: say WHERE and WHY (connection refused, timeout...), so a down server reads as one in the Services tab.
+            throw IllegalStateException(unreachable(url, e))
         }
         return r.status to runCatching { Json.parseToJsonElement(r.body).jsonObject }.getOrNull()
     }
@@ -326,6 +329,13 @@ class AccountService(
 
     companion object {
         const val DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
+
+        /** The unreachable-server message: the address (no query) and the transport's own reason, e.g. "Connection refused". */
+        internal fun unreachable(url: String, e: Exception): String {
+            val where = url.substringBefore('?')
+            val why = generateSequence<Throwable>(e) { it.cause }.mapNotNull { it.message?.takeIf(String::isNotBlank) }.firstOrNull()
+            return "could not reach the account server at $where (${e::class.simpleName}${why?.let { ": $it" }.orEmpty()})"
+        }
         const val DEFAULT_INTERVAL_S = 5L
         const val DEFAULT_EXPIRES_S = 900L
         const val DEFAULT_TOKEN_TTL_S = 3600L
