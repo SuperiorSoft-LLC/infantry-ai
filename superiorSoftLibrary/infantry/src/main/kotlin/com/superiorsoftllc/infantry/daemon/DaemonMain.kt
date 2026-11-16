@@ -359,6 +359,7 @@ fun main(args: Array<String> = emptyArray()) {
     // FIRSTINSTALL: install() routes System.out/err into the log file, so every line the owner needs goes through toConsole
     // (the log file AND the console the process was started from: a terminal, `docker logs`, a redirected daemon.log).
     DaemonLog.install(stateDir())?.also { DaemonLog.toConsole("[infantry] log file: ${DaemonLog.path(stateDir())}") }
+    StateDirLock.homeWithoutStateDirWarning(stateDir(), ::infantrySetting)?.let { DaemonLog.toConsole("[infantry] WARNING: $it") }
     // BUG-PORT-1-STATEDIR: one daemon per state dir, decided before anything opens the database.
     val stateLock = try {
         StateDirLock.acquire(stateDir())
