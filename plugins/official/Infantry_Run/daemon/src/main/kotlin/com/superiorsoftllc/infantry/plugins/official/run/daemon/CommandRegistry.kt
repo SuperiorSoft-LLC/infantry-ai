@@ -32,6 +32,8 @@ data class CommandSpec(
     val rooted: Boolean = true,
     /** SECRET-RENDER-1: `template=out` pairs (paths relative to the command folder) rendered before the run; the outputs are deleted when it ends. */
     val renders: List<String> = emptyList(),
+    /** RUN-TAB-1: launch the command detached (an app that outlives it); false = tracked, piped, killed with the daemon. */
+    val detached: Boolean = false,
 ) {
     override fun toString(): String = "CommandSpec(id=$id)"
 }
@@ -48,6 +50,7 @@ internal data class CommandFileEntry(
     /** RUN-CMD-REPO-1: the project whose directory is the root of [cwd]; null = the daemon's own root. */
     val project: String? = null,
     val renders: List<String> = emptyList(),
+    val detached: Boolean = false,
 )
 
 /**
@@ -65,16 +68,17 @@ class SavedCommand internal constructor(
     val secrets: List<String> = emptyList(),
     val projectId: String? = null,
     val renders: List<String> = emptyList(),
+    val detached: Boolean = false,
 ) {
     val workingDir: File get() = dir ?: throw IllegalStateException("command '$id' has no folder to run in")
     val rooted: Boolean get() = dir != null
 
-    fun toSpec(): CommandSpec = CommandSpec(id, name, cwd, argv, graceMillis, secrets, projectId, rooted, renders)
+    fun toSpec(): CommandSpec = CommandSpec(id, name, cwd, argv, graceMillis, secrets, projectId, rooted, renders, detached)
 
     /** The same command under [project] with [cwd], re-rooted at [dir] (the migration's assignment). */
-    internal fun movedTo(project: String, cwd: String?, dir: File): SavedCommand = SavedCommand(id, name, argv, cwd, dir, graceMillis, secrets, project, renders)
+    internal fun movedTo(project: String, cwd: String?, dir: File): SavedCommand = SavedCommand(id, name, argv, cwd, dir, graceMillis, secrets, project, renders, detached)
 
-    internal fun toFileEntry(): CommandFileEntry = CommandFileEntry(id, name, argv, cwd, graceMillis, secrets, projectId, renders)
+    internal fun toFileEntry(): CommandFileEntry = CommandFileEntry(id, name, argv, cwd, graceMillis, secrets, projectId, renders, detached)
 
     // argv must never reach a log line by accident.
     override fun toString(): String = "SavedCommand(id=$id)"
@@ -200,7 +204,7 @@ class CommandRegistry private constructor(
             val written = normalCwd(root, e.cwd) ?: return no("$where ('${e.id}') has a cwd outside the project folder")
             val cwd = written.takeIf { it != "." }
             val dir = resolveCwd(root, cwd) ?: return no("$where ('${e.id}') has a cwd outside the project folder")
-            return Result.success(SavedCommand(e.id, e.name?.takeIf { it.isNotBlank() } ?: e.id, e.argv.toList(), cwd, dir, e.graceMillis, e.secrets.distinct(), e.project?.takeIf { it.isNotBlank() }, e.renders.distinct()))
+            return Result.success(SavedCommand(e.id, e.name?.takeIf { it.isNotBlank() } ?: e.id, e.argv.toList(), cwd, dir, e.graceMillis, e.secrets.distinct(), e.project?.takeIf { it.isNotBlank() }, e.renders.distinct(), e.detached))
         }
 
         /** [validate] with no root: the same shape rules; the cwd is kept as written and checked once a folder resolves. */
@@ -208,7 +212,7 @@ class CommandRegistry private constructor(
             val scratch = canonicalRoot(File(System.getProperty("java.io.tmpdir") ?: ".")) ?: File(".").absoluteFile
             val shape = validate(e.copy(cwd = null), scratch, where).getOrElse { return Result.failure(it) }
             val cwd = e.cwd?.trim()?.takeIf { it.isNotEmpty() && it != "." }
-            return Result.success(SavedCommand(shape.id, shape.name, shape.argv, cwd, null, shape.graceMillis, shape.secrets, shape.projectId, shape.renders))
+            return Result.success(SavedCommand(shape.id, shape.name, shape.argv, cwd, null, shape.graceMillis, shape.secrets, shape.projectId, shape.renders, shape.detached))
         }
 
         /**

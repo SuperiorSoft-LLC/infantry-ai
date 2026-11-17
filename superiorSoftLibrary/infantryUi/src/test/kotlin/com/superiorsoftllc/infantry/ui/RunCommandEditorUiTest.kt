@@ -14,6 +14,8 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
@@ -107,11 +109,24 @@ class RunCommandEditorUiTest {
         assertEquals(listOf("gradlew.bat", "build", "--info"), save["argv"]!!.jsonArray.map { it.jsonPrimitive.content }, "argv is a list, never a shell string: $save")
         assertEquals("web", save["cwd"]?.jsonPrimitive?.content, "$save")
         assertEquals(5000L, save["graceMillis"]?.jsonPrimitive?.content?.toLong(), "$save")
+        assertEquals(null, save["detached"], "detached is opt-in: an unticked box sends nothing: $save")
 
         // The daemon's answer, the new list, closes the form and the command is pickable.
         link.push(Envelope(Envelope.COMMANDS, """[{"id":"build-web","name":"Build Web!","cwd":"web","argv":["gradlew.bat","build","--info"],"graceMillis":5000}]"""))
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithTagCount(RUN_FORM_TAG) == 0 }
         onNodeWithTag(RUN_COMMAND_PICKER_TAG).assertTextContains("Build Web!")
+    }
+
+    @Test fun `the Detached checkbox is off by default, and ticking it sends detached true`() = withPane("[]") { link, _ ->
+        onNodeWithTag(RUN_ADD_TAG).performClick()
+        onNodeWithTag(RUN_FORM_DETACHED_TAG).performScrollTo().assertIsOff()
+        onNodeWithTag(RUN_FORM_NAME_TAG).performTextInput("Sandbox")
+        onNodeWithTag(RUN_FORM_ARGV_TAG).performTextInput("powershell\n-NoProfile")
+        onNodeWithTag(RUN_FORM_DETACHED_TAG).performScrollTo().performClick()
+        onNodeWithTag(RUN_FORM_DETACHED_TAG).assertIsOn()
+        onNodeWithTag(RUN_FORM_SAVE_TAG).performScrollTo().performClick()
+        waitUntil(timeoutMillis = 5_000) { link.sentOf(Envelope.COMMAND_SAVE).isNotEmpty() }
+        assertEquals(true, link.lastData(Envelope.COMMAND_SAVE)["detached"]?.jsonPrimitive?.content?.toBoolean())
     }
 
     @Test fun `a daemon refusal shows inline and keeps the form open, a retry that is answered closes it`() = withPane("[]") { link, _ ->

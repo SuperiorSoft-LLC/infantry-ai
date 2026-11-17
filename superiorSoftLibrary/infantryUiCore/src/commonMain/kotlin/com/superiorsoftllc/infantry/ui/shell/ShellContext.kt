@@ -677,6 +677,9 @@ interface RunContext {
     /** RUN-SCOPE-1: [saveCommand] for [project] (its cwd is relative to that project's folder). */
     suspend fun saveCommand(id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String>, project: String?): CommandResult =
         saveCommand(id, name, argv, cwd, graceMillis, secrets)
+    /** RUN-TAB-1: [saveCommand] that also sets `detached`. The default drops it (a context that cannot store it). */
+    suspend fun saveCommand(id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String>, project: String?, detached: Boolean): CommandResult =
+        saveCommand(id, name, argv, cwd, graceMillis, secrets, project)
     /** RUN-SCOPE-1: [start] that names the project; the daemon refuses another project's command. */
     suspend fun start(commandId: String, interactive: Boolean, project: String?): CommandResult = start(commandId, interactive)
     /** RUN-SCOPE-1: registers [projectId]'s folder (what `project_config_set directory` does); "" clears it. */

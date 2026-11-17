@@ -455,7 +455,7 @@ class RunManager(
                 }
             }
             val started = try {
-                runs.start(RunSpec(command.argv, relativeCwd(runs, command), env, projectId = command.projectId, terminal = usePty, cols = cols, rows = rows), listener)
+                runs.start(RunSpec(command.argv, relativeCwd(runs, command), env, projectId = command.projectId, terminal = usePty && !command.detached, cols = cols, rows = rows, detached = command.detached), listener)
             } catch (e: Exception) {
                 // Never the argv or the message (it can quote it): the class name only.
                 finish(null, "FAILED", "spawn failed (${e::class.simpleName})")

@@ -36,6 +36,8 @@ data class CommandSpecView(
     val project: String? = null,
     /** RUN-SCOPE-1: false when no folder resolves for it (its project has none registered): listed, but it cannot start. */
     val rooted: Boolean = true,
+    /** RUN-TAB-1: launches an app that outlives the command (no output, not tracked, not stopped by Stop). Absent = false. */
+    val detached: Boolean = false,
 )
 
 /**
