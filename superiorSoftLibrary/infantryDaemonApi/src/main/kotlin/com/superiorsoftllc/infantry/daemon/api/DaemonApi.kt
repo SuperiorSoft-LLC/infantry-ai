@@ -291,7 +291,10 @@ interface DaemonApi {
         // 1.63.0 (ENDPOINT-ENV-1, additive): `environment` and `endpoint(name)` (module.json `daemon.endpoints`, per build environment).
         // 1.64.0 (PLUGIN-AUTH-ORIGIN-1, additive): module.json `daemon.http` (passAuthorization, allowedOrigins, allowNonLoopbackHost):
         // a public route may receive `Authorization` in [HttpCall.headers], admit listed origins and answer their CORS preflight.
-        const val VERSION = "1.64.0"
+        // 1.65.0 (TRIG-API-1, additive): `ServicesApi.provideScoped` (a provider per calling module) and daemon.api.triggers
+        // `Triggers` (+ TriggerFilter, TriggerActionHandler, TriggerFire, TriggerActionResult, the Trigger*Record DTOs,
+        // TriggerOwnership, TriggerEvents). No provider yet: `services.find(Triggers::class)` is null until TRIG-2c.
+        const val VERSION = "1.65.0"
     }
 }
 
