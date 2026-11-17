@@ -17,6 +17,9 @@ import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerSession
  * and never run), the live one first, then the newest. A profile id: that agent's sessions, wherever they are. A
  * trigger with no project matches sessions with no project.
  *
+ * `session:<id>` (TRIG-TARGET-1): exactly that session, wherever it is. If it is gone the fire is recorded `target_gone`
+ * ([PromptDelivery.TargetGone]) and no replacement is started.
+ *
  * NO SESSION. Only then is a session started, with the prompt as its first turn ([startSession], the unattended prompt
  * launch). A start refused because the role's agents are all busy elsewhere is [PromptDelivery.Busy], never a trip.
  *
@@ -31,6 +34,9 @@ class TriggerNudges(
 ) {
     fun deliver(nudge: TriggerNudge): PromptDelivery {
         val target = target(nudge)
+        if (target == null && nudge.agentId.startsWith(SESSION_PREFIX)) {
+            return PromptDelivery.TargetGone(nudge.agentId.removePrefix(SESSION_PREFIX)) // never spawn a replacement
+        }
         if (target == null) {
             return when (val launch = startSession(nudge.agentId, nudge.prompt, nudge.projectId)) {
                 is PromptStart.Started -> PromptDelivery.Started(launch.sessionId)
@@ -54,6 +60,10 @@ class TriggerNudges(
 
     internal fun target(nudge: TriggerNudge): TriggerSession? {
         val reachable = sessions().filter { it.reachable }
+        if (nudge.agentId.startsWith(SESSION_PREFIX)) {
+            val id = nudge.agentId.removePrefix(SESSION_PREFIX)
+            return reachable.firstOrNull { it.id == id }
+        }
         val candidates = if (nudge.agentId.startsWith(ROLE_PREFIX)) {
             val role = nudge.agentId.removePrefix(ROLE_PREFIX)
             val project = nudge.projectId?.takeIf { it.isNotBlank() }
@@ -67,5 +77,6 @@ class TriggerNudges(
     companion object {
         const val SENDER_PREFIX = "trigger:"
         private const val ROLE_PREFIX = "role:"
+        private const val SESSION_PREFIX = "session:"
     }
 }

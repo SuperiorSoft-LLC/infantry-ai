@@ -30,6 +30,8 @@ sealed interface PromptDelivery {
     data class Started(val sessionId: String) : PromptDelivery
     /** No session to mail and none could be started because the target is busy elsewhere. Never a trip. */
     data class Busy(val detail: String) : PromptDelivery
+    /** TRIG-TARGET-1: a `session:<id>` target no longer exists. Nothing is mailed or started; never a trip. */
+    data class TargetGone(val sessionId: String) : PromptDelivery
     data class Refused(val detail: String) : PromptDelivery
 }
 
@@ -406,6 +408,11 @@ class TriggerService(
                     guards[trigger.id]?.refundStart(run.runId) // nothing was started either
                     complete(run.runId, TriggerOutcome.SUCCEEDED)
                     redispose(run, TriggerEventDisposition.DEFERRED_BUSY)
+                }
+                is PromptDelivery.TargetGone -> {
+                    guards[trigger.id]?.refundStart(run.runId)
+                    complete(run.runId, TriggerOutcome.SUCCEEDED)
+                    redispose(run, TriggerEventDisposition.TARGET_GONE)
                 }
                 is PromptDelivery.Refused -> finishRefused(run, delivery.detail)
             }

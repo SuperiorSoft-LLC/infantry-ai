@@ -358,4 +358,37 @@ class TriggerNudgeTest {
         val refused = nudges(emptyList(), mutableListOf(), launch = PromptStart.Refused("no agent profile has role 'pm'")).deliver(pmNudge)
         assertEquals(PromptDelivery.Refused("no agent profile has role 'pm'"), refused)
     }
+
+    @Test
+    fun `a session target mails exactly that session and not a sibling of the same role`() {
+        val sent = mutableListOf<TriggerMailRequest>()
+        val sessions = listOf(
+            session("one", "fullstack", "project-1", state = SessionState.BUSY, spawnedAt = 9),
+            session("two", "fullstack", "project-1", spawnedAt = 1),
+        )
+        val delivery = nudges(sessions, sent).deliver(TriggerNudge("trg-4", "x", "project-1", "session:two", "go"))
+        assertEquals(PromptDelivery.Mailed("m-1"), delivery)
+        assertEquals("agent-two", sent.single().to)
+    }
+
+    @Test
+    fun `a gone session target is target_gone and no replacement is started`() {
+        val sent = mutableListOf<TriggerMailRequest>()
+        val started = mutableListOf<String?>()
+        val delivery = nudges(listOf(session("one", "fullstack", "project-1")), sent, started)
+            .deliver(TriggerNudge("trg-5", "x", "project-1", "session:gone", "go"))
+        assertEquals(PromptDelivery.TargetGone("gone"), delivery)
+        assertTrue(sent.isEmpty() && started.isEmpty())
+    }
+
+    @Test
+    fun `a target_gone fire is recorded and never trips`() {
+        answer = { PromptDelivery.TargetGone("gone") }
+        val service = service()
+        val t = service.save(nudgeSave())
+        service.fire(t.id)
+        settled(service, t.id, 1)
+        assertEquals(listOf("target_gone"), dispositions(service, t.id))
+        assertEquals("armed", service.list().single().state)
+    }
 }
