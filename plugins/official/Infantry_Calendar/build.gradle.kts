@@ -49,6 +49,14 @@ val officialJar = tasks.named<Jar>("jvmJar") {
     archiveFileName.set("Infantry_Calendar.jar")
     // OfficialTrust: the jar carries a signed module.json equal to the one on disk.
     from(layout.projectDirectory.file("module.json"))
+    // CAL-E2E-1: the month grid library is not on the host's class path, so the jar carries it (else the tab throws
+    // NoClassDefFoundError: com.kizitonwose.calendar.compose.CalendarStateKt).
+    from({
+        configurations.getByName("jvmRuntimeClasspath").incoming.artifactView { }.artifacts.artifacts
+            .filter { it.id.componentIdentifier.displayName.startsWith("com.kizitonwose.calendar:") }
+            .map { zipTree(it.file) }
+    }) { exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA", "META-INF/MANIFEST.MF") }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     val keystore = providers.gradleProperty("ihq.keystore")
     val alias = providers.gradleProperty("ihq.alias")
     val storePass = providers.environmentVariable("IHQ_STOREPASS")
