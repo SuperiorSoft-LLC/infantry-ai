@@ -60,9 +60,15 @@ internal object CommentsWiring {
         return array.map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content ?: throw IllegalArgumentException("$key must be an array of agent ids") }
     }
 
-    fun line(api: DaemonApi, c: TicketComments.Comment, full: Boolean): String {
-        val head = "${c.shortId} ${c.kind}/${c.state} by ${c.author.label} ${api.displayStamp(c.createdAt)}"
-        val text = if (full) c.body else c.body.lineSequence().firstOrNull().orEmpty().take(200)
+    fun line(api: DaemonApi, c: TicketComments.Comment, full: Boolean, maxChars: Int = 0): String =
+        render(c, api.displayStamp(c.createdAt), full, maxChars)
+
+    /** COMMENTS-TRUNC-1: full = the whole body, cut only at [maxChars] (> 0) with an explicit marker; compact = first line, 200 chars. */
+    fun render(c: TicketComments.Comment, stamp: String, full: Boolean, maxChars: Int = 0): String {
+        val head = "${c.shortId} ${c.kind}/${c.state} by ${c.author.label} $stamp"
+        val text = if (!full) c.body.lineSequence().firstOrNull().orEmpty().take(200)
+        else if (maxChars > 0 && c.body.length > maxChars) c.body.take(maxChars) + "\n[cut at $maxChars chars of ${c.body.length}; raise maxChars or read it with commentId]"
+        else c.body
         return "$head: $text"
     }
 
@@ -126,25 +132,35 @@ class TicketCommentsTool(private val api: DaemonApi, private val store: TicketCo
     override val name = READ
     override val description =
         "Read a ticket's comments, one compact line each (id, kind/state, author, time, text). which = latestOpen (default: the newest " +
-            "unresolved one), latest, first or all; kind filters done|issue|note|handoff; limit keeps the newest N of all. latestOpen/latest/first and limit show full text for one comment."
+            "unresolved one), latest, first or all; kind filters done|issue|note|handoff; limit keeps the newest N of all. latestOpen/latest/first show full text. detail=full gives the whole body of every comment (also with which=all), cut only at maxChars with a '[cut at N chars]' marker; commentId fetches ONE comment in full."
     override val inputSchema = TicketSave.schema("ticketId") {
         put("ticketId", TicketSave.prop("Full ticket id, or its 8-char suffix."))
         put("which", TicketSave.prop("latestOpen (default) | latest | first | all."))
         put("kind", TicketSave.prop("Only comments of this kind: done | issue | note."))
         put("limit", buildJsonObject { put("type", "integer"); put("description", "With which=all: keep only the newest N.") })
-    }
+        put("detail", TicketSave.prop("compact | full. full = whole comment bodies, also with which=all."))
+        put("maxChars", buildJsonObject { put("type", "integer"); put("description", "With full text: cut each body at N chars with a marker (default: no cut).") })
+        put("commentId", TicketSave.prop("Fetch ONE comment in full by id (the 8-char id is enough); ticketId is then optional."))
+    }.let { JsonObject(it - "required") }
     override val annotations = ToolArgs.annotations(readOnly = true)
 
     override fun call(call: ToolCall): ToolResult = try {
         val comments = store ?: return TicketSave.refused("$READ refused: $unavailable")
         val args = call.arguments
-        val requested = ToolArgs.string(args, "ticketId") ?: return TicketSave.refused("$READ needs a ticketId")
+        val maxChars = (args["maxChars"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0
+        val commentId = ToolArgs.string(args, "commentId")
+        if (commentId != null) {
+            val c = comments.get(commentId) ?: return TicketSave.refused("$READ: no comment '$commentId'")
+            WireTickets.find(api, call, c.ticketId).getOrElse { return TicketSave.refused(it.message ?: "no ticket for that comment") }
+            return ToolResult(CommentsWiring.line(api, c, true, maxChars))
+        }
+        val requested = ToolArgs.string(args, "ticketId") ?: return TicketSave.refused("$READ needs a ticketId (or a commentId)")
         val ticket = WireTickets.find(api, call, requested).getOrElse { return TicketSave.refused(it.message ?: "no ticket '$requested'") }
         val which = ToolArgs.string(args, "which") ?: "latestOpen"
         val limit = (args["limit"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
         val found = comments.read(ticket.id, which, ToolArgs.string(args, "kind")?.lowercase(), limit)
-        val full = which != "all"
-        ToolResult(if (found.isEmpty()) "no comments (${which}) on ${WireTickets.shortId(ticket.id)}" else found.joinToString("\n") { CommentsWiring.line(api, it, full) })
+        val full = which != "all" || ToolArgs.string(args, "detail")?.lowercase() == "full"
+        ToolResult(if (found.isEmpty()) "no comments (${which}) on ${WireTickets.shortId(ticket.id)}" else found.joinToString("\n") { CommentsWiring.line(api, it, full, maxChars) })
     } catch (e: IllegalArgumentException) {
         TicketSave.refused("$READ refused: ${e.message}")
     }
