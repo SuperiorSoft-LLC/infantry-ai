@@ -305,6 +305,8 @@ val e = api.events.publish("ticket.moved", """{"id":"t1"}""")                  /
 val handle = api.events.subscribe("ticket.*") { e: NamedEvent -> }            // exact name, "prefix.*", or "*"
 ```
 
+A UI half hears a broadcast frame only if its `module.json` lists the type in `daemonFrames` (and `daemon.<type>` in `events`): the client then publishes `daemon.<type>` on the plugin event bus to that module alone, the frame body in `data["data"]` (DAEMON-FRAMES-1). Requests stay on the plugin HTTP routes.
+
 A `NamedEvent` has `name` (dotted, lower case), `payload` (JSON text), `source` (plugin id, `session:<id>`, `cli` or
 `daemon`), `id`, `causeId` (the root event's id), `depth` (hops from the root) and `at`. Delivery is off the
 publishing thread, in publish order. The core carries `causeId` and `depth` but enforces no loop policy: a loop guard

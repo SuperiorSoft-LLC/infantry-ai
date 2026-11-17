@@ -879,6 +879,7 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 - `RouteGate`: The daemon rule: a route must be declared, and under the lockdown also allowed by the lock.
 - `ServiceGate`: The service rules: declared in module.json, not denied by the owner, and for a community module, allowed.
 - `ServiceRegistry`: PLUGINS-1: the host's service registry, the extension point for platform services.
+- `DaemonFrameRelay`: DAEMON-FRAMES-1: republishes a daemon broadcast frame to the modules whose `daemonFrames` names its type, as the event `daemon.<type>` (body in `data["data"]`), and to no other module.
 - `SimpleEventBus`: A plain in-process event bus. PLUGIN-HOTSWAP-1: it records each observer's owner module (`dropOwner` removes one module's observers) and binds one observer object once.
 - `LeakWatch`: PLUGIN-HOTSWAP-1: asks the GC to collect a swapped-out plugin's class loader and says whether it did within a timeout; `heapDump` for the dev leak report ([Plugin lifecycle](Plugin-lifecycle.md)).
 

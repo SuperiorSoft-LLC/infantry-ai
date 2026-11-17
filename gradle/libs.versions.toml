@@ -11,6 +11,7 @@ sqldelight = "2.2.1"
 agp = "9.0.1"
 androidx-activity = "1.12.4"
 kotlinx-datetime = "0.7.1"
+kizitonwose-calendar = "2.10.1"
 kotlinStdlib = "2.3.10"
 junitVersion = "1.3.0"
 zxing = "3.5.3"
@@ -39,6 +40,7 @@ sqldelight-runtime = { group = "app.cash.sqldelight", name = "runtime", version.
 sqldelight-jdbc-driver = { group = "app.cash.sqldelight", name = "jdbc-driver", version.ref = "sqldelight" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "kotlinx-datetime" }
+kizitonwose-calendar = { module = "com.kizitonwose.calendar:compose-multiplatform", version.ref = "kizitonwose-calendar" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
 # Ticket 55d60a5e: sqlite-driver 2.2.1 brings sqlite-jdbc 3.51.0.0, whose SQLite 3.51.0 deadlocks in the unix VFS
