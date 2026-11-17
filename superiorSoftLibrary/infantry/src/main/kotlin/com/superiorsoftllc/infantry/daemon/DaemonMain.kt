@@ -980,7 +980,14 @@ class InfantryDaemon(
             val agentModules = agentsWired.modules
             val agents = agentsWired.profiles
             // TRAITS-T4: the chokepoint's fallback, so a spawn path that resolves no instance itself still freezes one.
-            manager.instanceFor = agents::instanceFor
+            manager.instanceFor = { agentId, role -> agents.instanceFor(agentId, role) }
+            // PK-1 (plan CAL-PLAN-2 B3.1): the PLUGIN TOOLS briefing of every role session, from the AgentBriefing service (none = no section).
+            agents.pluginBriefing = { role, pid ->
+                com.superiorsoftllc.infantry.agents.PluginBriefingSection.of(
+                    pluginHost.get().serviceRegistry.find(com.superiorsoftllc.infantry.daemon.api.knowledge.AgentBriefing::class), role, pid,
+                    settings.limit(LimitRegistry.KNOWLEDGE_PLUGINS_MAX_CHARS), settings.limit(LimitRegistry.KNOWLEDGE_PLUGINS_SUMMARY_MAX_CHARS),
+                )
+            }
             manager.assistantDir = assistantDir
             // PROGRESS-S5: the opt-in estimated mode's per-project label durations outlive a restart.
             manager.progressEstimates = com.superiorsoftllc.infantry.session.FileProgressEstimates(
@@ -3675,7 +3682,7 @@ private suspend fun handleConnection(
                                 launchWarning(manager, resolved.providerId)?.let(outgoing::trySend)
                                 // TRAITS-T4/T5: resolved first and passed in, so the frozen row is what this turn rendered.
                                 // P10-K15: with the skill ids the row will freeze, so the turn renders exactly those.
-                                val instance = agents.instanceFor(resolved.agentId, resolved.role)?.let { manager.withSkills(it, null) }
+                                val instance = agents.instanceFor(resolved.agentId, resolved.role, resolved.projectId)?.let { manager.withSkills(it, null) }
                                 // BUG-G2d: the session the last `new` named as its origin is charged for this one; the
                                 // check that counts is here, under the guard's lock, right before the session exists.
                                 val origin = spawnOrigin

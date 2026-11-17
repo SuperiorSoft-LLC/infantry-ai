@@ -680,6 +680,17 @@ Generated for the `infantryDaemonApi` guard `SdkTypesDocumentedGuardTest`: every
 - `KnowledgeRecords`: DP-7c (DaemonApi 1.17.0, additive): the decisions / issues half of [Knowledge], a service published in the AR-5 registry by the plugin that owns those logs (Infantry_Notes).
 - `KnowledgeWriter`: SCRIPT-ARSENAL-2 (DaemonApi 1.51.0, additive): the write half of [Knowledge], published by Infantry_Notes; `save`/`delete`/`names` of generated notes; `GLOBAL_PROJECT` entries are found by every project's note search and show.
 
+### `PluginKnowledge.kt`
+
+PK-1 (DaemonApi 1.67.0, additive): plugin knowledge for any role ([Plugin knowledge](plugin-knowledge.md)).
+
+- `KnowledgeEntry`: one piece of plugin knowledge (the run-time twin of module.json `knowledge`); `module` is stamped by the provider; `KnowledgeEntry.of(module, declaration, body)`.
+- `PluginKnowledge`: the registry for knowledge computed at run time: `contribute(entry)` returns a handle; closing it, or unloading the contributor, removes the entry. Published with `services.provideScoped`.
+- `AgentBriefing`: the consumer port the core asks once per role session at spawn: `section(role, projectId, budget)`; no provider = no section.
+- `BriefingBudget`: the section's character budget (`maxChars`, `summaryMaxChars`), from the settings `limits.knowledge.plugins.*`.
+- `KnowledgeSections`: the one parser of `<!-- skip: roleA,roleB -->` section markers (`textFor(text, role)`), shared by the core KNOWLEDGE.md and plugin files.
+- `KnowledgeBriefing`: renders the PLUGIN TOOLS section from entries (scope, role-specific first, budget with a `+N more` line); every provider uses it.
+
 ### `LocalFiles.kt`
 
 - `LocalFile`: RUNTIME-LOAD-4 (DaemonApi 1.4.0, wire contract 1.147.0, additive): a tool argument that names files on the CALLER's machine.

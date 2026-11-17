@@ -297,7 +297,10 @@ interface DaemonApi {
         // 1.66.0 (TRIG-2c): `HttpCall.bodyBytes` (additive). Removed: `triggers.TriggerStore` and `TriggerHost.store` (the store moved
         // into Infantry_Triggers with the service; a protocol-typed SDK interface cannot cross plugin class loaders). `Triggers` now has
         // a provider: Infantry_Triggers publishes it with `services.provideScoped` (owner stamped from the calling module).
-        const val VERSION = "1.66.0"
+        // 1.67.0 (PK-1, additive; plan CAL-PLAN-2 B2/B3): daemon.api.knowledge `PluginKnowledge` (KnowledgeEntry), `AgentBriefing`
+        // (BriefingBudget), `KnowledgeSections` (the shared skip-marker parser) and `KnowledgeBriefing` (the PLUGIN TOOLS renderer);
+        // module.json `knowledge` (KnowledgeDeclaration); BOARD_API_VERSION 1.13.0; `modules.changed` also fires on a version change.
+        const val VERSION = "1.67.0"
     }
 }
 
