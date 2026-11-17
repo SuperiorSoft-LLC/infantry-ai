@@ -642,8 +642,11 @@ class DaemonPluginHost private constructor(
                 request(Envelope(type, data, sessionId), timeoutMs).toFrame()
         }
         if (entry.owner.id == "Infantry_Board" || entry.owner.id == "Board") log("[plugins] board tool call: $name caller=${caller.owner} session=${call.clientSessionId ?: "-"} role=${call.clientRole ?: "-"}")
-        return entry.owner.callSuspending("tool($name)", toolTimeoutMs(entry.owner, entry.tool)) { entry.tool.call(call) }
+        val result = entry.owner.callSuspending("tool($name)", toolTimeoutMs(entry.owner, entry.tool)) { entry.tool.call(call) }
             .getOrElse { ToolResult("$name failed: ${it.message ?: it::class.simpleName}", isError = true) }
+        // TICKET-EPIC-1: an argument the schema does not declare was dropped by the tool; say so instead of ignoring it silently.
+        val ignored = ignoredToolArgs(entry.tool.inputSchema, arguments)
+        return if (ignored.isEmpty()) result else result.copy(text = result.text + "\nWarning: ignored argument(s) not in $name's schema: ${ignored.joinToString(", ")}")
     }
 
     /**
@@ -1594,3 +1597,9 @@ private fun com.superiorsoftllc.infantry.plugin.api.DaemonMcpServerDeclaration.t
     name = name, command = command, workingDir = workingDir, url = url, env = env, envSecrets = envSecrets,
     headers = headers, headerSecrets = headerSecrets, provides = provides, localOnly = localOnly,
 )
+
+/** TICKET-EPIC-1: the argument names [arguments] carries that [schema] (its `properties`) does not declare; empty when the schema lists no properties. */
+internal fun ignoredToolArgs(schema: JsonObject, arguments: JsonObject): List<String> {
+    val declared = (schema["properties"] as? JsonObject)?.keys ?: return emptyList()
+    return arguments.keys.filter { it !in declared }
+}

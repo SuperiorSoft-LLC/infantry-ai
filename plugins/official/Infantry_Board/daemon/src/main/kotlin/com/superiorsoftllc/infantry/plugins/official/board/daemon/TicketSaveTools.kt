@@ -318,6 +318,8 @@ class TicketCreateTool(private val api: DaemonApi, private val comments: TicketC
             mcpProp()
             put("images", pathsProp("Images to attach: local image file paths (png, jpeg, gif or webp, at most 10 MB each; each is uploaded to the project's .infantry/uploads/ticket/), or paths already stored there. A missing, oversized or non-image file refuses the call and nothing is saved. The board shows them as attachments and the started worker's brief lists them."))
             put("status", prop("Column the new ticket enters: todo (default, the current sprint) or backlog (parked, never started until moved to todo)."))
+            put("epic", prop("TICKET-EPIC-1: file the ticket under this epic of its project (id or name). An unknown epic refuses the call and nothing is created. Its branch is cut from the epic's base."))
+            put("epicId", prop("Alias of epic."))
             relatedToProp()
             CommentsWiring.notifyProps(this, update = false)
             put("verbose", ToolArgs.verboseProp())
@@ -336,9 +338,21 @@ class TicketCreateTool(private val api: DaemonApi, private val comments: TicketC
         if (explicit != null) TicketSave.result(api.tickets.mayFile(explicit, by), tool)
         // TICKET-COMMENTS-2: the notify list is checked before anything is created.
         val notify = comments?.let { c -> try { CommentsWiring.list(args, "notify")?.let(c::validateTargets) } catch (e: IllegalArgumentException) { return TicketSave.refused("$tool refused: ${e.message}") } }
+        // TICKET-EPIC-1: the epic is resolved (id or name) before anything is created; an unknown one refuses, never drops silently.
+        val epicTarget = (ToolArgs.string(args, "epic") ?: ToolArgs.string(args, "epicId"))?.trim()?.takeIf { it.isNotEmpty() && !it.equals(EpicMove.NONE, true) }
+        val epicId = epicTarget?.let { target ->
+            val known = when (val r = api.epics.list(projectId, by)) {
+                is BoardResult.Ok -> r.value
+                is BoardResult.Refused -> return TicketSave.refused("$tool refused: ${r.text}")
+                is BoardResult.Unavailable -> return TicketSave.refused("$tool refused: ${r.reason}")
+            }
+            (known.firstOrNull { it.id == target } ?: known.firstOrNull { it.name.equals(target, ignoreCase = true) })?.id
+                ?: return TicketSave.refused("$tool refused: no epic '$target' in project ${projectId ?: "(none)"}; nothing created")
+        }
         val images = TicketSave.images(args, tool)?.let { TicketSave.attach(call, projectId, it, tool) }
         val draft = TicketDraft(
             title = title,
+            epicId = epicId,
             description = TicketReportLine.apply(TicketSave.verbatim(args, "description"), api.boardRuntime.setting(TicketReportLine.KEY)),
             projectId = projectId,
             agentId = TicketSave.roleAgentId(ToolArgs.string(args, "role")),
