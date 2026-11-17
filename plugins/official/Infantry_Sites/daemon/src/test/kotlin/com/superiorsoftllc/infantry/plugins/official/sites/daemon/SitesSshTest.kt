@@ -265,6 +265,15 @@ class SitesSshTest {
         assertFailsWith<IllegalArgumentException> { SitesService(SshJdkHttp(), TokenSource { SSH_TOKEN }, { base }).sshCertificate("../x", "k") }
     }
 
+    @Test
+    fun `409 server_setting_up is its own non-failure kind with the retry seconds, not not_running`() {
+        val base = stub(409, """{"error":"server_setting_up","message":"The server is still being set up. Try again shortly.","retryAfterSec":15}""", mutableListOf())
+        val e = assertFailsWith<SitesException> { SitesService(SshJdkHttp(), TokenSource { SSH_TOKEN }, { base }).sshCertificate(SID, "k") }
+        assertEquals(SitesException.SETTING_UP, e.kind)
+        assertEquals(15L, e.retryAfterSec)
+        assertTrue("still being set up" in e.message!! && "15 seconds" in e.message!!, e.message)
+    }
+
     // ---- server choice ----------------------------------------------------------------------------------------------
 
     @Test

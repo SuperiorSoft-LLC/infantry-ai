@@ -162,6 +162,8 @@ class SshExec(private val pins: HostKeyPins, private val log: (String) -> Unit =
         var refused: String? = null
         var checkFailed: Throwable? = null
         val client = SshClient.setUpDefaultClient()
+        // WS-READY-1: the hosting service reports the server's ED25519 host key; ask for that key type first, else MINA may be shown ECDSA/RSA and refuse a good server.
+        client.signatureFactories = client.signatureFactories.sortedBy { if (it.name.contains("ed25519")) 0 else 1 }
         client.serverKeyVerifier = ServerKeyVerifier { _, _, key ->
             // SSH-DAEMON-1: an exception thrown here ends the key exchange before any login; keep it, so it is not reported as a refusal.
             try {

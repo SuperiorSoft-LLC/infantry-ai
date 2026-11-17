@@ -61,15 +61,19 @@ private fun Chip(text: String, color: Color) {
     Text(text, color = color, fontSize = 11.sp, modifier = Modifier.border(BorderStroke(1.dp, color), RoundedCornerShape(10.dp)).padding(horizontal = 8.dp, vertical = 2.dp))
 }
 
-private fun statusColor(status: String): Color = when (status) {
-    "active" -> Palette.Ok
-    "new" -> Palette.Warn
+/** WS-READY-1: a new server, or a running one whose SSH is not authorizing yet, is "Setting up"; a missing sshReady counted as true. */
+fun siteSettingUp(status: String, sshReady: Boolean): Boolean = status == "new" || (status in setOf("running", "active") && !sshReady)
+
+private fun statusColor(status: String, sshReady: Boolean = true): Color = when {
+    siteSettingUp(status, sshReady) -> Palette.Warn
+    status == "active" || status == "running" -> Palette.Ok
+    status == "new" -> Palette.Warn
     else -> Palette.Muted
 }
 
 /** The status in plain words: active is Online, off is Offline, new is Starting; anything else as it came. */
-fun siteStatusLabel(status: String): String = when (status) {
-    "active" -> "Online"
+fun siteStatusLabel(status: String, sshReady: Boolean = true): String = if (siteSettingUp(status, sshReady)) "Setting up…" else when (status) {
+    "active", "running" -> "Online"
     "off" -> "Offline"
     "new" -> "Starting"
     "" -> "unknown"
@@ -144,7 +148,7 @@ fun SitesServers(context: TabContext) {
                 for (srv in s.servers) CardBox(SITES_ROW_TAG_PREFIX + srv.id) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(srv.name, color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                        Chip(siteStatusLabel(srv.status), statusColor(srv.status))
+                        Chip(siteStatusLabel(srv.status, srv.sshReady), statusColor(srv.status, srv.sshReady))
                     }
                     Text(listOf(srv.ip, srv.region, srv.size, SitesParser.date(srv.createdAt).orEmpty()).filter { it.isNotBlank() }.joinToString("   "), color = Palette.Muted, fontSize = 12.sp)
                     SitesParser.date(srv.destroyAt)?.let { Text("Will be destroyed on $it", color = Palette.Warn, fontSize = 12.sp) }
