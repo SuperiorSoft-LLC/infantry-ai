@@ -10,6 +10,18 @@
   "entry": "com.superiorsoftllc.infantry.plugins.official.mascot.MascotPlugin",
   "jar": "build/libs/Infantry_Mascot.jar",
   "buildOrder": 220,
+  "files": ["knowledge"],
+  "knowledge": [
+    {
+      "id": "mascot",
+      "summary": "Mascot avatars: settings (motion, state map, role looks) and how the avatar style is chosen.",
+      "file": "knowledge/mascot.md",
+      "tools": [],
+      "roles": ["assistant"],
+      "skipRoles": [],
+      "projects": []
+    }
+  ],
   "implementations": [
     { "registry": "agent.avatar.renderers", "key": "mascot" }
   ],

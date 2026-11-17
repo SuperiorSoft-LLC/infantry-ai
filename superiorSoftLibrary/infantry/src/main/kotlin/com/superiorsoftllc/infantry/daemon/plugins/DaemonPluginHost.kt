@@ -137,14 +137,11 @@ class DaemonPluginHost private constructor(
     /** CARD-3: the same resolved modules with their folders, as [DaemonApi.plugins] `loaded()` answers them. */
     @Volatile private var loadedViews: List<com.superiorsoftllc.infantry.daemon.api.plugins.LoadedModule> = emptyList()
         set(value) {
-            val changed = field.map { it.id } != value.map { it.id }
+            val payload = modulesChangedPayload(field, value)
             field = value
-            // ROLE-PLUGIN-1: the named event `modules.changed` (payload `{"modules":[ids]}`) tells a plugin that reads other modules'
-            // module.json (`loaded()`) to read again; published only when the set of loaded ids changes.
-            if (changed) runCatching {
-                val ids = kotlinx.serialization.json.JsonArray(value.map { kotlinx.serialization.json.JsonPrimitive(it.id) })
-                namedEvents.publish(MODULES_CHANGED_EVENT, kotlinx.serialization.json.JsonObject(mapOf("modules" to ids)).toString(), "core", null, 0)
-            }
+            // ROLE-PLUGIN-1: the named event `modules.changed` tells a plugin that reads other modules' module.json (`loaded()`) to
+            // read again; published only when the set of loaded ids changes, or (PK-1) a loaded module's version does.
+            if (payload != null) runCatching { namedEvents.publish(MODULES_CHANGED_EVENT, payload, "core", null, 0) }
         }
 
     /**
@@ -804,12 +801,14 @@ class DaemonPluginHost private constructor(
             if (now - owner.routeWindowStart > 60_000) { owner.routeWindowStart = now; owner.routeCount = 0 }
             if (++owner.routeCount > owner.routeRate && owner.routeRate > 0) return HttpReply(429, "plugin ${owner.id}: more than ${owner.routeRate} requests a minute")
         }
+        // TRIG-2c: the check and the handler see the same call, with the template's {name} values filled.
+        val routed = if (pathParams.isEmpty()) call else call.copy(pathParams = pathParams)
         entry.check?.let { chk ->
             // HTTP-SEAM-1: the route's declared auth runs first; fail closed (a throw refuses).
-            val refusal = owner.call("routeCheck(${call.method} ${call.path})") { chk.refusal(call) }.getOrElse { "route check failed" }
+            val refusal = owner.call("routeCheck(${call.method} ${call.path})") { chk.refusal(routed) }.getOrElse { "route check failed" }
             if (refusal != null) return HttpReply(401, refusal)
         }
-        return owner.call("route(${call.method} ${call.path})") { entry.handler(if (pathParams.isEmpty()) call else call.copy(pathParams = pathParams)) }
+        return owner.call("route(${call.method} ${call.path})") { entry.handler(routed) }
             .getOrElse { HttpReply(500, "plugin ${owner.id} failed: ${it.message ?: it::class.simpleName}") }
     }
 
@@ -1338,6 +1337,9 @@ class DaemonPluginHost private constructor(
         // RUNTIME-LOAD-5: the sessions read model behind this plugin's grants (community: default deny).
         override val sessionReads: com.superiorsoftllc.infantry.daemon.api.sessions.SessionReads =
             GrantedSessionReads({ hostServices.sessionReads }) { grant -> !p.community || grant in p.setting.allow }
+        // TRIG-2c: the trigger host for bundled / official plugins only (sessions, mail and the unattended launch are core facts).
+        override val triggerHost: com.superiorsoftllc.infantry.daemon.api.triggers.TriggerHost?
+            get() = if (p.community) null else hostServices.triggerHost
         // DP-5h-3a: the board runtime for bundled / official plugins only (a community plugin builds no board).
         override val boardRuntime: com.superiorsoftllc.infantry.daemon.api.board.BoardRuntime
             get() = if (p.community) com.superiorsoftllc.infantry.daemon.api.board.NoBoardRuntime else hostServices.boardRuntime
@@ -1494,6 +1496,23 @@ class DaemonPluginHost private constructor(
         const val PROGRESS_FAILED_EVENT = "progress.failed"
         /** ROLE-PLUGIN-1: published when the set of loaded modules changes (payload `{"modules":[ids]}`). */
         const val MODULES_CHANGED_EVENT = "modules.changed"
+
+        /**
+         * ROLE-PLUGIN-1 + PK-1: the `modules.changed` payload for a move from [before] to [after], or null when neither the loaded ids
+         * nor any version changed. `{"modules":[ids], "versions":[{"id":..,"version":..}]}`, both in load order: `modules` as before
+         * (readers keep working), `versions` so a reader can tell an upgrade (same id, new version) from nothing.
+         */
+        fun modulesChangedPayload(
+            before: List<com.superiorsoftllc.infantry.daemon.api.plugins.LoadedModule>,
+            after: List<com.superiorsoftllc.infantry.daemon.api.plugins.LoadedModule>,
+        ): String? {
+            if (before.map { it.id to it.manifest.version } == after.map { it.id to it.manifest.version }) return null
+            val ids = kotlinx.serialization.json.JsonArray(after.map { kotlinx.serialization.json.JsonPrimitive(it.id) })
+            val versions = kotlinx.serialization.json.JsonArray(after.map {
+                kotlinx.serialization.json.JsonObject(mapOf("id" to kotlinx.serialization.json.JsonPrimitive(it.id), "version" to kotlinx.serialization.json.JsonPrimitive(it.manifest.version)))
+            })
+            return kotlinx.serialization.json.JsonObject(mapOf("modules" to ids, "versions" to versions)).toString()
+        }
         val EVENT_EMIT_ACTION = ActionCatalog.Action("events.emit", "write", listOf("plugin_tool_call"))
         /** FULLSUITE-2: the built-in full-suite runner tool and its policy action. */
         const val TESTS_TOOL = "infantry_tests"

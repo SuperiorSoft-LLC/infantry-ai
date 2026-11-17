@@ -141,7 +141,7 @@ api.routes.handle("GET", "hello") { call: HttpCall -> HttpReply(200, """{"ok":tr
 - An **absolute** path (`/hooks/{id}`) must be declared in `daemon.routes` and only core and official modules may use
   it. It may contain `{name}` segments; values arrive in `HttpCall.pathParams`. An exact route wins over a template.
 - `daemon.publicRoutes` lists routes answered without the bearer token (core and official only).
-- `HttpCall`: `method`, `path`, `query`, `headers`, `body`, `remoteAddress`, `pathParams`. `HttpReply`: `status`,
+- `HttpCall`: `method`, `path`, `query`, `headers`, `body`, `remoteAddress`, `pathParams`, `bodyBytes` (1.66.0: the exact body bytes, for a signature check; a public route's body is read with the hard cap `limits.plugins.publicRouteBodyKb`, 413 over it). `HttpReply`: `status`,
   `body`, `contentType`, `headers`.
 - A route is rate limited to `limits.plugins.routeRequestsPerMinute` requests a minute (600; 0 = unlimited), then 429.
 - **Auth of a route (HTTP-SEAM-1, DaemonApi 1.61.0).** Every route is behind the daemon's auth unless it is listed in
@@ -305,6 +305,8 @@ val e = api.events.publish("ticket.moved", """{"id":"t1"}""")                  /
 val handle = api.events.subscribe("ticket.*") { e: NamedEvent -> }            // exact name, "prefix.*", or "*"
 ```
 
+A UI half hears a broadcast frame only if its `module.json` lists the type in `daemonFrames` (and `daemon.<type>` in `events`): the client then publishes `daemon.<type>` on the plugin event bus to that module alone, the frame body in `data["data"]` (DAEMON-FRAMES-1). Requests stay on the plugin HTTP routes.
+
 A `NamedEvent` has `name` (dotted, lower case), `payload` (JSON text), `source` (plugin id, `session:<id>`, `cli` or
 `daemon`), `id`, `causeId` (the root event's id), `depth` (hops from the root) and `at`. Delivery is off the
 publishing thread, in publish order. The core carries `causeId` and `depth` but enforces no loop policy: a loop guard
@@ -349,6 +351,57 @@ Each plugin has its own class loader, so plugins cannot share classes. Two mecha
   and `api.services.endpoints("scripting.engine/")`. Operation, request and answer are plain strings. This is how an
   extension point is declared as an id prefix that other plugins contribute under. Closing the returned handle, or
   unloading the plugin, removes the provider.
+- **Caller-scoped (TRIG-API-1, DaemonApi 1.65.0):** `api.services.provideScoped(MyApi::class) { callerModuleId -> MyApiFor(callerModuleId) }`.
+  The host calls the factory with the module id of whoever calls `find` (`core` when the daemon itself looks it up) and
+  caches one instance per caller, so the provider knows who is asking without trusting an argument. `find` is unchanged
+  for callers. Same tier and one-provider-per-type rules as `provide`. A caller's instance is dropped when that caller
+  unloads, and all of them when the handle closes; an instance that is `AutoCloseable` is closed then.
+
+### Triggers (TRIG-API-1, DaemonApi 1.65.0)
+
+`Triggers` (`daemon.api.triggers`) is the trigger service as an SDK API: the plugin that runs triggers publishes it with
+`provideScoped`, and any plugin (the Calendar, an orchestrator, a third party) finds it. A daemon with no trigger plugin
+answers `null`: the caller owns its fail mode. Since TRIG-2c (DaemonApi 1.66.0) Infantry_Triggers publishes it. Since TRIG-AT-1 it
+stores `owner` / `ref` and serves the kind `at`; since TRIG-ACTIONS-1 it serves plugin action kinds (`registerAction`).
+
+```kotlin
+val triggers = api.services.find(Triggers::class) ?: return              // null = no triggers on this daemon
+val t = triggers.save(TriggerSaveRequest(name = "Stand-up", kind = "at", fireAt = at, deleteAfterFire = true,
+    action = TriggerActionRecord(kind = "prompt", agentId = "session:$sessionId", prompt = "Stand-up in 5 minutes"),
+    ref = "calendar:cal-1a2b3c4d"))                                     // owner stamped: this module's id
+val mine = triggers.list(TriggerFilter(owner = api.moduleId))
+val handle = triggers.registerAction("pod.start") { fire -> TriggerActionResult.Started(startPod(fire.trigger)) }
+api.events.subscribe(TriggerEvents.ALL) { e -> /* trigger.fired | delivered | refused | target_gone */ }
+```
+
+- `Triggers`: `list(filter)`, `get(id)`, `save(request)`, `delete(id)`, `fire(id, source)`, `arm(id)`, `disable(id)`,
+  `events(id)`, `registerAction(kind, handler)`.
+- **Ownership** (`TriggerOwnership`): the provider stamps `owner` with the caller id `provideScoped` gave it. A request that
+  names another owner is refused (an illegal-argument exception); a module may change (update, delete, fire, arm, disable) only
+  a trigger it owns. `owner = null` is a person's trigger, changed in the app. `ref` is the owner's own opaque key.
+- The DTOs are the API's own (`TriggerSaveRequest`, `TriggerRecord`, `TriggerActionRecord`, `TriggerEventRecord`), field
+  for field the wire's `TriggerSave` / `TriggerView` / `TriggerAction` / `TriggerEventView`: a plugin's class loader does
+  not see the protocol module (each plugin shades its own copy), so a service typed with protocol classes could not cross
+  between plugins.
+- New fields (every default is today's behaviour): kind `at` with `fireAt` (epoch ms) and `deleteAfterFire`; target
+  `agentId = session:<id>` (that one session, never replaced); disposition `target_gone`; `owner`, `ref`.
+- **One-shots** (`at`, TRIG-AT-1): fires once at `fireAt` (event source `at`), then is disabled, or deleted once its run is over
+  when `deleteAfterFire`. No coalescing window or hourly ceiling applies. A slot passed while the daemon was down fires once if it
+  is late by at most the daemon setting `triggers.at.maxLateMs` (default 15 minutes), else it is recorded `missed` and kept,
+  disabled. Saving a new `fireAt` schedules it again.
+- **Plugin actions** (`registerAction`, TRIG-ACTIONS-1): a kind is `<namespace>.<name>` (`acme.log`; `start_next` and `prompt` stay built in, a
+  second registration of a kind throws). A trigger whose `action.kind` is that kind runs the handler off the scheduler thread with a
+  `TriggerFire(trigger, source, runId)`; the `TriggerActionResult` is the event's disposition: `Started` = `started` (digest: session id),
+  `Mailed` = `mailed`, `Done` = `delivered`, `Refused(reason)` = `refused` (reason in the digest); a throwing handler is `refused`. A fire
+  with no handler (never registered, handle closed, module unloaded) is `refused_unknown_action`. None of these trips the trigger or counts
+  toward the hourly ceiling. Closing the handle, or the module leaving `plugins.loaded()`, removes the kind. A trigger may name a kind
+  before its plugin loads. Example: `plugins/examples/Acme_TriggerAction` (registers `acme.log`, creates an owned `at` trigger that uses it).
+- **Orphans**: an owned trigger whose module is no longer in `plugins.loaded()` is deleted, at start and on `modules.changed`. The
+  Triggers tab shows an owned trigger with a "from <Module>" chip, read-only (no edit, no delete).
+- **Named events** (`TriggerEvents`): `trigger.fired` (an event started work or mailed its target) and `trigger.refused` (a ceiling,
+  launch-gate refusal or a suppression) are published since TRIG-2c; `trigger.delivered`,
+  `trigger.target_gone` come with session targets. Payload `{id, owner, ref, disposition, sessionId}`. One mechanism for plugins,
+  Lua hooks and agents (`infantry event`): there is no listener method on `Triggers`.
 
 ### Progress and downloads (DaemonApi 1.54.0)
 
@@ -629,6 +682,17 @@ Generated for the `infantryDaemonApi` guard `SdkTypesDocumentedGuardTest`: every
 - `KnowledgeRecords`: DP-7c (DaemonApi 1.17.0, additive): the decisions / issues half of [Knowledge], a service published in the AR-5 registry by the plugin that owns those logs (Infantry_Notes).
 - `KnowledgeWriter`: SCRIPT-ARSENAL-2 (DaemonApi 1.51.0, additive): the write half of [Knowledge], published by Infantry_Notes; `save`/`delete`/`names` of generated notes; `GLOBAL_PROJECT` entries are found by every project's note search and show.
 
+### `PluginKnowledge.kt`
+
+PK-1 (DaemonApi 1.67.0, additive): plugin knowledge for any role ([Plugin knowledge](plugin-knowledge.md)).
+
+- `KnowledgeEntry`: one piece of plugin knowledge (the run-time twin of module.json `knowledge`); `module` is stamped by the provider; `KnowledgeEntry.of(module, declaration, body)`.
+- `PluginKnowledge`: the registry for knowledge computed at run time: `contribute(entry)` returns a handle; closing it, or unloading the contributor, removes the entry. Published with `services.provideScoped`.
+- `AgentBriefing`: the consumer port the core asks once per role session at spawn: `section(role, projectId, budget)`; no provider = no section.
+- `BriefingBudget`: the section's character budget (`maxChars`, `summaryMaxChars`), from the settings `limits.knowledge.plugins.*`.
+- `KnowledgeSections`: the one parser of `<!-- skip: roleA,roleB -->` section markers (`textFor(text, role)`), shared by the core KNOWLEDGE.md and plugin files.
+- `KnowledgeBriefing`: renders the PLUGIN TOOLS section from entries (scope, role-specific first, budget with a `+N more` line); every provider uses it.
+
 ### `LocalFiles.kt`
 
 - `LocalFile`: RUNTIME-LOAD-4 (DaemonApi 1.4.0, wire contract 1.147.0, additive): a tool argument that names files on the CALLER's machine.
@@ -867,7 +931,20 @@ RUNNER-POOL-6 (DaemonApi 1.45.0, additive), package `com.superiorsoftllc.infantr
 - `TriggerMailResult`
 - `TriggerRunEvent`: A run's end as the trigger sees it.
 - `TriggerSession`: One session as a trigger sees it.
-- `TriggerStore`: The durable trigger tables (rows, events, webhook secrets, the pending nudge mail).
+
+### `Triggers.kt`
+
+- `TriggerActionHandler`: A plugin's handler for its own action kind (see `Triggers.registerAction`).
+- `TriggerActionRecord`: What a trigger does when it fires (wire twin: `protocol.TriggerAction`).
+- `TriggerActionResult`: What a `TriggerActionHandler` did; the service records it as the event's disposition.
+- `TriggerEventRecord`: One durable event row (wire twin: `protocol.TriggerEventView`).
+- `TriggerEvents`: The named events the trigger service publishes.
+- `TriggerFilter`: What `Triggers.list` matches.
+- `TriggerFire`: One firing handed to a `TriggerActionHandler`.
+- `TriggerOwnership`: The ownership rule every `Triggers` provider applies.
+- `TriggerRecord`: A trigger as the service holds it (wire twin: `protocol.TriggerView`).
+- `TriggerSaveRequest`: The `Triggers.save` request (wire twin: `protocol.TriggerSave`).
+- `Triggers`: Found with `services.find(Triggers::class)`; published by the plugin that runs the trigger service.
 
 ### `Updates.kt`
 

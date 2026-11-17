@@ -40,6 +40,16 @@
         "fields": [
           { "key": "knowledge.globalWriteRoles", "type": "text", "label": "Roles that may write global notes", "default": "pm", "scope": "daemon", "order": 1, "description": "Comma-separated role ids. The owner (no session) may always write. Every agent may read." }
         ]
+      },
+      {
+        "node": "infantry.notes.pluginKnowledge", "group": "Knowledge", "title": "Plugin tool notices", "tab": "Project", "order": 911,
+        "applies": "Applies to: the notice a running agent gets when a plugin adds, changes or removes tools.",
+        "keywords": ["plugin", "tools", "notice", "knowledge", "wake"],
+        "fields": [
+          { "key": "knowledge.plugins.notifyLive", "type": "checkbox", "label": "Tell running agents about new or removed plugin tools", "default": true, "scope": "daemon", "order": 1 },
+          { "key": "knowledge.plugins.noticeWakes", "type": "checkbox", "label": "Wake an idle agent for such a notice", "default": false, "scope": "daemon", "order": 2, "description": "Off: the notice waits and arrives with the agent's next turn." },
+          { "key": "knowledge.plugins.noticeCoalesceMs", "type": "number", "label": "Merge notices within (ms)", "default": 2000, "min": 0, "max": 600000, "step": 100, "scope": "daemon", "order": 3 }
+        ]
       }
     ],
     "tools": [

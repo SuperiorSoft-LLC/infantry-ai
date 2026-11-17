@@ -111,6 +111,12 @@ class SimpleEventBus(private val log: (String) -> Unit = {}) : EventBus {
         for (e in now) runCatching { e.observer(event) }.onFailure { log("[plugins] observer of ${event.name} failed: ${it.message}") }
     }
 
+    /** DAEMON-FRAMES-1: delivers [event] only to the observers modules in [owners] subscribed. */
+    fun publishTo(owners: Set<String>, event: PluginEvent) {
+        val now = observers.filter { it.name == event.name && it.owner in owners }
+        for (e in now) runCatching { e.observer(event) }.onFailure { log("[plugins] observer of ${event.name} failed: ${it.message}") }
+    }
+
     override fun subscribe(name: String, observer: (PluginEvent) -> Unit): () -> Unit = subscribe(null, name, observer)
 
     /**
@@ -151,3 +157,16 @@ class GatedEventBus(private val bus: EventBus, private val module: String, priva
 /** Registers the services every platform has: the event bus (each module sees only its declared events). */
 fun ServiceRegistry.provideEvents(bus: EventBus, log: (String) -> Unit = {}) =
     provide(Services.EVENTS) { s -> GatedEventBus(bus, s.name, s.manifest?.events.orEmpty(), log) }
+
+/**
+ * DAEMON-FRAMES-1: republishes a daemon broadcast frame to the modules that declared its type in `daemonFrames`, as the event
+ * `daemon.<type>` (the body in `data["data"]`), and to nobody else. A frame no module declared costs one lookup.
+ */
+object DaemonFrameRelay {
+    fun relay(bus: SimpleEventBus, manifests: List<com.superiorsoftllc.infantry.plugin.api.ModuleManifest>, type: String, body: String): Int {
+        val owners = manifests.filter { type in it.daemonFrames }.map { it.name }.toSet()
+        if (owners.isEmpty()) return 0
+        bus.publishTo(owners, PluginEvent("daemon.$type", mapOf("data" to body)))
+        return owners.size
+    }
+}

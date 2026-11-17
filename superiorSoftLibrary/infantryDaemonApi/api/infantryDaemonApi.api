@@ -82,6 +82,7 @@ public abstract interface class com/superiorsoftllc/infantry/daemon/api/DaemonAp
 	public static final field VERSION Ljava/lang/String;
 	public abstract fun config (Ljava/lang/String;)Ljava/lang/String;
 	public fun displayStamp (J)Ljava/lang/String;
+	public fun endpoint (Ljava/lang/String;)Ljava/lang/String;
 	public abstract fun env (Ljava/lang/String;)Ljava/lang/String;
 	public fun files (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/files/ProjectFiles;
 	public fun getAgents ()Lcom/superiorsoftllc/infantry/daemon/api/agents/Agents;
@@ -90,6 +91,7 @@ public abstract interface class com/superiorsoftllc/infantry/daemon/api/DaemonAp
 	public fun getBoardRuntime ()Lcom/superiorsoftllc/infantry/daemon/api/board/BoardRuntime;
 	public fun getCapabilities ()Lcom/superiorsoftllc/infantry/daemon/api/capabilities/Capabilities;
 	public fun getDownloads ()Lcom/superiorsoftllc/infantry/daemon/api/downloads/Downloads;
+	public fun getEnvironment ()Ljava/lang/String;
 	public fun getEpics ()Lcom/superiorsoftllc/infantry/daemon/api/board/Epics;
 	public abstract fun getEvents ()Lcom/superiorsoftllc/infantry/daemon/api/Events;
 	public abstract fun getFrames ()Lcom/superiorsoftllc/infantry/daemon/api/Frames;
@@ -99,6 +101,7 @@ public abstract interface class com/superiorsoftllc/infantry/daemon/api/DaemonAp
 	public fun getMeters ()Lcom/superiorsoftllc/infantry/daemon/api/usage/Meters;
 	public abstract fun getModuleId ()Ljava/lang/String;
 	public fun getNotifications ()Lcom/superiorsoftllc/infantry/plugin/api/Notifications;
+	public fun getPluginSecrets ()Lcom/superiorsoftllc/infantry/daemon/api/pluginsecrets/PluginSecrets;
 	public fun getPlugins ()Lcom/superiorsoftllc/infantry/daemon/api/plugins/PluginCatalogReader;
 	public abstract fun getPolicy ()Lcom/superiorsoftllc/infantry/daemon/api/Policy;
 	public fun getProcesses ()Lcom/superiorsoftllc/infantry/daemon/api/processes/Processes;
@@ -133,17 +136,20 @@ public final class com/superiorsoftllc/infantry/daemon/api/DaemonApi$Companion {
 
 public final class com/superiorsoftllc/infantry/daemon/api/DaemonApi$DefaultImpls {
 	public static fun displayStamp (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;J)Ljava/lang/String;
+	public static fun endpoint (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;Ljava/lang/String;)Ljava/lang/String;
 	public static fun files (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/files/ProjectFiles;
 	public static fun getAgents (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/agents/Agents;
 	public static fun getBoard (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/board/Board;
 	public static fun getBoardRuntime (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/board/BoardRuntime;
 	public static fun getCapabilities (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/capabilities/Capabilities;
 	public static fun getDownloads (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/downloads/Downloads;
+	public static fun getEnvironment (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Ljava/lang/String;
 	public static fun getEpics (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/board/Epics;
 	public static fun getHttp (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/http/Http;
 	public static fun getLaunchEnv (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/processes/LaunchEnv;
 	public static fun getMeters (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/usage/Meters;
 	public static fun getNotifications (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/plugin/api/Notifications;
+	public static fun getPluginSecrets (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/pluginsecrets/PluginSecrets;
 	public static fun getPlugins (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/plugins/PluginCatalogReader;
 	public static fun getProcesses (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/daemon/api/processes/Processes;
 	public static fun getProgress (Lcom/superiorsoftllc/infantry/daemon/api/DaemonApi;)Lcom/superiorsoftllc/infantry/plugin/api/Progress;
@@ -281,8 +287,8 @@ public final class com/superiorsoftllc/infantry/daemon/api/Hooks$DefaultImpls {
 }
 
 public final class com/superiorsoftllc/infantry/daemon/api/HttpCall {
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;[B)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;[BILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/util/Map;
@@ -290,10 +296,12 @@ public final class com/superiorsoftllc/infantry/daemon/api/HttpCall {
 	public final fun component5 ()Ljava/lang/String;
 	public final fun component6 ()Ljava/lang/String;
 	public final fun component7 ()Ljava/util/Map;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;)Lcom/superiorsoftllc/infantry/daemon/api/HttpCall;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/HttpCall;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/HttpCall;
+	public final fun component8 ()[B
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;[B)Lcom/superiorsoftllc/infantry/daemon/api/HttpCall;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/HttpCall;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;[BILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/HttpCall;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getBody ()Ljava/lang/String;
+	public final fun getBodyBytes ()[B
 	public final fun getHeaders ()Ljava/util/Map;
 	public final fun getMethod ()Ljava/lang/String;
 	public final fun getPath ()Ljava/lang/String;
@@ -483,6 +491,7 @@ public final class com/superiorsoftllc/infantry/daemon/api/NoServices : com/supe
 	public fun endpoints (Ljava/lang/String;)Ljava/util/Map;
 	public fun find (Lkotlin/reflect/KClass;)Ljava/lang/Object;
 	public fun provide (Lkotlin/reflect/KClass;Ljava/lang/Object;)Ljava/lang/AutoCloseable;
+	public fun provideScoped (Lkotlin/reflect/KClass;Lkotlin/jvm/functions/Function1;)Ljava/lang/AutoCloseable;
 	public fun publishEndpoint (Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/ServiceEndpoint;)Ljava/lang/AutoCloseable;
 }
 
@@ -569,11 +578,13 @@ public abstract interface class com/superiorsoftllc/infantry/daemon/api/Services
 	public fun endpoints (Ljava/lang/String;)Ljava/util/Map;
 	public abstract fun find (Lkotlin/reflect/KClass;)Ljava/lang/Object;
 	public abstract fun provide (Lkotlin/reflect/KClass;Ljava/lang/Object;)Ljava/lang/AutoCloseable;
+	public fun provideScoped (Lkotlin/reflect/KClass;Lkotlin/jvm/functions/Function1;)Ljava/lang/AutoCloseable;
 	public fun publishEndpoint (Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/ServiceEndpoint;)Ljava/lang/AutoCloseable;
 }
 
 public final class com/superiorsoftllc/infantry/daemon/api/ServicesApi$DefaultImpls {
 	public static fun endpoints (Lcom/superiorsoftllc/infantry/daemon/api/ServicesApi;Ljava/lang/String;)Ljava/util/Map;
+	public static fun provideScoped (Lcom/superiorsoftllc/infantry/daemon/api/ServicesApi;Lkotlin/reflect/KClass;Lkotlin/jvm/functions/Function1;)Ljava/lang/AutoCloseable;
 	public static fun publishEndpoint (Lcom/superiorsoftllc/infantry/daemon/api/ServicesApi;Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/ServiceEndpoint;)Ljava/lang/AutoCloseable;
 }
 
@@ -4352,6 +4363,28 @@ public final class com/superiorsoftllc/infantry/daemon/api/plugins/PluginSummary
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class com/superiorsoftllc/infantry/daemon/api/pluginsecrets/NoPluginSecrets : com/superiorsoftllc/infantry/daemon/api/pluginsecrets/PluginSecrets {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/daemon/api/pluginsecrets/NoPluginSecrets;
+	public fun clear (Ljava/lang/String;)Z
+	public fun get (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/pluginsecrets/SecretValue;
+	public fun set (Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/pluginsecrets/SecretValue;)Ljava/lang/Void;
+	public synthetic fun set (Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/pluginsecrets/SecretValue;)V
+}
+
+public abstract interface class com/superiorsoftllc/infantry/daemon/api/pluginsecrets/PluginSecrets {
+	public abstract fun clear (Ljava/lang/String;)Z
+	public abstract fun get (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/pluginsecrets/SecretValue;
+	public abstract fun set (Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/pluginsecrets/SecretValue;)V
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/pluginsecrets/SecretValue {
+	public fun <init> (Ljava/lang/String;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public final fun reveal ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class com/superiorsoftllc/infantry/daemon/api/processes/CpuAlertConfig {
 	public static final field Companion Lcom/superiorsoftllc/infantry/daemon/api/processes/CpuAlertConfig$Companion;
 	public fun <init> ()V
@@ -6646,8 +6679,8 @@ public final class com/superiorsoftllc/infantry/daemon/api/runs/RunListener$Defa
 }
 
 public final class com/superiorsoftllc/infantry/daemon/api/runs/RunSpec {
-	public fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/util/Map;Ljava/lang/String;ZII)V
-	public synthetic fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/util/Map;Ljava/lang/String;ZIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/util/Map;Ljava/lang/String;ZIIZ)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/util/Map;Ljava/lang/String;ZIIZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/util/List;
 	public final fun component2 ()Ljava/lang/String;
 	public final fun component3 ()Ljava/util/Map;
@@ -6655,12 +6688,14 @@ public final class com/superiorsoftllc/infantry/daemon/api/runs/RunSpec {
 	public final fun component5 ()Z
 	public final fun component6 ()I
 	public final fun component7 ()I
-	public final fun copy (Ljava/util/List;Ljava/lang/String;Ljava/util/Map;Ljava/lang/String;ZII)Lcom/superiorsoftllc/infantry/daemon/api/runs/RunSpec;
-	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/runs/RunSpec;Ljava/util/List;Ljava/lang/String;Ljava/util/Map;Ljava/lang/String;ZIIILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/runs/RunSpec;
+	public final fun component8 ()Z
+	public final fun copy (Ljava/util/List;Ljava/lang/String;Ljava/util/Map;Ljava/lang/String;ZIIZ)Lcom/superiorsoftllc/infantry/daemon/api/runs/RunSpec;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/runs/RunSpec;Ljava/util/List;Ljava/lang/String;Ljava/util/Map;Ljava/lang/String;ZIIZILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/runs/RunSpec;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getArgv ()Ljava/util/List;
 	public final fun getCols ()I
 	public final fun getCwd ()Ljava/lang/String;
+	public final fun getDetached ()Z
 	public final fun getEnv ()Ljava/util/Map;
 	public final fun getProjectId ()Ljava/lang/String;
 	public final fun getRows ()I
@@ -7153,8 +7188,138 @@ public abstract interface class com/superiorsoftllc/infantry/daemon/api/tickets/
 	public abstract fun postDaemonIssue (Ljava/lang/String;Ljava/lang/String;)Z
 }
 
+public abstract interface class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionHandler {
+	public abstract fun run (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerFire;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAgentId ()Ljava/lang/String;
+	public final fun getKind ()Ljava/lang/String;
+	public final fun getPrompt ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult {
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult$Done : com/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult$Done;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult$Mailed : com/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult$Mailed;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult$Mailed;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult$Mailed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMailId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult$Refused : com/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult$Refused;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult$Refused;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult$Refused;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult$Started : com/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult$Started;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult$Started;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionResult$Started;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getSessionId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerEventRecord {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()J
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerEventRecord;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerEventRecord;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerEventRecord;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDeliveryId ()Ljava/lang/String;
+	public final fun getDigest ()Ljava/lang/String;
+	public final fun getDisposition ()Ljava/lang/String;
+	public final fun getEventId ()Ljava/lang/String;
+	public final fun getReceivedAt ()J
+	public final fun getSource ()Ljava/lang/String;
+	public final fun getTriggerId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerEvents {
+	public static final field ALL Ljava/lang/String;
+	public static final field DELIVERED Ljava/lang/String;
+	public static final field FIRED Ljava/lang/String;
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerEvents;
+	public static final field REFUSED Ljava/lang/String;
+	public static final field TARGET_GONE Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerFilter {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerFilter;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerFilter;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerFilter;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getKind ()Ljava/lang/String;
+	public final fun getOwner ()Ljava/lang/String;
+	public final fun getProjectId ()Ljava/lang/String;
+	public final fun getRef ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerFire {
+	public fun <init> (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerFire;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerFire;Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerFire;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getRunId ()Ljava/lang/String;
+	public final fun getSource ()Ljava/lang/String;
+	public final fun getTrigger ()Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public abstract interface class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerHost {
-	public abstract fun getStore ()Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerStore;
 	public abstract fun mailPending (Ljava/lang/String;)Z
 	public abstract fun onRunEvent (Lkotlin/jvm/functions/Function1;)Ljava/lang/AutoCloseable;
 	public abstract fun sendMail (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerMailRequest;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerMailResult;
@@ -7207,6 +7372,63 @@ public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerMailR
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerOwnership {
+	public static final field INSTANCE Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerOwnership;
+	public final fun mayChange (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;Ljava/lang/String;)Z
+	public final fun requireChange (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;Ljava/lang/String;)V
+	public final fun stamp (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerSaveRequest;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerSaveRequest;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;ZLjava/lang/String;JIJJLjava/lang/Long;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;ZLjava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;ZLjava/lang/String;JIJJLjava/lang/Long;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;ZLjava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component10 ()J
+	public final fun component11 ()Ljava/lang/Long;
+	public final fun component12 ()Ljava/lang/String;
+	public final fun component13 ()Ljava/lang/Long;
+	public final fun component14 ()Ljava/lang/String;
+	public final fun component15 ()Ljava/lang/Long;
+	public final fun component16 ()Ljava/lang/Long;
+	public final fun component17 ()Ljava/lang/Long;
+	public final fun component18 ()Z
+	public final fun component19 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component20 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;
+	public final fun component5 ()Z
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()J
+	public final fun component8 ()I
+	public final fun component9 ()J
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;ZLjava/lang/String;JIJJLjava/lang/Long;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;ZLjava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;ZLjava/lang/String;JIJJLjava/lang/Long;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/Long;Ljava/lang/Long;Ljava/lang/Long;ZLjava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAction ()Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;
+	public final fun getCeilingRuns ()I
+	public final fun getCeilingWindowMs ()J
+	public final fun getCoalesceMs ()J
+	public final fun getCreatedAt ()J
+	public final fun getDeleteAfterFire ()Z
+	public final fun getEnabled ()Z
+	public final fun getFireAt ()Ljava/lang/Long;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getIntervalMs ()Ljava/lang/Long;
+	public final fun getKind ()Ljava/lang/String;
+	public final fun getLastFiredAt ()Ljava/lang/Long;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getNextFireAt ()Ljava/lang/Long;
+	public final fun getOwner ()Ljava/lang/String;
+	public final fun getProjectId ()Ljava/lang/String;
+	public final fun getRef ()Ljava/lang/String;
+	public final fun getState ()Ljava/lang/String;
+	public final fun getTrippedAt ()Ljava/lang/Long;
+	public final fun getTrippedReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public abstract interface class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerRunEvent {
 }
 
@@ -7230,6 +7452,46 @@ public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerRunEv
 	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRunEvent$StartFailed;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRunEvent$StartFailed;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getSessionId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerSaveRequest {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZJIJLcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;ZLjava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZJIJLcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;ZLjava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component10 ()Ljava/lang/String;
+	public final fun component11 ()Ljava/lang/String;
+	public final fun component12 ()Ljava/lang/Long;
+	public final fun component13 ()Z
+	public final fun component14 ()Ljava/lang/String;
+	public final fun component15 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Z
+	public final fun component5 ()J
+	public final fun component6 ()I
+	public final fun component7 ()J
+	public final fun component8 ()Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;
+	public final fun component9 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZJIJLcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;ZLjava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerSaveRequest;
+	public static synthetic fun copy$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerSaveRequest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZJIJLcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;Ljava/lang/Long;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Long;ZLjava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerSaveRequest;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAction ()Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionRecord;
+	public final fun getCeilingRuns ()I
+	public final fun getCeilingWindowMs ()J
+	public final fun getCoalesceMs ()J
+	public final fun getDeleteAfterFire ()Z
+	public final fun getEnabled ()Z
+	public final fun getFireAt ()Ljava/lang/Long;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getIntervalMs ()Ljava/lang/Long;
+	public final fun getKind ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getOwner ()Ljava/lang/String;
+	public final fun getProjectId ()Ljava/lang/String;
+	public final fun getRef ()Ljava/lang/String;
+	public final fun getWebhookSecret ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -7264,24 +7526,23 @@ public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerSessi
 	public fun toString ()Ljava/lang/String;
 }
 
-public abstract interface class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerStore {
-	public abstract fun all ()Ljava/util/List;
+public abstract interface class com/superiorsoftllc/infantry/daemon/api/triggers/Triggers {
+	public abstract fun arm (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;
 	public abstract fun delete (Ljava/lang/String;)Z
-	public abstract fun deleteWebhookSecret (Ljava/lang/String;)V
+	public abstract fun disable (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;
 	public abstract fun events (Ljava/lang/String;)Ljava/util/List;
-	public abstract fun get (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/protocol/TriggerView;
-	public abstract fun insertEvent (Lcom/superiorsoftllc/infantry/protocol/TriggerEventView;J)V
-	public static synthetic fun insertEvent$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerStore;Lcom/superiorsoftllc/infantry/protocol/TriggerEventView;JILjava/lang/Object;)V
-	public abstract fun intervals ()Ljava/util/Map;
-	public abstract fun pendingMail (Ljava/lang/String;)Ljava/lang/String;
-	public abstract fun setPendingMail (Ljava/lang/String;Ljava/lang/String;)V
-	public abstract fun setWebhookSecret (Ljava/lang/String;Ljava/lang/String;)V
-	public abstract fun upsert (Lcom/superiorsoftllc/infantry/protocol/TriggerView;Ljava/lang/Long;)V
-	public abstract fun webhookSecret (Ljava/lang/String;)Ljava/lang/String;
+	public abstract fun fire (Ljava/lang/String;Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;
+	public static synthetic fun fire$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/Triggers;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;
+	public abstract fun get (Ljava/lang/String;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;
+	public abstract fun list (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerFilter;)Ljava/util/List;
+	public static synthetic fun list$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/Triggers;Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerFilter;ILjava/lang/Object;)Ljava/util/List;
+	public abstract fun registerAction (Ljava/lang/String;Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerActionHandler;)Ljava/lang/AutoCloseable;
+	public abstract fun save (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerSaveRequest;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;
 }
 
-public final class com/superiorsoftllc/infantry/daemon/api/triggers/TriggerStore$DefaultImpls {
-	public static synthetic fun insertEvent$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerStore;Lcom/superiorsoftllc/infantry/protocol/TriggerEventView;JILjava/lang/Object;)V
+public final class com/superiorsoftllc/infantry/daemon/api/triggers/Triggers$DefaultImpls {
+	public static synthetic fun fire$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/Triggers;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerRecord;
+	public static synthetic fun list$default (Lcom/superiorsoftllc/infantry/daemon/api/triggers/Triggers;Lcom/superiorsoftllc/infantry/daemon/api/triggers/TriggerFilter;ILjava/lang/Object;)Ljava/util/List;
 }
 
 public final class com/superiorsoftllc/infantry/daemon/api/updates/Credential {
