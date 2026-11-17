@@ -45,6 +45,7 @@ import kotlinx.serialization.json.put
 class TriggersDaemonPlugin : DaemonPlugin {
     @Volatile private var service: TriggerService? = null
     @Volatile private var runEvents: AutoCloseable? = null
+    @Volatile private var moduleEvents: AutoCloseable? = null
 
     override fun start(api: DaemonApi) {
         val host = api.triggerHost ?: run {
@@ -67,9 +68,11 @@ class TriggersDaemonPlugin : DaemonPlugin {
             mailPending = host::mailPending,
             log = api::log,
             autoStart = false, // started below, once the daemon is up
+            atMaxLateMs = { api.config(AT_MAX_LATE_KEY)?.trim()?.toDoubleOrNull()?.toLong()?.coerceAtLeast(0L) ?: TriggerService.DEFAULT_AT_MAX_LATE_MS },
         )
         service = triggers
         triggers.eventSink = { view -> api.events.broadcast(Envelope.TRIGGER, json.encodeToString(TriggerView.serializer(), view)) }
+        triggers.deletedSink = { broadcastAll(api, triggers) }
         runEvents = host.onRunEvent(triggers::onRunEvent)
 
         registerFrames(api, triggers)
@@ -80,12 +83,29 @@ class TriggersDaemonPlugin : DaemonPlugin {
         api.services.provideScoped(Triggers::class) { caller -> ScopedTriggers(triggers, caller) }
         TriggerCapabilities(triggers) { broadcastAll(api, triggers) }.register(api)
         // TRIGGER-NUDGE: only now may a schedule fire (a slot missed while down fires on this first pump).
-        api.whenStarted { triggers.start() }
+        // TRIG-AT-1: an owned trigger outlives its module only until the next prune: at start, and whenever the loaded set changes.
+        moduleEvents = api.events.subscribe(MODULES_CHANGED) { pruneOrphans(api, triggers) }
+        api.whenStarted {
+            pruneOrphans(api, triggers)
+            triggers.start()
+        }
+    }
+
+    /**
+     * TRIG-AT-1: drops the triggers of modules no longer loaded. An empty list means this host has no plugin catalog (this module itself
+     * is loaded whenever the catalog answers), so nothing is pruned on it.
+     */
+    private fun pruneOrphans(api: DaemonApi, triggers: TriggerService) {
+        val loaded = runCatching { api.plugins.loaded().map { it.id }.toSet() }.getOrDefault(emptySet())
+        if (loaded.isEmpty()) return
+        runCatching { triggers.pruneOrphans(loaded) }.onFailure { api.log("Infantry_Triggers: orphan prune failed: ${it.message}") }
     }
 
     /** Stop observing FIRST, as core did: the shutdown's kills must not read as run failures (a running trigger trips at the next boot). */
     override fun stop() {
         runCatching { runEvents?.close() }
+        runCatching { moduleEvents?.close() }
+        moduleEvents = null
         runCatching { service?.close() }
         runEvents = null
         service = null
@@ -105,6 +125,8 @@ class TriggersDaemonPlugin : DaemonPlugin {
         api.frames.handle(Envelope.TRIGGER_DISABLE) { f, _ -> request(f.type) { triggers.disable(f.data); null } }
         api.frames.handle(Envelope.TRIGGER_DELETE) { f, _ ->
             request(f.type) {
+                // TRIG-AT-1: a person (the Triggers tab) does not delete a module's trigger; the module does, or its unload prunes it.
+                triggers.get(f.data.trim())?.let { triggers.requireOwner(it, null) }
                 triggers.delete(f.data)
                 broadcastAll(api, triggers)
                 null
@@ -147,6 +169,12 @@ class TriggersDaemonPlugin : DaemonPlugin {
         /** The `/health` `pluginStatus` field core reads into `Health.triggersTripped`. */
         const val TRIPPED_FIELD = "triggersTripped"
         const val HOOK_ROUTE = "/hooks/{id}"
+
+        /** TRIG-AT-1: the daemon setting (module.json `daemon.config`) for how late a one-shot may still fire, in ms. */
+        const val AT_MAX_LATE_KEY = "triggers.at.maxLateMs"
+
+        /** The host's named event when the set of loaded modules changes (payload `{"modules":[ids]}`). */
+        const val MODULES_CHANGED = "modules.changed"
         private val SIG = listOf(WebhookIngress.SIGNATURE_HEADER, WebhookIngress.LEGACY_SIGNATURE_HEADER)
         private val TS = listOf(WebhookIngress.TIMESTAMP_HEADER, WebhookIngress.LEGACY_TIMESTAMP_HEADER)
         private val DELIVERY = listOf(WebhookIngress.DELIVERY_HEADER, WebhookIngress.LEGACY_DELIVERY_HEADER)

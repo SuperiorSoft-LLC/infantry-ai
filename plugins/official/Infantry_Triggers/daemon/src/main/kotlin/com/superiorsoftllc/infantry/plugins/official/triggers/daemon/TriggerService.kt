@@ -71,6 +71,11 @@ class TriggerService(
     /** TRIG-2c: where a failure line goes (the plugin passes `api.log`, LOG-SEAM-1); stderr when unset (tests). */
     private val log: (String) -> Unit = { System.err.println("[infantry] $it") },
     /**
+     * TRIG-AT-1: how late a one-shot (`at`) may still fire, in ms (the plugin reads the setting `triggers.at.maxLateMs`). A slot found
+     * later than this, at boot or after a stalled pump, is recorded `missed` and does not fire.
+     */
+    private val atMaxLateMs: () -> Long = { DEFAULT_AT_MAX_LATE_MS },
+    /**
      * TRIGGER-NUDGE: false = the pump waits for [start]. The daemon starts it only once the mailbox and the sessions are
      * loaded, so a catch-up fire on boot mails a session that exists into a mailbox that remembers its queue.
      */
@@ -80,6 +85,10 @@ class TriggerService(
     @Volatile
     var eventSink: (TriggerView) -> Unit = {}
 
+    /** TRIG-AT-1: told after the service itself removes triggers (a fired one-shot, an orphan prune), so clients re-read the list. */
+    @Volatile
+    var deletedSink: (List<String>) -> Unit = {}
+
     private val guards = HashMap<String, TriggerGuard>()
     private val runTriggers = ConcurrentHashMap<String, String>() // runId -> triggerId, while in flight
     private val runEvents = ConcurrentHashMap<String, List<String>>() // runId -> the event ids it carries
@@ -87,6 +96,8 @@ class TriggerService(
     private val exits = ConcurrentHashMap<String, TriggerOutcome>() // sessionId -> outcome, ended before mapped
     private val dispositionOverrides = HashMap<String, TriggerEventDisposition>()
     private val intervals = HashMap<String, Long>() // schedule triggerId -> period in ms (persisted in triggers.interval_ms, restored on start)
+    private val oneShots = HashMap<String, Long>() // TRIG-AT-1: `at` triggerId -> fireAt, until it fires or is missed (triggers.next_fire_at)
+    private val firedToDelete = HashSet<String>() // TRIG-AT-1: fired `deleteAfterFire` one-shots, deleted once no run of theirs is in flight
     private val nextDueAt = HashMap<String, Long>() // schedule triggerId -> when the next event is due
     @Volatile private var closing = false
     private val started = java.util.concurrent.atomic.AtomicBoolean(false) // declared before init, which may call start()
@@ -112,6 +123,13 @@ class TriggerService(
         // mail was queued, the next slot nudges again, so tripping it would silence a recurring nudge for nothing.
         for (t in repo.all().filter { it.state == RUNNING }) {
             if (t.action.kind == "prompt" && deliverPrompt != null) store(t.copy(state = ARMED)) else tripStored(t, "daemon restarted mid-run")
+        }
+        // TRIG-AT-1: a one-shot still due keeps its persisted slot (the pump's first tick fires it once, or records it missed when it is
+        // later than the cap). One that fired before the stop but was not deleted yet (its run was in flight) is deleted on the first tick.
+        for (t in repo.all().filter { it.kind == AT }) {
+            val due = t.nextFireAt
+            if (due != null) oneShots[t.id] = due
+            else if (t.deleteAfterFire && repo.events(t.id).any { it.source == AT_SOURCE && it.disposition != MISSED_LABEL }) firedToDelete += t.id
         }
         if (autoStart) start()
     }
@@ -170,11 +188,27 @@ class TriggerService(
 
     /** Create (no id) or edit a trigger. Unserved kinds and actions are refused, never accepted and ignored. */
     @Synchronized
-    fun save(request: TriggerSave): TriggerView {
+    fun save(request: TriggerSave, owner: String? = null): TriggerView {
+        // TRIG-AT-1: [owner] is the TRUSTED owner (the calling module as the host named it via services.provideScoped, or null for a
+        // person: the Triggers tab, a capability call). The request's own `owner` is never trusted: it must be absent or equal [owner].
+        // Only a trigger's owner may edit it: a person cannot edit a module's trigger, nor a module a person's.
         val name = request.name.trim()
         require(name.isNotEmpty()) { "name is blank" }
         require(name.length <= 100) { "name is longer than 100 characters" }
-        require(request.kind == "manual" || request.kind == "schedule" || request.kind == "ship" || request.kind == "webhook") { "kind '${request.kind.take(40)}' is not served yet (served: manual, schedule, ship, webhook)" }
+        require(request.kind in SERVED_KINDS) { "kind '${request.kind.take(40)}' is not served yet (served: ${SERVED_KINDS.joinToString()})" }
+        val claimed = request.owner?.trim()?.takeIf { it.isNotEmpty() }
+        require(claimed == null || claimed == owner) {
+            if (owner == null) "owner is stamped from the calling module; a client cannot set it" else "trigger owner '${claimed!!.take(80)}' is not the calling module '$owner'"
+        }
+        val ref = request.ref?.trim()?.takeIf { it.isNotEmpty() }
+        require(ref == null || ref.length <= MAX_REF_CHARS) { "ref is longer than $MAX_REF_CHARS characters" }
+        val isAt = request.kind == AT
+        if (isAt) {
+            require((request.fireAt ?: 0L) > 0L) { "kind 'at' needs fireAt (epoch ms)" }
+        } else {
+            require(request.fireAt == null) { "fireAt is only valid on kind 'at'" }
+            require(!request.deleteAfterFire) { "deleteAfterFire is only valid on kind 'at'" }
+        }
         validateAction(request.action)
         val projectId = request.projectId?.trim()?.takeIf { it.isNotEmpty() }
         require(projectId == null || request.action.kind == "prompt") { "projectId is only valid on action 'prompt'" }
@@ -187,6 +221,8 @@ class TriggerService(
         val existing = request.id?.trim()?.takeIf { it.isNotEmpty() }?.let { id ->
             repo.get(id) ?: throw IllegalArgumentException("no trigger '${id.take(80)}'")
         }
+        if (existing != null) requireOwner(existing, owner)
+        require(!isAt || request.intervalMs == null) { "intervalMs is only valid on kind 'schedule'" }
         val secret = request.webhookSecret
         if (request.kind == "webhook") {
             require(secret != null || (existing != null && repo.webhookSecret(existing.id) != null)) { "kind 'webhook' needs a webhookSecret" }
@@ -215,6 +251,10 @@ class TriggerService(
             intervalMs = request.intervalMs.takeIf { request.kind == "schedule" },
             projectId = projectId,
             lastFiredAt = existing?.lastFiredAt,
+            fireAt = request.fireAt.takeIf { isAt },
+            deleteAfterFire = isAt && request.deleteAfterFire,
+            owner = owner,
+            ref = ref,
         )
         // New settings take effect on a fresh guard -- unless a run is in flight, which keeps its own.
         if (runTriggers.values.none { it == view.id }) guards.remove(view.id)
@@ -233,7 +273,38 @@ class TriggerService(
         // The secret is written before the push, so a client told about a webhook trigger can never reach a
         // hook that has no secret yet; it is dropped when the trigger stops being a webhook.
         if (view.kind == "webhook") secret?.let { repo.setWebhookSecret(view.id, it) } else repo.deleteWebhookSecret(view.id)
-        return store(view.copy(nextFireAt = nextDueAt[view.id]))
+        // TRIG-AT-1: a one-shot is due at its fireAt until it fires. An edit that keeps fireAt keeps whether it already fired; a new
+        // fireAt schedules it again.
+        firedToDelete.remove(view.id)
+        val atNext = if (isAt) {
+            if (existing != null && existing.kind == AT && existing.fireAt == view.fireAt) existing.nextFireAt else view.fireAt
+        } else null
+        if (atNext != null) oneShots[view.id] = atNext else oneShots.remove(view.id)
+        return store(view.copy(nextFireAt = if (isAt) atNext else nextDueAt[view.id]))
+    }
+
+    /** TRIG-AT-1: refuses a change of [t] by anyone but its owner ([owner] null = a person). */
+    fun requireOwner(t: TriggerView, owner: String?) {
+        require(t.owner == owner) {
+            if (t.owner != null) "trigger ${t.id} is owned by ${t.owner}; it is changed through that module" else "trigger ${t.id} is a person's; a module cannot change it"
+        }
+    }
+
+    /**
+     * TRIG-AT-1: deletes every OWNED trigger whose owner is not in [loadedModules] (the module was uninstalled or disabled); a person's
+     * trigger is never touched, nor one with a run in flight (the next prune takes it). Answers the ids removed. Called at start and on
+     * `modules.changed`.
+     */
+    @Synchronized
+    fun pruneOrphans(loadedModules: Set<String>): List<String> {
+        val gone = repo.all().filter { t -> t.owner != null && t.owner !in loadedModules && runTriggers.values.none { it == t.id } }
+        gone.forEach { t ->
+            log("trigger ${t.id} ('${t.name}') dropped: its owner ${t.owner} is no longer loaded")
+            forget(t.id)
+        }
+        val ids = gone.map { it.id }
+        if (ids.isNotEmpty()) runCatching { deletedSink(ids) }
+        return ids
     }
 
     /**
@@ -296,10 +367,18 @@ class TriggerService(
 
     @Synchronized
     fun delete(triggerId: String) {
-        require(repo.delete(triggerId.trim())) { "no trigger '${triggerId.take(80)}'" }
-        guards.remove(triggerId.trim())
-        intervals.remove(triggerId.trim())
-        nextDueAt.remove(triggerId.trim())
+        require(forget(triggerId.trim())) { "no trigger '${triggerId.take(80)}'" }
+    }
+
+    /** Must hold the lock. Removes the row and every in-memory trace of it; false when there was no row. */
+    private fun forget(id: String): Boolean {
+        val existed = repo.delete(id)
+        guards.remove(id)
+        intervals.remove(id)
+        nextDueAt.remove(id)
+        oneShots.remove(id)
+        firedToDelete.remove(id)
+        return existed
     }
 
     /** A daemon arm: a trigger's run ends when its session's run does. */
@@ -339,8 +418,9 @@ class TriggerService(
                 launches.execute { launch(t.id, run) }
             },
             onTrip = { trip -> tripped(trip) },
-            coalesceMs = t.coalesceMs,
-            ceilingRuns = t.ceilingRuns,
+            // TRIG-AT-1: a one-shot is never held in a coalescing window and no hourly ceiling applies to it (it fires once).
+            coalesceMs = if (t.kind == AT) 0L else t.coalesceMs,
+            ceilingRuns = if (t.kind == AT) Int.MAX_VALUE else t.ceilingRuns,
             ceilingWindowMs = t.ceilingWindowMs,
         )
     }
@@ -536,6 +616,8 @@ class TriggerService(
         runCatching {
             synchronized(this) {
                 fireDueSchedules()
+                fireDueOneShots()
+                deleteFiredOneShots()
                 for ((id, guard) in guards.toMap()) if (guard.pump()) sync(id)
             }
         }.onFailure { log("trigger pump failed: ${it.message}") }
@@ -556,6 +638,44 @@ class TriggerService(
             runCatching { fire(id, source = "schedule") }
                 .onFailure { log("schedule fire for $id failed: ${it.message}") }
         }
+    }
+
+    /**
+     * TRIG-AT-1, must hold the lock. Each one-shot whose fireAt has passed fires ONCE, as source `at`, then is disabled (or, with
+     * deleteAfterFire, deleted once its run is over). Later than [atMaxLateMs] = recorded `missed`, not fired, and disabled (a missed
+     * one-shot never fired, so it is kept for its owner to see, whatever deleteAfterFire says). A disabled or tripped one waits.
+     */
+    private fun fireDueOneShots() {
+        if (oneShots.isEmpty()) return
+        val now = clock()
+        for ((id, due) in oneShots.toMap()) {
+            if (now < due) continue
+            val t = repo.get(id)
+            if (t == null) { oneShots.remove(id); continue }
+            if (!t.enabled || t.state == DISABLED || t.state == TRIPPED) continue
+            oneShots.remove(id)
+            val late = now - due
+            if (late > atMaxLateMs().coerceAtLeast(0L)) {
+                record(idFactory(), id, TriggerEventDisposition.MISSED, AT_SOURCE)
+                log("trigger $id ('${t.name}') missed its one-shot by ${late / 1000}s; not fired")
+                store(t.copy(enabled = false, state = DISABLED, nextFireAt = null))
+                continue
+            }
+            // The slot is spent BEFORE the fire: a crash between the two loses a fire rather than repeating one.
+            store(t.copy(nextFireAt = null))
+            runCatching { fire(id, source = AT_SOURCE) }.onFailure { log("one-shot fire for $id failed: ${it.message}") }
+            repo.get(id)?.let { after -> store(after.copy(enabled = false, state = if (after.state == TRIPPED) TRIPPED else DISABLED)) }
+            if (t.deleteAfterFire) firedToDelete += id
+        }
+    }
+
+    /** TRIG-AT-1, must hold the lock: a fired deleteAfterFire one-shot goes once no run of it is in flight (its run ends first). */
+    private fun deleteFiredOneShots() {
+        if (firedToDelete.isEmpty()) return
+        val done = firedToDelete.filter { id -> runTriggers.values.none { it == id } }
+        if (done.isEmpty()) return
+        done.forEach { forget(it) }
+        runCatching { deletedSink(done) }
     }
 
     private fun outcomeOf(sessionId: String, killed: Boolean): TriggerOutcome {
@@ -593,6 +713,18 @@ class TriggerService(
         const val MIN_INTERVAL_MS = 60_000L
         private const val MIN_WEBHOOK_SECRET = 32
         private const val MAX_WEBHOOK_SECRET = 256
+
+        /** TRIG-AT-1: the one-shot kind, and the event source of its own firing (a Fire now keeps `manual`). */
+        const val AT = "at"
+        const val AT_SOURCE = "at"
+        private const val MISSED_LABEL = "missed"
+        val SERVED_KINDS = listOf("manual", "schedule", "ship", "webhook", AT)
+
+        /** TRIG-AT-1: the default of `triggers.at.maxLateMs` (module.json): a one-shot found up to 15 minutes late still fires. */
+        const val DEFAULT_AT_MAX_LATE_MS = 900_000L
+
+        /** TRIG-AT-1: the owner's opaque key is at most this long. */
+        const val MAX_REF_CHARS = 200
         private const val ARMED = "armed"
         private const val RUNNING = "running"
         private const val TRIPPED = "tripped"

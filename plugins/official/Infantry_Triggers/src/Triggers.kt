@@ -70,13 +70,27 @@ internal fun triggerSessionTargets(state: AppState): List<Pair<String, String>> 
 
 private val LIVE_TRIGGER_SESSION_STATES = setOf(SessionState.STARTING, SessionState.BUSY, SessionState.WAITING_INPUT, SessionState.IDLE)
 
+/**
+ * TRIG-AT-1: a trigger a module owns (the daemon stamps [TriggerView.owner]) is that module's: the tab shows it with a "from <Module>"
+ * chip and opens it read-only (no edit, no delete; fire, enable and the events stay). A one-shot is edited by the module that made it.
+ */
+internal fun triggerEditable(t: TriggerView): Boolean = t.owner == null && t.kind != "at"
+
+/** TRIG-AT-1: a person may delete their own triggers, never a module's. */
+internal fun triggerDeletable(t: TriggerView): Boolean = t.owner == null
+
 /** "any ticket" / "tickets for <assignee>" -- what a `start_next` trigger picks from. */
 internal fun triggerTarget(state: AppState, t: TriggerView): String =
     t.action.agentId?.takeIf { it.isNotBlank() }?.let { "next ticket assigned to ${assigneeLabel(state.visibleProfiles, it)}" } ?: "next startable ticket"
 
 /** One line: when it fires and what it does -- "every 7 min: mail role:qa in Infantry: ..." / "manual: next startable ticket". */
 internal fun triggerSummary(state: AppState, t: TriggerView): String {
-    val whenText = if (t.kind == "schedule") t.intervalMs?.let { "every ${humanDuration(it)}" } ?: "schedule (no interval)" else t.kind
+    val whenText = when (t.kind) {
+        "schedule" -> t.intervalMs?.let { "every ${humanDuration(it)}" } ?: "schedule (no interval)"
+        // TRIG-AT-1: a one-shot; the card's "next fire" line says when, and a spent one has no next slot.
+        "at" -> if (t.nextFireAt == null && t.fireAt != null) "once (done)" else "once"
+        else -> t.kind
+    }
     val what = if (t.action.kind == "prompt") {
         val project = t.projectId?.let { id -> state.projects.firstOrNull { it.id == id }?.name ?: id }
         "mail ${t.action.agentId?.let { if (it.startsWith("session:")) "session ${it.removePrefix("session:").take(8)}" else assigneeLabel(state.visibleProfiles, it) } ?: "?"}" + (project?.let { " in $it" } ?: "") + ": \"${t.action.prompt.orEmpty().take(60)}\""
@@ -124,6 +138,8 @@ private fun TriggerCard(t: TriggerView, state: AppState, triggers: TriggersConte
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(t.name, color = Palette.Text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            t.owner?.let { Chip("from $it", Palette.Info) }
+            Spacer(Modifier.width(4.dp))
             Chip(t.state, triggerStateColor(t.state))
         }
         Text(triggerSummary(state, t), color = Palette.Muted, fontSize = 11.sp)
@@ -160,11 +176,16 @@ private fun TriggerCard(t: TriggerView, state: AppState, triggers: TriggersConte
             )
             Text("Enabled", color = Palette.Muted, fontSize = 11.sp)
             TextButton(onClick = { showEvents = !showEvents }) { Text(if (showEvents) "Hide events" else "Events", fontSize = 11.sp) }
-            TextButton(onClick = { editing = !editing }, enabled = state.connection.gate("triggers.save").enabled) { Text(if (editing) "Close" else "Edit", fontSize = 11.sp) }
+            if (triggerEditable(t)) {
+                TextButton(onClick = { editing = !editing }, enabled = state.connection.gate("triggers.save").enabled) { Text(if (editing) "Close" else "Edit", fontSize = 11.sp) }
+            }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = { actionScope.launch { triggers.delete(t.id) } }, enabled = canDelete) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
+            if (triggerDeletable(t)) {
+                TextButton(onClick = { actionScope.launch { triggers.delete(t.id) } }, enabled = canDelete) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
+            }
         }
-        if (editing) TriggerForm(state, triggers, onDone = { editing = false }, existing = t)
+        if (t.owner != null) Text("Made by ${t.owner}: it is changed or removed there, and goes when that plugin is removed.", color = Palette.Muted, fontSize = 10.sp)
+        if (editing && triggerEditable(t)) TriggerForm(state, triggers, onDone = { editing = false }, existing = t)
         if (showEvents) TriggerEvents(t, state, triggers)
     }
 }

@@ -605,8 +605,16 @@ data class TriggerView(
     val projectId: String? = null,
     /** Contract 1.105.0: when the trigger last accepted an event; null = never. */
     val lastFiredAt: Long? = null,
-    /** Contract 1.105.0: for kind `schedule`, when the next event is due; null = not timed. */
+    /** Contract 1.105.0: for kind `schedule` (and `at`), when the next event is due; null = not timed. */
     val nextFireAt: Long? = null,
+    /** Contract 1.155.0 (TRIG-AT-1): for kind `at`, when the one-shot fires (epoch ms). */
+    val fireAt: Long? = null,
+    /** Contract 1.155.0: for kind `at`, the trigger is deleted once it fired. */
+    val deleteAfterFire: Boolean = false,
+    /** Contract 1.155.0: the module that owns this trigger (stamped by the daemon); null = a person's. An owned trigger is read-only here. */
+    val owner: String? = null,
+    /** Contract 1.155.0: the owner's opaque key for it. */
+    val ref: String? = null,
 )
 
 /** Contract 1.14.0: one event row; [disposition] is lower snake case (`started`, `folded`, `nothing_to_start`, ...). */

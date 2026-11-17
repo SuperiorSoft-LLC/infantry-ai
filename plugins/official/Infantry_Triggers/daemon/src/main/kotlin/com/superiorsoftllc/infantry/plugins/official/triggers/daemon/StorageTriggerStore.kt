@@ -13,18 +13,26 @@ import com.superiorsoftllc.infantry.protocol.TriggerView
  * pending mail id, delete drops events and secret with the row, insertEvent prunes to the newest `keep`.
  */
 class StorageTriggerStore(private val db: PluginStorage) : TriggerStore {
+    init {
+        // TRIG-AT-1: additive nullable columns on the adopted `triggers` table, as this module's own schema version (the host
+        // records it per module in plugin_storage_versions, so each ALTER runs once). Core's CREATE TABLE stays as it was.
+        db.migrate(SCHEMA_VERSION, MIGRATION)
+    }
+
     override fun upsert(trigger: TriggerView, intervalMs: Long?) {
         db.transaction {
             val pending = pendingMail(trigger.id)
             db.execute(
                 "INSERT OR REPLACE INTO triggers(id, name, kind, action_kind, action_agent_id, enabled, state, coalesce_ms, ceiling_runs, " +
-                    "ceiling_window_ms, created_at, tripped_at, tripped_reason, interval_ms, action_prompt, project_id, last_fired_at, next_fire_at, pending_mail_id) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "ceiling_window_ms, created_at, tripped_at, tripped_reason, interval_ms, action_prompt, project_id, last_fired_at, next_fire_at, pending_mail_id, " +
+                    "fire_at, delete_after_fire, owner, ref) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 listOf(
                     trigger.id, trigger.name, trigger.kind, trigger.action.kind, trigger.action.agentId,
                     if (trigger.enabled) 1L else 0L, trigger.state, trigger.coalesceMs, trigger.ceilingRuns.toLong(),
                     trigger.ceilingWindowMs, trigger.createdAt, trigger.trippedAt, trigger.trippedReason, intervalMs,
                     trigger.action.prompt, trigger.projectId, trigger.lastFiredAt, trigger.nextFireAt, pending,
+                    trigger.fireAt, if (trigger.deleteAfterFire) 1L else 0L, trigger.owner, trigger.ref,
                 ),
             )
         }
@@ -103,5 +111,22 @@ class StorageTriggerStore(private val db: PluginStorage) : TriggerStore {
         projectId = this["project_id"] as String?,
         lastFiredAt = (this["last_fired_at"] as Number?)?.toLong(),
         nextFireAt = (this["next_fire_at"] as Number?)?.toLong(),
+        fireAt = (this["fire_at"] as Number?)?.toLong(),
+        deleteAfterFire = ((this["delete_after_fire"] as Number?)?.toLong() ?: 0L) != 0L,
+        owner = this["owner"] as String?,
+        ref = this["ref"] as String?,
     )
+
+    companion object {
+        /** This module's storage schema version: 1 = TRIG-AT-1's columns. A later change appends statements under a higher version. */
+        const val SCHEMA_VERSION = 1
+
+        /** TRIG-AT-1: the one-shot time and its delete flag, the owning module and its opaque key. All nullable, so old rows read as before. */
+        val MIGRATION = listOf(
+            "ALTER TABLE triggers ADD COLUMN fire_at INTEGER",
+            "ALTER TABLE triggers ADD COLUMN delete_after_fire INTEGER",
+            "ALTER TABLE triggers ADD COLUMN owner TEXT",
+            "ALTER TABLE triggers ADD COLUMN ref TEXT",
+        )
+    }
 }
