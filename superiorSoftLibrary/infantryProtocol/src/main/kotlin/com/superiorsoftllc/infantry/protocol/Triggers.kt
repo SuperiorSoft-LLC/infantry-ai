@@ -59,15 +59,17 @@ data class TriggerSave(
      */
     val projectId: String? = null,
     /**
-     * Contract 1.155.0 (TRIG-API-1, additive; served from TRIG-2d): for kind `at` (a one-shot), when it fires, epoch ms. Refused on
-     * any other kind. Until it is served, kind `at` is refused like any unknown kind.
+     * Contract 1.155.0 (TRIG-API-1, additive; served since TRIG-AT-1): for kind `at` (a one-shot), when it fires, epoch ms. Required
+     * for `at`, refused on any other kind. It fires once, then is disabled; a slot passed while the daemon was down fires once if it is
+     * late by at most the setting `triggers.at.maxLateMs`, else it is recorded `missed`. No coalescing window or ceiling applies.
      */
     val fireAt: Long? = null,
     /** Contract 1.155.0: for kind `at`, delete the trigger once it has fired. False = keep it (disabled after its one firing). */
     val deleteAfterFire: Boolean = false,
     /**
      * Contract 1.155.0: the module that owns the trigger; null = a person. Stamped by the trigger service from the calling module
-     * (daemon.api.triggers.TriggerOwnership), never taken from a client (a `trigger_save` frame's owner is ignored today and refused from TRIG-2d).
+     * (daemon.api.triggers.TriggerOwnership), never taken from a client: since TRIG-AT-1 a `trigger_save` frame or capability call that names
+     * an owner is refused, and a person cannot edit or delete an owned trigger. An owned trigger is dropped when its module is no longer loaded.
      */
     val owner: String? = null,
     /** Contract 1.155.0: the owner's own opaque key for the trigger (e.g. `calendar:cal-1a2b3c4d`); the service never reads it. */

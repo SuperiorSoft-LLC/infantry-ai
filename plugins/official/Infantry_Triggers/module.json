@@ -1,6 +1,6 @@
 {
   "name": "Infantry_Triggers",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "apiVersion": 2,
   "author": "Infantry AI",
   "description": "Triggers that start work on an event.",
@@ -19,7 +19,7 @@
       "params": {
         "type": "object",
         "properties": {
-          "kind": { "type": "string", "description": "Only this kind: manual, schedule, ship or webhook." },
+          "kind": { "type": "string", "description": "Only this kind: manual, schedule, ship, webhook or at." },
           "projectId": { "type": "string", "description": "Only triggers of this project." }
         }
       },
@@ -27,7 +27,7 @@
     },
     {
       "id": "triggers.save",
-      "description": "Create (no id) or edit a trigger: {id?, name, kind (manual|schedule|ship|webhook), enabled?, action {kind: start_next|prompt, agentId?, prompt?}, intervalMs? (schedule), webhookSecret? (webhook), projectId? (prompt), coalesceMs?, ceilingRuns?, ceilingWindowMs?}. Answers the saved trigger.",
+      "description": "Create (no id) or edit a trigger: {id?, name, kind (manual|schedule|ship|webhook|at), enabled?, action {kind: start_next|prompt, agentId?, prompt?}, intervalMs? (schedule), fireAt? (at: epoch ms; fires once, then disabled), deleteAfterFire? (at: deleted after it fired), webhookSecret? (webhook), projectId? (prompt), coalesceMs?, ceilingRuns?, ceilingWindowMs?, ref? (an opaque key)}. owner is never set by a caller: a module's trigger is stamped with the module, and a module's trigger is not changed or deleted here. Answers the saved trigger.",
       "runs": "daemon",
       "action": "triggers.save",
       "kind": "write",
@@ -40,6 +40,9 @@
           "enabled": { "type": "boolean" },
           "action": { "type": "object" },
           "intervalMs": { "type": "integer" },
+          "fireAt": { "type": "integer" },
+          "deleteAfterFire": { "type": "boolean" },
+          "ref": { "type": "string" },
           "webhookSecret": { "type": "string" },
           "projectId": { "type": "string" },
           "coalesceMs": { "type": "integer" },
@@ -74,6 +77,16 @@
     "jar": "daemon/build/libs/Infantry_Triggers-daemon.jar",
     "apiAtLeast": "1.66.0",
     "side": "orchestrator",
+    "config": [
+      {
+        "node": "infantry.triggers.daemon", "group": "Triggers", "title": "Triggers: one-shots", "tab": "Plugins", "order": 940,
+        "applies": "Applies to: one-shot (at) triggers whose time passed while the daemon was down.",
+        "keywords": ["trigger", "one-shot", "at", "late", "missed", "reminder"],
+        "fields": [
+          { "key": "triggers.at.maxLateMs", "type": "number", "label": "A one-shot found this many milliseconds late still fires; later is recorded missed", "default": 900000, "min": 0, "max": 604800000, "step": 60000, "scope": "daemon", "order": 1 }
+        ]
+      }
+    ],
     "storage": { "adopt": ["triggers", "trigger_events", "trigger_webhooks"] },
     "hooks": ["status"],
     "frames": [

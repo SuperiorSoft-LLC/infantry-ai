@@ -359,9 +359,8 @@ Each plugin has its own class loader, so plugins cannot share classes. Two mecha
 
 `Triggers` (`daemon.api.triggers`) is the trigger service as an SDK API: the plugin that runs triggers publishes it with
 `provideScoped`, and any plugin (the Calendar, an orchestrator, a third party) finds it. A daemon with no trigger plugin
-answers `null`: the caller owns its fail mode. Since TRIG-2c (DaemonApi 1.66.0) Infantry_Triggers publishes it; until TRIG-AT-1 the
-service stores no `owner` / `ref`, so a trigger a module saves comes back owner-less (and that module cannot change it afterwards), the
-kind `at` is refused, and `registerAction` throws (unsupported until TRIG-ACTIONS-1).
+answers `null`: the caller owns its fail mode. Since TRIG-2c (DaemonApi 1.66.0) Infantry_Triggers publishes it. Since TRIG-AT-1 it
+stores `owner` / `ref` and serves the kind `at`; `registerAction` throws (unsupported until TRIG-ACTIONS-1).
 
 ```kotlin
 val triggers = api.services.find(Triggers::class) ?: return              // null = no triggers on this daemon
@@ -382,9 +381,14 @@ api.events.subscribe(TriggerEvents.ALL) { e -> /* trigger.fired | delivered | re
   for field the wire's `TriggerSave` / `TriggerView` / `TriggerAction` / `TriggerEventView`: a plugin's class loader does
   not see the protocol module (each plugin shades its own copy), so a service typed with protocol classes could not cross
   between plugins.
-- New fields (every default is today's behaviour, served from TRIG-2d): kind `at` with `fireAt` (epoch ms) and
-  `deleteAfterFire`; target `agentId = session:<id>` (that one session, never replaced); disposition `target_gone`;
-  `owner`, `ref`.
+- New fields (every default is today's behaviour): kind `at` with `fireAt` (epoch ms) and `deleteAfterFire`; target
+  `agentId = session:<id>` (that one session, never replaced); disposition `target_gone`; `owner`, `ref`.
+- **One-shots** (`at`, TRIG-AT-1): fires once at `fireAt` (event source `at`), then is disabled, or deleted once its run is over
+  when `deleteAfterFire`. No coalescing window or hourly ceiling applies. A slot passed while the daemon was down fires once if it
+  is late by at most the daemon setting `triggers.at.maxLateMs` (default 15 minutes), else it is recorded `missed` and kept,
+  disabled. Saving a new `fireAt` schedules it again.
+- **Orphans**: an owned trigger whose module is no longer in `plugins.loaded()` is deleted, at start and on `modules.changed`. The
+  Triggers tab shows an owned trigger with a "from <Module>" chip, read-only (no edit, no delete).
 - **Named events** (`TriggerEvents`): `trigger.fired` (an event started work or mailed its target) and `trigger.refused` (a ceiling,
   launch-gate refusal or a suppression) are published since TRIG-2c; `trigger.delivered`,
   `trigger.target_gone` come with session targets. Payload `{id, owner, ref, disposition, sessionId}`. One mechanism for plugins,

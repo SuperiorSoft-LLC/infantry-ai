@@ -34,4 +34,15 @@ class TriggerLanesTest {
         assertEquals(null, draft.problem())
         assertEquals("session:bbbbbbbb-2", draft.toSave(null)["action"]!!.let { (it as kotlinx.serialization.json.JsonObject)["agentId"]!!.let { v -> (v as kotlinx.serialization.json.JsonPrimitive).content } })
     }
+
+    @Test fun `an owned trigger is read-only with its owner shown, and a one-shot reads as once`() {
+        val owned = com.superiorsoftllc.infantry.ui.protocol.TriggerView(id = "t1", name = "Standup", kind = "at", state = "armed", fireAt = 5, nextFireAt = 5, owner = "Infantry_Calendar")
+        assertEquals(false, triggerEditable(owned))
+        assertEquals(false, triggerDeletable(owned))
+        val mine = com.superiorsoftllc.infantry.ui.protocol.TriggerView(id = "t2", name = "Mine", kind = "manual", state = "armed")
+        assertEquals(true, triggerEditable(mine))
+        assertEquals(true, triggerDeletable(mine))
+        assertEquals(true, triggerSummary(AppState(), owned).startsWith("once:"))
+        assertEquals(true, triggerSummary(AppState(), owned.copy(nextFireAt = null, state = "disabled")).startsWith("once (done):"))
+    }
 }

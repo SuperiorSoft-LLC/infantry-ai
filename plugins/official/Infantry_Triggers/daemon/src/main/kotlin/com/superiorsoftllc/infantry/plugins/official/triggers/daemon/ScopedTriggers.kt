@@ -25,9 +25,9 @@ import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerEventRecord as Ap
  * Every write is stamped with, and checked against, the caller by [TriggerOwnership]: a forged owner is refused, and only a
  * trigger's owner may change it (a person's trigger is changed in the app).
  *
- * The service runs as moved (TRIG-2c is a move): it persists no owner yet, so a trigger a module saves is stored owner-less and the
- * module cannot change it afterwards. Persisting `owner` / `ref` (a column on the adopted table) and the kind `at` are TRIG-AT-1;
- * plugin action kinds ([registerAction]) are TRIG-ACTIONS-1.
+ * TRIG-AT-1: the service persists `owner` (this caller, never the request's word) and `ref`, so the module lists, changes and deletes
+ * its own triggers afterwards; they are dropped when the module is no longer loaded. Plugin action kinds ([registerAction]) are
+ * TRIG-ACTIONS-1.
  */
 internal class ScopedTriggers(
     private val service: TriggerService,
@@ -44,7 +44,7 @@ internal class ScopedTriggers(
     override fun save(request: TriggerSaveRequest): TriggerRecord {
         val stamped = TriggerOwnership.stamp(request, callerModuleId)
         stamped.id?.trim()?.takeIf { it.isNotEmpty() }?.let { owned(it) }
-        return service.save(stamped.toWire()).toRecord()
+        return service.save(stamped.toWire(), owner = callerModuleId).toRecord()
     }
 
     override fun delete(id: String): Boolean {
@@ -99,6 +99,8 @@ internal class TriggerCapabilities(
         api.capabilities.handle(SAVE, CapabilityHandler { call -> service.save(TriggerSave.decode(call.args.toString())).toJson() })
         api.capabilities.handle(DELETE, CapabilityHandler { call ->
             val id = call.args.str("id") ?: throw IllegalArgumentException("id is required")
+            // TRIG-AT-1: a capability caller acts as a person: a module's trigger is that module's to delete.
+            service.get(id.trim())?.let { service.requireOwner(it, null) }
             service.delete(id)
             onDeleted()
             buildJsonObject { put("deleted", id.trim()) }
