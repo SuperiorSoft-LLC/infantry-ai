@@ -8,6 +8,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -80,6 +81,7 @@ internal fun calendarTargets(state: AppState): List<Pair<String, String>> {
     return roles.map { "role:$it" to it } + sessions.map { "session:${it.id}" to "${it.role ?: "agent"} ${it.shortId}" }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun CalendarTab(ctx: TabContext) {
     val scope = rememberCoroutineScope()
@@ -124,7 +126,7 @@ fun CalendarTab(ctx: TabContext) {
 
     Row(Modifier.fillMaxSize().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1.6f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(verticalArrangement = Arrangement.spacedBy(4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 TextButton(onClick = { scope.launch { calendarState.animateScrollToMonth(month.minus(1, DateTimeUnit.MONTH)) } }) { Text("<") }
                 Text("${month.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${month.year}", color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 TextButton(onClick = { scope.launch { calendarState.animateScrollToMonth(month.plus(1, DateTimeUnit.MONTH)) } }) { Text(">") }
@@ -144,7 +146,7 @@ fun CalendarTab(ctx: TabContext) {
                 dayContent = { day -> DayCell(day, today, selected, byDay[day.date], onClick = { selected = day.date }) },
             )
         }
-        DayPanel(selected, selected?.let { byDay[it] }.orEmpty(), Modifier.weight(1f), onOpen = { open = it }, onNew = { d -> draft = CalendarDraft(date = d.toString()) })
+        DayPanel(selected, selected?.let { byDay[it] }.orEmpty(), Modifier.weight(1f), onOpen = { it0 -> open = it0; scope.launch { api.get(it0.id).onSuccess { n -> if (n != null) open = n } } }, onNew = { d -> draft = CalendarDraft(date = d.toString()) })
     }
 
     if (confirmWipe) AhqAlertDialog(
