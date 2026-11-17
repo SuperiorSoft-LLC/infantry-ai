@@ -179,7 +179,19 @@ class CalendarCompleteTool(private val service: CalendarService, private val cre
     }
 }
 
+/** CAL-4: `infantry_calendar_clear`, the explicit wipe: every item, its history and the calendar's owned triggers. `confirm` must be true. */
+class CalendarClearTool(private val service: CalendarService) : DaemonTool {
+    override val name = "infantry_calendar_clear"
+    override val description = "Delete ALL calendar data: every item, its history and the triggers the calendar owns. Irreversible. Only when the user asked for it; confirm must be true."
+    override val inputSchema = schema(listOf("confirm"), "confirm" to prop("boolean", "Must be true."))
+    override fun call(call: ToolCall) = answer {
+        val ok = (call.arguments["confirm"] as? JsonPrimitive)?.let { it.booleanOrNull ?: it.contentOrNull?.trim()?.toBooleanStrictOrNull() } == true
+        if (!ok) throw CalendarRefusal("confirm must be true to delete all calendar data")
+        buildJsonObject { put("deleted", service.clear()) }
+    }
+}
+
 fun calendarTools(service: CalendarService, creators: CreatorOf): List<DaemonTool> = listOf(
     CalendarAddTool(service, creators), CalendarTimerTool(service, creators), CalendarListTool(service), CalendarGetTool(service),
-    CalendarUpdateTool(service, creators), CalendarCompleteTool(service, creators),
+    CalendarUpdateTool(service, creators), CalendarCompleteTool(service, creators), CalendarClearTool(service),
 )

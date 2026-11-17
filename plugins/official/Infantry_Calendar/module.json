@@ -9,7 +9,7 @@
   "services": ["events", "daemon"],
   "events": ["daemon.calendar_changed", "daemon.calendar_open"],
   "daemonFrames": ["calendar_changed", "calendar_open"],
-  "routes": ["POST /plugins/Infantry_Calendar/calendar/list", "POST /plugins/Infantry_Calendar/calendar/get", "POST /plugins/Infantry_Calendar/calendar/save", "POST /plugins/Infantry_Calendar/calendar/complete", "POST /plugins/Infantry_Calendar/calendar/snooze", "POST /plugins/Infantry_Calendar/calendar/delete"],
+  "routes": ["POST /plugins/Infantry_Calendar/calendar/list", "POST /plugins/Infantry_Calendar/calendar/get", "POST /plugins/Infantry_Calendar/calendar/save", "POST /plugins/Infantry_Calendar/calendar/complete", "POST /plugins/Infantry_Calendar/calendar/snooze", "POST /plugins/Infantry_Calendar/calendar/delete", "POST /plugins/Infantry_Calendar/calendar/clear"],
   "tabs": [{ "id": "infantry.calendar", "container": "center" }],
   "tier": "official",
   "sequence": [],
@@ -70,7 +70,8 @@
       { "name": "infantry_calendar_list", "action": "calendar.read", "kind": "read", "description": "List calendar items: optional from/to (yyyy-MM-dd, inclusive), status, kind, projectId, createdBy (an agent id, or user)." },
       { "name": "infantry_calendar_get", "action": "calendar.read", "kind": "read", "description": "One calendar item by id, with its history." },
       { "name": "infantry_calendar_update", "action": "calendar.write", "kind": "write", "description": "Change a calendar item: id plus any of title, notes, date, time, allDay, remindAt, remindBefore, target, projectId." },
-      { "name": "infantry_calendar_complete", "action": "calendar.write", "kind": "write", "description": "Mark a calendar item done (default) or cancelled: id, optional status done|cancelled." }
+      { "name": "infantry_calendar_complete", "action": "calendar.write", "kind": "write", "description": "Mark a calendar item done (default) or cancelled: id, optional status done|cancelled." },
+      { "name": "infantry_calendar_clear", "action": "calendar.delete", "kind": "destructive", "description": "Delete ALL calendar data (items, history, owned triggers). Irreversible; confirm must be true." }
     ]
   },
   "actions": [

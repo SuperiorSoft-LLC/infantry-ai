@@ -154,6 +154,7 @@ Rule 9 in one table. Search here before you write a helper; ticket ids name the 
 - [Plugin knowledge](docs/wiki/plugin-knowledge.md): module.json `knowledge`, what agents are briefed about a plugin's tools.
 - [UI plugin API](docs/wiki/plugin-api.md), [Daemon plugin API](docs/wiki/daemon-plugin-api.md), [Harnesses](docs/wiki/Harnesses.md).
 - [Notifications](docs/wiki/Notifications.md): the one notification bus and its presenters.
+- [Calendar](docs/wiki/Calendar.md): the Calendar plugin, user and agent usage, Delete all.
 - [Health](docs/wiki/Health.md): `infantry health`, the daemon health and environment report, restart log.
 - [Waiting flag](docs/wiki/Waiting.md): `infantry waiting on|off`, the "active but waiting" card state, the idle-nudge watcher.
 - [Scripting](docs/wiki/Scripting.md), [Script Arsenal](docs/wiki/script-arsenal.md) (global scripts), [Settings](docs/wiki/Settings.md), [Licensing](docs/wiki/licensing.md).

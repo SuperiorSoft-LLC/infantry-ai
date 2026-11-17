@@ -40,6 +40,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 ## Configure
 
 - [Board and epics](Board.md): epics, and moving tickets between epics.
+- [Calendar](Calendar.md): the Calendar plugin: tasks and reminders for the user and every agent, the tools, Delete all.
 - [Notifications](Notifications.md): the ONE notification bus (in-app toasts, OS notifications), presenters a plugin can override, routing settings, the inventory.
 - [CLI login](Login.md): `infantry login|logout|whoami`, the CLI's saved daemon connection (not Claude's `/login`).
 - [Health](Health.md): `infantry health`, the daemon health and environment report (up/down, restarts and why, MCP bridges, OS/shell/ports).

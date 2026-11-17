@@ -3,6 +3,8 @@
 A plugin tells agents what its tools are for. Any role, any plugin (community tier included), no host edit per plugin.
 The plan is CAL-PLAN-2 section 2 (ticket cc8207de); this page describes what is built.
 
+A built example: the Calendar plugin ([Calendar](Calendar.md)).
+
 ## Status
 
 | Part | Ticket | State |

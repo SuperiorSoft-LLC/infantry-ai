@@ -192,4 +192,25 @@ class CalendarRemindersTest {
         val tid = assertNotNull(s.triggerId)
         assertEquals(s.remindAt, fake.rows[tid]!!.remindAt)
     }
+
+    @Test fun `the wipe removes items, history and owned triggers, and the tool needs confirm`() {
+        val a = timer("Check the gate", 2, target = "role:qa")
+        timer("For the user", 5)
+        assertEquals(1, fake.rows.size)
+        val tool = CalendarClearTool(d.service)
+        val call = { args: String -> tool.call(WipeCall(kotlinx.serialization.json.Json.parseToJsonElement(args) as kotlinx.serialization.json.JsonObject)) }
+        assertTrue(call("{}").isError, "no confirm, no wipe")
+        assertEquals(2, d.store.list().size)
+        assertTrue(!call("""{"confirm":true}""").isError)
+        assertTrue(d.store.list().isEmpty())
+        assertTrue(d.store.events(a.id).isEmpty(), "history goes too")
+        assertTrue(fake.rows.isEmpty(), "owned triggers go too")
+    }
+}
+
+private class WipeCall(override val arguments: kotlinx.serialization.json.JsonObject) : com.superiorsoftllc.infantry.daemon.api.ToolCall {
+    override val caller = com.superiorsoftllc.infantry.daemon.api.Caller(owner = true)
+    override val clientSessionId: String? = null
+    override val clientRole: String? = null
+    override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long): com.superiorsoftllc.infantry.daemon.api.Frame = error("no frame in this test")
 }
