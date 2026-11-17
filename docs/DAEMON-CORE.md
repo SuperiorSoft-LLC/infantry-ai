@@ -38,7 +38,7 @@ is listed in the guard's reason for its package and moves package-by-package in 
 `DaemonCoreGuardTest` holds the same table as code: a new package fails the build until it is classified, and a package
 that is renamed or deleted must leave the table. Lines in PLUGIN_NOW/PLUGIN_LATER/STAYS are the DAEMON-PLUGINS-2 target list.
 
-**CORE** (stays by definition): `protocol`, `daemon`, `policy`, `settings`, `db`, `keystore`, `harness`, `runner`, `mcp` (MCP-REGISTRY-1: the harness-neutral MCP registry, grants and walled per-session selection).
+**CORE** (stays by definition): `protocol`, `daemon`, `policy`, `settings`, `db`, `keystore`, `harness`, `runner`, `downloads`, `http`, `mcp` (MCP-REGISTRY-1: the harness-neutral MCP registry, grants and walled per-session selection).
 
 **STAYS in core (reason)**
 | package | reason |
@@ -46,6 +46,7 @@ that is renamed or deleted must leave the table. Lines in PLUGIN_NOW/PLUGIN_LATE
 | `session` | SessionManager and the process ledger are core; AutoProgress, ToolApprovals, SleepHint, RetrievalClassifier are plugin candidates |
 | `mailbox` | Mailbox/MailRouter/MailStore are core; the Stall/Watchdog/ReportBack/FinishNotice monitors are product rules |
 | `persistence` | InfantryStore and the records are shared by every feature table; shrinks as features take their own tables |
+| `install` | CLI-PATH-1: puts the `infantry` command on the user's PATH (`CliPath`, `UserPathStore`), per OS, runner side |
 | `worktree` | git working copies, runner side, used by SessionManager and the board alike |
 | `projectgit` | git status/diff/commit helpers over worktree, runner side; moves with the Git plugin once DaemonApi has a git surface |
 | `usage`, `usagemeter`, `stats`, `tokens` | limits, metering and the harness-neutral RequestUsage record are fed by every harness stream |

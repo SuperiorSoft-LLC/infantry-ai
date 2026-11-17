@@ -151,6 +151,8 @@ class DaemonCoreGuardTest {
             "keystore" to "secret storage behind the secrets the plugin API grants",
             "harness" to "the Harness / HarnessPlugin / HarnessRegistry abstraction (its pi, descriptor and install subfolders are not core; claude lives in Infantry_Claude, opencode in Infantry_OpenCode)",
             "runner" to "process-runner and watch mechanism; ToolProfiles are data on top of it",
+            "downloads" to "DOWNLOAD-SEAM: the generic file-download mechanism (CoreDownloads, transport) behind DaemonApi.downloads; names no feature",
+            "http" to "HTTP-SEAM-1: CoreHttp, the one HTTP client behind DaemonApi.http (retry, limits.http.* settings); names no feature",
             "mcp" to "MCP-REGISTRY-1: the harness-neutral MCP registry, grants and walled per-session selection (names no harness or server)",
         )
 
@@ -167,6 +169,7 @@ class DaemonCoreGuardTest {
             "testrun" to "background full-suite runner and its ledger behind the infantry_tests tool (FULLSUITE-2); runner side of the staging gate",
             "tokens" to "usage ledger behind the meter",
             "archive" to "ArchiveService stores archived tickets and sessions for the board; stays in the app shell until the board plugin owns archiving",
+            "install" to "CLI-PATH-1: CliPath and UserPathStore put the infantry command on the user's PATH; per-OS, runner side, no feature knowledge",
             "executables" to "resolves harness and tool binaries for the runner",
             "update" to "self-update of the daemon install; DaemonMain wires it directly",
             "notify" to "the spoken-push frame helper of the protocol",
