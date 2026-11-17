@@ -27,6 +27,20 @@ A daemon plugin tool runs in the daemon, which cannot open the agent's files. `i
 A client below 1.147.0 sends plain strings and no `client.projectId`: such a tool sees no local files (a path it cannot read is refused as
 "does not exist") and no default project. A daemon below 1.147.0 never lists `localFiles`, and ignores `client.projectId`.
 
+### TRIG-API-1 (contract 1.155.0, additive): one-shot, owned and session-targeted trigger fields
+
+`TriggerSave` and `TriggerView` (`infantryProtocol/.../Triggers.kt`) gain four fields, each defaulting to today's behaviour:
+
+- `fireAt` (epoch ms) and `deleteAfterFire` (default false) for the new kind `at`, a one-shot.
+- `owner`: the module that made the trigger; null = a person. The trigger service stamps it from the calling module; a client's
+  value is never trusted (refused since TRIG-AT-1; a person cannot edit or delete an owned trigger).
+- `ref`: the owner's own opaque key (e.g. `calendar:cal-1a2b3c4d`).
+
+`TriggerAction.agentId` may be `session:<id>` (that one session, never replaced), and a trigger event may record the disposition
+`target_gone`. The `session:` target and `target_gone` are served since TRIG-TARGET-1; kind `at`, `owner` and `ref` since TRIG-AT-1
+(Infantry_Triggers 1.2.0: the one-shot fires once, then is disabled or deleted; late past `triggers.at.maxLateMs` = `missed`). A client below 1.155.0 ignores the new view fields. `trigger_save` is decoded strictly, so a daemon below 1.155.0
+refuses a payload that carries them; a 1.155.0 daemon with Infantry_Triggers 1.2.0 stores them.
+
 ### MCP-REGISTRY-1 (contract 1.154.0, additive): the MCP registry, grants and the walled default
 
 One daemon backend for every MCP server a session can get (design `docs/design/MCP-TOOLS.md`, section 4.2). Payloads are in

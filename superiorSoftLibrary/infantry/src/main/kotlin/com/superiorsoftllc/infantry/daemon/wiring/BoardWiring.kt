@@ -16,7 +16,6 @@ import com.superiorsoftllc.infantry.session.SessionManager
 import com.superiorsoftllc.infantry.settings.SettingsService
 import com.superiorsoftllc.infantry.ticketfiles.RelatedDescription
 import com.superiorsoftllc.infantry.ticketfiles.RelatedWorkSource
-import com.superiorsoftllc.infantry.triggers.TriggerService
 import com.superiorsoftllc.infantry.worktree.TicketBaseRef
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
@@ -28,12 +27,12 @@ object BoardWiring {
 
     /** The typed durable ticket-event log, the ticket files and the three core event consumers over it; null without a board. */
     fun buildTicketServices(
-        withBoard: Boolean, store: InfantryStore, settings: SettingsService, triggers: TriggerService, doneWorkerReaper: DoneWorkerReaper,
+        withBoard: Boolean, store: InfantryStore, settings: SettingsService, doneWorkerReaper: DoneWorkerReaper,
         relatedRef: AtomicReference<RelatedWorkSource>, relatedDescriptionRef: AtomicReference<RelatedDescription>, boardPorts: BoardPorts,
     ): Core? {
         val ticketEvents: TicketEventLog? = if (!withBoard) null else TicketServices.eventLog(store)
         return ticketEvents?.let { events ->
-            Core(events, TicketServices.create(store, events, settings, triggers, doneWorkerReaper, relatedRef, relatedDescriptionRef) { projectId -> boardPorts.cutRepo(projectId)?.let(::File) })
+            Core(events, TicketServices.create(store, events, settings, doneWorkerReaper, relatedRef, relatedDescriptionRef) { projectId -> boardPorts.cutRepo(projectId)?.let(::File) })
         }
     }
 

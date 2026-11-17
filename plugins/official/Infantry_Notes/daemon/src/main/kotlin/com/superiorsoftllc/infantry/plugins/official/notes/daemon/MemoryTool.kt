@@ -54,6 +54,9 @@ class MemoryTool(private val projectOf: (sessionId: String) -> String?) : Daemon
         fun arg(k: String) = (call.arguments[k] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
         val session = call.clientSessionId?.trim()?.takeIf { it.isNotEmpty() }
         val project = arg("projectId") ?: session?.let(projectOf) ?: call.clientProjectId?.trim()?.takeIf { it.isNotEmpty() }
+            // PK-2: a session with no project (the Assistant) still reads the global notes (plugin:* among them): its reads fall
+            // back to the global notes' own project id; a write needs scope=global or a projectId.
+            ?: MemoryStore.GLOBAL_PROJECT.takeIf { arg("action") in READ_ACTIONS || arg("scope") == "global" }
             ?: return refused("$NAME: no project (this session has none; pass projectId)")
         val scope = arg("scope")
         if (scope != null && scope !in SCOPES) return refused("$NAME: scope must be one of ${SCOPES.joinToString("|")}")
@@ -115,6 +118,7 @@ class MemoryTool(private val projectOf: (sessionId: String) -> String?) : Daemon
         const val NAME = "infantry_memory"
         val ACTIONS = listOf("show", "search", "index", "write", "update", "delete")
         val SCOPES = listOf("project", "role", "session", "global")
+        private val READ_ACTIONS = setOf("show", "search", "index")
         private val json = Json { ignoreUnknownKeys = true }
     }
 }

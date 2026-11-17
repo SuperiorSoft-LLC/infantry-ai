@@ -55,7 +55,10 @@ object TestDaemonPlugins {
     }
 
     /** CI-TESTS-5: the official daemon plugins a daemon test that spawns, mails and reports needs (board, roles, agents, chat, attention, notes). */
-    fun fullRoot(): File = root("official/Infantry_Board", "official/Infantry_Roles", "official/Infantry_Agents", "official/Infantry_Chat", "official/Infantry_Attention", "official/Infantry_Notes").also { boardRoots += it }
+    fun fullRoot(): File = root("official/Infantry_Board", "official/Infantry_Roles", "official/Infantry_Agents", "official/Infantry_Chat", "official/Infantry_Attention", "official/Infantry_Notes", "official/Infantry_Triggers").also { boardRoots += it }
+
+    /** TRIG-2c: the default board root (board, attention, roles) plus Infantry_Triggers, which runs the trigger service since TRIG-2c. */
+    fun triggersRoot(): File = boardRoot("official/Infantry_Attention", "official/Infantry_Roles", "official/Infantry_Triggers")
 
     /** Copies module [src] to [dst]: module.json, `policies/`, and the jars its `daemon.jar` / `harness.jar` name (which must be built). */
     fun copy(src: File, dst: File) {

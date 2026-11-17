@@ -52,3 +52,18 @@ signing: repository secrets `IHQ_KEYSTORE_B64` (base64 of the keystore), `IHQ_ST
 ## Submit to the registry
 Open a pull request to the `infantry-plugins` registry repository adding your `catalog-entry.json` for the release
 (see REGISTRY-1b). The daemon recomputes the permission grants when it validates the entry.
+
+## Tell agents about your tools (optional)
+
+Add a `knowledge` entry to `module.json` (and list its folder in `files`) so every role session is briefed about your tool.
+JSON has no comments, so the example is here; paste it next to `daemon` and delete what you do not need:
+
+```
+"knowledge": [
+  { "id": "starter", "summary": "Starter: example_sessions counts the daemon's sessions.",
+    "file": "knowledge/starter.md", "tools": ["example_sessions"], "roles": ["*"], "skipRoles": [], "projects": [] }
+],
+"files": ["knowledge"]
+```
+
+Rules and budget settings: the Infantry AI repo, `docs/wiki/plugin-knowledge.md`.
