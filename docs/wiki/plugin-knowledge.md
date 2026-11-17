@@ -8,7 +8,7 @@ The plan is CAL-PLAN-2 section 2 (ticket cc8207de); this page describes what is 
 | Part | Ticket | State |
 |---|---|---|
 | module.json `knowledge`, the SDK ports, the briefing section in every role session's first turn, the budget settings, `modules.changed` on a version change | PK-1 | built |
-| The provider (Infantry_Notes): `plugin:<Module>/<id>` notes, the `AgentBriefing` answer, live notices to running sessions | PK-2 | planned |
+| The provider (Infantry_Notes): `plugin:<Module>/<id>` notes, the `AgentBriefing` answer, live notices to running sessions | PK-2 | built (real-window proof pending) |
 | MCP `tools/list_changed` so a live session's tool list catches up | PK-3 | planned |
 
 Until a provider is loaded, no session gets a PLUGIN TOOLS section: no provider = no section, the same rule as the project
@@ -72,3 +72,22 @@ entries that name the session's role come first and the rest are named in one `+
 `KnowledgeBriefing.render`, so they all brief alike; the core holds the answer to the budget even if a provider overshoots.
 
 The skip-marker parser is `KnowledgeSections.textFor`, shared by the core KNOWLEDGE.md and plugin knowledge files.
+
+## The provider (Infantry_Notes, PK-2)
+
+Infantry_Notes' daemon half (`PluginKnowledgeProvider`) reconciles at start and on every `modules.changed`:
+
+- One global note `plugin:<Module>/<id>` (folder `plugins`) per valid declared entry of a loaded module, holding the summary, the
+  tool names and the entry's `file` text. A changed version or text refreshes it; a note whose module is no longer loaded (also one
+  left by an earlier run) is deleted. Any session reads it, the Assistant (no project) too: `infantry memory show plugin:<Module>/<id>`.
+- It answers `AgentBriefing` and accepts `PluginKnowledge.contribute` (dynamic entries, removed on close or when the module unloads).
+- Live notices: when an entry is added, upgraded or removed, each live session in its scope (role, project; a session that has
+  not run yet gets it in its first turn instead) hears ONE coalesced notice: "New tools available: ... If your tool list doesn't show
+  them yet, call them with `infantry tool <name>`", or "These tools were removed; do not call: ...".
+  An idle session is not woken: the notice is held and arrives with its next turn.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `knowledge.plugins.notifyLive` | on | Send the live notices at all. |
+| `knowledge.plugins.noticeWakes` | off | Deliver at once, waking an idle session. |
+| `knowledge.plugins.noticeCoalesceMs` | 2000 | Merge changes within this window into one notice. |
