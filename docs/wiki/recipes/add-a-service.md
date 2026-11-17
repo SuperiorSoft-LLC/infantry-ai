@@ -59,7 +59,7 @@ endpoints, `api` (with its path prefix) and `site` (plans and billing pages), ea
 ```json
 "endpoints": {
   "api": {
-    "prod": "https://api.superiorsoftllc.tech/api/superiorsoft",
+    "prod": "https://superiorsoftllc.tech/api/superiorsoft",
     "dev": "http://127.0.0.1:18953/api/superiorsoft",
     "staging": "http://127.0.0.1:18953/api/superiorsoft"
   },

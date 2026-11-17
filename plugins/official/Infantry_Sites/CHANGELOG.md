@@ -19,5 +19,5 @@
   addresses live in module.json `daemon.endpoints` (`api`, `site`) and the build environment picks one (dev / staging / prod).
   A value stored under the old keys is ignored.
 - Developers override an address for local testing with `INFANTRY_ENDPOINT_INFANTRY_SITES_API` / `..._SITE`.
-- The prod addresses (`api.superiorsoftllc.tech`, `superiorsoftllc.tech`) are placeholders until the owner confirms them.
+- The prod addresses are the live host: API `https://superiorsoftllc.tech/api/superiorsoft` (Caddy route on the site host; no `api.` subdomain exists), site `https://superiorsoftllc.tech`.
 - Needs daemon API 1.63.0.
