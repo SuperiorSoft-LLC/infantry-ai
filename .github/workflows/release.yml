@@ -332,7 +332,13 @@ jobs:
         run: |
           set -euo pipefail
           V='${{ needs.version.outputs.version }}'
-          ./gradlew --no-daemon :superiorSoftLibrary:infantry:headlessDist -PinfantryVersion="$V" $IHQ_SIGN
+          # NIGHTLY-CI-1: Maven Central answers a shared runner IP with a transient 403 on dependency resolution (nightly
+          # 2026-11-16, run 43892956881, ubuntu only). Retry the build: a real compile error fails all three attempts.
+          for attempt in 1 2 3; do
+            ./gradlew --no-daemon :superiorSoftLibrary:infantry:headlessDist -PinfantryVersion="$V" $IHQ_SIGN && break
+            [ "$attempt" = 3 ] && exit 1
+            echo "::warning::headlessDist attempt $attempt failed; retrying in 60s"; sleep 60
+          done
           mkdir -p out
           cp superiorSoftLibrary/infantry/build/distributions/InfantryAI-server-"$V"-* out/
       # UPDATER-1 gate: an archive is published only when it starts (/health 200, no refused plugin) and has no new split
