@@ -11,7 +11,7 @@ A built example: the Calendar plugin ([Calendar](Calendar.md)).
 |---|---|---|
 | module.json `knowledge`, the SDK ports, the briefing section in every role session's first turn, the budget settings, `modules.changed` on a version change | PK-1 | built |
 | The provider (Infantry_Notes): `plugin:<Module>/<id>` notes, the `AgentBriefing` answer, live notices to running sessions | PK-2 | built (real-window proof pending) |
-| MCP `tools/list_changed` so a live session's tool list catches up | PK-3 | planned |
+| MCP `tools/list_changed` so a live session's tool list catches up (the stdio bridge compares the tool list every `limits.mcp.toolsWatchSeconds` and sends `notifications/tools/list_changed` when it changes) | PK-3 | built |
 
 Until a provider is loaded, no session gets a PLUGIN TOOLS section: no provider = no section, the same rule as the project
 knowledge digest.
