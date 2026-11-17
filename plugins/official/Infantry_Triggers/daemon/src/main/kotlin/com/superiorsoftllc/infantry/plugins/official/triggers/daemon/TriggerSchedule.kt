@@ -27,6 +27,12 @@ enum class TriggerEventDisposition {
     DEFERRED_BUSY,
     /** TRIG-TARGET-1: a `session:<id>` target is gone (ended or removed); nothing was sent and no replacement was started. */
     TARGET_GONE,
+    /** TRIG-ACTIONS-1: a plugin action ran and needs nothing more. */
+    DELIVERED,
+    /** TRIG-ACTIONS-1: a plugin action declined (reason in the digest). */
+    REFUSED,
+    /** TRIG-ACTIONS-1: the trigger's plugin action kind has no registered handler (never loaded, closed or unloaded). */
+    REFUSED_UNKNOWN_ACTION,
 }
 
 /** One in-memory event-history row; persistence adapters can store these without conflating runs. */

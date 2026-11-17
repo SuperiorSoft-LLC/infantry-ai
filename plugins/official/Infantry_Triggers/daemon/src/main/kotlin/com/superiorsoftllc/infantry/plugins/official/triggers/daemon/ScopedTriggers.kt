@@ -73,7 +73,7 @@ internal class ScopedTriggers(
     override fun events(id: String): List<ApiEventRecord> = service.events(id).map { it.toRecord() }
 
     override fun registerAction(kind: String, handler: TriggerActionHandler): AutoCloseable =
-        throw UnsupportedOperationException("plugin action kinds are not served yet (TRIG-ACTIONS-1)")
+        service.registerAction(kind, callerModuleId, handler)
 
     private fun owned(id: String) {
         val existing = service.get(id) ?: throw IllegalArgumentException("no trigger '${id.take(80)}'")
