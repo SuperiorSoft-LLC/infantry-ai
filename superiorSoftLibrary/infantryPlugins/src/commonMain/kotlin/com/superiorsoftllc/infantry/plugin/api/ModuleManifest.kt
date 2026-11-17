@@ -171,6 +171,13 @@ data class ModuleManifest(
      * is gone. A packaged install carries the files when [files] names their folder.
      */
     val scripts: List<ScriptDeclaration> = emptyList(),
+    /**
+     * PK-1 (docs/wiki/plugin-knowledge.md): what agents should know about this module's tools. Each entry's one-line summary is
+     * briefed, within a budget, into the first turn of every session in its scope; its [KnowledgeDeclaration.file] holds the details
+     * an agent reads on demand. A packaged install carries the file when [files] names its folder. Versioned with the module: a new
+     * version ships its new text. Checked with [KnowledgeDeclarations.problems]; a bad entry is skipped, never the module.
+     */
+    val knowledge: List<KnowledgeDeclaration> = emptyList(),
 ) {
     /** NS3: the node ids of [fills]. */
     val fillNodes: List<String> get() = fills.map { it.node }
@@ -245,6 +252,94 @@ data class ScriptHookDeclaration(
     val args: JsonObject? = null,
     val global: Boolean = false,
 )
+
+/**
+ * PK-1: one knowledge entry a module brings (module.json `knowledge`). [id] is unique within the module (`[a-z0-9][a-z0-9._-]{0,63}`);
+ * [summary] the one line agents are briefed with (trimmed to the `limits.knowledge.plugins.summaryMaxChars` setting); [file] a
+ * text file in the module folder (`knowledge/calendar.md`, `.md` or `.txt`) with the details, which may use the same
+ * `<!-- skip: roleA,roleB -->` section markers as the core KNOWLEDGE.md; [tools] the tool names the entry is about.
+ * Scope: [roles] the roles that see it (empty or `*` = every role; `assistant` is just a role), [skipRoles] the roles that never
+ * do (wins over [roles]), [projects] the project ids it applies to (empty = every project, and sessions with no project).
+ */
+@Serializable
+data class KnowledgeDeclaration(
+    val id: String,
+    val summary: String = "",
+    val file: String = "",
+    val tools: List<String> = emptyList(),
+    val roles: List<String> = emptyList(),
+    val skipRoles: List<String> = emptyList(),
+    val projects: List<String> = emptyList(),
+) {
+    /** Whether a session of [role] (null = none) in [projectId] (null = none) is in this entry's scope. */
+    fun appliesTo(role: String?, projectId: String?): Boolean =
+        KnowledgeDeclarations.inScope(roles, skipRoles, projects, role, projectId)
+}
+
+/** PK-1: the rules of module.json `knowledge`, shared by the host, the providers and the SDK briefing renderer. */
+object KnowledgeDeclarations {
+    /** The id rule of an entry. */
+    val ID = Regex("[a-z0-9][a-z0-9._-]{0,63}")
+
+    /** A role name in `roles` / `skipRoles`: the role-id rule, or `*` in `roles`. */
+    private val ROLE = Regex("[a-z][a-z0-9-]{0,31}")
+
+    /** A details file: a relative path inside the module folder ending in `.md` or `.txt`. */
+    private val FILE = Regex("""[A-Za-z0-9_.\-]+(/[A-Za-z0-9_.\-]+)*\.(md|txt)""")
+
+    /** A tool name: letters, digits, `_ . -`, at most 128. */
+    private val TOOL = Regex("""[A-Za-z0-9_.\-]{1,128}""")
+
+    /** The roles value that means every role. */
+    const val ALL_ROLES = "*"
+
+    /**
+     * Scope rule: [skipRoles] wins; [roles] empty or holding [ALL_ROLES] admits every role (a session with no role too), else only
+     * a listed one; [projects] empty admits every project (and no project), else only a listed id. Role names compare ignoring case.
+     */
+    fun inScope(roles: List<String>, skipRoles: List<String>, projects: List<String>, role: String?, projectId: String?): Boolean {
+        val r = role?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+        if (r != null && skipRoles.any { it.trim().lowercase() == r }) return false
+        val wanted = roles.map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+        if (wanted.isNotEmpty() && ALL_ROLES !in wanted && (r == null || r !in wanted)) return false
+        val ps = projects.map { it.trim() }.filter { it.isNotEmpty() }
+        val p = projectId?.trim()?.takeIf { it.isNotEmpty() }
+        return ps.isEmpty() || (p != null && p in ps)
+    }
+
+    /** Whether [roles] names [role] itself (not only `*`): a role-specific entry, briefed first when the budget is short. */
+    fun roleSpecific(roles: List<String>, role: String?): Boolean {
+        val r = role?.trim()?.lowercase() ?: return false
+        return roles.any { it.trim().lowercase() == r }
+    }
+
+    /** The problems of one entry (empty = valid). */
+    fun problems(d: KnowledgeDeclaration): List<String> = buildList {
+        val id = d.id.trim()
+        if (!ID.matches(id)) add("knowledge id '${id.take(40)}' must match ${ID.pattern}")
+        if (d.summary.isBlank()) add("knowledge '${id.take(40)}': summary is blank")
+        if (d.summary.any { it == '\n' || it == '\r' }) add("knowledge '${id.take(40)}': summary must be one line")
+        val file = d.file.trim()
+        if (file.isNotEmpty() && (!FILE.matches(file) || file.split('/').any { it == ".." || it == "." })) {
+            add("knowledge '${id.take(40)}': file '${file.take(80)}' must be a relative .md or .txt path inside the module folder")
+        }
+        d.tools.filter { !TOOL.matches(it.trim()) }.forEach { add("knowledge '${id.take(40)}': tool '${it.take(40)}' is not a tool name") }
+        d.roles.map { it.trim().lowercase() }.filter { it != ALL_ROLES && !ROLE.matches(it) }
+            .forEach { add("knowledge '${id.take(40)}': role '${it.take(40)}' is not a role id or *") }
+        d.skipRoles.map { it.trim().lowercase() }.filter { !ROLE.matches(it) }
+            .forEach { add("knowledge '${id.take(40)}': skipRole '${it.take(40)}' is not a role id") }
+        d.projects.filter { it.isBlank() || it.any(Char::isISOControl) || it.length > 200 }
+            .forEach { add("knowledge '${id.take(40)}': project '${it.take(40)}' is not a project id") }
+    }
+
+    /** The problems of a whole `knowledge` list: each entry's, plus duplicate ids. */
+    fun problems(list: List<KnowledgeDeclaration>): List<String> =
+        list.flatMap(::problems) + list.groupBy { it.id.trim() }.filter { it.value.size > 1 }.keys.map { "knowledge id '${it.take(40)}' is declared twice" }
+
+    /** The valid entries of [list] (a duplicate id keeps its first entry). */
+    fun valid(list: List<KnowledgeDeclaration>): List<KnowledgeDeclaration> =
+        list.filter { problems(it).isEmpty() }.distinctBy { it.id.trim() }
+}
 
 /** GAP-AUDIT-1 (b): a node the module draws; [overridable] false = locked against every other module. */
 @Serializable

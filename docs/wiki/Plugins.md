@@ -70,6 +70,7 @@ Fields that exist today. Unknown keys are ignored. Real manifests: `plugins/comm
 | `actions` | Named actions your controls perform, so a policy preset can switch them off. |
 | `daemon` | `entry`, `jar`, `apiAtLeast`, `tools`, `frames`, `hooks`, `config`, `storage`, `env`, `limits`. |
 | `harness` | `jar`, `contract`, `ids`, `cli`, `settings`, `hooks`. |
+| `knowledge` | What agents should know about your tools: one-line summaries briefed into every role session in scope, details in a file. See [Plugin knowledge](plugin-knowledge.md). |
 
 ### Daemon half
 

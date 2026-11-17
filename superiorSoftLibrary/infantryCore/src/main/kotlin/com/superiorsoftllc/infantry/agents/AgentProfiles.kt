@@ -58,14 +58,21 @@ class AgentProfiles(
     @Volatile var spawnRoute: ((projectId: String?, role: String?) -> RoleBinding?)? = null
 
     /**
+     * PK-1 (plan CAL-PLAN-2 B3.1): the plugin briefing (PLUGIN TOOLS) of a session of (role, projectId), already within its budget;
+     * set by the daemon over the `AgentBriefing` service ([PluginBriefingSection]). Null, or a null answer = no section.
+     */
+    @Volatile var pluginBriefing: ((role: String?, projectId: String?) -> String?)? = null
+
+    /**
      * TRAITS-T4 (docs/INFANTRY-ROLE-TRAITS.md section 3): the [RoleInstance] a session spawned NOW for [agentId] and/or
      * [role] is a clone of -- the profile's persona and the effective trait set ([TraitBindings.effective]: the role's
      * list, then the agent's additions) as frozen snapshots. The role is the spawn's, else the profile's. Null for an
      * anonymous spawn. ROLE-EDIT-1: the profile's own instructions win; the role's persona ([rolePersona], read at spawn,
      * so an edit saved before the spawn applies and a running session keeps what it froze) is the fallback. Every spawn path calls this, directly or through [SessionManager.instanceFor], so the stored
-     * instance is exactly what was rendered.
+     * instance is exactly what was rendered. PK-1: the plugin briefing for the role in [projectId] (else the profile's project) is
+     * appended after the shared knowledge, frozen with the rest.
      */
-    fun instanceFor(agentId: String?, role: String?): RoleInstance? {
+    fun instanceFor(agentId: String?, role: String?, projectId: String? = null): RoleInstance? {
         val id = agentId?.trim()?.takeIf { it.isNotEmpty() }
         val profile = id?.let { repository.get(it) }
         val roleId = role?.trim()?.takeIf { it.isNotEmpty() } ?: profile?.role
@@ -74,10 +81,17 @@ class AgentProfiles(
         return RoleInstance(
             agentId = id,
             role = roleId,
-            instructions = SharedKnowledge.withKnowledge(profile?.instructions?.takeIf { it.isNotBlank() } ?: roleId?.let(rolePersona)?.takeIf { it.isNotBlank() }, roleId),
+            instructions = SharedKnowledge.withBriefing(
+                SharedKnowledge.withKnowledge(profile?.instructions?.takeIf { it.isNotBlank() } ?: roleId?.let(rolePersona)?.takeIf { it.isNotBlank() }, roleId),
+                briefing(roleId, projectId?.trim()?.takeIf { it.isNotEmpty() } ?: profile?.projectId),
+            ),
             traits = traitIds.mapNotNull { trait(it)?.let(TraitSnapshot::of) },
         )
     }
+
+    /** PK-1: the plugin briefing, or null; a failing provider never fails a spawn (the session simply has no section). */
+    private fun briefing(role: String?, projectId: String?): String? =
+        runCatching { pluginBriefing?.invoke(role, projectId) }.getOrNull()
 
     /** SWAP-AGENT-1: whether [id] is a role this daemon knows (the live catalog the daemon wired in). */
     fun roleKnown(id: String): Boolean = roleExists(id)

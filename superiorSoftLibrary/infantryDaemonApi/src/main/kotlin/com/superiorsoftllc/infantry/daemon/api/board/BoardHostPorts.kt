@@ -51,6 +51,12 @@ interface BoardAgents {
     /** DP-5f-2b: the instance (persona + effective traits) a spawn for [profileId] and/or [role] would freeze now; null = anonymous. */
     fun instanceFor(profileId: String?, role: String?): BoardRoleInstance? = null
 
+    /**
+     * PK-1 (BOARD_API_VERSION 1.13.0, additive): [instanceFor] for a session in [projectId], so the instance carries that project's
+     * plugin briefing. A host without it answers the project-less instance.
+     */
+    fun instanceFor(profileId: String?, role: String?, projectId: String?): BoardRoleInstance? = instanceFor(profileId, role)
+
     /** DP-5f-2b: [instance] with the skill ids a spawn for its agent on [ticketId] would freeze now; unchanged when the host has no resolver. */
     fun withSkills(instance: BoardRoleInstance, ticketId: String?): BoardRoleInstance = instance
 

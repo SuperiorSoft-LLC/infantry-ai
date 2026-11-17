@@ -923,6 +923,19 @@ object LimitRegistry {
         max = 1_000_000, zeroMeans = "never inline",
     )
 
+    /** PK-1 (plan CAL-PLAN-2 B3.1): the plugin briefing (PLUGIN TOOLS) a role session's first turn carries. */
+    val KNOWLEDGE_PLUGINS_MAX_CHARS = LimitDef(
+        "limits.knowledge.plugins.maxChars", 1500, "chars",
+        "The most characters of the PLUGIN TOOLS section (installed plugins' knowledge summaries) in a role session's first turn; past it, role-specific entries stay and the rest are named in one '+N more' line. Smaller = cheaper first turns.",
+        max = 1_000_000, zeroMeans = "no cap",
+    )
+
+    val KNOWLEDGE_PLUGINS_SUMMARY_MAX_CHARS = LimitDef(
+        "limits.knowledge.plugins.summaryMaxChars", 200, "chars",
+        "The most characters of one plugin knowledge summary in the PLUGIN TOOLS section; a longer one is cut with '...'.",
+        max = 100_000, zeroMeans = "no cap",
+    )
+
     val MCP_MAX_RESULT_CHARS = LimitDef(
         "limits.mcp.maxResultChars", 8000, "chars",
         "The most characters one MCP tool result may carry to an agent; a longer one is cut with a note saying how to narrow the call.",
@@ -1301,6 +1314,7 @@ object LimitRegistry {
         MCP_DEFAULT_DETAIL,
         TICKET_GET_DEFAULT_DETAIL, TICKET_SUMMARY_DESCRIPTION_CHARS,
         SKILLS_INLINE_MAX_CHARS,
+        KNOWLEDGE_PLUGINS_MAX_CHARS, KNOWLEDGE_PLUGINS_SUMMARY_MAX_CHARS,
         MCP_MAX_RESULT_CHARS,
         TOOLS_INBOX_LIMIT, TOOLS_LIST_LIMIT, TOOLS_SESSION_TAIL_LINES, TOOLS_BOARD_QUEUE_SHOWN, TOOLS_BOARD_DONE_SHOWN,
         MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
