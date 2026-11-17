@@ -138,7 +138,7 @@ class TriggerDaemonTest {
     @Test
     fun aTriggerRunningWhenTheDaemonStopsComesBackTripped() {
         val state = Files.createTempDirectory("infantry-trigger-test").toFile()
-        val first = DaemonFixture.launch(runner = GatedRunner(), context = FakeTicketContext("HANG"), stateDir = state, pluginsRoot = TestDaemonPlugins.triggersRoot())
+        val first = DaemonFixture.launch(runner = GatedRunner(), context = FakeTicketContext("HANG"), stateDir = state)
         val triggerId: String
         try {
             first.client.await(Envelope.READY)
@@ -150,7 +150,7 @@ class TriggerDaemonTest {
         } finally {
             first.stop()
         }
-        val second = DaemonFixture.launch(StubScript.default(), stateDir = state, pluginsRoot = TestDaemonPlugins.triggersRoot())
+        val second = DaemonFixture.launch(StubScript.default(), stateDir = state)
         try {
             second.client.await(Envelope.READY)
             second.send(Envelope(Envelope.TRIGGER_LIST))
@@ -221,9 +221,7 @@ class TriggerDaemonTest {
     fun anUnknownActionKindIsRefusedNamingItNeverIgnored() = withDaemon(StubScript.default()) { fixture ->
         val refused = refusalOf(fixture, """{"name":"p","action":{"kind":"teleport","agentId":"backend"}}""")
         assertTrue(refused.startsWith("trigger_save refused: ") && refused.contains("teleport"), refused)
-        val listMark = fixture.client.mark()
-        fixture.send(Envelope(Envelope.TRIGGER_LIST))
-        assertTrue(triggers(fixture.client.awaitAfter(listMark, "the list") { it.type == Envelope.TRIGGERS }).isEmpty(), "a refused save stores nothing")
+        assertTrue(fixture.daemon.triggers.list().isEmpty(), "a refused save stores nothing")
     }
 
     @Test
@@ -237,7 +235,7 @@ class TriggerDaemonTest {
         val gated = GatedRunner()
         // FakeTicketContext would REPLACE a composed ticket prompt with a fixed string: a prompt action that
         // went through the ticket composer would lose its text, and this test would say so.
-        val fixture = DaemonFixture.launch(runner = gated, context = FakeTicketContext(), pluginsRoot = TestDaemonPlugins.triggersRoot())
+        val fixture = DaemonFixture.launch(runner = gated, context = FakeTicketContext())
         try {
             fixture.client.await(Envelope.READY)
             fixture.client.saveProfile("""{"id":"backend","name":"Backend","role":"backend"}""")
@@ -276,7 +274,7 @@ class TriggerDaemonTest {
     @Test
     fun aPromptActionSurvivesADaemonRestart() {
         val state = Files.createTempDirectory("infantry-trigger-prompt").toFile()
-        val first = DaemonFixture.launch(StubScript.default(), stateDir = state, pluginsRoot = TestDaemonPlugins.triggersRoot())
+        val first = DaemonFixture.launch(StubScript.default(), stateDir = state)
         val id: String
         try {
             first.client.await(Envelope.READY)
@@ -284,7 +282,7 @@ class TriggerDaemonTest {
         } finally {
             first.stop()
         }
-        val second = DaemonFixture.launch(StubScript.default(), stateDir = state, pluginsRoot = TestDaemonPlugins.triggersRoot())
+        val second = DaemonFixture.launch(StubScript.default(), stateDir = state)
         try {
             second.client.await(Envelope.READY)
             second.send(Envelope(Envelope.TRIGGER_LIST))
@@ -323,7 +321,7 @@ class TriggerDaemonTest {
     private fun triggers(frame: Envelope) = json.decodeFromString(ListSerializer(TriggerView.serializer()), frame.data)
 
     private fun withDaemon(script: StubScript, block: (DaemonFixture) -> Unit) {
-        val fixture = DaemonFixture.launch(script, runner = ScriptedRunner(script, 0), pluginsRoot = TestDaemonPlugins.triggersRoot())
+        val fixture = DaemonFixture.launch(script, runner = ScriptedRunner(script, 0))
         try {
             fixture.client.await(Envelope.READY)
             block(fixture)

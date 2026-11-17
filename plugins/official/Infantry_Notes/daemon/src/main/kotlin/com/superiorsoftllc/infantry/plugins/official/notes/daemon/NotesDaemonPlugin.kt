@@ -27,16 +27,6 @@ import com.superiorsoftllc.infantry.protocol.Envelope
  * (digest, section, search, roleNotes) that core's first turn and board brief read through the service registry.
  */
 class NotesDaemonPlugin : DaemonPlugin {
-    private var timer: java.util.concurrent.ScheduledExecutorService? = null
-    private val subscriptions = mutableListOf<AutoCloseable>()
-
-    override fun stop() {
-        subscriptions.forEach { runCatching { it.close() } }
-        subscriptions.clear()
-        timer?.shutdownNow()
-        timer = null
-    }
-
     override fun start(api: DaemonApi) {
         val decisions = DecisionStore(api.storage)
         val issues = IssueStore(api.storage)
@@ -117,7 +107,6 @@ class NotesDaemonPlugin : DaemonPlugin {
 
             override fun names(project: String, prefix: String): List<String> = memory.index(project).map { it.name }.filter { it.startsWith(prefix) }
         })
-        startPluginKnowledge(api, memory)
         api.services.provide(KnowledgeRecords::class, object : KnowledgeRecords {
             override fun activeDecisions(project: String) =
                 decisions.list(project).filter { it.active }.sortedBy { it.number }.map { KnowledgeDecision(it.ref, it.summary) }
@@ -128,48 +117,7 @@ class NotesDaemonPlugin : DaemonPlugin {
         })
     }
 
-    /** PK-2: the provider of plugin knowledge (notes `plugin:<Module>/<id>`, the AgentBriefing answer, live notices). */
-    private fun startPluginKnowledge(api: DaemonApi, memory: MemoryStore) {
-        val executor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "plugin-knowledge").also { it.isDaemon = true } }
-        timer = executor
-        fun flag(key: String, default: Boolean) = api.settings.stored(key)?.trim()?.trim('"')?.lowercase()?.let { it == "true" } ?: default
-        val provider = PluginKnowledgeProvider(PluginKnowledgeProvider.Ports(
-            saveNote = { name, description, body -> memory.save(MemoryStore.GLOBAL_PROJECT, name, description, body, PLUGIN_NOTE_FOLDER) },
-            deleteNote = { name -> memory.delete(MemoryStore.GLOBAL_PROJECT, name) },
-            noteNames = { memory.index(MemoryStore.GLOBAL_PROJECT).map { it.name } },
-            loaded = { api.plugins.loaded() },
-            readFile = { m, file ->
-                val dir = m.dir ?: return@Ports null
-                val target = java.io.File(dir, file).canonicalFile
-                if (!target.path.startsWith(dir.canonicalPath + java.io.File.separator) || !target.isFile) null else target.readText()
-            },
-            sessions = { api.sessions.list() },
-            send = { id, subject, body -> api.sessionNotifier.notifySession(id, subject, body) },
-            notifyLive = { flag("knowledge.plugins.notifyLive", true) },
-            noticeWakes = { flag("knowledge.plugins.noticeWakes", false) },
-            coalesceMs = { api.settings.stored("knowledge.plugins.noticeCoalesceMs")?.trim()?.trim('"')?.toLongOrNull()?.takeIf { it >= 0 } ?: DEFAULT_COALESCE_MS },
-            schedule = { delay, block -> runCatching { executor.schedule({ runCatching(block) }, delay, java.util.concurrent.TimeUnit.MILLISECONDS) } },
-            log = { api.log(it) },
-        ))
-        api.services.provide(com.superiorsoftllc.infantry.daemon.api.knowledge.AgentBriefing::class, provider)
-        api.services.provideScoped(com.superiorsoftllc.infantry.daemon.api.knowledge.PluginKnowledge::class) { module ->
-            object : com.superiorsoftllc.infantry.daemon.api.knowledge.PluginKnowledge {
-                override fun contribute(entry: com.superiorsoftllc.infantry.daemon.api.knowledge.KnowledgeEntry) = provider.contribute(module, entry)
-            }
-        }
-        fun sessionOf(e: com.superiorsoftllc.infantry.daemon.api.NamedEvent): String? =
-            runCatching { (kotlinx.serialization.json.Json.parseToJsonElement(e.payload) as? kotlinx.serialization.json.JsonObject)?.get("sessionId")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } }.getOrNull()
-        subscriptions += api.events.subscribe("modules.changed") { provider.reconcile() }
-        subscriptions += api.events.subscribe("session.turn_started") { e -> sessionOf(e)?.let { provider.onTurnStarted(it) } }
-        subscriptions += api.events.subscribe("session.ended") { e -> sessionOf(e)?.let { provider.onSessionEnded(it) } }
-        // At start: write the notes of the modules already loaded (no notices: nothing changed for a running session). A module loaded
-        // after this plugin announces itself with modules.changed.
-        runCatching { provider.reconcile() }.onFailure { api.log("plugin knowledge: first reconcile failed: ${it.message}") }
-    }
-
     private companion object {
-        const val PLUGIN_NOTE_FOLDER = "plugins"
-        const val DEFAULT_COALESCE_MS = 2_000L
         /** ROLE-NOTE-READ-1: a role note up to this long is carried in its "changed" notice; longer ones are read with infantry_memory. */
         const val ROLE_NOTE_INLINE_CHARS = 1500
     }

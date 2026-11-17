@@ -39,9 +39,8 @@ import kotlinx.serialization.Serializable
  * 1.6.0 (DP-5c, additive): [BoardHost], the port the board plugin asks of the host (storage, git, sessions, settings, clock).
  * 1.7.0 (DP-5f-2, additive): [BoardHost] gains [BoardAgents], [BoardRunHealth], [BoardContextSources], [BoardImages] and
  *   [BoardSessions.subscribe] ([BoardSessionEvent]).
- * 1.13.0 (PK-1, additive): [BoardAgents.instanceFor] with a project id (the instance carries that project's plugin briefing).
  */
-const val BOARD_API_VERSION = "1.13.0"
+const val BOARD_API_VERSION = "1.12.0"
 
 const val GRANT_TICKETS_READ = "tickets.read"
 const val GRANT_TICKETS_WRITE = "tickets.write"

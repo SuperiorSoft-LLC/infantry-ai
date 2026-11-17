@@ -3,6 +3,7 @@
 package com.superiorsoftllc.infantry.plugins.official.triggers.daemon
 
 import com.superiorsoftllc.infantry.daemon.api.storage.PluginStorage
+import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerStore
 import com.superiorsoftllc.infantry.persistence.SqlInfantryStore
 import com.superiorsoftllc.infantry.protocol.TriggerAction
 import com.superiorsoftllc.infantry.protocol.TriggerEventView
@@ -64,7 +65,7 @@ class TriggerStoreContractTest {
     fun `core repository and the plugin store give the same results`() {
         val dir = Files.createTempDirectory("trig2b")
         val core = SqlInfantryStore.open(dir.resolve("core.db").toString())
-        val coreResult = script(CoreTriggerStore(core.triggers))
+        val coreResult = script(core.triggers)
         core.close()
         SqlInfantryStore.open(dir.resolve("plugin.db").toString()).close()
         val conn = DriverManager.getConnection("jdbc:sqlite:${dir.resolve("plugin.db")}")

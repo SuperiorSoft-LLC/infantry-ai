@@ -457,12 +457,6 @@ plugin's own script. With the module uninstalled or disabled its hooks are gone 
 `[disabled: plugin not loaded]` and refused by a run; reinstalling enables both. Plugin scripts get no extra privileges:
 same engines, limits, policy and gates as any script. Types: `ScriptDeclaration`, `ScriptHookDeclaration`.
 
-### Plugin knowledge (module.json `knowledge`, PK-1)
-
-A module tells agents what its tools are for: each entry's one-line `summary` is briefed into the first turn of every
-role session in its scope (`roles`, `skipRoles`, `projects`), its `file` holds the details. Full rules: [Plugin knowledge](plugin-knowledge.md).
-Types: `KnowledgeDeclaration`, `KnowledgeDeclarations`.
-
 ### Agent avatar renderers (AVATAR-DOCS-1)
 
 Every agent avatar in the app is drawn by one core composable, `AgentAvatar` (`superiorSoftLibrary/infantryUiCore/src/commonMain/kotlin/com/superiorsoftllc/infantry/ui/AgentAvatarRenderers.kt` holds the seam; `AgentAvatar.kt` holds the composable). A plugin can add an avatar style by registering a renderer under the registry `agent.avatar.renderers`:
@@ -749,8 +743,6 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 - `BlockDeclaration`: A block named [name] the module adds to slot [slot].
 - `CardDeclaration`: CARD-3: one chat card type the module brings: `type`, `summary`, `spec` (a file in the module folder or the text), `images`.
 - `CardImages`: CARD-3: module.json `cards[].images`: the image hosts a card type declares.
-- `KnowledgeDeclaration`: PK-1: one knowledge entry the module brings (module.json `knowledge`): `id`, `summary`, `file`, `tools`, scope `roles` / `skipRoles` / `projects`; `appliesTo(role, projectId)`.
-- `KnowledgeDeclarations`: PK-1: the rules of module.json `knowledge`: `problems`, `valid`, `inScope`, `roleSpecific`.
 - `RoleDeclaration`: ROLE-PLUGIN-1: one role the module brings (module.json `roles`): `id`, `name`, `persona` (a file in the module folder or the text), `color`, `icon`, `description`, preferred `cards` and `tools`.
 - `BlockTypeDeclaration`: NS1 / PB1 (6t.2): a block type, `vendor.name` (core's layout primitives are `layout.row` ...).
 - `DaemonCapabilities`: NS3 (1a): `daemon.needs` (refused = the module does not work) and `daemon.wants` (refused = it degrades).
@@ -879,7 +871,6 @@ Generated for the `infantryPlugins` guard `SdkTypesDocumentedGuardTest`: every p
 - `RouteGate`: The daemon rule: a route must be declared, and under the lockdown also allowed by the lock.
 - `ServiceGate`: The service rules: declared in module.json, not denied by the owner, and for a community module, allowed.
 - `ServiceRegistry`: PLUGINS-1: the host's service registry, the extension point for platform services.
-- `DaemonFrameRelay`: DAEMON-FRAMES-1: republishes a daemon broadcast frame to the modules whose `daemonFrames` names its type, as the event `daemon.<type>` (body in `data["data"]`), and to no other module.
 - `SimpleEventBus`: A plain in-process event bus. PLUGIN-HOTSWAP-1: it records each observer's owner module (`dropOwner` removes one module's observers) and binds one observer object once.
 - `LeakWatch`: PLUGIN-HOTSWAP-1: asks the GC to collect a swapped-out plugin's class loader and says whether it did within a timeout; `heapDump` for the dev leak report ([Plugin lifecycle](Plugin-lifecycle.md)).
 

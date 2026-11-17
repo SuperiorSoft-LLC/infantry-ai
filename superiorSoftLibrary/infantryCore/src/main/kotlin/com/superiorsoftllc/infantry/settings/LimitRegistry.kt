@@ -758,12 +758,6 @@ object LimitRegistry {
         "How long one capability call (infantry_capability_call, ih.call, a plugin's api.capabilities.call) waits for its daemon handler or client host before it fails; a capability's own declared timeoutMs wins, capped at limits.plugins.toolMaxTimeoutMs.",
         min = 1, zeroIsUnlimited = false,
     )
-    /** TRIG-2c: a PUBLIC plugin route's body (no daemon token, e.g. a signed webhook) is read with this hard cap; over it = 413, unread. */
-    val PLUGIN_PUBLIC_ROUTE_BODY_KB = LimitDef(
-        "limits.plugins.publicRouteBodyKb", 64, "KB",
-        "The largest request body a public plugin route (answered without the daemon token, such as POST /hooks/{id}) accepts; a larger one is refused 413 before any plugin code runs.",
-        min = 1, max = 16_384, zeroIsUnlimited = false,
-    )
     val PLUGIN_TOOL_MAX_TIMEOUT_MS = LimitDef(
         "limits.plugins.toolMaxTimeoutMs", 1_800_000, "ms",
         "The ceiling for a plugin tool's own declared timeoutMs (a long tool such as a harness install opts in; it can never wait longer than this).",
@@ -921,26 +915,6 @@ object LimitRegistry {
         "limits.skills.inlineMaxChars", 1500, "chars",
         "A layered skill (global/project/role) whose body is at most this long is written into the first-turn brief; a longer one appears as a description line with the command that shows it.",
         max = 1_000_000, zeroMeans = "never inline",
-    )
-
-    /** PK-1 (plan CAL-PLAN-2 B3.1): the plugin briefing (PLUGIN TOOLS) a role session's first turn carries. */
-    val KNOWLEDGE_PLUGINS_MAX_CHARS = LimitDef(
-        "limits.knowledge.plugins.maxChars", 1500, "chars",
-        "The most characters of the PLUGIN TOOLS section (installed plugins' knowledge summaries) in a role session's first turn; past it, role-specific entries stay and the rest are named in one '+N more' line. Smaller = cheaper first turns.",
-        max = 1_000_000, zeroMeans = "no cap",
-    )
-
-    val KNOWLEDGE_PLUGINS_SUMMARY_MAX_CHARS = LimitDef(
-        "limits.knowledge.plugins.summaryMaxChars", 200, "chars",
-        "The most characters of one plugin knowledge summary in the PLUGIN TOOLS section; a longer one is cut with '...'.",
-        max = 100_000, zeroMeans = "no cap",
-    )
-
-    /** PK-3 (plan CAL-PLAN-2 B4): how often an MCP server checks the daemon's tool list to send notifications/tools/list_changed. */
-    val MCP_TOOLS_WATCH_SECONDS = LimitDef(
-        "limits.mcp.toolsWatchSeconds", 5, "seconds",
-        "How often the MCP bridge asks the daemon for its tool list to tell the agent's CLI (notifications/tools/list_changed) that a plugin was loaded, unloaded or changed. Larger = fewer daemon calls.",
-        max = 86_400, zeroMeans = "never check (no list_changed notices)",
     )
 
     val MCP_MAX_RESULT_CHARS = LimitDef(
@@ -1321,8 +1295,7 @@ object LimitRegistry {
         MCP_DEFAULT_DETAIL,
         TICKET_GET_DEFAULT_DETAIL, TICKET_SUMMARY_DESCRIPTION_CHARS,
         SKILLS_INLINE_MAX_CHARS,
-        KNOWLEDGE_PLUGINS_MAX_CHARS, KNOWLEDGE_PLUGINS_SUMMARY_MAX_CHARS,
-        MCP_MAX_RESULT_CHARS, MCP_TOOLS_WATCH_SECONDS,
+        MCP_MAX_RESULT_CHARS,
         TOOLS_INBOX_LIMIT, TOOLS_LIST_LIMIT, TOOLS_SESSION_TAIL_LINES, TOOLS_BOARD_QUEUE_SHOWN, TOOLS_BOARD_DONE_SHOWN,
         MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         USAGE_STALE_MAX_HOURS, USAGE_BACKOFF_MAX_MINUTES, USAGE_MANUAL_REFRESH_FLOOR_SECONDS,
@@ -1337,7 +1310,7 @@ object LimitRegistry {
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         RELATED_BRIEF_TICKETS, RELATED_BRIEF_FILES, RELATED_BRIEF_CHARS, RELATED_BLOCK_TICKETS, RELATED_BLOCK_FILES, RELATED_BLOCK_CHARS,
-        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_PUBLIC_ROUTE_BODY_KB, PLUGIN_CAPABILITY_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS, PLUGIN_UNLOAD_CHECK_MS, PLUGIN_CATALOG_STALE_MS, PLUGIN_REFRESH_TIMEOUT_MS, PLUGIN_AUTO_RELOAD_ATTEMPTS, PLUGIN_AUTO_RELOAD_DELAY_MS,
+        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_CAPABILITY_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS, PLUGIN_UNLOAD_CHECK_MS, PLUGIN_CATALOG_STALE_MS, PLUGIN_REFRESH_TIMEOUT_MS, PLUGIN_AUTO_RELOAD_ATTEMPTS, PLUGIN_AUTO_RELOAD_DELAY_MS,
         MODELS_CATALOG_TTL_MS, MODELS_CATALOG_WAIT_MS, CLI_ANSWER_TIMEOUT_MS, HARNESS_LOGIN_TIMEOUT_MS, HARNESS_PROBE_TIMEOUT_SECONDS,
         MCP_LIST_TTL_MS, MCP_LIST_WAIT_MS, MCP_SERVERS_MAX, MCP_GRANTS_MAX, MCP_PURPOSE_CHARS,
         RUN_MAX_SECRETS, SECRET_RENDER_MAX_BYTES, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,

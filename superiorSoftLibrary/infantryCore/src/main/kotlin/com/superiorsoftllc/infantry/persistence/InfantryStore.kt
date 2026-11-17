@@ -217,25 +217,8 @@ interface ProviderStateRepository {
     fun all(): List<ProviderState>
 }
 
-/**
- * Story 9.5: triggers and the durable disposition row of every event they received. TRIG-2c: the trigger service lives in
- * Infantry_Triggers and reads these tables through its own store (`api.storage`, adopted tables); this repository stays for the
- * schema and the tests that seed or read the rows directly.
- */
-interface TriggerRepository {
-    fun upsert(trigger: TriggerView, intervalMs: Long?)
-    fun get(id: String): TriggerView?
-    fun all(): List<TriggerView>
-    fun intervals(): Map<String, Long>
-    fun delete(id: String): Boolean
-    fun insertEvent(event: TriggerEventView, keep: Long = 500)
-    fun events(triggerId: String): List<TriggerEventView>
-    fun setWebhookSecret(triggerId: String, secret: String)
-    fun webhookSecret(triggerId: String): String?
-    fun deleteWebhookSecret(triggerId: String)
-    fun pendingMail(triggerId: String): String?
-    fun setPendingMail(triggerId: String, mailId: String?)
-}
+/** Story 9.5: triggers and the durable disposition row of every event they received. */
+interface TriggerRepository : com.superiorsoftllc.infantry.daemon.api.triggers.TriggerStore // TRIG-1: the members (and their docs) live on the port
 
 /** The repositories plus the cross-table operations that must be atomic. */
 interface InfantryStore : Closeable {

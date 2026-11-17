@@ -291,16 +291,7 @@ interface DaemonApi {
         // 1.63.0 (ENDPOINT-ENV-1, additive): `environment` and `endpoint(name)` (module.json `daemon.endpoints`, per build environment).
         // 1.64.0 (PLUGIN-AUTH-ORIGIN-1, additive): module.json `daemon.http` (passAuthorization, allowedOrigins, allowNonLoopbackHost):
         // a public route may receive `Authorization` in [HttpCall.headers], admit listed origins and answer their CORS preflight.
-        // 1.65.0 (TRIG-API-1, additive): `ServicesApi.provideScoped` (a provider per calling module) and daemon.api.triggers
-        // `Triggers` (+ TriggerFilter, TriggerActionHandler, TriggerFire, TriggerActionResult, the Trigger*Record DTOs,
-        // TriggerOwnership, TriggerEvents). No provider yet: `services.find(Triggers::class)` is null until TRIG-2c.
-        // 1.66.0 (TRIG-2c): `HttpCall.bodyBytes` (additive). Removed: `triggers.TriggerStore` and `TriggerHost.store` (the store moved
-        // into Infantry_Triggers with the service; a protocol-typed SDK interface cannot cross plugin class loaders). `Triggers` now has
-        // a provider: Infantry_Triggers publishes it with `services.provideScoped` (owner stamped from the calling module).
-        // 1.67.0 (PK-1, additive; plan CAL-PLAN-2 B2/B3): daemon.api.knowledge `PluginKnowledge` (KnowledgeEntry), `AgentBriefing`
-        // (BriefingBudget), `KnowledgeSections` (the shared skip-marker parser) and `KnowledgeBriefing` (the PLUGIN TOOLS renderer);
-        // module.json `knowledge` (KnowledgeDeclaration); BOARD_API_VERSION 1.13.0; `modules.changed` also fires on a version change.
-        const val VERSION = "1.67.0"
+        const val VERSION = "1.64.0"
     }
 }
 
@@ -615,12 +606,6 @@ data class HttpCall(
     val remoteAddress: String? = null,
     /** 1.29.0 (TRIG-2a): the values of a template route's `{name}` segments (`POST /hooks/{id}` -> `id`); empty on an exact route. */
     val pathParams: Map<String, String> = emptyMap(),
-    /**
-     * 1.66.0 (TRIG-2c, additive): the exact request body bytes, for a handler that verifies a signature over them; null when the host
-     * passed text only. A public route's body is read with a hard cap (`limits.plugins.publicRouteBodyKb`): over it, core answers 413
-     * and neither the check nor the handler runs. [body] is the same bytes decoded as UTF-8.
-     */
-    val bodyBytes: ByteArray? = null,
 )
 
 data class HttpReply(

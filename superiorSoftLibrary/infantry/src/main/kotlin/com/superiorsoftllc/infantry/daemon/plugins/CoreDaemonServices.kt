@@ -59,8 +59,6 @@ class CoreDaemonServices(
     override val processHost: com.superiorsoftllc.infantry.session.LocalProcesses? = null,
     override val launchEnvHost: com.superiorsoftllc.infantry.session.LaunchEnvHost? = null,
     override val pluginSettings: com.superiorsoftllc.infantry.daemon.api.processes.PluginSettings = com.superiorsoftllc.infantry.daemon.api.processes.NoPluginSettings,
-    /** TRIG-2c: the trigger host the Triggers plugin runs on; null = none. */
-    override val triggerHost: com.superiorsoftllc.infantry.daemon.api.triggers.TriggerHost? = null,
     /** PACE-TREND-1: the plan meters' current readings; null = none. */
     override val meters: com.superiorsoftllc.infantry.daemon.api.usage.Meters = com.superiorsoftllc.infantry.daemon.api.usage.NoMeters,
     /** DP-7e: the mail port; null = delivers nothing. */

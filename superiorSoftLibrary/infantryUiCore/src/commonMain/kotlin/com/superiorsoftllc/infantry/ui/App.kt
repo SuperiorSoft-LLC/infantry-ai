@@ -378,8 +378,6 @@ fun App(
             trySend = { e -> capabilityScope.launch { controller.client.send(e) }; true },
         )
     }
-    // DAEMON-FRAMES-1: a daemon broadcast frame reaches only the modules whose module.json `daemonFrames` names its type.
-    LaunchedEffect(controller) { controller.client.frames.collect { currentTabs.relayDaemonFrame(it.type, it.data) } }
     val lastTickets = remember { arrayOf(state.tickets) }
     LaunchedEffect(state.tickets) {
         HostEvents.ticketChanges(lastTickets[0], state.tickets).forEach { tabs.events.publish(it) }

@@ -8,6 +8,7 @@ import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerMailRequest
 import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerMailResult
 import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerRunEvent
 import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerSession
+import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerStore
 import com.superiorsoftllc.infantry.mailbox.MailResult
 import com.superiorsoftllc.infantry.mailbox.MailSendRequest
 import com.superiorsoftllc.infantry.session.SessionEvent
@@ -17,11 +18,12 @@ import com.superiorsoftllc.infantry.session.isInSession
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * TRIG-1: the in-core [TriggerHost]. Supplies the trigger service (Infantry_Triggers since TRIG-2c) with the sessions, the mail layer and the
+ * TRIG-1: the in-core [TriggerHost]. Supplies the triggers package with the store, the sessions, the mail layer and the
  * unattended prompt launch, so that package imports only the protocol and the daemon API. Core session events come in
  * through [dispatch]; the spawn refusals (depth, pod cap, guards) stay the launch function's, unchanged.
  */
 class LocalTriggerApi(
+    override val store: TriggerStore,
     private val getSession: (String) -> SessionRecord?,
     private val listSessions: () -> List<SessionRecord>,
     private val send: (MailSendRequest) -> MailResult,
@@ -46,9 +48,6 @@ class LocalTriggerApi(
         listeners += listener
         return AutoCloseable { listeners -= listener }
     }
-
-    /** TRIG-2c: drop every listener; the daemon calls it first on shutdown, so the shutdown's kills never read as run failures. */
-    fun close() = listeners.clear()
 
     /** Feed every core session event; the ones that end a trigger's run reach the listeners. */
     fun dispatch(event: SessionEvent) {

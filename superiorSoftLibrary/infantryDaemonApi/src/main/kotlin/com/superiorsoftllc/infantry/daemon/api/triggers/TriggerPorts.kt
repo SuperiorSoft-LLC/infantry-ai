@@ -3,16 +3,30 @@
 package com.superiorsoftllc.infantry.daemon.api.triggers
 
 import com.superiorsoftllc.infantry.daemon.api.board.PromptStart
+import com.superiorsoftllc.infantry.protocol.TriggerEventView
+import com.superiorsoftllc.infantry.protocol.TriggerView
 
 /*
  * TRIG-1 (DaemonApi 1.28.0, additive): everything the triggers service needs from the daemon, as ports. The service
  * (stored triggers, coalescing, schedules, ship, webhook ingress, prompt nudges) compiles against these and the protocol
- * only, so it can move out of core. A daemon without triggers answers a null `DaemonApi.triggerHost`.
- *
- * 1.66.0 (TRIG-2c, a removal): the service moved into Infantry_Triggers, and the store interface with it (the plugin keeps its rows in its
- * own adopted tables through `api.storage`). `TriggerStore` and `TriggerHost.store` are gone: a protocol-typed interface on the SDK
- * line cannot be implemented across plugin class loaders (each plugin carries its own protocol classes).
+ * only, so it can move out of core. A daemon without triggers answers [NoTriggerHost].
  */
+
+/** The durable trigger tables (rows, events, webhook secrets, the pending nudge mail). */
+interface TriggerStore {
+    fun upsert(trigger: TriggerView, intervalMs: Long?)
+    fun get(id: String): TriggerView?
+    fun all(): List<TriggerView>
+    fun intervals(): Map<String, Long>
+    fun delete(id: String): Boolean
+    fun insertEvent(event: TriggerEventView, keep: Long = 500)
+    fun events(triggerId: String): List<TriggerEventView>
+    fun setWebhookSecret(triggerId: String, secret: String)
+    fun webhookSecret(triggerId: String): String?
+    fun deleteWebhookSecret(triggerId: String)
+    fun pendingMail(triggerId: String): String?
+    fun setPendingMail(triggerId: String, mailId: String?)
+}
 
 /** One session as a trigger sees it. [reachable]: mail can still reach it (in flight, resumable, or bound and never run). */
 data class TriggerSession(
@@ -49,6 +63,7 @@ sealed interface TriggerMailResult {
  * [prompt] as its first turn; its refusals (depth, pod cap, launch guards) are the host's, unchanged.
  */
 interface TriggerHost {
+    val store: TriggerStore
     fun session(sessionId: String): TriggerSession?
     fun sessions(): List<TriggerSession>
     fun sendMail(request: TriggerMailRequest): TriggerMailResult

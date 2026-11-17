@@ -7,7 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * TRIG-1. Rule: the trigger service (Infantry_Triggers' daemon half since TRIG-2c) imports only `kotlin.`, `kotlinx.`, `java.`, `javax.`, the protocol
+ * TRIG-1. Rule: the `triggers` package imports only `kotlin.`, `kotlinx.`, `java.`, `javax.`, the protocol
  * (`...infantry.protocol.`) and the daemon API (`...infantry.daemon.api.`). Trigger code reaches the board and sessions
  * only through those ports.
  * Why: a direct import of a daemon or board class couples triggers to the implementation and breaks the port seam.
@@ -16,9 +16,8 @@ import kotlin.test.assertEquals
  */
 class TriggerPortsGuardTest {
     private val dir = listOf(
-        // TRIG-2c: the trigger service moved into Infantry_Triggers' daemon half; the rule follows the code there.
-        "../../plugins/official/Infantry_Triggers/daemon/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/triggers/daemon",
-        "plugins/official/Infantry_Triggers/daemon/src/main/kotlin/com/superiorsoftllc/infantry/plugins/official/triggers/daemon",
+        "src/main/kotlin/com/superiorsoftllc/infantry/triggers",
+        "superiorSoftLibrary/infantry/src/main/kotlin/com/superiorsoftllc/infantry/triggers",
     ).map(::File).first { it.isDirectory }
 
     @Test

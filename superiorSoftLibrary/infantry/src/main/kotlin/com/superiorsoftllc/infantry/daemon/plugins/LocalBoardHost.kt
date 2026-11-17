@@ -367,7 +367,6 @@ class LocalBoardHost(
         }
 
         override fun instanceFor(profileId: String?, role: String?) = agentProfiles?.instanceFor(profileId, role)?.toBoard()
-        override fun instanceFor(profileId: String?, role: String?, projectId: String?) = agentProfiles?.instanceFor(profileId, role, projectId)?.toBoard()
         override fun withSkills(instance: BoardRoleInstance, ticketId: String?): BoardRoleInstance {
             val manager = sessionManager() ?: return instance
             return manager.withSkills(instance.toCore(), manager.bindingPolicy.bindingFor(ticketId)).toBoard()

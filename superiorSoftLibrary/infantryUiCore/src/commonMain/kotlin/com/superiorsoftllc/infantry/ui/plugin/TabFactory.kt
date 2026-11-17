@@ -43,7 +43,6 @@ import com.superiorsoftllc.infantry.plugin.host.AcceptedPreference
 import com.superiorsoftllc.infantry.plugin.host.AcceptedShellOverride
 import com.superiorsoftllc.infantry.plugin.host.ModuleState
 import com.superiorsoftllc.infantry.plugin.host.ModuleStatus
-import com.superiorsoftllc.infantry.plugin.host.DaemonFrameRelay
 import com.superiorsoftllc.infantry.plugin.host.SimpleEventBus
 import com.superiorsoftllc.infantry.ui.ModuleTier
 import com.superiorsoftllc.infantry.ui.Palette
@@ -480,10 +479,6 @@ class TabFactory(
     val generation: (module: String) -> Int = { 0 },
 ) {
     val modules: List<InfantryModule> = modules.toList()
-
-    /** DAEMON-FRAMES-1: hands a daemon broadcast frame to the modules that declared it; answers how many got it. */
-    fun relayDaemonFrame(type: String, body: String): Int =
-        (events as? SimpleEventBus)?.let { DaemonFrameRelay.relay(it, this.modules.map { m -> m.manifest }, type, body) } ?: 0
     /** TOAST-1: where a module's `Notifications.notify` lands in the window; the window sets it to its controller's. */
     var toasts: com.superiorsoftllc.infantry.ui.ToastService = com.superiorsoftllc.infantry.ui.NoToastService
     /** NOTIFY-CORE-1: where a module's [com.superiorsoftllc.infantry.plugin.api.Services.NOTIFICATIONS] lands; the window sets its target to its controller's bus. */

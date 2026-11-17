@@ -10,50 +10,17 @@ import kotlin.reflect.KClass
  * through [com.superiorsoftllc.infantry.daemon.api.ServicesApi]. One provider per interface; a missing provider is null.
  */
 class ServiceRegistry {
-    /**
-     * One provider: [impl] for a plain one, [factory] for a caller-scoped one (TRIG-API-1), whose instances are cached per caller
-     * module id in [perCaller].
-     */
-    private class Entry(val owner: String, val impl: Any?, val factory: ((String) -> Any)? = null) {
-        val perCaller = ConcurrentHashMap<String, Any>()
-
-        /** Drops [caller]'s instance (only if it is still [instance]) and closes it when it is closeable. */
-        fun evict(caller: String, instance: Any) {
-            if (perCaller.remove(caller, instance)) (instance as? AutoCloseable)?.let { runCatching { it.close() } }
-        }
-
-        fun evictAll() = perCaller.entries.toList().forEach { (caller, instance) -> evict(caller, instance) }
-    }
+    private class Entry(val owner: String, val impl: Any)
     private val entries = ConcurrentHashMap<KClass<*>, Entry>()
 
-    private fun register(type: KClass<*>, e: Entry): AutoCloseable {
-        check(entries.putIfAbsent(type, e) == null) { "a provider of ${type.qualifiedName} is already registered by ${entries[type]?.owner}" }
-        return AutoCloseable { if (entries.remove(type, e)) e.evictAll() }
-    }
-
     /** Registers [impl] for [type] on behalf of [owner]; the handle removes it (only if it is still this provider). */
-    fun <T : Any> provide(owner: String, type: KClass<T>, impl: T): AutoCloseable = register(type, Entry(owner, impl))
-
-    /**
-     * TRIG-API-1: registers a caller-scoped provider of [type] on behalf of [owner]: [factory] gets the finding module's id, once per
-     * caller (cached). The handle removes the provider and drops (closes) every cached instance.
-     */
-    fun <T : Any> provideScoped(owner: String, type: KClass<T>, factory: (callerModuleId: String) -> T): AutoCloseable =
-        register(type, Entry(owner, null, factory))
-
-    /**
-     * The provider of [type] as [caller] sees it, or null. A plain provider is the same object for everyone; a scoped one is the
-     * caller's own instance, created on its first lookup, when [onCreated] receives the handle that drops it again (the module host
-     * closes it when [caller] unloads).
-     */
-    fun <T : Any> find(type: KClass<T>, caller: String = CORE_CALLER, onCreated: (AutoCloseable) -> Unit = {}): T? {
-        val e = entries[type] ?: return null
-        val factory = e.factory ?: return e.impl?.let { type.javaObjectType.cast(it) }
-        var created = false
-        val instance = e.perCaller.computeIfAbsent(caller) { created = true; factory(it) }
-        if (created) onCreated(AutoCloseable { e.evict(caller, instance) })
-        return type.javaObjectType.cast(instance)
+    fun <T : Any> provide(owner: String, type: KClass<T>, impl: T): AutoCloseable {
+        val e = Entry(owner, impl)
+        check(entries.putIfAbsent(type, e) == null) { "a provider of ${type.qualifiedName} is already registered by ${entries[type]?.owner}" }
+        return AutoCloseable { entries.remove(type, e) }
     }
+
+    fun <T : Any> find(type: KClass<T>): T? = entries[type]?.impl?.let { type.javaObjectType.cast(it) }
 
     private val endpoints = ConcurrentHashMap<String, Entry>()
 
@@ -69,11 +36,6 @@ class ServiceRegistry {
 
     /** Who provides [type] (diagnostics), or null. */
     fun ownerOf(type: KClass<*>): String? = entries[type]?.owner
-
-    companion object {
-        /** The caller id a scoped provider sees when the daemon itself looks it up. */
-        const val CORE_CALLER = "core"
-    }
 }
 
 /**
@@ -90,12 +52,7 @@ class ScopedServices(
         check(mayProvide()) { "a community plugin needs the grant ${GRANT} to publish a service" }
         return registry.provide(owner, type, impl).also(track)
     }
-    /** A scoped provider sees [owner] as the caller; the cached instance is dropped when this module unloads. */
-    override fun <T : Any> find(type: KClass<T>): T? = registry.find(type, owner, track)
-    override fun <T : Any> provideScoped(type: KClass<T>, factory: (callerModuleId: String) -> T): AutoCloseable {
-        check(mayProvide()) { "a community plugin needs the grant ${GRANT} to publish a service" }
-        return registry.provideScoped(owner, type, factory).also(track)
-    }
+    override fun <T : Any> find(type: KClass<T>): T? = registry.find(type)
     override fun publishEndpoint(id: String, endpoint: com.superiorsoftllc.infantry.daemon.api.ServiceEndpoint): AutoCloseable {
         check(mayProvide()) { "a community plugin needs the grant ${GRANT} to publish a service" }
         return registry.publishEndpoint(owner, id, endpoint).also(track)

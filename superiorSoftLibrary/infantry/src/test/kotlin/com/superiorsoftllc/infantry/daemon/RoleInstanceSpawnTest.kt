@@ -278,7 +278,7 @@ class RoleInstanceSpawnTest {
     private fun withDaemon(block: (DaemonFixture, RecordingRunner) -> Unit) {
         val script = StubScript.default()
         val runner = RecordingRunner(ScriptedRunner(script, delayMs = 0))
-        val fixture = DaemonFixture.launch(script, runner = runner, pluginsRoot = TestDaemonPlugins.triggersRoot())
+        val fixture = DaemonFixture.launch(script, runner = runner)
         try {
             block(fixture, runner)
         } finally {

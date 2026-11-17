@@ -303,7 +303,7 @@ class MemoryStore(
     fun export(projectId: String, dir: File) {
         val owner = projectId.trim()
         require(owner.isNotEmpty()) { "expects a project id" }
-        val projectNotes = notes.values.filter { it.projectId == owner && it.scope == SCOPE_PROJECT && !it.name.startsWith("plugin:") }
+        val projectNotes = notes.values.filter { it.projectId == owner && it.scope == SCOPE_PROJECT }
         dir.mkdirs()
         val root = dir.canonicalPath + File.separator
         val written = HashSet<String>()
@@ -412,8 +412,7 @@ class MemoryStore(
             require(name.isNotEmpty()) { "name is blank" }
             require(name.length <= MAX_NAME_LENGTH) { "name is longer than $MAX_NAME_LENGTH characters" }
             require(name.none { it.isISOControl() }) { "name contains a control character" }
-            // PK-2: a generated `plugin:<Module>/<id>` note holds one '/'; it is never mirrored to a folder (see export).
-            require(('/' !in name || name.startsWith("plugin:")) && '\\' !in name) { "name contains a path separator" }
+            require('/' !in name && '\\' !in name) { "name contains a path separator" }
             require(".." !in name) { "name contains a '..' path traversal" }
             require(!name.equals(INDEX_FILE_NAME.substringBeforeLast('.'), ignoreCase = true)) {
                 "name is reserved for the mirror index ($INDEX_FILE_NAME)"

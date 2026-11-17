@@ -68,18 +68,6 @@ class MemoryToolTest {
         assertEquals(true, tool.call(call("action" to "index", "scope" to "x")).isError)
     }
 
-    /** PK-2: the Assistant has no project; it still reads a global plugin note (name holds a '/'), and a project-less write is refused. */
-    @Test
-    fun aSessionWithNoProjectReadsGlobalPluginNotes() {
-        handler.answer(Frame(Envelope.MEMORY_SAVE, json.encodeToString(MemorySave.serializer(),
-            MemorySave(MemoryStore.GLOBAL_PROJECT, "plugin:Acme_Cal/cal", "d", "use acme_add", scope = "project"))))
-        val noProject = MemoryTool { null }
-        fun anon(vararg args: Pair<String, String>) = object : ToolCall by call(*args) { override val clientSessionId: String? = null }
-        assertTrue("use acme_add" in noProject.call(anon("action" to "show", "name" to "plugin:Acme_Cal/cal")).text)
-        assertTrue("plugin:Acme_Cal/cal" in noProject.call(anon("action" to "index")).text)
-        assertTrue(noProject.call(anon("action" to "write", "name" to "x", "description" to "d", "body" to "b")).isError)
-    }
-
     /** KNOWLEDGE-WRITE-GAP-1: a pm session may write a global note; search finds it by body keyword from another project; a worker is refused. */
     @Test
     fun globalWriteSearchByBodyReadFromAnotherProjectAndRefusedRole() {

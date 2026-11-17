@@ -74,7 +74,6 @@ JSON has no comments, so each field is explained here. Unknown keys are ignored.
 | `author` | none | Required for community. Shown on the module's tabs and in Settings. |
 | `license` | none | Required for community: an SPDX id or `NOASSERTION`. |
 | `description` | `""` | One line. |
-| `knowledge` | none | What agents are briefed about your tools; see [Plugin knowledge](plugin-knowledge.md). |
 | `tier` | none | Ignored. The folder decides; a mismatch is logged. |
 | `platforms` | all | `["desktop","android","web"]`. A host on another platform skips the module ("not available on this platform"); an unknown value refuses it. |
 | `buildOrder` | none | Used only by the Gradle module-list generator for modules **compiled in** (core and official): it sorts the generated list, then by name. It is not a `ModuleManifest` field; the loader of a community jar ignores it. Source: `superiorSoftLibrary/infantryAppUi/build.gradle.kts`. |

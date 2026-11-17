@@ -39,66 +39,19 @@ internal class McpServer(
     private val out: Appendable,
     private val err: Appendable,
     private val tools: McpTools,
-    /** The daemon's plugin tool list, or null while the daemon cannot be reached (a seam so tests can script it). */
-    private val listTools: () -> JsonArray? = { tools.pluginDescriptors().takeIf { tools.daemonAnswered } },
 ) {
 
     /** Serves until stdin reaches EOF. Returns the process exit code (always 0: EOF is a clean shutdown). */
     fun serve(): Int {
         err.appendLine("infantry mcp: serving MCP over stdio (${SERVER_NAME} ${SERVER_VERSION})")
-        val watcher = startToolsWatch()
         while (true) {
             val line = input.readLine() ?: break
             if (line.isBlank()) continue
-            val response = synchronized(lock) { handleLine(line) } ?: continue
+            val response = handleLine(line) ?: continue
             write(response)
         }
-        watcher?.interrupt()
         err.appendLine("infantry mcp: stdin closed, exiting")
         return 0
-    }
-
-    private val lock = Any()
-
-    /** Fingerprint of the last tool list this client was given (or saw at the last check); null = none yet. */
-    private var toolsFingerprint: Int? = null
-
-    /**
-     * PK-3: a daemon thread that re-reads the plugin tool list every limits.mcp.toolsWatchSeconds (0 = off). The daemon's
-     * `modules.changed` event is not a frame a stdio bridge receives, so the bridge compares the list the daemon would
-     * serve; any load, unload or version change that alters it sends one notifications/tools/list_changed.
-     */
-    private fun startToolsWatch(): Thread? {
-        val seconds = runCatching {
-            com.superiorsoftllc.infantry.settings.LimitRegistry.fromEnv(com.superiorsoftllc.infantry.settings.LimitRegistry.MCP_TOOLS_WATCH_SECONDS, System::getenv)
-        }.getOrDefault(com.superiorsoftllc.infantry.settings.LimitRegistry.MCP_TOOLS_WATCH_SECONDS.default)
-        if (seconds <= 0) return null
-        return Thread {
-            try {
-                while (true) {
-                    Thread.sleep(seconds * 1000)
-                    checkToolsChanged()
-                }
-            } catch (_: InterruptedException) {
-            }
-        }.apply { isDaemon = true; name = "infantry-mcp-tools-watch"; start() }
-    }
-
-    /**
-     * Re-reads the tool list and, when it differs from the last one seen, writes `notifications/tools/list_changed`. Returns true
-     * when it did. The first check only records the baseline; an unreachable daemon changes nothing (no notice, baseline kept).
-     */
-    internal fun checkToolsChanged(): Boolean = synchronized(lock) {
-        val list = listTools() ?: return false
-        val now = list.toString().hashCode()
-        val before = toolsFingerprint
-        toolsFingerprint = now
-        if (before == null || before == now) return false
-        write(buildJsonObject {
-            put("jsonrpc", "2.0")
-            put("method", "notifications/tools/list_changed")
-        })
-        true
     }
 
     /** One line in, at most one response out. Null = a notification, which is never answered. */
@@ -129,11 +82,7 @@ internal class McpServer(
         return when (method) {
             "initialize" -> result(id, initializeResult(params))
             "ping" -> result(id, JsonObject(emptyMap()))
-            "tools/list" -> {
-                val plugin = tools.pluginDescriptors()
-                if (tools.daemonAnswered) toolsFingerprint = plugin.toString().hashCode()
-                result(id, buildJsonObject { put("tools", JsonArray(McpTools.descriptors() + plugin)) })
-            }
+            "tools/list" -> result(id, buildJsonObject { put("tools", JsonArray(McpTools.descriptors() + tools.pluginDescriptors())) })
             "tools/call" -> {
                 val name = (params["name"] as? JsonPrimitive)?.contentOrNull?.let(LegacyToolNames::canonical)
                     ?: return error(id, INVALID_PARAMS, "Invalid params: tools/call requires a tool name")
@@ -151,7 +100,7 @@ internal class McpServer(
         return buildJsonObject {
             put("protocolVersion", version)
             put("capabilities", buildJsonObject {
-                put("tools", buildJsonObject { put("listChanged", true) })
+                put("tools", buildJsonObject { put("listChanged", false) })
             })
             put("serverInfo", buildJsonObject {
                 put("name", SERVER_NAME)
@@ -174,7 +123,7 @@ internal class McpServer(
         }
     }
 
-    private fun write(message: JsonObject) = synchronized(out) {
+    private fun write(message: JsonObject) {
         // One line per message: kotlinx's compact encoding never emits a raw newline (strings escape it).
         out.append(json.encodeToString(JsonObject.serializer(), message)).append('\n')
         (out as? Flushable)?.flush()

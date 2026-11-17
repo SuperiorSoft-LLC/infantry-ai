@@ -63,9 +63,6 @@ interface DaemonServices {
     val boardRuntime: com.superiorsoftllc.infantry.daemon.api.board.BoardRuntime get() = com.superiorsoftllc.infantry.daemon.api.board.NoBoardRuntime
     val spawns: com.superiorsoftllc.infantry.daemon.api.spawns.Spawns get() = com.superiorsoftllc.infantry.daemon.api.spawns.NoSpawns
 
-    /** TRIG-2c: the core facts a trigger service needs (sessions, mail, the unattended launch, run ends); null = none (no triggers). */
-    val triggerHost: com.superiorsoftllc.infantry.daemon.api.triggers.TriggerHost? get() = null
-
     /** STACK-NEUTRAL-2: the host process service ([com.superiorsoftllc.infantry.session.LocalProcesses]); null = none. */
     val processHost: com.superiorsoftllc.infantry.session.LocalProcesses? get() = null
 

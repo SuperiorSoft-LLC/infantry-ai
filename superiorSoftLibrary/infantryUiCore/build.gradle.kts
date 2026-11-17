@@ -83,7 +83,6 @@ kotlin {
             // RUNTIME-13: and the official Infantry_Triggers and Infantry_Attention (the Triggers and Attention tabs).
             implementation(project(":plugins:official:Infantry_Triggers"))
             implementation(project(":plugins:official:Infantry_Attention"))
-            implementation(project(":plugins:official:Infantry_Calendar"))
             // RUNTIME-14: and the official Infantry_Roles (the Roles tab and the roles window fill).
             implementation(project(":plugins:official:Infantry_Roles"))
             // RUNTIME-15: and the official Infantry_Board (the board overlay fill and its block types).

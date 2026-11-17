@@ -16,7 +16,6 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 ## Build plugins
 
 - [Plugins](Plugins.md): `module.json`, the UI and daemon halves, config fields, building, installing, signing, a hello plugin.
-- [Plugin knowledge](plugin-knowledge.md): module.json `knowledge`, the PLUGIN TOOLS briefing every role session gets.
 - [Plugin lifecycle](Plugin-lifecycle.md): live swap of one plugin (install, update, enable, disable, remove), `PluginScope`, the leak check, and the do and don't for authors.
 - [Make a plugin](make-a-plugin.md): step by step from the template to a built UI + daemon example.
 - [Publish a plugin](publish-a-plugin.md): package a plugin from its own repo as an `.ihq` and list it in the community registry.
@@ -40,7 +39,6 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 ## Configure
 
 - [Board and epics](Board.md): epics, and moving tickets between epics.
-- [Calendar](Calendar.md): the Calendar plugin: tasks and reminders for the user and every agent, the tools, Delete all.
 - [Notifications](Notifications.md): the ONE notification bus (in-app toasts, OS notifications), presenters a plugin can override, routing settings, the inventory.
 - [CLI login](Login.md): `infantry login|logout|whoami`, the CLI's saved daemon connection (not Claude's `/login`).
 - [Health](Health.md): `infantry health`, the daemon health and environment report (up/down, restarts and why, MCP bridges, OS/shell/ports).
