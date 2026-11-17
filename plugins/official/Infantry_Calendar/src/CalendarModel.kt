@@ -27,7 +27,10 @@ data class CalItem(
     val history: List<CalHistory> = emptyList(),
 ) {
     val isReminder: Boolean get() = kind == "reminder"
-    val open: Boolean get() = status == "open"
+    /** Still to do: open, or a reminder snoozed to later (CAL-3). */
+    val open: Boolean get() = status == "open" || status == "snoozed"
+    /** CAL-3: a reminder that can be snoozed (not done or cancelled). */
+    val snoozable: Boolean get() = kind == "reminder" && status in setOf("open", "snoozed", "fired", "missed")
     val at: Long? get() = startAt ?: dueAt
 }
 
@@ -39,7 +42,12 @@ object CalendarModel {
     /** Dots drawn in a month cell before "+n". */
     const val MAX_DOTS = 3
     /** The snooze step the item modal offers, in minutes. */
-    const val SNOOZE_MINUTES = 15L
+    /** CAL-3: the item id in a `calendar_open` frame body (`{"id":"cal-..."}`), or null. */
+    fun openId(body: String?): String? = body?.let { runCatching { (kotlinx.serialization.json.Json.parseToJsonElement(it) as? JsonObject)?.get("id") }.getOrNull() }
+        ?.let { (it as? JsonPrimitive)?.contentOrNull }?.takeIf { it.isNotBlank() }
+
+    /** CAL-3: the snooze presets the daemon accepts, with their labels. */
+    val SNOOZE_PRESETS = listOf("5m" to "Snooze 5 min", "1h" to "1 h", "tomorrow" to "Tomorrow")
 
     fun parseItem(e: JsonElement): CalItem? {
         val o = e as? JsonObject ?: return null

@@ -96,9 +96,43 @@ class CalendarStore(private val db: PluginStorage, private val clock: () -> Long
         return db.query(sql, args + f.limit.coerceAtMost(Int.MAX_VALUE / 2).toLong()).map(::row)
     }
 
-    /** The items whose alarm is due: open, an alarm set, not yet fired (CAL-3 fires them). */
+    /** The items whose alarm is due: open or snoozed, an alarm set, not yet fired (CAL-3 fires them). */
     fun dueReminders(now: Long): List<CalendarItem> =
-        db.query("SELECT * FROM $ITEMS WHERE status = 'open' AND remind_at IS NOT NULL AND remind_at <= ? AND fired_at IS NULL ORDER BY remind_at", listOf(now)).map(::row)
+        db.query("SELECT * FROM $ITEMS WHERE status IN ('open','snoozed') AND remind_at IS NOT NULL AND remind_at <= ? AND fired_at IS NULL ORDER BY remind_at", listOf(now)).map(::row)
+
+    /**
+     * CAL-3: claims the alarm of [id] ONCE: sets fired_at (and [status], or keeps it when null) only while the alarm is still unclaimed.
+     * True = this caller owns the fire; a second claim (another tick, a restart that re-reads the row) answers false.
+     */
+    fun claimAlarm(id: String, status: String?, logKind: String, eventsKeep: Int): Boolean = db.transaction {
+        val now = clock()
+        val n = db.execute(
+            "UPDATE $ITEMS SET fired_at = ?, status = COALESCE(?, status), updated_at = ? WHERE id = ? AND fired_at IS NULL AND status IN ('open','snoozed')",
+            listOf(now, status, now, id),
+        )
+        if (n > 0) log(id, logKind, "calendar", null, eventsKeep)
+        n > 0
+    }
+
+    /** CAL-3: a new alarm at [remindAt]; the alarm is unclaimed again. A reminder reads `snoozed`, a task stays as it is. */
+    fun snooze(id: String, remindAt: Long, by: String?, detail: String, eventsKeep: Int): CalendarItem? {
+        val cur = get(id) ?: return null
+        val status = if (cur.kind == "reminder") "snoozed" else cur.status
+        db.transaction {
+            db.execute("UPDATE $ITEMS SET remind_at = ?, fired_at = NULL, status = ?, updated_at = ? WHERE id = ?", listOf(remindAt, status, clock(), id))
+            log(id, "snoozed", by, detail, eventsKeep)
+        }
+        return get(id)
+    }
+
+    /** CAL-3: the owned trigger of an agent-targeted reminder (null = none). */
+    fun setTrigger(id: String, triggerId: String?) {
+        db.execute("UPDATE $ITEMS SET trigger_id = ? WHERE id = ?", listOf(triggerId, id))
+    }
+
+    /** CAL-3: every item that has a target or a trigger id (the reconcile pass walks these). */
+    fun linked(): List<CalendarItem> =
+        db.query("SELECT * FROM $ITEMS WHERE target IS NOT NULL OR trigger_id IS NOT NULL", emptyList()).map(::row)
 
     fun update(id: String, p: ItemPatch, by: String?, eventsKeep: Int): CalendarItem? {
         val cur = get(id) ?: return null
@@ -111,7 +145,7 @@ class CalendarStore(private val db: PluginStorage, private val clock: () -> Long
         p.dueAt?.let { set("due_at", it) }
         p.day?.let { set("day", it) }
         p.zone?.let { set("zone", it) }
-        if (p.clearRemind) set("remind_at", null) else p.remindAt?.let { set("remind_at", it); set("fired_at", null); if (cur.status == "fired" || cur.status == "missed") set("status", "open") }
+        if (p.clearRemind) set("remind_at", null) else p.remindAt?.let { set("remind_at", it); set("fired_at", null); if (cur.status == "fired" || cur.status == "missed" || cur.status == "snoozed") set("status", "open") }
         if (p.clearTarget) set("target", null) else p.target?.let { set("target", it) }
         p.projectId?.let { set("project_id", it) }
         db.transaction {
