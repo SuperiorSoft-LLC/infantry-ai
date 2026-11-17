@@ -360,7 +360,7 @@ Each plugin has its own class loader, so plugins cannot share classes. Two mecha
 `Triggers` (`daemon.api.triggers`) is the trigger service as an SDK API: the plugin that runs triggers publishes it with
 `provideScoped`, and any plugin (the Calendar, an orchestrator, a third party) finds it. A daemon with no trigger plugin
 answers `null`: the caller owns its fail mode. Since TRIG-2c (DaemonApi 1.66.0) Infantry_Triggers publishes it. Since TRIG-AT-1 it
-stores `owner` / `ref` and serves the kind `at`; `registerAction` throws (unsupported until TRIG-ACTIONS-1).
+stores `owner` / `ref` and serves the kind `at`; since TRIG-ACTIONS-1 it serves plugin action kinds (`registerAction`).
 
 ```kotlin
 val triggers = api.services.find(Triggers::class) ?: return              // null = no triggers on this daemon
@@ -373,7 +373,7 @@ api.events.subscribe(TriggerEvents.ALL) { e -> /* trigger.fired | delivered | re
 ```
 
 - `Triggers`: `list(filter)`, `get(id)`, `save(request)`, `delete(id)`, `fire(id, source)`, `arm(id)`, `disable(id)`,
-  `events(id)`, `registerAction(kind, handler)` (implemented in TRIG-ACTIONS-1; closing the handle or unloading removes it).
+  `events(id)`, `registerAction(kind, handler)`.
 - **Ownership** (`TriggerOwnership`): the provider stamps `owner` with the caller id `provideScoped` gave it. A request that
   names another owner is refused (an illegal-argument exception); a module may change (update, delete, fire, arm, disable) only
   a trigger it owns. `owner = null` is a person's trigger, changed in the app. `ref` is the owner's own opaque key.
@@ -387,6 +387,13 @@ api.events.subscribe(TriggerEvents.ALL) { e -> /* trigger.fired | delivered | re
   when `deleteAfterFire`. No coalescing window or hourly ceiling applies. A slot passed while the daemon was down fires once if it
   is late by at most the daemon setting `triggers.at.maxLateMs` (default 15 minutes), else it is recorded `missed` and kept,
   disabled. Saving a new `fireAt` schedules it again.
+- **Plugin actions** (`registerAction`, TRIG-ACTIONS-1): a kind is `<namespace>.<name>` (`acme.log`; `start_next` and `prompt` stay built in, a
+  second registration of a kind throws). A trigger whose `action.kind` is that kind runs the handler off the scheduler thread with a
+  `TriggerFire(trigger, source, runId)`; the `TriggerActionResult` is the event's disposition: `Started` = `started` (digest: session id),
+  `Mailed` = `mailed`, `Done` = `delivered`, `Refused(reason)` = `refused` (reason in the digest); a throwing handler is `refused`. A fire
+  with no handler (never registered, handle closed, module unloaded) is `refused_unknown_action`. None of these trips the trigger or counts
+  toward the hourly ceiling. Closing the handle, or the module leaving `plugins.loaded()`, removes the kind. A trigger may name a kind
+  before its plugin loads. Example: `plugins/examples/Acme_TriggerAction` (registers `acme.log`, creates an owned `at` trigger that uses it).
 - **Orphans**: an owned trigger whose module is no longer in `plugins.loaded()` is deleted, at start and on `modules.changed`. The
   Triggers tab shows an owned trigger with a "from <Module>" chip, read-only (no edit, no delete).
 - **Named events** (`TriggerEvents`): `trigger.fired` (an event started work or mailed its target) and `trigger.refused` (a ceiling,

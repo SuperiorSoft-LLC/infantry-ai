@@ -98,6 +98,7 @@ class TriggersDaemonPlugin : DaemonPlugin {
     private fun pruneOrphans(api: DaemonApi, triggers: TriggerService) {
         val loaded = runCatching { api.plugins.loaded().map { it.id }.toSet() }.getOrDefault(emptySet())
         if (loaded.isEmpty()) return
+        runCatching { triggers.pruneActions(loaded) }.onFailure { api.log("Infantry_Triggers: action prune failed: ${it.message}") }
         runCatching { triggers.pruneOrphans(loaded) }.onFailure { api.log("Infantry_Triggers: orphan prune failed: ${it.message}") }
     }
 
@@ -225,6 +226,7 @@ internal class PublishingTriggerStore(
         inner.insertEvent(event, keep)
         val names = when (event.disposition) {
             "started", "mailed" -> listOf(TriggerEvents.FIRED)
+            "delivered" -> listOf(TriggerEvents.DELIVERED)
             in REFUSALS -> listOf(TriggerEvents.REFUSED)
             else -> return
         }
@@ -240,7 +242,7 @@ internal class PublishingTriggerStore(
     }
 
     private companion object {
-        val REFUSALS = setOf("refused_ceiling", "refused_launch_gate", "suppressed_tripped", "suppressed_disabled")
+        val REFUSALS = setOf("refused_ceiling", "refused_launch_gate", "suppressed_tripped", "suppressed_disabled", "refused", "refused_unknown_action")
     }
 }
 

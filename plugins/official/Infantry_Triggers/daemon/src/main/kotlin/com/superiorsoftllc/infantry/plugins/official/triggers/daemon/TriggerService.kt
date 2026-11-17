@@ -2,6 +2,9 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.triggers.daemon
 
+import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerActionHandler
+import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerActionResult
+import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerFire
 import com.superiorsoftllc.infantry.daemon.api.attention.AttentionKinds
 import com.superiorsoftllc.infantry.daemon.api.attention.Attention
 import com.superiorsoftllc.infantry.daemon.api.board.PromptStart
@@ -89,6 +92,7 @@ class TriggerService(
     @Volatile
     var deletedSink: (List<String>) -> Unit = {}
 
+    private val actionKinds = ConcurrentHashMap<String, PluginAction>() // TRIG-ACTIONS-1
     private val guards = HashMap<String, TriggerGuard>()
     private val runTriggers = ConcurrentHashMap<String, String>() // runId -> triggerId, while in flight
     private val runEvents = ConcurrentHashMap<String, List<String>>() // runId -> the event ids it carries
@@ -440,7 +444,11 @@ class TriggerService(
                     "action 'prompt' text is longer than ${TriggerAction.MAX_PROMPT_CHARS} characters"
                 }
             }
-            else -> throw IllegalArgumentException("action '${action.kind.take(40)}' is not served yet (served: start_next, prompt)")
+            // TRIG-ACTIONS-1: a plugin's kind is `<namespace>.<name>`. It need not be registered yet (the plugin may load later);
+            // a fire with no handler is recorded `refused_unknown_action`.
+            else -> require(PLUGIN_KIND.matches(action.kind)) {
+                "action '${action.kind.take(40)}' is not served (served: start_next, prompt, or a plugin kind like 'acme.notify')"
+            }
         }
     }
 
@@ -513,6 +521,7 @@ class TriggerService(
         // and dropping the lock orders the hand-out after those commits; the action still runs with NO lock.
         synchronized(this) { if (closing) return }
         val trigger = repo.get(triggerId) ?: return
+        if (trigger.action.kind != "start_next" && trigger.action.kind != "prompt") return launchPlugin(trigger, run)
         if (trigger.action.kind == "prompt") {
             val deliver = deliverPrompt ?: return launchPrompt(trigger, run)
             return launchNudge(trigger, run, deliver)
@@ -556,6 +565,47 @@ class TriggerService(
         }
     }
 
+    /** TRIG-ACTIONS-1, on [launches]: hand the fire to the plugin's handler with NO lock held; the result becomes the event's disposition. */
+    private fun launchPlugin(trigger: TriggerView, run: TriggerRun) {
+        val registered = actionKinds[trigger.action.kind]
+        val source = repo.events(trigger.id).firstOrNull { it.eventId == run.events.lastEventId }?.source ?: "manual"
+        val result: TriggerActionResult? = registered?.let {
+            try {
+                it.handler.run(TriggerFire(trigger.toRecord(), source, run.runId))
+            } catch (e: Exception) {
+                log("trigger ${trigger.id} action ${trigger.action.kind} failed: ${e.message}")
+                TriggerActionResult.Refused("action failed: ${e.message}".take(MAX_DIGEST))
+            }
+        }
+        synchronized(this) {
+            if (closing) return
+            guards[trigger.id]?.refundStart(run.runId) // a plugin action starts no board session of its own
+            complete(run.runId, TriggerOutcome.SUCCEEDED)
+            when (result) {
+                null -> redispose(run, TriggerEventDisposition.REFUSED_UNKNOWN_ACTION, "no handler for '${trigger.action.kind}'")
+                is TriggerActionResult.Started -> redispose(run, TriggerEventDisposition.STARTED, result.sessionId)
+                is TriggerActionResult.Mailed -> redispose(run, TriggerEventDisposition.MAILED, result.mailId)
+                TriggerActionResult.Done -> redispose(run, TriggerEventDisposition.DELIVERED)
+                is TriggerActionResult.Refused -> redispose(run, TriggerEventDisposition.REFUSED, result.reason.take(MAX_DIGEST))
+            }
+        }
+    }
+
+    /** TRIG-ACTIONS-1: a plugin's action [kind], owned by [owner]; closing the handle (or [pruneActions]) removes it. */
+    fun registerAction(kind: String, owner: String, handler: TriggerActionHandler): AutoCloseable {
+        require(PLUGIN_KIND.matches(kind)) { "action kind '${kind.take(40)}' must look like '<namespace>.<name>'" }
+        val entry = PluginAction(owner, handler)
+        check(actionKinds.putIfAbsent(kind, entry) == null) { "action kind '$kind' is already registered" }
+        return AutoCloseable { actionKinds.remove(kind, entry) }
+    }
+
+    /** TRIG-ACTIONS-1: drops the kinds of modules no longer loaded. */
+    fun pruneActions(loadedModules: Set<String>) {
+        actionKinds.entries.removeIf { it.value.owner !in loadedModules }
+    }
+
+    private class PluginAction(val owner: String, val handler: TriggerActionHandler)
+
     private fun finishRefused(run: TriggerRun, detail: String) {
         // 63a8314f: same rule as the nothing_to_start branch -- the row settles (here, to TRIPPED via
         // complete) before the disposition that announces the refusal becomes readable.
@@ -594,11 +644,11 @@ class TriggerService(
     }
 
     /** Re-label the events a run carries (first and last of its window) with what actually happened. */
-    private fun redispose(run: TriggerRun, disposition: TriggerEventDisposition) {
+    private fun redispose(run: TriggerRun, disposition: TriggerEventDisposition, digestOverride: String? = null) {
         for (eventId in listOf(run.events.firstEventId, run.events.lastEventId).distinct()) {
             val existing = repo.events(run.triggerId).firstOrNull { it.eventId == eventId }
             if (existing == null) dispositionOverrides[eventId] = disposition // fire() records it in a moment
-            else record(eventId, run.triggerId, disposition, existing.source, at = existing.receivedAt, deliveryId = existing.deliveryId, digest = existing.digest)
+            else record(eventId, run.triggerId, disposition, existing.source, at = existing.receivedAt, deliveryId = existing.deliveryId, digest = digestOverride ?: existing.digest)
         }
     }
 
@@ -711,6 +761,8 @@ class TriggerService(
 
         /** Floor for a schedule trigger's period: one minute. Rows saved before the floor keep their stored period. */
         const val MIN_INTERVAL_MS = 60_000L
+        private val PLUGIN_KIND = Regex("[a-z][a-z0-9_]*(\\.[a-z0-9_-]+)+")
+        private const val MAX_DIGEST = 200
         private const val MIN_WEBHOOK_SECRET = 32
         private const val MAX_WEBHOOK_SECRET = 256
 
