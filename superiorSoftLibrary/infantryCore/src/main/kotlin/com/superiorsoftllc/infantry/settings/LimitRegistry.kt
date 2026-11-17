@@ -758,6 +758,12 @@ object LimitRegistry {
         "How long one capability call (infantry_capability_call, ih.call, a plugin's api.capabilities.call) waits for its daemon handler or client host before it fails; a capability's own declared timeoutMs wins, capped at limits.plugins.toolMaxTimeoutMs.",
         min = 1, zeroIsUnlimited = false,
     )
+    /** TRIG-2c: a PUBLIC plugin route's body (no daemon token, e.g. a signed webhook) is read with this hard cap; over it = 413, unread. */
+    val PLUGIN_PUBLIC_ROUTE_BODY_KB = LimitDef(
+        "limits.plugins.publicRouteBodyKb", 64, "KB",
+        "The largest request body a public plugin route (answered without the daemon token, such as POST /hooks/{id}) accepts; a larger one is refused 413 before any plugin code runs.",
+        min = 1, max = 16_384, zeroIsUnlimited = false,
+    )
     val PLUGIN_TOOL_MAX_TIMEOUT_MS = LimitDef(
         "limits.plugins.toolMaxTimeoutMs", 1_800_000, "ms",
         "The ceiling for a plugin tool's own declared timeoutMs (a long tool such as a harness install opts in; it can never wait longer than this).",
@@ -1310,7 +1316,7 @@ object LimitRegistry {
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         RELATED_BRIEF_TICKETS, RELATED_BRIEF_FILES, RELATED_BRIEF_CHARS, RELATED_BLOCK_TICKETS, RELATED_BLOCK_FILES, RELATED_BLOCK_CHARS,
-        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_CAPABILITY_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS, PLUGIN_UNLOAD_CHECK_MS, PLUGIN_CATALOG_STALE_MS, PLUGIN_REFRESH_TIMEOUT_MS, PLUGIN_AUTO_RELOAD_ATTEMPTS, PLUGIN_AUTO_RELOAD_DELAY_MS,
+        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_GUARD_STRIKES, PLUGIN_GUARD_COOLDOWN_MS, PLUGIN_POOL_SIZE, PLUGIN_QUEUE_LIMIT, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_PUBLIC_ROUTE_BODY_KB, PLUGIN_CAPABILITY_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS, PLUGIN_UNLOAD_CHECK_MS, PLUGIN_CATALOG_STALE_MS, PLUGIN_REFRESH_TIMEOUT_MS, PLUGIN_AUTO_RELOAD_ATTEMPTS, PLUGIN_AUTO_RELOAD_DELAY_MS,
         MODELS_CATALOG_TTL_MS, MODELS_CATALOG_WAIT_MS, CLI_ANSWER_TIMEOUT_MS, HARNESS_LOGIN_TIMEOUT_MS, HARNESS_PROBE_TIMEOUT_SECONDS,
         MCP_LIST_TTL_MS, MCP_LIST_WAIT_MS, MCP_SERVERS_MAX, MCP_GRANTS_MAX, MCP_PURPOSE_CHARS,
         RUN_MAX_SECRETS, SECRET_RENDER_MAX_BYTES, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,

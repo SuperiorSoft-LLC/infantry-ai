@@ -804,12 +804,14 @@ class DaemonPluginHost private constructor(
             if (now - owner.routeWindowStart > 60_000) { owner.routeWindowStart = now; owner.routeCount = 0 }
             if (++owner.routeCount > owner.routeRate && owner.routeRate > 0) return HttpReply(429, "plugin ${owner.id}: more than ${owner.routeRate} requests a minute")
         }
+        // TRIG-2c: the check and the handler see the same call, with the template's {name} values filled.
+        val routed = if (pathParams.isEmpty()) call else call.copy(pathParams = pathParams)
         entry.check?.let { chk ->
             // HTTP-SEAM-1: the route's declared auth runs first; fail closed (a throw refuses).
-            val refusal = owner.call("routeCheck(${call.method} ${call.path})") { chk.refusal(call) }.getOrElse { "route check failed" }
+            val refusal = owner.call("routeCheck(${call.method} ${call.path})") { chk.refusal(routed) }.getOrElse { "route check failed" }
             if (refusal != null) return HttpReply(401, refusal)
         }
-        return owner.call("route(${call.method} ${call.path})") { entry.handler(if (pathParams.isEmpty()) call else call.copy(pathParams = pathParams)) }
+        return owner.call("route(${call.method} ${call.path})") { entry.handler(routed) }
             .getOrElse { HttpReply(500, "plugin ${owner.id} failed: ${it.message ?: it::class.simpleName}") }
     }
 
@@ -1338,6 +1340,9 @@ class DaemonPluginHost private constructor(
         // RUNTIME-LOAD-5: the sessions read model behind this plugin's grants (community: default deny).
         override val sessionReads: com.superiorsoftllc.infantry.daemon.api.sessions.SessionReads =
             GrantedSessionReads({ hostServices.sessionReads }) { grant -> !p.community || grant in p.setting.allow }
+        // TRIG-2c: the trigger host for bundled / official plugins only (sessions, mail and the unattended launch are core facts).
+        override val triggerHost: com.superiorsoftllc.infantry.daemon.api.triggers.TriggerHost?
+            get() = if (p.community) null else hostServices.triggerHost
         // DP-5h-3a: the board runtime for bundled / official plugins only (a community plugin builds no board).
         override val boardRuntime: com.superiorsoftllc.infantry.daemon.api.board.BoardRuntime
             get() = if (p.community) com.superiorsoftllc.infantry.daemon.api.board.NoBoardRuntime else hostServices.boardRuntime

@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-package com.superiorsoftllc.infantry.triggers
+package com.superiorsoftllc.infantry.plugins.official.triggers.daemon
 
 import java.security.MessageDigest
 import javax.crypto.Mac
@@ -47,16 +47,10 @@ class WebhookIngress(
 
     fun deliver(triggerId: String, signature: String?, timestamp: String?, delivery: String?, body: ByteArray): HookOutcome {
         if (body.size > MAX_BODY_BYTES) return HookOutcome.Rejected(413, "body is larger than $MAX_BODY_BYTES bytes")
-        val id = triggerId.trim()
-        val secret = triggers.webhookSecret(id) ?: return unauthorized()
-        val ts = timestamp?.trim()?.takeIf { it.length in 1..13 && it.all(Char::isDigit) }?.toLong() ?: return unauthorized()
-        val deliveryId = delivery?.trim()?.takeIf { DELIVERY_ID.matches(it) } ?: return unauthorized()
-        val presented = signature?.trim()?.takeIf { SIGNATURE.matches(it) }?.substring(SIGNATURE_PREFIX.length)?.lowercase()
-            ?: return unauthorized()
-        val expected = hex(hmac(secret, "v1:$ts:$deliveryId:".toByteArray(Charsets.UTF_8) + body))
-        if (!MessageDigest.isEqual(expected.toByteArray(Charsets.US_ASCII), presented.toByteArray(Charsets.US_ASCII))) {
-            return unauthorized()
-        }
+        val signed = verify(triggerId, signature, timestamp, delivery, body) ?: return unauthorized()
+        val id = signed.triggerId
+        val ts = signed.timestamp
+        val deliveryId = signed.deliveryId
 
         // Authenticated from here on: the caller holds the secret, so specific answers leak nothing.
         val now = clock()
@@ -90,9 +84,32 @@ class WebhookIngress(
         }
     }
 
-    private fun unauthorized() = HookOutcome.Rejected(401, "missing or invalid webhook signature")
+    /**
+     * TRIG-2c: the signature check alone, for the route's declared auth check (HTTP-SEAM-1: a public route carries its own check).
+     * Null = a valid signature; otherwise the one 401 text every pre-signature failure shares. [deliver] runs the same check again.
+     */
+    fun refusal(triggerId: String, signature: String?, timestamp: String?, delivery: String?, body: ByteArray): String? =
+        if (verify(triggerId, signature, timestamp, delivery, body) != null) null else UNAUTHORIZED
+
+    private class Signed(val triggerId: String, val timestamp: Long, val deliveryId: String)
+
+    /** Trigger and secret -> header shape -> signature; null on any failure (one answer for all, see the class comment). */
+    private fun verify(triggerId: String, signature: String?, timestamp: String?, delivery: String?, body: ByteArray): Signed? {
+        val id = triggerId.trim()
+        val secret = triggers.webhookSecret(id) ?: return null
+        val ts = timestamp?.trim()?.takeIf { it.length in 1..13 && it.all(Char::isDigit) }?.toLong() ?: return null
+        val deliveryId = delivery?.trim()?.takeIf { DELIVERY_ID.matches(it) } ?: return null
+        val presented = signature?.trim()?.takeIf { SIGNATURE.matches(it) }?.substring(SIGNATURE_PREFIX.length)?.lowercase()
+            ?: return null
+        val expected = hex(hmac(secret, "v1:$ts:$deliveryId:".toByteArray(Charsets.UTF_8) + body))
+        if (!MessageDigest.isEqual(expected.toByteArray(Charsets.US_ASCII), presented.toByteArray(Charsets.US_ASCII))) return null
+        return Signed(id, ts, deliveryId)
+    }
+
+    private fun unauthorized() = HookOutcome.Rejected(401, UNAUTHORIZED)
 
     companion object {
+        private const val UNAUTHORIZED = "missing or invalid webhook signature"
         const val MAX_BODY_BYTES = 64 * 1024
         const val DEFAULT_REPLAY_WINDOW_SECONDS = 300L
         const val MIN_REPLAY_WINDOW_SECONDS = 60L

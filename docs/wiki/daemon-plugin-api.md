@@ -141,7 +141,7 @@ api.routes.handle("GET", "hello") { call: HttpCall -> HttpReply(200, """{"ok":tr
 - An **absolute** path (`/hooks/{id}`) must be declared in `daemon.routes` and only core and official modules may use
   it. It may contain `{name}` segments; values arrive in `HttpCall.pathParams`. An exact route wins over a template.
 - `daemon.publicRoutes` lists routes answered without the bearer token (core and official only).
-- `HttpCall`: `method`, `path`, `query`, `headers`, `body`, `remoteAddress`, `pathParams`. `HttpReply`: `status`,
+- `HttpCall`: `method`, `path`, `query`, `headers`, `body`, `remoteAddress`, `pathParams`, `bodyBytes` (1.66.0: the exact body bytes, for a signature check; a public route's body is read with the hard cap `limits.plugins.publicRouteBodyKb`, 413 over it). `HttpReply`: `status`,
   `body`, `contentType`, `headers`.
 - A route is rate limited to `limits.plugins.routeRequestsPerMinute` requests a minute (600; 0 = unlimited), then 429.
 - **Auth of a route (HTTP-SEAM-1, DaemonApi 1.61.0).** Every route is behind the daemon's auth unless it is listed in
@@ -359,8 +359,9 @@ Each plugin has its own class loader, so plugins cannot share classes. Two mecha
 
 `Triggers` (`daemon.api.triggers`) is the trigger service as an SDK API: the plugin that runs triggers publishes it with
 `provideScoped`, and any plugin (the Calendar, an orchestrator, a third party) finds it. A daemon with no trigger plugin
-answers `null`: the caller owns its fail mode. **No provider is published yet** (the service moves into Infantry_Triggers in
-TRIG-2c), so this release ships the contract only.
+answers `null`: the caller owns its fail mode. Since TRIG-2c (DaemonApi 1.66.0) Infantry_Triggers publishes it; until TRIG-AT-1 the
+service stores no `owner` / `ref`, so a trigger a module saves comes back owner-less (and that module cannot change it afterwards), the
+kind `at` is refused, and `registerAction` throws (unsupported until TRIG-ACTIONS-1).
 
 ```kotlin
 val triggers = api.services.find(Triggers::class) ?: return              // null = no triggers on this daemon
@@ -384,8 +385,9 @@ api.events.subscribe(TriggerEvents.ALL) { e -> /* trigger.fired | delivered | re
 - New fields (every default is today's behaviour, served from TRIG-2d): kind `at` with `fireAt` (epoch ms) and
   `deleteAfterFire`; target `agentId = session:<id>` (that one session, never replaced); disposition `target_gone`;
   `owner`, `ref`.
-- **Named events** (`TriggerEvents`, published by the service from TRIG-2c on): `trigger.fired`, `trigger.delivered`,
-  `trigger.refused`, `trigger.target_gone`, payload `{id, owner, ref, disposition, sessionId}`. One mechanism for plugins,
+- **Named events** (`TriggerEvents`): `trigger.fired` (an event started work or mailed its target) and `trigger.refused` (a ceiling,
+  launch-gate refusal or a suppression) are published since TRIG-2c; `trigger.delivered`,
+  `trigger.target_gone` come with session targets. Payload `{id, owner, ref, disposition, sessionId}`. One mechanism for plugins,
   Lua hooks and agents (`infantry event`): there is no listener method on `Triggers`.
 
 ### Progress and downloads (DaemonApi 1.54.0)
@@ -905,7 +907,6 @@ RUNNER-POOL-6 (DaemonApi 1.45.0, additive), package `com.superiorsoftllc.infantr
 - `TriggerMailResult`
 - `TriggerRunEvent`: A run's end as the trigger sees it.
 - `TriggerSession`: One session as a trigger sees it.
-- `TriggerStore`: The durable trigger tables (rows, events, webhook secrets, the pending nudge mail).
 
 ### `Triggers.kt`
 

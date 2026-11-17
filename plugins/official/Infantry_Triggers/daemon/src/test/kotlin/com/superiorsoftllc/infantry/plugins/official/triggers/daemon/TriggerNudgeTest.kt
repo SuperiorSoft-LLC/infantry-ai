@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-package com.superiorsoftllc.infantry.triggers
+package com.superiorsoftllc.infantry.plugins.official.triggers.daemon
 
 import com.superiorsoftllc.infantry.daemon.api.board.PromptStart
 import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerMailRequest
@@ -45,8 +45,8 @@ class TriggerNudgeTest {
     private fun service(): TriggerService {
         val store = SqlInfantryStore.open(path).also { stores += it }
         return TriggerService(
-            repo = store.triggers,
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            repo = CoreTriggerStore(store.triggers),
+            attention = MemAttention(),
             startNext = { null },
             sessions = { null },
             deliverPrompt = { nudge -> nudges += nudge; answer(nudge).also { if (it is PromptDelivery.Mailed) pendingMail += it.mailId } },

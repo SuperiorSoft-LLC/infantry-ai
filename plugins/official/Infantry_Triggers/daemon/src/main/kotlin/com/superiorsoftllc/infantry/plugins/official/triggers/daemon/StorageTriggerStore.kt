@@ -3,7 +3,6 @@
 package com.superiorsoftllc.infantry.plugins.official.triggers.daemon
 
 import com.superiorsoftllc.infantry.daemon.api.storage.PluginStorage
-import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerStore
 import com.superiorsoftllc.infantry.protocol.TriggerAction
 import com.superiorsoftllc.infantry.protocol.TriggerEventView
 import com.superiorsoftllc.infantry.protocol.TriggerView
