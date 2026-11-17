@@ -53,6 +53,15 @@ class PluginStorageTest {
         assertFailsWith<IllegalArgumentException> { storage().query("SELECT 1 FROM tickets") }
     }
 
+    @Test fun `migrate may add a nullable column to an adopted table, once, and never to one not adopted`() {
+        // TRIG-AT-1: Infantry_Triggers adds its columns to the core-created `triggers` table it adopts.
+        val s = storage(adopt = listOf("tickets"))
+        s.migrate(1, listOf("ALTER TABLE tickets ADD COLUMN acme_extra TEXT"))
+        s.migrate(1, listOf("ALTER TABLE tickets ADD COLUMN acme_extra TEXT")) // recorded: a second ALTER would fail on the duplicate column
+        s.query("SELECT acme_extra FROM tickets LIMIT 1")
+        assertFailsWith<IllegalArgumentException> { storage(adopt = listOf("tickets")).migrate(2, listOf("ALTER TABLE runs ADD COLUMN acme_x TEXT")) }
+    }
+
     @Test fun `migrate is idempotent and records the version`() {
         val s = storage()
         val ddl = listOf("CREATE TABLE acme_notes_n (id INTEGER)", "INSERT INTO acme_notes_n VALUES (1)")

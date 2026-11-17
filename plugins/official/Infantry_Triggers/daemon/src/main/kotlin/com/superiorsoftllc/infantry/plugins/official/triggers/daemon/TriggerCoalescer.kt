@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-package com.superiorsoftllc.infantry.triggers
+package com.superiorsoftllc.infantry.plugins.official.triggers.daemon
 
 /** Clock seam keeps coalescing behavior deterministic and independent of wall-clock time. */
 fun interface TriggerClock {

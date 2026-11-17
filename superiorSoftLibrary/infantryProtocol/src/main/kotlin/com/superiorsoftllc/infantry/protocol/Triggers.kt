@@ -14,6 +14,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class TriggerAction(
     val kind: String = "start_next",
+    /**
+     * A profile id or `role:<role>`; since contract 1.155.0 (TRIG-API-1) also `session:<id>`: that one session, never replaced (a
+     * session that is gone records `target_gone`). Served from TRIG-2d; until then a daemon refuses `session:` like any unknown target.
+     */
     val agentId: String? = null,
     /** Contract 1.41.0: for kind `prompt`, the first message of the session the trigger starts; non-blank, at most [MAX_PROMPT_CHARS]. Refused on any other kind. */
     val prompt: String? = null,
@@ -54,6 +58,22 @@ data class TriggerSave(
      * an action other than `prompt`.
      */
     val projectId: String? = null,
+    /**
+     * Contract 1.155.0 (TRIG-API-1, additive; served since TRIG-AT-1): for kind `at` (a one-shot), when it fires, epoch ms. Required
+     * for `at`, refused on any other kind. It fires once, then is disabled; a slot passed while the daemon was down fires once if it is
+     * late by at most the setting `triggers.at.maxLateMs`, else it is recorded `missed`. No coalescing window or ceiling applies.
+     */
+    val fireAt: Long? = null,
+    /** Contract 1.155.0: for kind `at`, delete the trigger once it has fired. False = keep it (disabled after its one firing). */
+    val deleteAfterFire: Boolean = false,
+    /**
+     * Contract 1.155.0: the module that owns the trigger; null = a person. Stamped by the trigger service from the calling module
+     * (daemon.api.triggers.TriggerOwnership), never taken from a client: since TRIG-AT-1 a `trigger_save` frame or capability call that names
+     * an owner is refused, and a person cannot edit or delete an owned trigger. An owned trigger is dropped when its module is no longer loaded.
+     */
+    val owner: String? = null,
+    /** Contract 1.155.0: the owner's own opaque key for the trigger (e.g. `calendar:cal-1a2b3c4d`); the service never reads it. */
+    val ref: String? = null,
 ) {
     companion object {
         fun decode(text: String): TriggerSave = StrictJson.decode(serializer(), text, "trigger_save payload")
@@ -87,6 +107,14 @@ data class TriggerView(
     val lastFiredAt: Long? = null,
     /** Contract 1.105.0: for kind `schedule`, when the next event is due; null = not timed. Persisted: a slot already past at boot fires once. */
     val nextFireAt: Long? = null,
+    /** Contract 1.155.0 (TRIG-API-1): for kind `at`, when it fires; null = not a one-shot. */
+    val fireAt: Long? = null,
+    /** Contract 1.155.0: for kind `at`, deleted once it has fired. */
+    val deleteAfterFire: Boolean = false,
+    /** Contract 1.155.0: the owning module; null = a person. The Triggers tab shows an owned trigger read-only. */
+    val owner: String? = null,
+    /** Contract 1.155.0: the owner's opaque key. */
+    val ref: String? = null,
 )
 
 /**
@@ -95,7 +123,8 @@ data class TriggerView(
  * `dropped_after_failure`, `refused_ceiling`, `suppressed_tripped`, `suppressed_disabled`, `duplicate`,
  * `missed`, `nothing_to_start`, `refused_launch_gate`, `wont_fix`; since 1.105.0 `mailed` (a `prompt` action's mail was
  * queued for its target) and `coalesced_pending` (an earlier prompt mail of this trigger is still undelivered, so this
- * event adds nothing).
+ * event adds nothing); since 1.155.0 (TRIG-API-1, recorded from TRIG-2d) `target_gone` (a `session:<id>` target no longer exists;
+ * nothing is spawned in its place).
  */
 @Serializable
 data class TriggerEventView(

@@ -51,6 +51,10 @@ internal class GrantedBoard(private val tickets: () -> Tickets, private val epic
         override fun ticketOf(sessionId: String, by: Caller) = need(GRANT_TICKETS_READ) { tickets().ticketOf(sessionId, by) }
         override fun workerOf(ticketId: String, by: Caller) = need(GRANT_TICKETS_READ) { tickets().workerOf(ticketId, by) }
         override fun mayFile(projectId: String, by: Caller) = need(GRANT_TICKETS_WRITE) { tickets().mayFile(projectId, by) }
+        // TRIG-2c: the trigger hand-outs, now called by the Infantry_Triggers plugin (core called the board directly before); unforwarded,
+        // a plugin got the interface default (Unavailable) and a start_next trigger never started anything.
+        override fun startNext(agentFilter: String?, by: Caller) = need(GRANT_TICKETS_START) { tickets().startNext(agentFilter, by) }
+        override fun startPrompt(agentId: String, prompt: String, projectId: String?, by: Caller) = need(GRANT_TICKETS_START) { tickets().startPrompt(agentId, prompt, projectId, by) }
     }
 
     val epicsApi: Epics = object : Epics {
