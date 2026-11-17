@@ -32,6 +32,7 @@
   powershell -File scripts/package-dist.ps1 -Sha <sha> -Keystore <p12> -KeyAlias <alias>
   powershell -File scripts/package-dist.ps1 -Sha <sha> -Preset no-optional        # leave every optional plugin out
   powershell -File scripts/package-dist.ps1 -Sha <sha> -Exclude Infantry_Stats    # leave one out
+  powershell -File scripts/package-dist.ps1 -Sha <sha> -Label calendar -ReleaseBranch feature-calendar   # variant build, see docs/wiki/Variant-builds.md
   powershell -File scripts/package-dist.ps1 -BackupState -StateDir <dir> [-DryRun]
 #>
 [CmdletBinding()]
@@ -47,7 +48,8 @@ param(
   [string[]]$Exclude,       # BUILD-PLUGINS-1: leave these optional plugins out (core/official are refused)
   [string]$Preset,          # BUILD-PLUGINS-1: a named preset from plugins/build-presets.json (full, no-optional, core-only)
   [string]$ReleaseBranch = 'feature-agenthq-mvp',
-  [string]$ProjectId
+  [string]$ProjectId,
+  [string]$Label            # CAL-BRANCH-1: a variant name (e.g. calendar): folder <stamp>-<sha8>-<label>, version <v>-<label>+<stamp>
 )
 
 $repo = Split-Path -Parent $PSScriptRoot
@@ -149,10 +151,13 @@ try {
   $selection = Resolve-PluginSelection @(Get-PluginInventory $pluginsRoot) $pluginsRoot $Include $Exclude $Preset
 } catch { Fail "plugin selection: $($_.Exception.Message)" }
 
+if ($Label -and $Label -notmatch '^[0-9A-Za-z][0-9A-Za-z-]{0,23}$') { Fail "-Label must be 1-24 letters, digits or '-' (got '$Label')" }
+
 Write-Output "PACKAGE-DIST step 1/7: resolve"
 $root = Get-BuildRoot
 $buildsDir = Join-Path $root.Path 'builds'
 $folderName = (Get-Date).ToString('yyyyMMdd-HHmmss') + '-' + $full.Substring(0, 8)  # PKG-DIST-1: every build gets its own folder
+if ($Label) { $folderName += "-$Label" }
 $dest = Join-Path $buildsDir $folderName
 $current = Join-Path $root.Path 'current'
 
@@ -171,6 +176,11 @@ $gradleArgs = @(':superiorSoftLibrary:infantryUi:createDistributable', '--no-par
   # the worktree is detached, so the packaging guard sees HEAD; the sha was checked to be on $ReleaseBranch above
   '-PallowAnyBranch=true') + $signArgs
 # MASCOT-BUNDLED-1: always pass the resolved list, even empty: with no flag Gradle leaves out every standalone plugin, which would undo -Include.
+# CAL-BRANCH-1: the label rides in the SemVer pre-release (1.6.0-calendar+<stamp>.<sha>), so About, the daemon `ready` build= and BUILD-INFO show it.
+if ($Label) {
+  $baseVersion = ((Select-String -Path (Join-Path $repo 'gradle.properties') -Pattern '^infantryVersion=(.+)$').Matches[0].Groups[1].Value).Trim()
+  $gradleArgs += "-PinfantryVersion=$baseVersion-$Label"
+}
 $gradleArgs += "-Pihq.excludePlugins=$($selection.Excluded -join ',')"
 if ($selection.Excluded.Count -gt 0) { $gradleArgs += '-Pihq.optionalOut=true' }
 
@@ -178,6 +188,7 @@ if ($DryRun) {
   Write-Output "DRY-RUN build: sha=$full (on $ReleaseBranch)"
   Write-Output "  build.root=$($root.Path) (from $($root.From))"
   Write-Output "  output=$dest"
+  if ($Label) { Write-Output "  label=$Label (version $baseVersion-$Label)" }
   Write-Output "  current=$current"
   Write-Output "  manifest=$dest\MANIFEST.txt"
   Write-Output "  plugins: preset=$(if ($Preset) { $Preset } else { 'full' }) included=$($selection.Included.Count) excluded=[$($selection.Excluded -join ', ')]"
@@ -223,6 +234,7 @@ Write-Output "PACKAGE-DIST step 3/7: gradle"
   $script:Step = 'write BUILD-INFO/MANIFEST/README'
   $stampUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
   $info = @("sha=$full", "built=$stampUtc", "signing=$signing", "source=$($image.Name)")
+  if ($Label) { $info += "label=$Label" }
   $infoPath = Join-Path $dest 'BUILD-INFO.txt'
   if (Test-Path -LiteralPath $infoPath) { Add-Content -LiteralPath $infoPath -Value (@('', '# package-dist') + $info) -Encoding ASCII }  # keep the image's own record
   else { Set-Content -LiteralPath $infoPath -Value $info -Encoding ASCII }
