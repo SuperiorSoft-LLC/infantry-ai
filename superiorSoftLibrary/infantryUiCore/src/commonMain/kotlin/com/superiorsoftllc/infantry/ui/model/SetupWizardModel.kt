@@ -53,8 +53,15 @@ object SetupWizard {
     fun needed(report: HarnessInstallReport?, secrets: List<SecretRow>?, providers: List<ProviderInfo>, catalog: List<ProviderModels> = emptyList()): Boolean? {
         if (report == null || secrets == null) return null
         if (report.harnesses.isEmpty()) return null
-        return talkable(report, secrets, providers, catalog).isEmpty()
+        if (talkable(report, secrets, providers, catalog).isNotEmpty()) return false
+        // ONBOARD-CLAUDE-1: a sign-in state the daemon has never probed (it keeps probe results in memory, so every daemon start begins
+        // unprobed) is not "signed out": wait for the probe instead of showing the sign-in step to someone already connected.
+        return if (unprobed(report, secrets).isNotEmpty()) null else true
     }
+
+    /** The key rows of installed harnesses whose sign-in the daemon has not probed yet; the setup asks it to check each once. */
+    fun unprobed(report: HarnessInstallReport, secrets: List<SecretRow>): List<SecretRow> =
+        report.harnesses.filter(::installed).mapNotNull { keyRow(it.id, secrets) }.filter { !it.set && it.signedIn == "unknown" && it.lastProbe == 0L }
 
     /** Where the setup starts: Node only while npm is missing and nothing is installed yet; then the pick; then sign-in. */
     fun firstStep(report: HarnessInstallReport): Step = when {

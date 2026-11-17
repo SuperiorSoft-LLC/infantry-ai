@@ -82,6 +82,12 @@ object ShellSetupWizard : Block("infantry.shell.setupWizard", "infantry.shell.se
         val report = state.harnessInstall
         val secrets = state.secrets?.secrets
         val needed = SetupWizard.needed(report, secrets, state.providers, state.modelCatalog)
+        // ONBOARD-CLAUDE-1: ask the daemon to probe each never-probed sign-in once (no tokens); `needed` stays undecided until it answers.
+        val probing = remember { mutableSetOf<String>() }
+        if (report != null && secrets != null) {
+            val todo = SetupWizard.unprobed(report, secrets).map { it.name }.filter { it !in probing }
+            LaunchedEffect(todo) { todo.forEach { probing += it; s.controller.checkHarnessAuth(it) } }
+        }
         // Once per app start: opened by itself while nothing can answer.
         var decided by remember { mutableStateOf(false) }
         LaunchedEffect(needed) {

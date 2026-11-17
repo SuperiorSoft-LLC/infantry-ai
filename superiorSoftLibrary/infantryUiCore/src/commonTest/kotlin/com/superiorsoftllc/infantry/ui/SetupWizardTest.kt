@@ -29,8 +29,17 @@ class SetupWizardTest {
         assertNull(SetupWizard.needed(report(h("claude", false)), null, emptyList()))
         assertEquals(true, SetupWizard.needed(report(h("claude", false), h("opencode", false)), emptyList(), emptyList()))
         // Installed but no key and no login: still nothing to talk to.
-        assertEquals(true, SetupWizard.needed(report(h("claude", true)), listOf(key("claude")), emptyList()))
+        assertEquals(true, SetupWizard.needed(report(h("claude", true)), listOf(key("claude").copy(lastProbe = 5L)), emptyList()))
         assertEquals(false, SetupWizard.needed(report(h("claude", true)), listOf(key("claude", set = true)), emptyList()))
+        // ONBOARD-CLAUDE-1: never probed (fresh daemon) is undecided, not signed out.
+        assertNull(SetupWizard.needed(report(h("claude", true)), listOf(key("claude")), emptyList()))
+        // Any harness, not only claude: an unprobed "codex"/"commandcode" row waits; once probed signed-in it is done, once probed signed-out it opens.
+        for (id in listOf("codex", "commandcode", "someNewHarness")) {
+            assertNull(SetupWizard.needed(report(h(id, true)), listOf(key(id)), emptyList()))
+            assertEquals(false, SetupWizard.needed(report(h(id, true)), listOf(key(id, signedIn = "true").copy(lastProbe = 5L)), emptyList()))
+            assertEquals(true, SetupWizard.needed(report(h(id, true)), listOf(key(id, signedIn = "false").copy(lastProbe = 5L)), emptyList()))
+        }
+        assertEquals(listOf("harness.claude.key"),SetupWizard.unprobed(report(h("claude", true)), listOf(key("claude"))).map { it.name })
         assertEquals(false, SetupWizard.needed(report(h("claude", true)), listOf(key("claude", signedIn = "true")), emptyList()))
         // ONBOARD-1's in-app login finished before the probe caught up.
         assertEquals(false, SetupWizard.needed(report(h("claude", true)), listOf(key("claude").copy(loginState = "done")), emptyList()))
