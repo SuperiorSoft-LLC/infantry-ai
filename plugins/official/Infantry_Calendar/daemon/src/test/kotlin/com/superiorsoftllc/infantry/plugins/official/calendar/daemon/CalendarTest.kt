@@ -25,7 +25,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private class JdbcStorage(private val c: Connection) : PluginStorage {
+internal class JdbcStorage(private val c: Connection) : PluginStorage {
     override fun migrate(version: Int, sql: List<String>) = sql.forEach { c.createStatement().use { s -> s.execute(it) } }
     override fun query(sql: String, args: List<Any?>): List<Map<String, Any?>> = c.prepareStatement(sql).use { ps ->
         args.forEachIndexed { i, a -> ps.setObject(i + 1, a) }
@@ -58,7 +58,7 @@ class CalendarTest {
     private val zone = ZoneId.of("UTC")
     private val changes = mutableListOf<CalendarChange>()
     private val store = CalendarStore(db) { now }.also { it.install() }
-    private val service = CalendarService(store, { CalendarLimits(titleMax = 30, notesMax = 100, listMax = 3, eventsKeep = 3) }, { zone }, { now }, { it != "gone" }) { changes += it }
+    private val service = CalendarService(store, { CalendarLimits(titleMax = 30, notesMax = 100, listMax = 3, eventsKeep = 3) }, { zone }, { now }, { it != "gone" }, triggers = { FakeTriggers() }) { changes += it }
     private val creators = CreatorOf { if (it == "sess-1") "agent-1" else null }
 
     @AfterTest fun close() { conn.close() }

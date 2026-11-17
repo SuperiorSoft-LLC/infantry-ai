@@ -33,7 +33,7 @@ val InfantryCalendar = InfantryModule(
     ModuleManifest(
         name = "Infantry_Calendar", version = "1.0.0", author = "Infantry AI", description = "A planner for the user: tasks and reminders.",
         tabs = listOf(TabDeclaration(CALENDAR_TAB_ID, TabContainers.CENTER)),
-        routes = CALENDAR_ROUTES, events = listOf(CALENDAR_CHANGED_EVENT), daemonFrames = listOf("calendar_changed"),
+        routes = CALENDAR_ROUTES, events = listOf(CALENDAR_CHANGED_EVENT, CALENDAR_OPEN_EVENT), daemonFrames = listOf("calendar_changed", "calendar_open"),
         services = listOf("events", "daemon"),
     ),
     listOf(calendarTab()),

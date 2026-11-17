@@ -103,6 +103,14 @@ fun CalendarTab(ctx: TabContext) {
         val off = ctx.services.get(Services.EVENTS)?.subscribe(CALENDAR_CHANGED_EVENT) { version++ }
         onDispose { off?.invoke() }
     }
+    // CAL-3: a reminder notification's Open button asks the tab to open that item (the daemon's calendar_open frame).
+    DisposableEffect(ctx.services) {
+        val off = ctx.services.get(Services.EVENTS)?.subscribe(CALENDAR_OPEN_EVENT) { e ->
+            val id = CalendarModel.openId(e.data["data"]) ?: return@subscribe
+            scope.launch { api.get(id).onSuccess { n -> if (n != null) { open = n; selected = runCatching { LocalDate.parse(n.day) }.getOrNull() ?: selected } } }
+        }
+        onDispose { off?.invoke() }
+    }
     val live = ctx.state.connection.isLive
     LaunchedEffect(month, version, live) {
         if (!live) return@LaunchedEffect
@@ -224,9 +232,9 @@ private fun ItemDialog(item: CalItem, api: CalendarApi, onClose: () -> Unit, onE
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (item.open) Button(onClick = { act { api.complete(item.id, "done") } }) { Text("Done") }
                 else OutlinedButton(onClick = { act { api.complete(item.id, "open") } }) { Text("Reopen") }
-                if (item.isReminder && item.open) OutlinedButton(onClick = {
-                    act { api.save("""{"id":"${item.id}","remindAt":"${Clock.System.now().toEpochMilliseconds() + CalendarModel.SNOOZE_MINUTES * 60_000L}"}""") }
-                }) { Text("Snooze ${CalendarModel.SNOOZE_MINUTES} min") }
+                if (item.snoozable) CalendarModel.SNOOZE_PRESETS.forEach { (preset, label) ->
+                    OutlinedButton(onClick = { act { api.snooze(item.id, preset) } }) { Text(label) }
+                }
                 OutlinedButton(onClick = { onEdit(item) }) { Text("Edit") }
                 TextButton(onClick = { confirmDelete = true }) { Text("Delete", color = Palette.Danger) }
             }

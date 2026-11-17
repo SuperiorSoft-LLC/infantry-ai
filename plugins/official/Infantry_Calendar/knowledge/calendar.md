@@ -17,6 +17,9 @@ If your tool list does not show these yet, call them with `infantry tool <name>`
 - Add what the USER asked for or would clearly want (a deadline they mentioned, a follow-up date). Do not fill their calendar with your own chatter.
 - An item you create records you as its creator; the user sees who made it.
 - Times use the user's zone unless you pass `zone` (an IANA name).
+- When a reminder fires, the user gets a notification (Open, Snooze, Done). A `role:`/`session:` target also gets your reminder as mail
+  through a one-shot trigger; that needs the Triggers plugin, and is refused without it. When a reminder reaches you, handle it,
+  then `infantry_calendar_complete` it.
 
 <!-- skip: assistant -->
 ## For workers

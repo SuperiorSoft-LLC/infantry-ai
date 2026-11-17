@@ -12,15 +12,21 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import com.superiorsoftllc.infantry.daemon.api.triggers.Triggers
 import java.time.ZoneId
 
 /**
  * CAL-1 (Calendar epic): Infantry_Calendar's daemon half. Installs its tables (`storage.migrate`), serves the six agent tools
  * (open to every agent, `created_by` taken from the tool caller) and the `calendar_*` frames for the Calendar tab (CAL-2), and
- * broadcasts `calendar_changed` after every write. Firing reminders is CAL-3. The data stays when the plugin is disabled.
+ * broadcasts `calendar_changed` after every write. The data stays when the plugin is disabled.
+ *
+ * CAL-3: fires due alarms on `api.schedule("calendar.tick")` ([CalendarReminders]), keeps one owned `at` trigger per agent-targeted
+ * reminder through the Triggers SDK service, reconciles them once the daemon has started (and whenever the loaded modules change), and
+ * answers the notification buttons (Open / Snooze / Done).
  */
 class CalendarDaemonPlugin : DaemonPlugin {
     @Volatile private var service: CalendarService? = null
+    private val closers = mutableListOf<AutoCloseable>()
 
     override fun start(api: DaemonApi) {
         val store = CalendarStore(api.storage)
@@ -31,14 +37,35 @@ class CalendarDaemonPlugin : DaemonPlugin {
             defaultZone = { zoneFrom(api.config(ZONE_KEY)) },
             sessionExists = { id -> runCatching { api.sessions.get(id) != null }.getOrDefault(true) },
             changed = { c -> runCatching { api.events.broadcast(CHANGED, CalendarJson.change(c).toString()) } },
+            triggers = { runCatching { api.services.find(Triggers::class) }.getOrNull()?.let { TriggersLink(it, api.moduleId) } },
+            publish = { name, item -> api.events.publish(name, CalendarJson.item(item).toString()) },
         )
         service = svc
+        val reminders = CalendarReminders(
+            store = store, service = svc,
+            maxLateMs = { positive(api.config(MAX_LATE_KEY), CalendarReminders.DEFAULT_MAX_LATE_MINUTES) * CalendarService.MS_PER_MINUTE },
+            notify = { n -> api.notifications.notify(n) },
+            dismiss = { id -> runCatching { api.notifications.dismiss(id) } },
+            openItem = { id -> runCatching { api.events.broadcast(OPEN, buildJsonObject { put("id", id) }.toString()) } },
+            log = api::log,
+        )
+        // The host disables a plugin whose scheduled job throws: every failure stays in the log.
+        val tickMs = positive(api.config(TICK_KEY), CalendarReminders.DEFAULT_TICK_SECONDS) * MS_PER_SECOND
+        closers += api.schedule("calendar.tick", tickMs) { runCatching { reminders.tick() }.onFailure { api.log("calendar: tick failed: ${it.message}") } }
+        closers += api.notifications.onAction { e -> runCatching { reminders.onAction(e) }.onFailure { api.log("calendar: action failed: ${it.message}") } }
+        fun reconcile() = runCatching { reminders.reconcile() }.onFailure { api.log("calendar: reconcile failed: ${it.message}") }
+        api.whenStarted { reconcile() }
+        closers += api.events.subscribe(MODULES_CHANGED) { reconcile() }
         val creators = CreatorOf { sessionId -> runCatching { api.sessions.get(sessionId)?.agentId }.getOrNull() }
         calendarTools(svc, creators).forEach(api.tools::register)
         registerFrames(api, svc)
     }
 
-    override fun stop() { service = null }
+    override fun stop() {
+        closers.forEach { runCatching { it.close() } }
+        closers.clear()
+        service = null
+    }
 
     /** One operation over the service: (reply frame type, body). The frames and the HTTP routes the tab calls both run these. */
     private fun operations(svc: CalendarService): Map<String, Pair<String, (JsonObject) -> kotlinx.serialization.json.JsonElement>> {
@@ -58,6 +85,10 @@ class CalendarDaemonPlugin : DaemonPlugin {
                 val existing = a["id"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
                 // The tab acts as the person: items it saves are the user's.
                 CalendarJson.item(if (existing == null) svc.add(input, CalendarCreator.USER) else svc.update(existing, input, "user"))
+            }),
+            "snooze" to ("calendar_item" to { a: JsonObject ->
+                val preset = a["preset"]?.jsonPrimitive?.contentOrNull ?: throw CalendarRefusal("preset is required: 5m, 1h or tomorrow")
+                CalendarJson.item(svc.snooze(id(a), preset, "user"))
             }),
             "complete" to ("calendar_item" to { a: JsonObject -> CalendarJson.item(svc.complete(id(a), a["status"]?.jsonPrimitive?.contentOrNull, "user")) }),
             "delete" to ("calendar_deleted" to { a: JsonObject -> val i = id(a); buildJsonObject { put("id", i); put("deleted", svc.delete(i)) } }),
@@ -81,6 +112,9 @@ class CalendarDaemonPlugin : DaemonPlugin {
         }
     }
 
+    /** A positive whole number from a setting, else [default]. */
+    private fun positive(s: String?, default: Long): Long = s?.trim()?.toDoubleOrNull()?.toLong()?.takeIf { it > 0 } ?: default
+
     private fun zoneFrom(name: String?): ZoneId =
         name?.trim()?.takeIf { it.isNotEmpty() }?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: ZoneId.systemDefault()
 
@@ -88,5 +122,11 @@ class CalendarDaemonPlugin : DaemonPlugin {
         /** The named push to clients after every write. */
         const val CHANGED = "calendar_changed"
         const val ZONE_KEY = "calendar.zone"
+        /** CAL-3: the frame that asks the Calendar tab to open one item (a notification's Open button). */
+        const val OPEN = "calendar_open"
+        const val TICK_KEY = "calendar.tickSeconds"
+        const val MAX_LATE_KEY = "calendar.maxLateMinutes"
+        const val MODULES_CHANGED = "modules.changed"
+        const val MS_PER_SECOND = 1000L
     }
 }

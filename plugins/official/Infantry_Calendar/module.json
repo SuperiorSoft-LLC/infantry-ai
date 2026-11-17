@@ -7,9 +7,9 @@
   "entry": "com.superiorsoftllc.infantry.plugins.official.calendar.CalendarPlugin",
   "jar": "build/libs/Infantry_Calendar.jar",
   "services": ["events", "daemon"],
-  "events": ["daemon.calendar_changed"],
-  "daemonFrames": ["calendar_changed"],
-  "routes": ["POST /plugins/Infantry_Calendar/calendar/list", "POST /plugins/Infantry_Calendar/calendar/get", "POST /plugins/Infantry_Calendar/calendar/save", "POST /plugins/Infantry_Calendar/calendar/complete", "POST /plugins/Infantry_Calendar/calendar/delete"],
+  "events": ["daemon.calendar_changed", "daemon.calendar_open"],
+  "daemonFrames": ["calendar_changed", "calendar_open"],
+  "routes": ["POST /plugins/Infantry_Calendar/calendar/list", "POST /plugins/Infantry_Calendar/calendar/get", "POST /plugins/Infantry_Calendar/calendar/save", "POST /plugins/Infantry_Calendar/calendar/complete", "POST /plugins/Infantry_Calendar/calendar/snooze", "POST /plugins/Infantry_Calendar/calendar/delete"],
   "tabs": [{ "id": "infantry.calendar", "container": "center" }],
   "tier": "official",
   "sequence": [],
@@ -42,14 +42,16 @@
     "config": [
       {
         "node": "infantry.calendar.limits", "group": "Calendar", "title": "Calendar: limits", "tab": "Plugins", "order": 950,
-        "applies": "Applies to: how long a calendar title or note may be, how many items a list returns, how much history is kept.",
+        "applies": "Applies to: how long a calendar title or note may be, how many items a list returns, how much history is kept, and when reminders fire.",
         "keywords": ["calendar", "reminder", "task", "limit", "history"],
         "fields": [
           { "key": "limits.calendar.titleMaxChars", "type": "number", "label": "Longest item title (characters)", "default": 200, "min": 20, "max": 2000, "step": 10, "scope": "daemon", "order": 1 },
           { "key": "limits.calendar.notesMaxChars", "type": "number", "label": "Longest item note (characters)", "default": 4000, "min": 100, "max": 100000, "step": 100, "scope": "daemon", "order": 2 },
           { "key": "limits.calendar.listMaxItems", "type": "number", "label": "Most items one list answers", "default": 200, "min": 10, "max": 5000, "step": 10, "scope": "daemon", "order": 3 },
           { "key": "limits.calendar.eventsKeepPerItem", "type": "number", "label": "History entries kept per item", "default": 50, "min": 5, "max": 1000, "step": 5, "scope": "daemon", "order": 4 },
-          { "key": "calendar.zone", "type": "text", "label": "Time zone for items (IANA name, empty = this computer's)", "default": "", "scope": "daemon", "order": 5 }
+          { "key": "calendar.zone", "type": "text", "label": "Time zone for items (IANA name, empty = this computer's)", "default": "", "scope": "daemon", "order": 5 },
+          { "key": "calendar.tickSeconds", "type": "number", "label": "How often due reminders are checked (seconds; applies after a restart)", "default": 15, "min": 1, "max": 600, "step": 1, "scope": "daemon", "order": 6 },
+          { "key": "calendar.maxLateMinutes", "type": "number", "label": "A reminder later than this (e.g. the app was off) is marked missed, not fired (minutes)", "default": 30, "min": 1, "max": 10080, "step": 1, "scope": "daemon", "order": 7 }
         ]
       }
     ],
@@ -58,6 +60,7 @@
       { "type": "calendar_get", "action": "calendar.read", "kind": "read" },
       { "type": "calendar_save", "action": "calendar.write", "kind": "write" },
       { "type": "calendar_complete", "action": "calendar.write", "kind": "write" },
+      { "type": "calendar_snooze", "action": "calendar.write", "kind": "write" },
       { "type": "calendar_delete", "action": "calendar.delete", "kind": "destructive" },
       { "type": "calendar_clear", "action": "calendar.delete", "kind": "destructive" }
     ],
@@ -72,7 +75,7 @@
   },
   "actions": [
     { "id": "calendar.read", "label": "Read the calendar", "kind": "read", "frames": ["calendar_list", "calendar_get"] },
-    { "id": "calendar.write", "label": "Add or change calendar items", "kind": "write", "frames": ["calendar_save", "calendar_complete"] },
+    { "id": "calendar.write", "label": "Add or change calendar items", "kind": "write", "frames": ["calendar_save", "calendar_complete", "calendar_snooze"] },
     { "id": "calendar.delete", "label": "Delete calendar items", "kind": "destructive", "frames": ["calendar_delete", "calendar_clear"] }
   ]
 }

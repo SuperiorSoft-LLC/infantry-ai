@@ -48,8 +48,17 @@ class CalendarService(
     private val defaultZone: () -> ZoneId,
     private val clock: () -> Long = System::currentTimeMillis,
     private val sessionExists: (String) -> Boolean = { true },
+    /** CAL-3: the agent-reminder port; null = no Triggers plugin (agent targets are refused, user reminders still work). */
+    private val triggers: () -> ReminderTriggers? = { null },
+    /** CAL-3: publishes a named event (`calendar.item.*`) with the item. */
+    private val publish: (name: String, item: CalendarItem) -> Unit = { _, _ -> },
     private val changed: (CalendarChange) -> Unit = {},
 ) {
+    internal fun eventsKeep() = limits().eventsKeep
+    internal fun published(name: String, item: CalendarItem) = runCatching { publish(name, item) }
+    internal fun changedNow(c: CalendarChange) = changed(c)
+    internal fun link(): ReminderTriggers? = triggers()
+
     fun add(input: ItemInput, creator: CalendarCreator): CalendarItem {
         val lim = limits()
         val kind = input.kind?.trim()?.lowercase() ?: "task"
@@ -62,7 +71,8 @@ class CalendarService(
         if (target != null && kind != "reminder") throw CalendarRefusal("only a reminder has a target; make it a reminder, or leave target out")
         val wantsAlarm = kind == "reminder" || input.remindAt != null || input.remindBefore != null
         val remind = if (wantsAlarm) resolveRemind(input, whenAt, zone) else null
-        val item = store.add(
+        if (target != null) needTriggers()
+        val added = store.add(
             NewItem(
                 kind = kind, title = title, notes = notes, projectId = input.projectId?.trim()?.ifEmpty { null }, allDay = whenAt.allDay,
                 startAt = if (kind == "reminder") whenAt.at else null, dueAt = if (kind == "task") whenAt.at else null,
@@ -70,7 +80,9 @@ class CalendarService(
             ),
             lim.eventsKeep,
         )
+        val item = try { syncTrigger(added) } catch (e: CalendarRefusal) { store.delete(added.id); throw e }
         changed(CalendarChange("added", listOf(item.id), listOf(item.day)))
+        published(EVENT_CREATED, item)
         return item
     }
 
@@ -98,7 +110,8 @@ class CalendarService(
             projectId = input.projectId?.trim()?.ifEmpty { null },
         )
         if (target != null && cur.kind != "reminder") throw CalendarRefusal("only a reminder has a target")
-        val updated = store.update(id, patch, by, lim.eventsKeep) ?: throw CalendarRefusal("no calendar item '$id'")
+        if (target != null || (cur.target != null && !patch.clearTarget && remind != null)) needTriggers()
+        val updated = syncTrigger(store.update(id, patch, by, lim.eventsKeep) ?: throw CalendarRefusal("no calendar item '$id'"))
         changed(CalendarChange("updated", listOf(id), listOf(cur.day, updated.day).distinct()))
         return updated
     }
@@ -106,19 +119,68 @@ class CalendarService(
     fun complete(id: String, status: String?, by: String?): CalendarItem {
         val s = (status ?: "done").trim().lowercase()
         if (s !in listOf("done", "cancelled", "open")) throw CalendarRefusal("status must be done, cancelled or open")
-        val item = store.setStatus(id, s, by, limits().eventsKeep) ?: throw CalendarRefusal("no calendar item '$id'")
+        val item = syncTrigger(store.setStatus(id, s, by, limits().eventsKeep) ?: throw CalendarRefusal("no calendar item '$id'"))
         changed(CalendarChange("status", listOf(id), listOf(item.day)))
+        if (s == "done") published(EVENT_DONE, item)
         return item
     }
 
+    /**
+     * CAL-3: rings the alarm again later: [preset] `5m`, `1h` or `tomorrow` (09:00 tomorrow in the item's zone), or a number of minutes.
+     * The alarm is unclaimed again, so the tick fires it once more; an agent target gets a fresh trigger.
+     */
+    fun snooze(id: String, preset: String, by: String?): CalendarItem {
+        val cur = store.get(id) ?: throw CalendarRefusal("no calendar item '$id'")
+        if (cur.status == "done" || cur.status == "cancelled") throw CalendarRefusal("item '$id' is ${cur.status}; reopen it first")
+        val now = clock()
+        val p = preset.trim().lowercase()
+        val at = when (p) {
+            "5m" -> now + SNOOZE_SHORT_MINUTES * MS_PER_MINUTE
+            "1h" -> now + SNOOZE_LONG_MINUTES * MS_PER_MINUTE
+            "tomorrow" -> java.time.Instant.ofEpochMilli(now).atZone(ZoneId.of(cur.zone)).toLocalDate().plusDays(1)
+                .atTime(DEFAULT_ALL_DAY_REMIND).atZone(ZoneId.of(cur.zone)).toInstant().toEpochMilli()
+            else -> p.removeSuffix("m").toLongOrNull()?.takeIf { it > 0 }?.let { now + it * MS_PER_MINUTE }
+                ?: throw CalendarRefusal("snooze must be 5m, 1h, tomorrow or a number of minutes")
+        }
+        if (cur.target != null) needTriggers()
+        val item = syncTrigger(store.snooze(id, at, by, p, limits().eventsKeep) ?: throw CalendarRefusal("no calendar item '$id'"))
+        changed(CalendarChange("snoozed", listOf(id), listOf(item.day)))
+        return item
+    }
+
+    /**
+     * CAL-3: makes the item's owned trigger match it. An open (or snoozed) reminder with a target and an unfired alarm has exactly
+     * one `at` trigger at its alarm; once the target is cleared or the item is closed or missed, the trigger goes. A FIRED item keeps
+     * its trigger: Triggers fires it on its own clock and deletes it after (deleteAfterFire). Answers the item as stored.
+     */
+    fun syncTrigger(item: CalendarItem): CalendarItem {
+        if (wantsTrigger(item)) {
+            val link = needTriggers()
+            val tid = link.upsert(item, item.triggerId)
+            if (tid != item.triggerId) store.setTrigger(item.id, tid)
+            return store.get(item.id) ?: item
+        }
+        val tid = item.triggerId ?: return item
+        if (item.target == null || item.status in GONE_STATUSES) {
+            triggers()?.let { runCatching { it.delete(tid) } }
+            store.setTrigger(item.id, null)
+            return store.get(item.id) ?: item
+        }
+        return item
+    }
+
+    private fun needTriggers(): ReminderTriggers = triggers()
+        ?: throw CalendarRefusal("reminding an agent needs the Triggers plugin (Infantry_Triggers), which is not loaded; leave target out to remind the user")
+
     fun delete(id: String): Boolean {
         val cur = store.get(id) ?: return false
+        cur.triggerId?.let { tid -> triggers()?.let { runCatching { it.delete(tid) } } }
         val ok = store.delete(id)
         if (ok) changed(CalendarChange("deleted", listOf(id), listOf(cur.day)))
         return ok
     }
 
-    fun clear(): Int = store.clear().also { changed(CalendarChange("cleared", emptyList(), emptyList())) }
+    fun clear(): Int = store.also { s -> triggers()?.let { link -> s.linked().mapNotNull { it.triggerId }.forEach { runCatching { link.delete(it) } } } }.clear().also { changed(CalendarChange("cleared", emptyList(), emptyList())) }
 
     fun list(filter: ItemFilter): List<CalendarItem> = store.list(filter.copy(limit = filter.limit.coerceAtMost(limits().listMax)))
     fun get(id: String): CalendarItem? = store.get(id)
@@ -188,6 +250,17 @@ class CalendarService(
 
     companion object {
         const val MS_PER_MINUTE = 60_000L
+        const val SNOOZE_SHORT_MINUTES = 5L
+        const val SNOOZE_LONG_MINUTES = 60L
+        /** The named events (`api.events.publish`) a Lua hook can listen to; payload = the item as the tools answer it. */
+        const val EVENT_CREATED = "calendar.item.created"
+        const val EVENT_FIRED = "calendar.item.fired"
+        const val EVENT_DONE = "calendar.item.done"
+        /** Statuses whose item no longer needs its trigger. */
+        val GONE_STATUSES = setOf("done", "cancelled", "missed")
+
+        fun wantsTrigger(i: CalendarItem): Boolean =
+            i.target != null && i.status in setOf("open", "snoozed") && i.remindAt != null && i.firedAt == null
         /** An all-day reminder with no alarm time rings at this local time. */
         val DEFAULT_ALL_DAY_REMIND: LocalTime = LocalTime.of(9, 0)
     }

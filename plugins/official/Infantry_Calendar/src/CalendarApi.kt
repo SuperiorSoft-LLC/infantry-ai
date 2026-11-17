@@ -13,10 +13,13 @@ import kotlinx.serialization.json.contentOrNull
 private const val BASE = "POST /plugins/Infantry_Calendar/calendar/"
 
 /** The routes module.json declares (the tab may call only these). */
-val CALENDAR_ROUTES = listOf("list", "get", "save", "complete", "delete").map { BASE + it }
+val CALENDAR_ROUTES = listOf("list", "get", "save", "complete", "snooze", "delete").map { BASE + it }
 
 /** The event the host republishes from the daemon's `calendar_changed` frame (module.json `daemonFrames`). */
 const val CALENDAR_CHANGED_EVENT = "daemon.calendar_changed"
+
+/** CAL-3: the event the host republishes from the daemon's `calendar_open` frame (a reminder notification's Open button); data `id`. */
+const val CALENDAR_OPEN_EVENT = "daemon.calendar_open"
 
 /** CAL-2: the Calendar tab's requests, over the plugin HTTP routes of the daemon half. Every call answers a Result carrying the daemon's refusal text. */
 class CalendarApi(private val daemon: DaemonAccess?) {
@@ -39,5 +42,7 @@ class CalendarApi(private val daemon: DaemonAccess?) {
     suspend fun get(id: String): Result<CalItem?> = call("get", """{"id":"$id"}""").map { CalendarModel.parseItem(it) }
     suspend fun save(argsJson: String): Result<CalItem?> = call("save", argsJson).map { CalendarModel.parseItem(it) }
     suspend fun complete(id: String, status: String): Result<CalItem?> = call("complete", """{"id":"$id","status":"$status"}""").map { CalendarModel.parseItem(it) }
+    /** CAL-3: ring again later; [preset] is `5m`, `1h` or `tomorrow`. */
+    suspend fun snooze(id: String, preset: String): Result<CalItem?> = call("snooze", """{"id":"$id","preset":"$preset"}""").map { CalendarModel.parseItem(it) }
     suspend fun delete(id: String): Result<Unit> = call("delete", """{"id":"$id"}""").map { }
 }
