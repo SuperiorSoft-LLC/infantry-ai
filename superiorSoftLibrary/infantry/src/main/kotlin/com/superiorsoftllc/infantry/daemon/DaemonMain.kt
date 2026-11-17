@@ -2055,7 +2055,7 @@ class InfantryDaemon(
                 harnessModulesRef.set(harnessModules)
             }
             val plugins = pluginHost.get()
-            // DEMO-USAGE-HIDE-1: plugin-offered plan-limit readings replace the provider sources (`hooks.usageReading`).
+            // USAGE-HIDE-1: plugin-offered plan-limit readings replace the provider sources (`hooks.usageReading`).
             limits.replacement = {
                 val at = System.currentTimeMillis()
                 val seen = HashSet<String>()

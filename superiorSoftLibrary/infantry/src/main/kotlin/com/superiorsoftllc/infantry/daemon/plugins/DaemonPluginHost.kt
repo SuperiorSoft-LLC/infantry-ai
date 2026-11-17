@@ -322,7 +322,7 @@ class DaemonPluginHost private constructor(
     /** ORCH-1: the orchestrator bindings plugins offered, for the daemon to register on its hub. */
     fun orchestratorBindings(): List<Pair<String, com.superiorsoftllc.infantry.daemon.api.orchestrator.OrchestratorBinding>> = orchestratorBindings.map { it.value }
 
-    /** DEMO-USAGE-HIDE-1: the plan-limit readings plugins offered (`hooks.usageReading`); non-empty = they replace the provider sources. */
+    /** USAGE-HIDE-1: the plan-limit readings plugins offered (`hooks.usageReading`); non-empty = they replace the provider sources. */
     fun usageReadings(): List<UsageOffer> = usageReadings.map { it.value }
 
     /** USAGE-MOCK-1: one plugin's offered readings (provider id to windows; null/empty = off now) and whether pacing judges them. */
