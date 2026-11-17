@@ -5,6 +5,7 @@ package com.superiorsoftllc.infantry.plugins.official.triggers
 import com.superiorsoftllc.infantry.ui.shell.gate
 import com.superiorsoftllc.infantry.ui.*
 
+import com.superiorsoftllc.infantry.ui.protocol.SessionState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +58,18 @@ private val BUILT_IN_TRIGGER_ROLES = listOf("pm", "qa", "version-control", "assi
 internal fun triggerLanes(state: AppState): List<String> =
     (BUILT_IN_TRIGGER_ROLES + state.roles.map { it.id } + state.visibleProfiles.map { it.role }).distinct().map { "role:$it" }
 
+/**
+ * TRIG-TARGET-1: the `session:<id>` targets a prompt trigger can aim at -- one per session that is still running
+ * (starting, busy, waiting or idle), as (target, chip label). Ended sessions are not offered.
+ */
+internal fun triggerSessionTargets(state: AppState): List<Pair<String, String>> =
+    state.agents.values
+        .filter { it.session.state in LIVE_TRIGGER_SESSION_STATES }
+        .sortedByDescending { it.session.spawnedAt }
+        .map { "session:${it.id}" to "${it.role ?: "agent"} ${it.shortId}" }
+
+private val LIVE_TRIGGER_SESSION_STATES = setOf(SessionState.STARTING, SessionState.BUSY, SessionState.WAITING_INPUT, SessionState.IDLE)
+
 /** "any ticket" / "tickets for <assignee>" -- what a `start_next` trigger picks from. */
 internal fun triggerTarget(state: AppState, t: TriggerView): String =
     t.action.agentId?.takeIf { it.isNotBlank() }?.let { "next ticket assigned to ${assigneeLabel(state.visibleProfiles, it)}" } ?: "next startable ticket"
@@ -66,7 +79,7 @@ internal fun triggerSummary(state: AppState, t: TriggerView): String {
     val whenText = if (t.kind == "schedule") t.intervalMs?.let { "every ${humanDuration(it)}" } ?: "schedule (no interval)" else t.kind
     val what = if (t.action.kind == "prompt") {
         val project = t.projectId?.let { id -> state.projects.firstOrNull { it.id == id }?.name ?: id }
-        "mail ${t.action.agentId?.let { assigneeLabel(state.visibleProfiles, it) } ?: "?"}" + (project?.let { " in $it" } ?: "") + ": \"${t.action.prompt.orEmpty().take(60)}\""
+        "mail ${t.action.agentId?.let { if (it.startsWith("session:")) "session ${it.removePrefix("session:").take(8)}" else assigneeLabel(state.visibleProfiles, it) } ?: "?"}" + (project?.let { " in $it" } ?: "") + ": \"${t.action.prompt.orEmpty().take(60)}\""
     } else {
         triggerTarget(state, t)
     }
@@ -219,6 +232,14 @@ private fun TriggerForm(state: AppState, triggers: TriggersContext, onDone: () -
             if (!draft.isPrompt) Chip("anyone", if (draft.agentId == null) Palette.Accent else Palette.Muted, Modifier.clickable { draft = draft.copy(agentId = null) })
             lanes.forEach { lane -> Chip(lane, if (draft.agentId == lane) Palette.Accent else Palette.Muted, Modifier.clickable { draft = draft.copy(agentId = lane) }) }
             state.visibleProfiles.forEach { p -> p.id?.let { id -> Chip(p.name, if (draft.agentId == id) Palette.Accent else Palette.Muted, Modifier.clickable { draft = draft.copy(agentId = id) }) } }
+        }
+        if (draft.isPrompt) {
+            val live = triggerSessionTargets(state)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Live sessions", color = Palette.Muted, fontSize = 11.sp)
+                if (live.isEmpty()) Text("none running", color = Palette.Muted, fontSize = 11.sp)
+                live.forEach { (target, label) -> Chip(label, if (draft.agentId == target) Palette.Accent else Palette.Muted, Modifier.clickable { draft = draft.copy(agentId = target) }) }
+            }
         }
         if (draft.isPrompt) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {

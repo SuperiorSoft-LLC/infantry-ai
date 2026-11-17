@@ -25,6 +25,8 @@ enum class TriggerEventDisposition {
     COALESCED_PENDING,
     /** TRIGGER-NUDGE: no target session to mail and every agent of the role busy elsewhere; the next slot tries again. Never a trip. */
     DEFERRED_BUSY,
+    /** TRIG-TARGET-1: a `session:<id>` target is gone (ended or removed); nothing was sent and no replacement was started. */
+    TARGET_GONE,
 }
 
 /** One in-memory event-history row; persistence adapters can store these without conflating runs. */
