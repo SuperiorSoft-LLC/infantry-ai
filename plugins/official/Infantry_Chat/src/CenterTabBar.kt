@@ -24,6 +24,7 @@ fun CenterTabBar(state: AppState, current: String, modifier: Modifier = Modifier
         tagOf = { strip[it].testTag },
         barTag = CENTER_TAB_BAR_TAG,
         modifier = modifier,
+        iconOf = { strip[it].icon },
     ) { onPick(strip[it].id) }
 }
 

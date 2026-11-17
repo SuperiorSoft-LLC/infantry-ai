@@ -90,6 +90,7 @@ object RightPanelStrip : Block("tabStrip", "$BODY.strip") {
             tabs = strip.map { tabs.title(it, s.state) to (s.ui.rightTab == it.id) },
             tagOf = { strip[it].testTag },
             modifier = scope.modifier,
+            iconOf = { strip[it].icon },
         ) { s.ui.rightTab = strip[it].id }
     }
 }
