@@ -13,7 +13,7 @@ import kotlinx.serialization.json.contentOrNull
 private const val BASE = "POST /plugins/Infantry_Calendar/calendar/"
 
 /** The routes module.json declares (the tab may call only these). */
-val CALENDAR_ROUTES = listOf("list", "get", "save", "complete", "snooze", "delete").map { BASE + it }
+val CALENDAR_ROUTES = listOf("list", "get", "save", "complete", "snooze", "delete", "clear").map { BASE + it }
 
 /** The event the host republishes from the daemon's `calendar_changed` frame (module.json `daemonFrames`). */
 const val CALENDAR_CHANGED_EVENT = "daemon.calendar_changed"
@@ -44,5 +44,7 @@ class CalendarApi(private val daemon: DaemonAccess?) {
     suspend fun complete(id: String, status: String): Result<CalItem?> = call("complete", """{"id":"$id","status":"$status"}""").map { CalendarModel.parseItem(it) }
     /** CAL-3: ring again later; [preset] is `5m`, `1h` or `tomorrow`. */
     suspend fun snooze(id: String, preset: String): Result<CalItem?> = call("snooze", """{"id":"$id","preset":"$preset"}""").map { CalendarModel.parseItem(it) }
+    /** CAL-4: the explicit wipe of every item, its history and the calendar's owned triggers. */
+    suspend fun clear(): Result<Unit> = call("clear", "{}").map { }
     suspend fun delete(id: String): Result<Unit> = call("delete", """{"id":"$id"}""").map { }
 }

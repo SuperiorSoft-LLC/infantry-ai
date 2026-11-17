@@ -97,6 +97,7 @@ fun CalendarTab(ctx: TabContext) {
     var selected by remember { mutableStateOf<LocalDate?>(null) }
     var open by remember { mutableStateOf<CalItem?>(null) }
     var draft by remember { mutableStateOf<CalendarDraft?>(null) }
+    var confirmWipe by remember { mutableStateOf(false) }
 
     // Live updates: the daemon's calendar_changed frame (module.json daemonFrames), republished by the host.
     DisposableEffect(ctx.services) {
@@ -129,6 +130,7 @@ fun CalendarTab(ctx: TabContext) {
                 TextButton(onClick = { scope.launch { calendarState.animateScrollToMonth(month.plus(1, DateTimeUnit.MONTH)) } }) { Text(">") }
                 Spacer(Modifier.weight(1f))
                 OutlinedButton(onClick = { selected = today; scope.launch { calendarState.animateScrollToMonth(thisMonth) } }) { Text("Today", fontSize = 12.sp) }
+                TextButton(onClick = { confirmWipe = true }, enabled = live) { Text("Delete all", fontSize = 12.sp, color = Palette.Danger) }
                 Button(onClick = { draft = CalendarDraft(date = (selected ?: today).toString()) }, enabled = live) { Text("+ New", fontSize = 12.sp) }
             }
             error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
@@ -145,6 +147,13 @@ fun CalendarTab(ctx: TabContext) {
         DayPanel(selected, selected?.let { byDay[it] }.orEmpty(), Modifier.weight(1f), onOpen = { open = it }, onNew = { d -> draft = CalendarDraft(date = d.toString()) })
     }
 
+    if (confirmWipe) AhqAlertDialog(
+        onDismissRequest = { confirmWipe = false },
+        title = { Text("Delete all calendar data?") },
+        text = { Text("Every item, its history and the reminders' triggers are removed. This cannot be undone.") },
+        confirmButton = { Button(onClick = { confirmWipe = false; scope.launch { api.clear().onSuccess { open = null; version++ }.onFailure { error = it.message } } }) { Text("Delete all") } },
+        dismissButton = { TextButton(onClick = { confirmWipe = false }) { Text("Cancel") } },
+    )
     open?.let { item ->
         ItemDialog(item, api, onClose = { open = null }, onEdit = { draft = CalendarDraft.from(it); open = null }, onChanged = { version++ })
     }

@@ -10,6 +10,7 @@ The user's personal planner. Every agent may add to it; the user sees it in the 
 - `infantry_calendar_list`: filter by `from`/`to` day, `status`, `kind`, `projectId`.
 - `infantry_calendar_get`: one item with its history. `infantry_calendar_update`: change fields.
 - `infantry_calendar_complete`: mark `done` (default) or `cancelled`.
+- `infantry_calendar_clear`: delete ALL calendar data (needs `confirm: true`). Only when the user explicitly asks.
 
 If your tool list does not show these yet, call them with `infantry tool <name>`.
 
