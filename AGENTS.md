@@ -199,7 +199,7 @@ More guards outside that folder or not listed above (same rule: read the failure
 | `daemon/plugins/HookKindsGuardTest.kt`, `daemon/plugins/BoardApiImportGuardTest.kt` | Hook kinds and board API imports stay on their declared lists. |
 | `daemon/NoDemoInDaemonCoreGuardTest.kt` | The demo lockdown lives in `plugins/demo/Demo_Lock`, never in daemon core. |
 | `agents/registry/AgentRegistryLayerGuardTest.kt` | The agent registry never imports orchestration (board, tickets, worktrees, pipeline). |
-| `triggers/TriggerGuardTest.kt`, `triggers/TriggerPortsGuardTest.kt` | Trigger code reaches the board and sessions only through its ports. |
+| `triggers/TriggerPortsGuardTest.kt` (scans `plugins/official/Infantry_Triggers/daemon/src/main`), `plugins/official/Infantry_Triggers/daemon/src/test/kotlin/com/superiorsoftllc/infantry/plugins/official/triggers/daemon/TriggerGuardTest.kt` | Trigger code reaches the board and sessions only through its ports; a trigger's ceiling trips it. |
 | `infantryUiCore` jvmTest: `NoDemoInCoreGuardTest`, `PolicyGateGuardTest`, `HandCursorGuardTest`, `ControllerEchoGuardTest` | UI core names no demo; every declared plugin action asks a gate; clickables use the hand-cursor wrappers in `Clickables.kt`; the controller echo rule. |
 | `infantryUi` test: `PerfGuardTest`; `Infantry_Updater` daemon test: `UpdateTokenGuardTest` | UI perf budget; no update token ever enters the repo. |
 

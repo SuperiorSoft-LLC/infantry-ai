@@ -191,7 +191,6 @@ class DaemonCoreGuardTest {
             "brief" to "blocker: DaemonApi has no ticket/board/epic surface and DaemonMain, TicketBoard, the story handlers and the mailbox name each other directly; see docs/DAEMON-BOARD-API.md",
             "ledger" to "blocker: DaemonApi has no ticket/board/epic surface and DaemonMain, TicketBoard, the story handlers and the mailbox name each other directly; see docs/DAEMON-BOARD-API.md",
             "agents" to "blocker: AgentProfiles is wired into MailRouter and SessionManager spawn binding; needs a spawn-binding hook",
-            "triggers" to "blocker: DaemonApi has schedule() but no spawn-with-binding or ticket-transition events",
             "cli" to "blocker: the infantry CLI and MCP server import protocol, session and daemon types; needs the infantryCore module split first",
             "client" to "blocker: the console client shares protocol and mailbox types; moves with cli",
         )

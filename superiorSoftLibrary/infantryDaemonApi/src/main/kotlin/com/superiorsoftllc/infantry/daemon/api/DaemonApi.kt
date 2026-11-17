@@ -294,7 +294,10 @@ interface DaemonApi {
         // 1.65.0 (TRIG-API-1, additive): `ServicesApi.provideScoped` (a provider per calling module) and daemon.api.triggers
         // `Triggers` (+ TriggerFilter, TriggerActionHandler, TriggerFire, TriggerActionResult, the Trigger*Record DTOs,
         // TriggerOwnership, TriggerEvents). No provider yet: `services.find(Triggers::class)` is null until TRIG-2c.
-        const val VERSION = "1.65.0"
+        // 1.66.0 (TRIG-2c): `HttpCall.bodyBytes` (additive). Removed: `triggers.TriggerStore` and `TriggerHost.store` (the store moved
+        // into Infantry_Triggers with the service; a protocol-typed SDK interface cannot cross plugin class loaders). `Triggers` now has
+        // a provider: Infantry_Triggers publishes it with `services.provideScoped` (owner stamped from the calling module).
+        const val VERSION = "1.66.0"
     }
 }
 
@@ -609,6 +612,12 @@ data class HttpCall(
     val remoteAddress: String? = null,
     /** 1.29.0 (TRIG-2a): the values of a template route's `{name}` segments (`POST /hooks/{id}` -> `id`); empty on an exact route. */
     val pathParams: Map<String, String> = emptyMap(),
+    /**
+     * 1.66.0 (TRIG-2c, additive): the exact request body bytes, for a handler that verifies a signature over them; null when the host
+     * passed text only. A public route's body is read with a hard cap (`limits.plugins.publicRouteBodyKb`): over it, core answers 413
+     * and neither the check nor the handler runs. [body] is the same bytes decoded as UTF-8.
+     */
+    val bodyBytes: ByteArray? = null,
 )
 
 data class HttpReply(

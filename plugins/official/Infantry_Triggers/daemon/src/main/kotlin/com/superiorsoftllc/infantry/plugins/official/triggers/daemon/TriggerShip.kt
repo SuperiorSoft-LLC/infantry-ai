@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-package com.superiorsoftllc.infantry.triggers
+package com.superiorsoftllc.infantry.plugins.official.triggers.daemon
 
 /** Ship trigger ledger: each ticket id is eligible once, independent of reopen/close cycles. */
 class TriggerShip(

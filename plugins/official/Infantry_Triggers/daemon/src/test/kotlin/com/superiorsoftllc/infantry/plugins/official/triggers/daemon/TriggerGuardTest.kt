@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-package com.superiorsoftllc.infantry.triggers
+package com.superiorsoftllc.infantry.plugins.official.triggers.daemon
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -126,7 +126,7 @@ class TriggerGuardTest {
     @Test
     fun `trip report persists and publishes attention`() {
         var pushed: com.superiorsoftllc.infantry.daemon.api.attention.AttentionEntry? = null
-        val attention = com.superiorsoftllc.infantry.daemon.MemAttention(clock = { 42L }).also { it.eventSink = { e -> pushed = e } }
+        val attention = MemAttention(clock = { 42L }).also { it.eventSink = { e -> pushed = e } }
         val trip = TriggerTrip("trigger-x", "trigger_tripped", "FAILED", "run failed")
 
         trip.reportTo(attention)

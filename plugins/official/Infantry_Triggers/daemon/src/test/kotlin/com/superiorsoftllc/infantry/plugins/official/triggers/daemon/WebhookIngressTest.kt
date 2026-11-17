@@ -1,8 +1,7 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-package com.superiorsoftllc.infantry.triggers
+package com.superiorsoftllc.infantry.plugins.official.triggers.daemon
 
-import com.superiorsoftllc.infantry.persistence.TriggerRepository
 import com.superiorsoftllc.infantry.protocol.TriggerEventView
 import com.superiorsoftllc.infantry.protocol.TriggerSave
 import com.superiorsoftllc.infantry.protocol.TriggerView
@@ -22,7 +21,7 @@ class WebhookIngressTest {
      * remove-then-add below handed a reader an empty list ("List is empty" at `.single()`) or a
      * ConcurrentModificationException.
      */
-    private class MemoryTriggers : TriggerRepository {
+    private class MemoryTriggers : TriggerStore {
         val rows = LinkedHashMap<String, TriggerView>()
         val eventRows = mutableListOf<TriggerEventView>()
         val secrets = HashMap<String, String>()
@@ -51,7 +50,7 @@ class WebhookIngressTest {
 
     private fun service(over: MemoryTriggers = repo): TriggerService = TriggerService(
         repo = over,
-        attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+        attention = MemAttention(),
         startNext = { null },
         sessions = { null },
         clock = { nowMs },

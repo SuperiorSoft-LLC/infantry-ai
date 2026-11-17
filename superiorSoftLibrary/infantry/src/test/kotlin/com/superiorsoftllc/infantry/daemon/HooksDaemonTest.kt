@@ -3,7 +3,13 @@
 package com.superiorsoftllc.infantry.daemon
 
 import com.superiorsoftllc.infantry.protocol.TriggerSave
-import com.superiorsoftllc.infantry.triggers.WebhookIngress
+import com.superiorsoftllc.infantry.protocol.Envelope
+import com.superiorsoftllc.infantry.protocol.TriggerEventView
+import com.superiorsoftllc.infantry.protocol.TriggerView
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -23,6 +29,7 @@ class HooksDaemonTest {
     private val secret = "whsec-0123456789abcdef0123456789abcdef"
     private val fixtures = mutableListOf<DaemonFixture>()
     private val http = HttpClient.newHttpClient()
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     @AfterTest
     fun stopAll() {
@@ -30,7 +37,7 @@ class HooksDaemonTest {
         fixtures.clear()
     }
 
-    private fun launch(): DaemonFixture = DaemonFixture.launch(token = token).also { fixtures += it }
+    private fun launch(): DaemonFixture = DaemonFixture.launch(token = token, pluginsRoot = TestDaemonPlugins.triggersRoot()).also { fixtures += it }
 
     private fun post(
         f: DaemonFixture, path: String, body: ByteArray, headers: Map<String, String> = emptyMap(),
@@ -42,13 +49,32 @@ class HooksDaemonTest {
     }
 
     private fun signed(body: ByteArray, delivery: String, ts: Long = System.currentTimeMillis() / 1_000, key: String = secret) = mapOf(
-        WebhookIngress.SIGNATURE_HEADER to WebhookIngress.sign(key, ts, delivery, body),
-        WebhookIngress.TIMESTAMP_HEADER to ts.toString(),
-        WebhookIngress.DELIVERY_HEADER to delivery,
+        "X-Infantry-Signature" to sign(key, ts, delivery, body),
+        "X-Infantry-Timestamp" to ts.toString(),
+        "X-Infantry-Delivery" to delivery,
     )
 
-    private fun hook(f: DaemonFixture): String =
-        f.daemon.triggers.save(TriggerSave(name = "gh", kind = "webhook", coalesceMs = 0, webhookSecret = secret)).id
+    /**
+     * TRIG-2c: the service runs in Infantry_Triggers now (its classes are not on this module's test path), so the test signs as any
+     * sender does (the documented v1 scheme: hex HMAC-SHA256 of "v1:<ts>:<delivery>:<raw body>") and reaches the service by its frames.
+     */
+    private fun sign(key: String, ts: Long, delivery: String, body: ByteArray): String {
+        val mac = Mac.getInstance("HmacSHA256").apply { init(SecretKeySpec(key.toByteArray(Charsets.UTF_8), "HmacSHA256")) }
+        return "v1=" + mac.doFinal("v1:$ts:$delivery:".toByteArray(Charsets.UTF_8) + body).joinToString("") { "%02x".format(it) }
+    }
+
+    private fun hook(f: DaemonFixture): String {
+        val mark = f.client.frames.size
+        f.send(Envelope(Envelope.TRIGGER_SAVE, json.encodeToString(TriggerSave.serializer(), TriggerSave(name = "gh", kind = "webhook", coalesceMs = 0, webhookSecret = secret))))
+        return json.decodeFromString(TriggerView.serializer(), f.client.awaitAfter(mark, "the saved trigger") { it.type == Envelope.TRIGGER }.data).id
+    }
+
+    private fun events(f: DaemonFixture, id: String): List<TriggerEventView> {
+        val mark = f.client.frames.size
+        f.send(Envelope(Envelope.TRIGGER_EVENTS, id))
+        val frame = f.client.awaitAfter(mark, "the trigger events") { it.type == Envelope.TRIGGER_EVENTS }
+        return json.decodeFromString(ListSerializer(TriggerEventView.serializer()), frame.data)
+    }
 
     @Test
     fun aSignedPostIsAdmittedWithoutTheBearerAndRecorded() {
@@ -58,7 +84,7 @@ class HooksDaemonTest {
         val response = post(f, "/hooks/$id", body, signed(body, "delivery-1"))
         assertEquals(200, response.statusCode(), response.body())
         assertTrue(response.body().contains("\"disposition\""), response.body())
-        assertEquals("delivery-1", f.daemon.triggers.events(id).single().deliveryId)
+        assertEquals("delivery-1", events(f, id).single().deliveryId)
     }
 
     @Test
@@ -71,7 +97,7 @@ class HooksDaemonTest {
         // The daemon bearer is NOT a substitute for the signature on this route.
         assertEquals(401, post(f, "/hooks/$id", body, mapOf("Authorization" to "Bearer $token")).statusCode())
         assertEquals(401, post(f, "/hooks/trg-unknown", body, signed(body, "d")).statusCode())
-        assertTrue(f.daemon.triggers.events(id).isEmpty())
+        assertTrue(events(f, id).isEmpty())
     }
 
     @Test

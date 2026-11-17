@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-package com.superiorsoftllc.infantry.triggers
+package com.superiorsoftllc.infantry.plugins.official.triggers.daemon
 
 import com.superiorsoftllc.infantry.daemon.api.attention.AttentionKinds
 import com.superiorsoftllc.infantry.daemon.api.attention.Attention
@@ -8,7 +8,6 @@ import com.superiorsoftllc.infantry.daemon.api.board.PromptStart
 import com.superiorsoftllc.infantry.daemon.api.board.StartResult
 import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerRunEvent
 import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerSession
-import com.superiorsoftllc.infantry.daemon.api.triggers.TriggerStore
 import com.superiorsoftllc.infantry.protocol.TicketStatus
 import com.superiorsoftllc.infantry.protocol.TriggerAction
 import com.superiorsoftllc.infantry.protocol.TriggerEventView
@@ -67,6 +66,8 @@ class TriggerService(
     private val clock: () -> Long = System::currentTimeMillis,
     private val idFactory: () -> String = { UUID.randomUUID().toString() },
     private val pumpMs: Long = 1_000,
+    /** TRIG-2c: where a failure line goes (the plugin passes `api.log`, LOG-SEAM-1); stderr when unset (tests). */
+    private val log: (String) -> Unit = { System.err.println("[infantry] $it") },
     /**
      * TRIGGER-NUDGE: false = the pump waits for [start]. The daemon starts it only once the mailbox and the sessions are
      * loaded, so a catch-up fire on boot mails a session that exists into a mailbox that remembers its queue.
@@ -120,6 +121,9 @@ class TriggerService(
 
     fun list(): List<TriggerView> = repo.all()
 
+    /** TRIG-2c: one trigger, or null (the [com.superiorsoftllc.infantry.daemon.api.triggers.Triggers] service's `get`). */
+    fun get(triggerId: String): TriggerView? = repo.get(triggerId.trim())
+
     /**
      * Under the lock, unlike [list]: a run settles in two writes inside one locked block -- the trigger row
      * (whose push is a client's cue to re-read the events) and then the event's relabel (`started` ->
@@ -146,7 +150,7 @@ class TriggerService(
     fun onTicketDone() {
         for (t in repo.all().filter { it.kind == "ship" }) {
             runCatching { fire(t.id, source = "ship") }
-                .onFailure { System.err.println("[infantry] ship fire for ${t.id} failed: ${it.message}") }
+                .onFailure { log("ship fire for ${t.id} failed: ${it.message}") }
         }
     }
 
@@ -363,7 +367,7 @@ class TriggerService(
         val launch: PromptStart = try {
             startPrompt(trigger.action.agentId.orEmpty(), trigger.action.prompt.orEmpty())
         } catch (e: Exception) {
-            System.err.println("[infantry] trigger ${trigger.id} prompt start failed: ${e.message}")
+            log("trigger ${trigger.id} prompt start failed: ${e.message}")
             PromptStart.Refused("prompt start failed: ${e.message}")
         }
         synchronized(this) {
@@ -388,7 +392,7 @@ class TriggerService(
         val delivery: PromptDelivery = try {
             deliver(TriggerNudge(trigger.id, trigger.name, trigger.projectId, trigger.action.agentId.orEmpty(), trigger.action.prompt.orEmpty()))
         } catch (e: Exception) {
-            System.err.println("[infantry] trigger ${trigger.id} prompt delivery failed: ${e.message}")
+            log("trigger ${trigger.id} prompt delivery failed: ${e.message}")
             PromptDelivery.Refused("prompt delivery failed: ${e.message}")
         }
         synchronized(this) {
@@ -429,7 +433,7 @@ class TriggerService(
         val answer: StartResult? = try {
             startNext(trigger.action.agentId)
         } catch (e: Exception) {
-            System.err.println("[infantry] trigger $triggerId start_next failed: ${e.message}")
+            log("trigger $triggerId start_next failed: ${e.message}")
             synchronized(this) {
                 if (closing) return
                 finishRefused(run, "start_next failed: ${e.message}")
@@ -492,7 +496,7 @@ class TriggerService(
     private fun tripped(trip: TriggerTrip) {
         val t = repo.get(trip.triggerId) ?: return
         store(t.copy(state = TRIPPED, trippedAt = clock(), trippedReason = trip.detail))
-        runCatching { trip.reportTo(attention) }.onFailure { System.err.println("[infantry] trip attention failed: ${it.message}") }
+        runCatching { trip.reportTo(attention) }.onFailure { log("trip attention failed: ${it.message}") }
     }
 
     private fun tripStored(t: TriggerView, reason: String) {
@@ -527,7 +531,7 @@ class TriggerService(
                 fireDueSchedules()
                 for ((id, guard) in guards.toMap()) if (guard.pump()) sync(id)
             }
-        }.onFailure { System.err.println("[infantry] trigger pump failed: ${it.message}") }
+        }.onFailure { log("trigger pump failed: ${it.message}") }
     }
 
     /**
@@ -543,7 +547,7 @@ class TriggerService(
             nextDueAt[id] = now + interval
             repo.get(id)?.let { store(it.copy(nextFireAt = now + interval)) }
             runCatching { fire(id, source = "schedule") }
-                .onFailure { System.err.println("[infantry] schedule fire for $id failed: ${it.message}") }
+                .onFailure { log("schedule fire for $id failed: ${it.message}") }
         }
     }
 

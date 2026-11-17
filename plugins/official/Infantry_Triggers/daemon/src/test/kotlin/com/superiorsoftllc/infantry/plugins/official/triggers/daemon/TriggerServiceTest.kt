@@ -1,11 +1,10 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-package com.superiorsoftllc.infantry.triggers
+package com.superiorsoftllc.infantry.plugins.official.triggers.daemon
 
 import com.superiorsoftllc.infantry.daemon.api.board.PromptStart
 import com.superiorsoftllc.infantry.daemon.api.board.StartResult
 import com.superiorsoftllc.infantry.daemon.api.board.TicketInfo
-import com.superiorsoftllc.infantry.persistence.TriggerRepository
 import com.superiorsoftllc.infantry.protocol.Ticket
 import com.superiorsoftllc.infantry.protocol.TicketStart
 import com.superiorsoftllc.infantry.protocol.TriggerEventView
@@ -35,7 +34,7 @@ class TriggerServiceTest {
      * Unsynchronized, the remove-then-add below handed a reader an empty list ("List is empty" at `.single()`)
      * or a ConcurrentModificationException. Same fix as WebhookIngressTest (2169237e).
      */
-    private class MemoryTriggers : TriggerRepository {
+    private class MemoryTriggers : TriggerStore {
         private val rows = LinkedHashMap<String, TriggerView>()
         private val eventRows = mutableListOf<TriggerEventView>()
         private val periods = HashMap<String, Long>()
@@ -69,7 +68,7 @@ class TriggerServiceTest {
     fun triggerViewEchoesIntervalMs() {
         val service = TriggerService(
             repo = MemoryTriggers(),
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = { null },
             sessions = { null },
             clock = { 0L },
@@ -86,7 +85,7 @@ class TriggerServiceTest {
     fun `triggerSaveAcceptsScheduleKind`() {
         val service = TriggerService(
             repo = MemoryTriggers(),
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = { null },
             sessions = { null },
             clock = { 0L },
@@ -103,7 +102,7 @@ class TriggerServiceTest {
     fun `triggerSaveAcceptsShipKind`() {
         val service = TriggerService(
             repo = MemoryTriggers(),
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = { null },
             sessions = { null },
             clock = { 0L },
@@ -120,7 +119,7 @@ class TriggerServiceTest {
     fun `shipTriggerFiresWhenTicketReachesDone`() {
         val service = TriggerService(
             repo = MemoryTriggers(),
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = { null },
             sessions = { null },
             clock = { 0L },
@@ -142,7 +141,7 @@ class TriggerServiceTest {
         var startCalls = 0
         val service = TriggerService(
             repo = MemoryTriggers(),
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = {
                 startCalls++
                 null
@@ -177,7 +176,7 @@ class TriggerServiceTest {
         )
         val service = TriggerService(
             repo = MemoryTriggers(),
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = { startResult(startedTicket) },
             sessions = { null },
             clock = { now },
@@ -205,7 +204,7 @@ class TriggerServiceTest {
         )
         val service = TriggerService(
             repo = MemoryTriggers(),
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = {
                 startCalls.incrementAndGet()
                 startResult(startedTicket)
@@ -243,7 +242,7 @@ class TriggerServiceTest {
     fun `scheduleIntervalBelowOneMinuteIsRefused`() {
         val service = TriggerService(
             repo = MemoryTriggers(),
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = { null },
             sessions = { null },
             clock = { 0L },
@@ -264,7 +263,7 @@ class TriggerServiceTest {
         var startCalls = 0
         val service = TriggerService(
             repo = MemoryTriggers(),
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = {
                 startCalls++
                 null
@@ -297,7 +296,7 @@ class TriggerServiceTest {
         )
         val service = TriggerService(
             repo = MemoryTriggers(),
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = {
                 startCalls.incrementAndGet()
                 startResult(refusedTicket)
@@ -339,7 +338,7 @@ class TriggerServiceTest {
         )
         val beforeRestart = TriggerService(
             repo = repo,
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = { startResult(startedTicket) },
             sessions = { null },
             clock = { now },
@@ -351,7 +350,7 @@ class TriggerServiceTest {
         // The daemon restarts: a brand-new service over the SAME repository. The interval must come back with it.
         val afterRestart = TriggerService(
             repo = repo,
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = { startResult(startedTicket) },
             sessions = { null },
             clock = { now },
@@ -392,7 +391,7 @@ class TriggerServiceTest {
         )
         val service = TriggerService(
             repo = MemoryTriggers(),
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = {
                 launchThread.set(Thread.currentThread())
                 entered.countDown()
@@ -429,7 +428,7 @@ class TriggerServiceTest {
     private class ParkingTriggers(
         private val disposition: String,
         private val memory: MemoryTriggers = MemoryTriggers(),
-    ) : TriggerRepository by memory {
+    ) : TriggerStore by memory {
         val parked = CountDownLatch(1)
         private val released = CountDownLatch(1)
         fun release() = released.countDown()
@@ -462,7 +461,7 @@ class TriggerServiceTest {
         val repo = ParkingTriggers("nothing_to_start")
         val service = TriggerService(
             repo = repo,
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = { null }, // the empty board: there is nothing to start
             sessions = { null },
             clock = { 0L },
@@ -506,7 +505,7 @@ class TriggerServiceTest {
         )
         val service = TriggerService(
             repo = repo,
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = { startResult(refused) },
             sessions = { null },
             clock = { 0L },
@@ -548,7 +547,7 @@ class TriggerServiceTest {
         val repo = ParkingTriggers("nothing_to_start")
         val service = TriggerService(
             repo = repo,
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = { null }, // the empty board: there is nothing to start
             sessions = { null },
             clock = { 0L },
@@ -579,7 +578,7 @@ class TriggerServiceTest {
     }
 
     /** A repository that runs [beforeInsertEvent] ahead of every event write. Everything else is plain in-memory storage. */
-    private class HookedTriggers(private val memory: MemoryTriggers = MemoryTriggers()) : TriggerRepository by memory {
+    private class HookedTriggers(private val memory: MemoryTriggers = MemoryTriggers()) : TriggerStore by memory {
         @Volatile var beforeInsertEvent: (TriggerEventView) -> Unit = {}
         override fun insertEvent(event: TriggerEventView, keep: Long) {
             beforeInsertEvent(event)
@@ -612,7 +611,7 @@ class TriggerServiceTest {
         )
         val service = TriggerService(
             repo = repo,
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = {
                 val id = triggerId.get()
                 durableAtHandOut.set(repo.events(id).map { it.disposition } to repo.get(id)?.state)
@@ -652,7 +651,7 @@ class TriggerServiceTest {
     fun `twoTriggersRunningAtOnceEachSettleOnlyTheirOwnRun`() {
         val service = TriggerService(
             repo = MemoryTriggers(),
-            attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            attention = MemAttention(),
             startNext = { null },
             sessions = { null },
             startPrompt = { agentId, _ -> PromptStart.Started("s-$agentId") },
@@ -708,7 +707,7 @@ class TriggerServiceTest {
         val inBoard = java.util.concurrent.CountDownLatch(1)
         val release = java.util.concurrent.CountDownLatch(1)
         val service = TriggerService(
-            repo = MemoryTriggers(), attention = com.superiorsoftllc.infantry.daemon.MemAttention(),
+            repo = MemoryTriggers(), attention = MemAttention(),
             startNext = { inBoard.countDown(); release.await(5, java.util.concurrent.TimeUnit.SECONDS); null },
             sessions = { null }, pumpMs = 60_000, autoStart = false,
         )
