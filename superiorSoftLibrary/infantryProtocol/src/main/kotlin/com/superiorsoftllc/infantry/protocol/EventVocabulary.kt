@@ -393,7 +393,8 @@ object EventVocabulary {
     // **1.152.0 (SECRETS-2b, ticket-8e2b3f70) is ADDITIVE + BEHAVIOURAL**: project-scoped secrets. `secret_field_set` / `secret_field_delete` / `secret_delete` take `project` (absent = app scope); `secret_state.entries[].project`; frame `secret_move` ({name, from?, to?}); a saved command's run resolves each secret name in its project first, then the app scope. See CONTRACT.md.
     // **1.153.0 (ROLE-PLUGIN-1, ticket-4bf756fe) is ADDITIVE**: roles a plugin declares (module.json `roles`). `roles` / `role` entries gain `plugin` (the declaring module, "" = none), `disabled` (that module is not loaded), `edited` (the owner changed the seeded role; the module never rewrites it), `cards` and `tools` (preferred card types / tool names by id); `role_save` takes `cards` / `tools` (null = keep). See CONTRACT.md.
     // **1.154.0 (MCP-REGISTRY-1, ticket-7b276192) is ADDITIVE**: the MCP registry. Frames `mcp_list` / `mcp_get` / `mcp_add` / `mcp_update` / `mcp_remove` / `mcp_set_enabled` / `mcp_test` / `mcp_assign` / `mcp_revoke` / `mcp_grants` / `mcp_plan`, answers `mcp_servers` / `mcp_server` / `mcp_status` / `mcp_grants` / `mcp_plan`, event `mcp_changed`; sessions `mcpServers` [{name, state, detail?, toolCount?}]. User MCP servers are walled: a session gets one only through a grant. See CONTRACT.md.
-    const val VERSION = "1.154.0"
+    // **1.155.0 (TRIG-API-1, ticket-a5a09f2f) is ADDITIVE**: trigger fields `fireAt`, `deleteAfterFire`, `owner`, `ref` on `TriggerSave` / `TriggerView`; kind `at`, target `session:<id>` and disposition `target_gone` are specified (served from TRIG-2d; refused until then). Every default is today's behaviour. See CONTRACT.md.
+    const val VERSION = "1.155.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

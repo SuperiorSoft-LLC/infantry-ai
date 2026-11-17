@@ -131,7 +131,10 @@ import io.ktor.server.response.header
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import io.ktor.server.routing.route
+import io.ktor.server.request.receiveChannel
 import io.ktor.server.request.receiveText
+import io.ktor.utils.io.readRemaining
+import kotlinx.io.readByteArray
 import io.ktor.server.request.path
 import io.ktor.server.request.httpMethod
 import io.ktor.server.websocket.DefaultWebSocketServerSession
@@ -151,12 +154,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import com.superiorsoftllc.infantry.protocol.RoleSave
-import com.superiorsoftllc.infantry.protocol.TriggerEventView
-import com.superiorsoftllc.infantry.protocol.TriggerSave
-import com.superiorsoftllc.infantry.protocol.TriggerView
-import com.superiorsoftllc.infantry.triggers.TriggerNudges
-import com.superiorsoftllc.infantry.triggers.TriggerService
-import com.superiorsoftllc.infantry.triggers.WebhookIngress
 import com.superiorsoftllc.infantry.usage.GateDecision
 import com.superiorsoftllc.infantry.usage.LaunchGate
 import com.superiorsoftllc.infantry.usage.LaunchOrigin
@@ -303,7 +300,6 @@ private data class HealthCounts(
     val pods: Int,
     val runsInFlight: Int,
     val attentionOpen: Int,
-    val triggersTripped: Int,
 )
 
 /** Ticket 55d60a5e: the health limits, resolved once at start-up (see [LimitRegistry.HEALTH_DB_TIMEOUT_SECONDS]). */
@@ -470,8 +466,6 @@ class InfantryDaemon(
     val budget: OperatorBudget,
     /** Story 9.7b: observed limit state per provider. */
     val providerStates: ProviderStateTracker,
-    /** Story 9.5: the daemon's triggers. */
-    val triggers: TriggerService,
     /** PW-3: the workspaces, stored in [store] and checked against the project store. */
     val workspaces: WorkspaceStore,
     /** PORT-1: where [start] records the bound port (`<stateDir>/daemon.port`); null = recorded nowhere. */
@@ -574,9 +568,6 @@ class InfantryDaemon(
         com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.lateProgress(pluginHost, "plugins")
 
     fun close() {
-        // Triggers stop observing FIRST: the kills below must not read as trigger-run failures; a trigger
-        // still running is tripped at the next boot instead ("daemon restarted mid-run").
-        runCatching { triggers.close() }
         background.forEach { runCatching { it.close() } }
         // PROMPT-1: nobody can answer after this; every suspended asker gets deny / no answer.
         runCatching { pendingPrompts.closeAll() }
@@ -989,7 +980,14 @@ class InfantryDaemon(
             val agentModules = agentsWired.modules
             val agents = agentsWired.profiles
             // TRAITS-T4: the chokepoint's fallback, so a spawn path that resolves no instance itself still freezes one.
-            manager.instanceFor = agents::instanceFor
+            manager.instanceFor = { agentId, role -> agents.instanceFor(agentId, role) }
+            // PK-1 (plan CAL-PLAN-2 B3.1): the PLUGIN TOOLS briefing of every role session, from the AgentBriefing service (none = no section).
+            agents.pluginBriefing = { role, pid ->
+                com.superiorsoftllc.infantry.agents.PluginBriefingSection.of(
+                    pluginHost.get().serviceRegistry.find(com.superiorsoftllc.infantry.daemon.api.knowledge.AgentBriefing::class), role, pid,
+                    settings.limit(LimitRegistry.KNOWLEDGE_PLUGINS_MAX_CHARS), settings.limit(LimitRegistry.KNOWLEDGE_PLUGINS_SUMMARY_MAX_CHARS),
+                )
+            }
             manager.assistantDir = assistantDir
             // PROGRESS-S5: the opt-in estimated mode's per-project label durations outlive a restart.
             manager.progressEstimates = com.superiorsoftllc.infantry.session.FileProgressEstimates(
@@ -1475,30 +1473,12 @@ class InfantryDaemon(
             var triggerTickets: com.superiorsoftllc.infantry.daemon.api.board.Tickets? = null
             val triggerCaller = com.superiorsoftllc.infantry.daemon.api.Caller(owner = true)
             val triggerApi = com.superiorsoftllc.infantry.daemon.wiring.LocalTriggerApi(
-                store = store.triggers,
                 getSession = manager::get,
                 listSessions = manager::list,
                 send = mail::send,
                 launch = { agentId, prompt, projectId -> triggerPrompt(triggerTickets, agentId, prompt, projectId, triggerCaller) },
                 pending = { mailId -> mailbox.message(mailId)?.state == MessageState.QUEUED },
             )
-            val triggerNudges = TriggerNudges(
-                sessions = triggerApi::sessions,
-                send = triggerApi::sendMail,
-                startSession = triggerApi::startPrompt,
-            )
-            val triggers = com.superiorsoftllc.infantry.daemon.wiring.TriggersWiring.build(
-                repo = store.triggers,
-                attention = attentionSvc,
-                startNext = { filter -> (triggerTickets?.startNext(filter, triggerCaller) as? com.superiorsoftllc.infantry.daemon.api.board.BoardResult.Ok)?.value },
-                startPrompt = { agentId, prompt -> triggerPrompt(triggerTickets, agentId, prompt, null, triggerCaller) },
-                sessions = triggerApi::session,
-                deliverPrompt = triggerNudges::deliver,
-                mailPending = triggerApi::mailPending,
-            )
-            triggerApi.onRunEvent(triggers::onRunEvent)
-            triggers.eventSink = { view -> broadcastTrigger(clients, view) }
-            // H12b: a committed move into done reaches the ship triggers, after the board commit has released.
             // BASICS-KILL-1 (contract 1.118.0): a project with autoRemoveDoneWorkers ends and removes a done ticket's worker.
             val doneWorkerReaper = DoneWorkerReaper(
                 manager = manager,
@@ -1515,7 +1495,7 @@ class InfantryDaemon(
             // ticket-event log, the core-built [LocalBoardHost] over it (the plugin builds its TicketBoard on this host through the board runtime), the
             // ticket files and the three core event consumers. The repo a ticket was cut in and an epic's base branch are asked of the board port.
             val ticketCore = com.superiorsoftllc.infantry.daemon.wiring.BoardWiring.buildTicketServices(
-                withBoard, store, settings, triggers, doneWorkerReaper, relatedRef, relatedDescriptionRef, boardPorts,
+                withBoard, store, settings, doneWorkerReaper, relatedRef, relatedDescriptionRef, boardPorts,
             )
             val ticketEvents: com.superiorsoftllc.infantry.backlog.TicketEventLog? = ticketCore?.events
             val ticketServices = ticketCore?.services
@@ -1849,6 +1829,8 @@ class InfantryDaemon(
                         clientBroadcast = { type, data -> val frame = Envelope(type, data); for (c in clients.toList()) c.trySend(frame) },
                         // STACK-NEUTRAL-2: api.processes / api.launchEnv / api.settings.
                         processHost = localProcesses, launchEnvHost = launchEnvHost,
+                        // TRIG-2c: api.triggerHost, what the Triggers plugin runs its service on (sessions, mail, the unattended launch, run ends).
+                        triggerHost = triggerApi,
                         pluginSettings = settings.forPlugins(),
                         // CORE-PROGRESS-DOWNLOAD-1: the core string settings the host reads (progress.presenter, downloads.*).
                         coreStringSetting = { settings.plainString(it) },
@@ -2388,8 +2370,6 @@ class InfantryDaemon(
             plugins.markStarted()
             // Deliver anything that was queued before the last shutdown to a session already at rest.
             mail.onStartup()
-            // TRIGGER-NUDGE: only now may a schedule fire (a slot missed while down fires on this first pump).
-            triggers.start()
             // Contract 1.11.0: this process's identity, taken AFTER reconciliation and recovery so a session
             // they touched (and that streamed nothing here) reads as older than the replay history.
             // CLI-PTY-5: with kept chat history every session may have history here, whatever its last heartbeat.
@@ -2424,10 +2404,10 @@ class InfantryDaemon(
                 routing {
                     // DAEMON-PLUGINS-1: each plugin's declared top-level routes, and every plugin's own `/plugins/<id>/...`.
                     for ((method, path) in plugins.topLevelRoutes()) {
-                        route(path, io.ktor.http.HttpMethod.parse(method)) { handle { answerPluginRoute(call, plugins) } }
+                        route(path, io.ktor.http.HttpMethod.parse(method)) { handle { answerPluginRoute(call, plugins, settings.limit(com.superiorsoftllc.infantry.settings.LimitRegistry.PLUGIN_PUBLIC_ROUTE_BODY_KB) * 1024) } }
                     }
                     route("${com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.PLUGIN_PREFIX}{module}/{path...}") {
-                        handle { answerPluginRoute(call, plugins) }
+                        handle { answerPluginRoute(call, plugins, settings.limit(com.superiorsoftllc.infantry.settings.LimitRegistry.PLUGIN_PUBLIC_ROUTE_BODY_KB) * 1024) }
                     }
                     get("/health") {
                         // Ticket 55d60a5e: the database part runs on the gate's own thread, bounded; a stuck database
@@ -2439,7 +2419,6 @@ class InfantryDaemon(
                                 pods = store.pods.open().size,
                                 runsInFlight = store.runs.unfinished().size,
                                 attentionOpen = attentionSvc.list().count { it.ackedAt == null },
-                                triggersTripped = triggers.trippedCount(),
                             )
                         }
                         val counts = (outcome as? HealthGate.Outcome.Ok)?.value?.also { lastHealthCounts = it } ?: lastHealthCounts
@@ -2461,7 +2440,8 @@ class InfantryDaemon(
                                 providers = manager.providers.map { it.id },
                                 attentionOpen = counts?.attentionOpen ?: 0,
                                 providerStatus = manager.providers.associate { it.id to providerStates.state(it.id).status.wireName },
-                                triggersTripped = counts?.triggersTripped ?: 0,
+                                // TRIG-2c: the Triggers plugin reports its tripped count as a status field (`hooks.status`); no plugin = 0.
+                                triggersTripped = plugins.statusFields()["triggersTripped"]?.toIntOrNull() ?: 0,
                                 database = database,
                                 databaseDetail = detail,
                                 pluginStatus = plugins.statusFields(),
@@ -2479,8 +2459,6 @@ class InfantryDaemon(
                     // Phase 6 agent-facing mail API: how a spawned CLI agent answers a delivered message.
                     mailRoutes(mail, mailbox) { request -> plugins.mailRefusal(request.from, request.to, request.allowCrossProject) }
                     // UPDATER-1: `/update/*` (status / check / apply / client) is served by the Infantry_Updater plugin's daemon half.
-                    // P9.6: signature-admitted webhook ingress (exempt from the bearer in AccessPolicy, signed per hook).
-                    hookRoutes(WebhookIngress(triggers))
                     // STALL-2: the harness watch hooks (claude PreToolUse http, opencode plugin, pi extension) ask here.
                     watchHookRoutes(
                         approvalOf = { id -> manager.get(id)?.let { manager.toolApprovalFor(id).mode } },
@@ -2514,7 +2492,6 @@ class InfantryDaemon(
                             settings,
                             identity,
                             providerStates,
-                            triggers,
                             harnesses,
                             com.superiorsoftllc.infantry.persistence.PromptStore(store.prompts),
                             com.superiorsoftllc.infantry.persistence.SkillStore(store.skills),
@@ -2681,7 +2658,6 @@ class InfantryDaemon(
                 attention = attentionSvc,
                 budget = budget,
                 providerStates = providerStates,
-                triggers = triggers,
                 workspaces = workspaces,
                 portFile = portFile,
                 // BUG-PERM-1: the Tool approval reader is put back with the executable resolver (both read this store).
@@ -2690,7 +2666,9 @@ class InfantryDaemon(
                 portReservation = portReservation,
                 handover = handover,
                 processHost = localProcesses,
-                background = listOf(healthCloser, AutoCloseable { usageRefresher.stop() }, runnerLinkService, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, AutoCloseable { harnessModulesRef.get()?.close() }),
+                // TRIG-2c: the trigger host stops reporting run ends FIRST: the shutdown's kills must not read as trigger-run failures (a trigger still
+                // running is tripped at the next boot, "daemon restarted mid-run"); the Triggers plugin itself stops later, with the plugins.
+                background = listOf(AutoCloseable { triggerApi.close() }, healthCloser, AutoCloseable { usageRefresher.stop() }, runnerLinkService, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, AutoCloseable { harnessModulesRef.get()?.close() }),
                 afterSessions = listOf(plugins),
                 healthSettings = healthSettings,
                 deploymentMode = deploymentMode,
@@ -2993,24 +2971,6 @@ private fun broadcastMail(clients: List<Channel<Envelope>>, event: MailEvent, at
     if (envelope != null) for (client in clients) client.trySend(envelope)
 }
 
-/** Contract 1.14.0: push a changed trigger to every connected client. */
-private fun broadcastTrigger(clients: List<Channel<Envelope>>, view: TriggerView) {
-    val envelope = Envelope(Envelope.TRIGGER, json.encodeToString(TriggerView.serializer(), view))
-    for (client in clients) client.trySend(envelope)
-}
-
-private fun triggersEnvelope(all: List<TriggerView>): Envelope =
-    Envelope(Envelope.TRIGGERS, json.encodeToString(ListSerializer(TriggerView.serializer()), all))
-
-/** A trigger request: a refusal is an `error` naming the verb and the problem; nothing changes. */
-private inline fun triggerRequest(type: String, block: () -> Envelope?): Envelope? = try {
-    block()
-} catch (e: IllegalArgumentException) {
-    Envelope(Envelope.ERROR, "$type refused: ${e.message ?: "invalid request"}")
-} catch (e: Exception) {
-    Envelope(Envelope.ERROR, "$type failed: ${e.message ?: e::class.simpleName}")
-}
-
 /** USAGE-PACE: a ticket worker in one of these states no longer spends its meter. */
 private val DEAD_SESSION_STATES = setOf(
     com.superiorsoftllc.infantry.session.SessionState.EXITED,
@@ -3113,7 +3073,6 @@ private suspend fun handleConnection(
     settings: ProjectSettings,
     identity: DaemonIdentity,
     providerStates: ProviderStateTracker,
-    triggers: TriggerService,
     harnesses: HarnessRegistry,
     prompts: com.superiorsoftllc.infantry.persistence.PromptStore,
     skills: com.superiorsoftllc.infantry.persistence.SkillStore,
@@ -3723,7 +3682,7 @@ private suspend fun handleConnection(
                                 launchWarning(manager, resolved.providerId)?.let(outgoing::trySend)
                                 // TRAITS-T4/T5: resolved first and passed in, so the frozen row is what this turn rendered.
                                 // P10-K15: with the skill ids the row will freeze, so the turn renders exactly those.
-                                val instance = agents.instanceFor(resolved.agentId, resolved.role)?.let { manager.withSkills(it, null) }
+                                val instance = agents.instanceFor(resolved.agentId, resolved.role, resolved.projectId)?.let { manager.withSkills(it, null) }
                                 // BUG-G2d: the session the last `new` named as its origin is charged for this one; the
                                 // check that counts is here, under the guard's lock, right before the session exists.
                                 val origin = spawnOrigin
@@ -3824,25 +3783,6 @@ private suspend fun handleConnection(
                             Envelope(Envelope.ERROR, "new refused: $reason")
                         }
                     }
-                }
-
-                // Contract 1.14.0 -- triggers. A change is pushed to every client by the service's sink, and for
-                // the requester that push is the answer; `trigger_fire` also answers its sender directly.
-                Envelope.TRIGGER_SAVE -> triggerRequest(envelope.type) { triggers.save(TriggerSave.decode(envelope.data)); null }
-                Envelope.TRIGGER_LIST -> triggerRequest(envelope.type) { triggersEnvelope(triggers.list()) }
-                Envelope.TRIGGER_FIRE -> triggerRequest(envelope.type) {
-                    Envelope(Envelope.TRIGGER, json.encodeToString(TriggerView.serializer(), triggers.fire(envelope.data)))
-                }
-                Envelope.TRIGGER_ARM -> triggerRequest(envelope.type) { triggers.arm(envelope.data); null }
-                Envelope.TRIGGER_DISABLE -> triggerRequest(envelope.type) { triggers.disable(envelope.data); null }
-                Envelope.TRIGGER_DELETE -> triggerRequest(envelope.type) {
-                    triggers.delete(envelope.data)
-                    val all = triggersEnvelope(triggers.list())
-                    for (client in clients) client.trySend(all)
-                    null
-                }
-                Envelope.TRIGGER_EVENTS -> triggerRequest(envelope.type) {
-                    Envelope(Envelope.TRIGGER_EVENTS, json.encodeToString(ListSerializer(TriggerEventView.serializer()), triggers.events(envelope.data)))
                 }
 
                 // Contract 1.13.0: every provider's latest observed limit state -- `unknown` until observed.
@@ -5132,13 +5072,37 @@ private fun scheduledTicker(intervalMillis: Long, task: () -> Unit): AutoCloseab
     return AutoCloseable { executor.shutdownNow() }
 }
 
-/** DAEMON-PLUGINS-1: one HTTP request to a plugin route, answered by its plugin ([DaemonPluginHost.answerRoute]); 404 when none. */
-internal suspend fun answerPluginRoute(call: io.ktor.server.application.ApplicationCall, plugins: com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost) {
+/**
+ * DAEMON-PLUGINS-1: one HTTP request to a plugin route, answered by its plugin ([DaemonPluginHost.answerRoute]); 404 when none.
+ * TRIG-2c: a PUBLIC route (no daemon token) gets its body read with a hard cap of [publicBodyCapBytes]: a declared Content-Length
+ * over it is refused 413 unread, and a chunked or lying body is cut off one byte past it, so an unauthenticated caller can never
+ * make the daemon buffer more than the cap + 1 bytes. Its exact bytes reach the plugin as [com.superiorsoftllc.infantry.daemon.api.HttpCall.bodyBytes].
+ */
+internal suspend fun answerPluginRoute(
+    call: io.ktor.server.application.ApplicationCall,
+    plugins: com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost,
+    publicBodyCapBytes: Long = com.superiorsoftllc.infantry.settings.LimitRegistry.PLUGIN_PUBLIC_ROUTE_BODY_KB.default * 1024,
+) {
     val request = call.request
     // CONN-CLOSE-EMPTY-1: read a body only when the request declares one. A bodiless DELETE (python urllib: no Content-Length,
     // Connection: close) has no body to wait for; receiveText() on it never returns because the client keeps its side open.
     val hasBody = (request.headers[io.ktor.http.HttpHeaders.ContentLength]?.toLongOrNull() ?: 0L) > 0L || request.headers.contains(io.ktor.http.HttpHeaders.TransferEncoding)
-    val body = if (request.httpMethod == io.ktor.http.HttpMethod.Get || !hasBody) "" else runCatching { call.receiveText() }.getOrDefault("")
+    val readsBody = request.httpMethod != io.ktor.http.HttpMethod.Get && hasBody
+    val bytes: ByteArray? = if (readsBody && plugins.isPublicRoute(request.httpMethod.value, request.path())) {
+        val declared = request.headers[io.ktor.http.HttpHeaders.ContentLength]?.toLongOrNull()
+        val read = if (declared != null && declared > publicBodyCapBytes) null
+            else runCatching { call.receiveChannel().readRemaining(publicBodyCapBytes + 1).readByteArray() }.getOrNull()
+        if (read == null || read.size > publicBodyCapBytes) {
+            call.respondText("body is larger than $publicBodyCapBytes bytes", status = io.ktor.http.HttpStatusCode.PayloadTooLarge)
+            return
+        }
+        read
+    } else null
+    val body = when {
+        bytes != null -> bytes.toString(Charsets.UTF_8)
+        readsBody -> runCatching { call.receiveText() }.getOrDefault("")
+        else -> ""
+    }
     val reply = plugins.answerRoute(
         com.superiorsoftllc.infantry.daemon.api.HttpCall(
             method = request.httpMethod.value,
@@ -5149,6 +5113,7 @@ internal suspend fun answerPluginRoute(call: io.ktor.server.application.Applicat
                 passAuthorization = plugins.routeOpenings(request.httpMethod.value, request.path())?.passAuthorization == true,
             ),
             body = body,
+            bodyBytes = bytes,
             remoteAddress = request.local.remoteAddress,
         ),
     ) ?: com.superiorsoftllc.infantry.daemon.api.HttpReply(404, "no plugin answers ${request.httpMethod.value} ${request.path()}")
@@ -5208,7 +5173,6 @@ class TicketServices private constructor(val files: TicketFiles, val filesText: 
             store: InfantryStore,
             events: TicketEventLog,
             settings: SettingsService,
-            triggers: TriggerService,
             doneWorkerReaper: DoneWorkerReaper,
             relatedRef: AtomicReference<RelatedWorkSource>,
             relatedDescriptionRef: AtomicReference<RelatedDescription>,
@@ -5230,9 +5194,8 @@ class TicketServices private constructor(val files: TicketFiles, val filesText: 
             val ticketFilesExec = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
                 Thread(r, "infantry-ticket-files").also { it.isDaemon = true }
             }
-            // BOARD-API-2 (DP-4b): the three core consumers subscribe like a plugin would; a cursor survives a restart, so a transition not
+            // BOARD-API-2 (DP-4b): the core consumers subscribe like a plugin would; a cursor survives a restart, so a transition not
             // handled when the daemon stopped is replayed on the next start.
-            events.subscribe("core.triggers") { e -> if (e.isTransition) triggers.onTicketTransition(e.ticketId, e.to!!) }
             events.subscribe("core.done-worker-reaper") { e -> if (e.isTransition) doneWorkerReaper.onTicketTransition(e.ticketId, e.to!!) }
             events.subscribe("core.ticket-files") { e ->
                 if (e.kind == TicketEvent.DONE) ticketFilesExec.execute {

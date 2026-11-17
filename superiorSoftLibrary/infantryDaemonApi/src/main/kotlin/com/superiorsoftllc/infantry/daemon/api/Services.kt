@@ -21,6 +21,17 @@ interface ServicesApi {
     fun <T : Any> find(type: KClass<T>): T?
 
     /**
+     * Publish a CALLER-SCOPED provider of [type] (TRIG-API-1, DaemonApi 1.65.0, additive): the host calls [factory] with the module id
+     * of whoever calls [find] (`core` for the daemon itself) and caches one instance per caller, so a provider learns who is asking
+     * without trusting an argument (e.g. it stamps the owner of what the caller makes). [find] is unchanged for callers. Same tier rule
+     * and one-provider-per-type rule as [provide] (a plain and a scoped provider of one type clash). A cached instance is dropped when
+     * its caller unloads, and all of them when the handle closes (or this plugin unloads); an instance that is [AutoCloseable] is
+     * closed then.
+     */
+    fun <T : Any> provideScoped(type: KClass<T>, factory: (callerModuleId: String) -> T): AutoCloseable =
+        error("this daemon has no scoped service registry")
+
+    /**
      * Publish a string endpoint under [id] (1.25.0, additive): a contract two plugins share without sharing classes (each plugin has its own
      * class loader), so a plugin can declare an extension point as an id prefix and other plugins contribute under it. Same tier rule and
      * one-provider-per-id rule as [provide]; closing the handle (or unloading the plugin) removes it.
@@ -41,4 +52,6 @@ object NoServices : ServicesApi {
     override fun <T : Any> provide(type: KClass<T>, impl: T): AutoCloseable = error("this daemon has no service registry")
     override fun <T : Any> find(type: KClass<T>): T? = null
     override fun publishEndpoint(id: String, endpoint: ServiceEndpoint): AutoCloseable = error("this daemon has no service registry")
+    override fun <T : Any> provideScoped(type: KClass<T>, factory: (callerModuleId: String) -> T): AutoCloseable =
+        error("this daemon has no service registry")
 }

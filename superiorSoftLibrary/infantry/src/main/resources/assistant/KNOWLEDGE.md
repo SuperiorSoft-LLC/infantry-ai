@@ -94,7 +94,7 @@ Rules learned shipping Mascot (the avatar plugin). Agents and the Assistant must
 - **Fallback.** If a community avatar renderer fails to load (`NoClassDefFoundError`), the app falls back to Portrait.
 - **Publish procedure (only on the owner's explicit yes).** 1) bump the version in the plugin's `module.json`, 2) build the jar, 3) attach it as a release asset on `SuperiorSoft-LLC/infantry-plugins`, 4) add `community/<Plugin>.json` on main with size and sha256, 5) hand-push `community.json` to `gh-pages` (the publish workflow cannot deploy). Users then press Plugins > Sources > Refresh (the app caches the catalog) before Update turns active.
 - **Live proof before "done".** Merged is not verified. Test in a real app window against the published catalog: install or update the plugin, switch the setting, confirm the visible change, restart and confirm it persisted. Say "merged, not verified" until you did.
-- **Mascot settings** (Configuration > Plugins > "Mascot avatars", node `Infantry_Mascot.avatars`): Motion (Static default / Focus only / Everywhere), Pose change ms, State map (`SESSION_STATE=Mood;...`, default `STARTING=Greet;BUSY=Working;WAITING_INPUT=Notify;IDLE=Idle;EXITED=Sleepy;ORPHANED=Confused;FAILED=Alert`), Idle fidget seconds, Role looks (`role=eyes/finish/cat`). The avatar style itself is chosen in the avatar picker; Mascot must be installed and enabled first.
+- **Mascot settings.** Shipped by the plugin itself (Infantry_Mascot `knowledge`); present only while it is enabled.
 
 ## Troubleshooting
 

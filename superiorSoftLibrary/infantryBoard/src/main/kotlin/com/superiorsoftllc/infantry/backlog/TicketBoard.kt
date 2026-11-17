@@ -360,7 +360,7 @@ class TicketBoard(
         host.sessions.checkSpawn(executor.provider, executor.model)?.let { return PromptLaunch.Refused(it) }
         // TRAITS-T4/T5: the instance is resolved first and passed in, so the stored row is what this turn rendered.
         // P10-K15: with the skill ids the row will freeze, so the turn renders exactly those.
-        val instance = host.agents.instanceFor(profile.id, profile.role)?.let { host.agents.withSkills(it, null) }
+        val instance = host.agents.instanceFor(profile.id, profile.role, projectId)?.let { host.agents.withSkills(it, null) }
         // P10-K9: the session's own project (TRIGGER-NUDGE: the trigger's, when it names one).
         val first = composeFirstTurn(instance?.instructions, instance?.toSnapshots().orEmpty(), profile.role, profile.id, prompt, host.context.knowledgeSection(projectId, profile.role), host.context.skillsSection(instance?.skillIds), host.context.environmentSection(projectId))
         return when (val started = host.sessions.start(
@@ -1406,7 +1406,7 @@ class TicketBoard(
 
         // TRAITS-T4/T5: resolved BEFORE composing, then passed to startNew, so the frozen row is what this start rendered.
         // P10-K15: with the skill ids the row will freeze for this ticket, so the `skills` source renders exactly those.
-        val instance = host.agents.instanceFor(profile.id, profile.role)?.let { host.agents.withSkills(it, id) }
+        val instance = host.agents.instanceFor(profile.id, profile.role, row.projectId)?.let { host.agents.withSkills(it, id) }
         val input = briefInput(
             row, initial, profile.role, profile.id, instance,
             startedBy?.let { starter -> reportTo(starter) },
