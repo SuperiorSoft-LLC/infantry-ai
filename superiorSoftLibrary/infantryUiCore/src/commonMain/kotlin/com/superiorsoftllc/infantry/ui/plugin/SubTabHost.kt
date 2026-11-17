@@ -45,6 +45,7 @@ fun SubTabHost(factory: TabFactory, hostId: String, context: TabContext, picked:
             fontSize = 12.sp,
             tagOf = { kids[it].testTag },
             barTag = SUB_TAB_BAR_TAG_PREFIX + hostId,
+            iconOf = { kids[it].icon },
         ) { onPick(kids[it].id) }
         Box(Modifier.fillMaxWidth().weight(1f)) { factory.Content(current.id, context) }
     }

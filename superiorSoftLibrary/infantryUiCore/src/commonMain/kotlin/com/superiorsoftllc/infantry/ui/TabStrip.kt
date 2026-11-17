@@ -4,6 +4,13 @@ package com.superiorsoftllc.infantry.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
@@ -35,6 +42,8 @@ fun TabBar(
     tagOf: ((Int) -> String)? = null,
     barTag: String? = null,
     modifier: Modifier = Modifier,
+    /** TAB-ICONS-1: the icon before label [i] (a tab's own [com.superiorsoftllc.infantry.ui.plugin.TabProvider.icon]); null = none. */
+    iconOf: ((Int) -> ImageVector?)? = null,
     onPick: (Int) -> Unit,
 ) {
     ArrowScrollRow(
@@ -44,7 +53,11 @@ fun TabBar(
     ) {
         tabs.forEachIndexed { i, (label, on) ->
             Column(Modifier.let { m -> tagOf?.let { m.testTag(it(i)) } ?: m }.clickable { onPick(i) }.padding(horizontal = hPad, vertical = 7.dp)) {
-                Text(label, maxLines = 1, softWrap = false, color = if (on) Palette.Accent else Palette.Muted, fontSize = fontSize, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                val color = if (on) Palette.Accent else Palette.Muted
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    iconOf?.invoke(i)?.let { Icon(it, null, Modifier.size((fontSize.value * 1.2f).dp), tint = color); Spacer(Modifier.width(4.dp)) }
+                    Text(label, maxLines = 1, softWrap = false, color = color, fontSize = fontSize, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                }
             }
         }
     }

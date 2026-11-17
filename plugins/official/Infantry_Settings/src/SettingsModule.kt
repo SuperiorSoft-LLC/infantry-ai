@@ -47,7 +47,7 @@ private fun settingsTab() = TabProvider(
 private fun pluginsTab() = TabProvider(
     id = PLUGINS_TAB_ID, container = TabContainers.CENTER, order = 90,
     title = { "Plugins" },
-    icon = tabIcon("plugins", { moveTo(5f, 5f); lineTo(19f, 5f); lineTo(19f, 19f); lineTo(5f, 19f); close() }),
+    icon = tabIcon("plugins", { moveTo(4f, 9f); lineTo(9f, 9f); lineTo(9f, 7f); curveTo(9f, 3.5f, 14f, 3.5f, 14f, 7f); lineTo(14f, 9f); lineTo(19f, 9f); lineTo(19f, 20f); lineTo(4f, 20f); close() }),
     testTag = "center-tab-PLUGINS", parent = SETTINGS_TAB_ID,
 ) {
     val port = LocalPlatformHost.current.pluginManager
