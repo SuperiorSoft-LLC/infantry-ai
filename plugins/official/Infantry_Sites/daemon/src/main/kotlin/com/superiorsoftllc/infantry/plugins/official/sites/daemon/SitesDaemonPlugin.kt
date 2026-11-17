@@ -136,7 +136,7 @@ class SitesDaemonPlugin : DaemonPlugin {
     // ---- agent tools: read only, declared in module.json `daemon.tools` ------------------------------------
 
     internal fun tools(service: SitesService, ssh: SitesSsh): List<DaemonTool> = listOf(
-        tool("infantry_sites_list", "List your hosting servers (id, name, status, ip, region, size, createdAt, destroyAt).", obj(), read = true) { service.list() },
+        tool("infantry_sites_list", "List your hosting servers (id, name, status, sshReady, ip, region, size, createdAt, destroyAt). sshReady=false (or status new) means the server is still being set up: SSH is not available yet, wait 1-3 minutes.", obj(), read = true) { service.list() },
         tool(SSH_EXEC, "Run a shell command on one of your hosting servers over SSH (no setup: this PC's key and a short-lived certificate). Returns exitCode, stdout, stderr (capped). 'server' is a name or id from infantry_sites_list, optional when you have one server.",
             obj("server" to "string", "command" to "string", "timeoutSec" to "integer", required = listOf("command"))) { a ->
             val timeout = a.str("timeoutSec")?.toLongOrNull()?.coerceAtMost(maxExecSec)
@@ -181,6 +181,9 @@ class SitesDaemonPlugin : DaemonPlugin {
         override fun call(call: ToolCall): ToolResult = try {
             ToolResult(run(call.arguments).toString())
         } catch (e: SitesException) {
+            if (e.kind == SitesException.SETTING_UP) return ToolResult(buildJsonObject {
+                put("status", SitesException.SETTING_UP); put("retryAfterSec", e.retryAfterSec ?: SitesException.DEFAULT_RETRY_SEC); put("message", e.message ?: "")
+            }.toString())
             ToolResult("${e.kind}: ${e.message}", isError = true)
         } catch (e: IllegalArgumentException) {
             ToolResult(e.message ?: "bad arguments", isError = true)

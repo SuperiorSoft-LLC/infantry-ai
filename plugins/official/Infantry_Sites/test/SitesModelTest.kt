@@ -31,3 +31,15 @@ class SitesModelTest {
         assertEquals("Verify your email address to create a server.", SitesParser.message("email_unverified", "x"))
     }
 }
+
+class SitesReadyTest {
+    @Test
+    fun `setting up shows for new and for running without ssh, a missing sshReady is ready`() {
+        assertEquals("Setting up…", siteStatusLabel("new"))
+        assertEquals("Setting up…", siteStatusLabel("running", sshReady = false))
+        assertEquals("Online", siteStatusLabel("running", sshReady = true))
+        assertEquals("Offline", siteStatusLabel("off", sshReady = false))
+        val st = SitesParser.parse("""{"state":"ready","servers":[{"id":"a","status":"running"},{"id":"b","status":"running","sshReady":false}]}""")!!
+        assertEquals(listOf(true, false), st.servers.map { it.sshReady })
+    }
+}

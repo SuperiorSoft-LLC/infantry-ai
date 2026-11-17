@@ -149,6 +149,17 @@ class SitesTest {
     }
 
     @Test
+    fun `sshReady is read, and a missing one counts as ready`() {
+        stub.servers = mutableListOf(
+            mapOf("id" to ID1, "name" to "a", "status" to "running", "sshReady" to "false"),
+            mapOf("id" to ID1, "name" to "b", "status" to "running", "sshReady" to "true"),
+            mapOf("id" to ID1, "name" to "c", "status" to "active"),
+        )
+        val ready = service().list().map { (it as JsonObject)["sshReady"]!!.jsonPrimitive.content }
+        assertEquals(listOf("false", "true", "true"), ready)
+    }
+
+    @Test
     fun `403 splits on the error field, email_unverified vs forbidden`() {
         val e = failure(403, """{"error":"email_unverified","message":"x"}""")
         assertEquals(SitesException.EMAIL_UNVERIFIED, e.kind)

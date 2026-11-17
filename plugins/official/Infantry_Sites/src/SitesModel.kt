@@ -16,7 +16,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 
 /** One hosting server as the daemon shows it. The id is a UUID string. */
-data class SiteServer(val id: String, val name: String, val status: String, val ip: String, val region: String, val size: String, val createdAt: String, val destroyAt: String)
+data class SiteServer(val id: String, val name: String, val status: String, val ip: String, val region: String, val size: String, val createdAt: String, val destroyAt: String, val sshReady: Boolean = true)
 
 /** What the Servers section draws: [state] is `ready`, `signed_out`, `not_entitled`, `limit`, `not_configured`, `unavailable` or `not_found`. */
 data class SitesState(val state: String, val servers: List<SiteServer>, val limit: Int?, val message: String?, val signUpUrl: String?, val reclaimableUntil: Long? = null, val planStatus: String? = null, val siteUrl: String? = null)
@@ -32,7 +32,7 @@ object SitesParser {
 
     private fun server(o: JsonObject): SiteServer? {
         val id = o.str("id") ?: return null
-        return SiteServer(id, o.str("name") ?: id, o.str("status").orEmpty(), o.str("ip").orEmpty(), o.str("region").orEmpty(), o.str("size").orEmpty(), o.str("createdAt").orEmpty(), o.str("destroyAt").orEmpty())
+        return SiteServer(id, o.str("name") ?: id, o.str("status").orEmpty(), o.str("ip").orEmpty(), o.str("region").orEmpty(), o.str("size").orEmpty(), o.str("createdAt").orEmpty(), o.str("destroyAt").orEmpty(), (o["sshReady"] as? JsonPrimitive)?.booleanOrNull ?: true)
     }
 
     /** The answer of an action route: null when it worked, else (state, error) of the refusal. */

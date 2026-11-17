@@ -16,7 +16,7 @@ import kotlinx.serialization.json.put
 import java.util.UUID
 
 /** Why a hosting call did not happen; [kind] is what the UI keys its state on. */
-class SitesException(val kind: String, message: String) : RuntimeException(message) {
+class SitesException(val kind: String, message: String, val retryAfterSec: Long? = null) : RuntimeException(message) {
     companion object {
         const val SIGNED_OUT = "signed_out"
         const val NOT_ENTITLED = "not_entitled"
@@ -29,6 +29,9 @@ class SitesException(val kind: String, message: String) : RuntimeException(messa
         const val NOT_RUNNING = "not_running"
         const val HOST_KEY = "host_key_mismatch"
         const val AUTH_FAILED = "auth_failed"
+        /** WS-READY-1: the server is up but not yet authorizing SSH. Not a failure; try again shortly. */
+        const val SETTING_UP = "setting_up"
+        const val DEFAULT_RETRY_SEC = 15L
     }
 }
 
@@ -87,6 +90,7 @@ class SitesService(
         val first = send(base, "POST", path, body, emptyMap())
         val r = if (first.status == 401) send(base, "POST", path, body, emptyMap()) else first
         val json = r.body.takeIf { it.isNotBlank() }?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() } as? JsonObject
+        val code = (json?.get("error") as? JsonPrimitive)?.contentOrNull
         fun str(o: JsonObject?, k: String) = (o?.get(k) as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
         when (r.status) {
             in 200..299 -> {}
@@ -94,7 +98,12 @@ class SitesService(
             401 -> throw SitesException(SitesException.SIGNED_OUT, "sign in again")
             403 -> throw SitesException(SitesException.NOT_ENTITLED, "your account may not open SSH to servers (permission hosting.servers.ssh)")
             404 -> throw SitesException(SitesException.NOT_FOUND, "no such server on your account")
-            409 -> throw SitesException(SitesException.NOT_RUNNING, "the server is not running; start it on the site")
+            409 -> if (code == "server_setting_up") {
+                val secs = (json?.get("retryAfterSec") as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
+                    ?: r.headers.entries.firstOrNull { it.key.equals("Retry-After", ignoreCase = true) }?.value?.trim()?.toLongOrNull()
+                    ?: SitesException.DEFAULT_RETRY_SEC
+                throw SitesException(SitesException.SETTING_UP, settingUpText(secs), secs)
+            } else throw SitesException(SitesException.NOT_RUNNING, "the server is not running; start it on the site")
             503 -> throw SitesException(SitesException.NOT_CONFIGURED, "SSH access is not configured on the hosting service yet")
             else -> { answer(r); throw SitesException(SitesException.UNAVAILABLE, "the hosting service answered HTTP ${r.status}") } // 429, 5xx: the shared map
         }
@@ -156,12 +165,15 @@ class SitesService(
         fun s(k: String) = (o[k] as? JsonPrimitive)?.contentOrNull.orEmpty()
         return buildJsonObject {
             put("id", s("id")); put("name", s("name")); put("status", s("status")); put("ip", s("ip"))
+            put("sshReady", (o["sshReady"] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull() ?: true) // missing = an older API = ready
             put("region", s("region")); put("size", s("size")); put("createdAt", s("createdAt")); put("destroyAt", s("destroyAt"))
         }
     }
 
     companion object {
         const val DEFAULT_SSH_PORT = 22
+
+        fun settingUpText(secs: Long) = "This server is still being set up and authorizing connections. This is normal for a new server (usually 1-3 minutes). Try again in about $secs seconds."
         private val UUID_RE = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
         fun isUuid(v: String) = UUID_RE.matches(v)
