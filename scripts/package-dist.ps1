@@ -11,7 +11,7 @@
 
   Build mode (-Sha):
     1. resolves the sha and requires it to be on the release branch (feature-agenthq-mvp),
-    2. builds it in a clean detached worktree under %TEMP% (createDistributable, --no-parallel, Xmx3g / Metaspace 2g),
+    2. builds it in a clean detached worktree under %TEMP% (createDistributable, --no-parallel, heap from -GradleHeap / INFANTRY_PACKAGE_HEAP / gradle.properties, Metaspace 2g),
        signed with -Keystore/-KeyAlias (IHQ_STOREPASS in env), else devSign (says so in the output and manifest),
     3. copies the app image to <build.root>\builds\<sha>\, writes BUILD-INFO.txt + MANIFEST.txt there,
     4. runs copy-integrity checks (exe exists and size matches, file count and bytes match, BUILD-INFO sha matches),
@@ -49,6 +49,7 @@ param(
   [string]$Preset,          # BUILD-PLUGINS-1: a named preset from plugins/build-presets.json (full, no-optional, core-only)
   [string]$ReleaseBranch = 'feature-agenthq-mvp',
   [string]$ProjectId,
+  [string]$GradleHeap,      # PACKAGE-HEAP-1: Gradle JVM max heap (e.g. 6g); default env INFANTRY_PACKAGE_HEAP, else org.gradle.jvmargs in gradle.properties
   [string]$Label            # CAL-BRANCH-1: a variant name (e.g. calendar): folder <stamp>-<sha8>-<label>, version <v>-<label>+<stamp>
 )
 
@@ -171,8 +172,16 @@ if ($Keystore) {
   $signing = 'devSign'
   $signArgs = @('-Pihq.devSign=true')
 }
+# PACKAGE-HEAP-1: no hard-coded heap (AGENTS.md rule 5): flag, then env, then gradle.properties, so the script follows the repo.
+if (-not $GradleHeap) { $GradleHeap = $env:INFANTRY_PACKAGE_HEAP }
+if (-not $GradleHeap) {
+  $m = Select-String -Path (Join-Path $repo 'gradle.properties') -Pattern '^org\.gradle\.jvmargs=.*?-Xmx(\d+[gGmM])' | Select-Object -First 1
+  if ($m) { $GradleHeap = $m.Matches[0].Groups[1].Value }
+}
+if (-not $GradleHeap) { Fail "no Gradle heap: pass -GradleHeap, set INFANTRY_PACKAGE_HEAP, or put -Xmx in org.gradle.jvmargs of gradle.properties" }
+if ($GradleHeap -notmatch '^\d+[gGmM]$') { Fail "-GradleHeap must look like 6g or 6144m (got '$GradleHeap')" }
 $gradleArgs = @(':superiorSoftLibrary:infantryUi:createDistributable', '--no-parallel', '--no-daemon',
-  '-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g',  # quoted per argument when run (Invoke-Gradle)
+  "-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx$GradleHeap",  # quoted per argument when run (Invoke-Gradle)
   # the worktree is detached, so the packaging guard sees HEAD; the sha was checked to be on $ReleaseBranch above
   '-PallowAnyBranch=true') + $signArgs
 # MASCOT-BUNDLED-1: always pass the resolved list, even empty: with no flag Gradle leaves out every standalone plugin, which would undo -Include.
