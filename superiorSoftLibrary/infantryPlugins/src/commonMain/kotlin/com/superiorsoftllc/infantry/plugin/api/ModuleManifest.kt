@@ -69,6 +69,11 @@ data class ModuleManifest(
     val endpoints: List<EndpointDeclaration> = emptyList(),
     /** Events the module may publish or observe. */
     val events: List<String> = emptyList(),
+    /**
+     * DAEMON-FRAMES-1: the daemon broadcast frame types (a daemon half's `api.events.broadcast`) the host republishes to this module
+     * alone, as the event `daemon.<type>` with the frame body in `data["data"]`. The module also lists `daemon.<type>` in [events].
+     */
+    val daemonFrames: List<String> = emptyList(),
     /** Platform services the module may use, by [ServiceKey.id]. */
     val services: List<String> = emptyList(),
     val tabs: List<TabDeclaration> = emptyList(),
