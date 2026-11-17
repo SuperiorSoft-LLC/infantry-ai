@@ -81,6 +81,9 @@ object Palette {
     /** UI-SHAPE-1: the one soft corner of every text field, text area, dropdown trigger and dropdown menu (not a pill, not square). */
     val FieldShape: androidx.compose.foundation.shape.RoundedCornerShape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
 
+    /** UI-BUTTON-SHAPE-1: the one soft corner of every text/outlined/filled button (6dp like the chips; never a pill). */
+    val ButtonShape: androidx.compose.foundation.shape.RoundedCornerShape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+
     /** Text on the accent: the original dark brown on light accents (amber), white on deep ones (the emblem red). */
     val OnAccent: Color get() = if (Accent.luminance() > 0.4f) Color(0xFF1A1200) else Color.White
 }

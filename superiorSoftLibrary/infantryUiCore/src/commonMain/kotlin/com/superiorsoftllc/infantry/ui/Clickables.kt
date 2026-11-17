@@ -68,10 +68,11 @@ fun Button(
     enabled: Boolean = true,
     colors: ButtonColors = ButtonDefaults.buttonColors(),
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
+    shape: androidx.compose.ui.graphics.Shape = Palette.ButtonShape,
     content: @Composable RowScope.() -> Unit,
 ) = androidx.compose.material3.Button(
     onClick = onClick, modifier = modifier.handCursor(enabled), enabled = enabled,
-    colors = colors, contentPadding = contentPadding, content = content,
+    shape = shape, colors = colors, contentPadding = contentPadding, content = content,
 )
 
 @Composable
@@ -81,7 +82,7 @@ fun OutlinedButton(
     enabled: Boolean = true,
     colors: ButtonColors = ButtonDefaults.outlinedButtonColors(),
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
-    shape: androidx.compose.ui.graphics.Shape = ButtonDefaults.outlinedShape,
+    shape: androidx.compose.ui.graphics.Shape = Palette.ButtonShape,
     border: androidx.compose.foundation.BorderStroke? = ButtonDefaults.outlinedButtonBorder(enabled),
     content: @Composable RowScope.() -> Unit,
 ) = androidx.compose.material3.OutlinedButton(
@@ -96,10 +97,11 @@ fun TextButton(
     enabled: Boolean = true,
     colors: ButtonColors = ButtonDefaults.textButtonColors(),
     contentPadding: PaddingValues = ButtonDefaults.TextButtonContentPadding,
+    shape: androidx.compose.ui.graphics.Shape = Palette.ButtonShape,
     content: @Composable RowScope.() -> Unit,
 ) = androidx.compose.material3.TextButton(
     onClick = onClick, modifier = modifier.handCursor(enabled), enabled = enabled,
-    colors = colors, contentPadding = contentPadding, content = content,
+    shape = shape, colors = colors, contentPadding = contentPadding, content = content,
 )
 
 @Composable
