@@ -936,6 +936,13 @@ object LimitRegistry {
         max = 100_000, zeroMeans = "no cap",
     )
 
+    /** PK-3 (plan CAL-PLAN-2 B4): how often an MCP server checks the daemon's tool list to send notifications/tools/list_changed. */
+    val MCP_TOOLS_WATCH_SECONDS = LimitDef(
+        "limits.mcp.toolsWatchSeconds", 5, "seconds",
+        "How often the MCP bridge asks the daemon for its tool list to tell the agent's CLI (notifications/tools/list_changed) that a plugin was loaded, unloaded or changed. Larger = fewer daemon calls.",
+        max = 86_400, zeroMeans = "never check (no list_changed notices)",
+    )
+
     val MCP_MAX_RESULT_CHARS = LimitDef(
         "limits.mcp.maxResultChars", 8000, "chars",
         "The most characters one MCP tool result may carry to an agent; a longer one is cut with a note saying how to narrow the call.",
@@ -1315,7 +1322,7 @@ object LimitRegistry {
         TICKET_GET_DEFAULT_DETAIL, TICKET_SUMMARY_DESCRIPTION_CHARS,
         SKILLS_INLINE_MAX_CHARS,
         KNOWLEDGE_PLUGINS_MAX_CHARS, KNOWLEDGE_PLUGINS_SUMMARY_MAX_CHARS,
-        MCP_MAX_RESULT_CHARS,
+        MCP_MAX_RESULT_CHARS, MCP_TOOLS_WATCH_SECONDS,
         TOOLS_INBOX_LIMIT, TOOLS_LIST_LIMIT, TOOLS_SESSION_TAIL_LINES, TOOLS_BOARD_QUEUE_SHOWN, TOOLS_BOARD_DONE_SHOWN,
         MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         USAGE_STALE_MAX_HOURS, USAGE_BACKOFF_MAX_MINUTES, USAGE_MANUAL_REFRESH_FLOOR_SECONDS,
