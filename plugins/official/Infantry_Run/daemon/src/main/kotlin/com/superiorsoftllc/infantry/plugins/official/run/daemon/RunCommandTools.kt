@@ -45,6 +45,7 @@ class RunCommandTools(
             listOf("id" to "command id (upsert key)", "name" to "display name", "command" to "shell command line",
                 "cwd" to "working dir relative to the project's folder (. or blank = the folder itself; an absolute path must be inside it)",
                 "project" to "project id the command is for", "allowCrossProject" to "boolean: allow a project other than the caller's",
+                "detached" to "boolean: launch an app that stays open after the command (no pipes, not tracked, not killed with the daemon); default false",
                 "renders" to "array of template=out secret-template renders (relative to the command folder) done before each run; outputs are deleted when it ends"), listOf("id"), false) { save(it) },
         tool("infantry_run_command_delete", "Delete a saved command by id.", listOf("id" to "command id", "project" to "project id", "allowCrossProject" to "boolean"), listOf("id"), false) { delete(it) },
         tool("infantry_run_start", "Start a saved command; returns the run id.", listOf("id" to "command id", "project" to "project id", "allowCrossProject" to "boolean"), listOf("id"), false) { start(it) },
@@ -120,6 +121,7 @@ class RunCommandTools(
             str(a, "cwd")?.let { put("cwd", it) }
             put("argv", JsonArray(argv.map { JsonPrimitive(it) }))
             (a["renders"] as? JsonArray)?.let { put("renders", it) }
+            (a["detached"] as? JsonPrimitive)?.booleanOrNull?.let { put("detached", it) }
         }
         val refusal = store.save(Json.encodeToString(JsonObject.serializer(), data), manager::unlessRunning, str(a, "project") ?: c.clientProjectId)
         if (refusal != null) return err("infantry_run_command_save refused: $refusal")

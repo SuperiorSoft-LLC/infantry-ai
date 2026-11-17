@@ -2384,6 +2384,8 @@ object WireRequests {
         id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String> = emptyList(),
         /** RUN-SCOPE-1: the project the command belongs to (its cwd is relative to that project's folder); null = sent without. */
         project: String? = null,
+        /** RUN-TAB-1: only sent when true, so an older daemon (strict decode) still takes the save. */
+        detached: Boolean = false,
     ): Envelope {
         val fields = linkedMapOf<String, JsonElement>(
             "id" to JsonPrimitive(id),
@@ -2395,6 +2397,7 @@ object WireRequests {
         fields["graceMillis"] = JsonPrimitive(graceMillis)
         // 1.135.0 (SECRETS-2): only when there are any, so an older daemon (strict decode) still takes the save.
         if (secrets.isNotEmpty()) fields["secrets"] = kotlinx.serialization.json.JsonArray(secrets.map { JsonPrimitive(it) })
+        if (detached) fields["detached"] = JsonPrimitive(true)
         return Envelope(Envelope.COMMAND_SAVE, JsonObject(fields).toString())
     }
 

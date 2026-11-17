@@ -63,3 +63,22 @@ class CommandStoreTest {
         assertEquals(Envelope.RUN, runs.start("""{"commandId":"build"}""").reply.type)
     }
 }
+
+/** RUN-TAB-1: `detached` is opt-in; a command saved without it is not detached, and the flag survives a save and a list. */
+class CommandDetachedFlagTest {
+    private val home: File = Files.createTempDirectory("infantry-cmddetached-test").toFile()
+    private val repo: File = File(home, "repo").also { it.mkdirs() }
+
+    @AfterTest fun cleanUp() { home.deleteRecursively() }
+
+    @Test fun `detached defaults to false and round-trips when set`() {
+        val store = CommandStore(File(home, "commands.json"), repo)
+        assertNull(store.save("""{"id":"plain","argv":["x"]}"""))
+        assertNull(store.save("""{"id":"app","argv":["x"],"detached":true}"""))
+        assertEquals(false, store.registry.find("plain")!!.detached)
+        assertEquals(true, store.registry.find("app")!!.detached)
+        assertTrue(store.registry.specsJson().contains("\"detached\":true"))
+        val again = CommandStore(File(home, "commands.json"), repo)
+        assertEquals(true, again.registry.find("app")!!.detached)
+    }
+}

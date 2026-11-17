@@ -2050,13 +2050,15 @@ class Controller(
         id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String> = emptyList(),
         /** RUN-SCOPE-1: the project the command belongs to; its cwd is relative to that project's folder. */
         project: String? = null,
+        /** RUN-TAB-1: launch the command detached (an app that stays open). */
+        detached: Boolean = false,
     ): CommandResult {
         if (!supportsCommandEdit()) return CommandResult.Refused("this daemon cannot edit commands (needs contract 1.94.0)")
         if (id.isBlank()) return CommandResult.Refused("the command needs an id")
         if (argv.isEmpty()) return CommandResult.Refused("the command needs at least one argument (the program)")
         if (secrets.isNotEmpty() && !supportsKeyValueSecrets()) return CommandResult.Refused("this daemon cannot give a run secrets (needs contract 1.135.0)")
         _state.update { it.copy(runs = it.runs.copy(commandError = null)) }
-        return send(WireRequests.commandSave(id, name, argv, cwd, graceMillis, secrets, project))
+        return send(WireRequests.commandSave(id, name, argv, cwd, graceMillis, secrets, project, detached))
     }
 
     /** RUN-CMD-2: delete the saved command [id] (`command_delete`); answered like [saveCommand]. */

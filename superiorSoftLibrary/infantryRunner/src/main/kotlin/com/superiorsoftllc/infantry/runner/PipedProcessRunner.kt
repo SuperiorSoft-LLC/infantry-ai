@@ -34,7 +34,7 @@ class PipedProcessRunner : ProcessRunner {
         val stdoutDrain = drain(process.inputStream.bufferedReader(), listener::onStdout, "stdout")
         val stderrDrain = drain(process.errorStream.bufferedReader(), listener::onStderr, "stderr")
 
-        return PipedRunningProcess(process, stdoutDrain, stderrDrain, listener)
+        return PipedRunningProcess(process, stdoutDrain, stderrDrain, listener, RunJob.attach(process.pid()))
     }
 
     /**
@@ -70,6 +70,8 @@ private class PipedRunningProcess(
     private val stdoutDrain: Thread,
     private val stderrDrain: Thread,
     private val listener: ProcessListener,
+    /** RUN-TAB-1: groups the run's descendants so a kill reaches them after this process has exited. */
+    private val job: RunJob? = null,
 ) : RunningProcess {
 
     private val exitCode = CompletableFuture<Int>()
@@ -81,6 +83,7 @@ private class PipedRunningProcess(
             stdoutDrain.join()
             stderrDrain.join()
             runCatching { listener.onExit(code) }
+            job?.close()
             exitCode.complete(code)
         }, "infantry-wait-${process.pid()}").apply {
             isDaemon = true
@@ -103,7 +106,10 @@ private class PipedRunningProcess(
 
     override fun terminate() = ProcessTreeKiller.terminate(process)
 
-    override fun killTree() = ProcessTreeKiller.kill(process)
+    override fun killTree() {
+        job?.terminate()
+        ProcessTreeKiller.kill(process)
+    }
 
     override fun awaitExit(): Int = exitCode.get()
 }

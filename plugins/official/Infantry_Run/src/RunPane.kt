@@ -73,6 +73,7 @@ const val RUN_FORM_ID_TAG = "run-form-id"
 const val RUN_FORM_ARGV_TAG = "run-form-argv"
 const val RUN_FORM_CWD_TAG = "run-form-cwd"
 const val RUN_FORM_GRACE_TAG = "run-form-grace"
+const val RUN_FORM_DETACHED_TAG = "run-form-detached"
 const val RUN_FORM_SAVE_TAG = "run-form-save"
 const val RUN_FORM_CANCEL_TAG = "run-form-cancel"
 const val RUN_FORM_ERROR_TAG = "run-form-error"
@@ -113,13 +114,15 @@ internal data class CommandDraft(
     val cwd: String = "",
     val grace: String = RunCommandForm.DEFAULT_GRACE_MILLIS.toString(),
     val secrets: String = "",
+    /** RUN-TAB-1: launch an app that outlives the command. */
+    val detached: Boolean = false,
 ) {
     companion object {
         fun of(c: CommandSpecView) = CommandDraft(
             editingId = c.id, name = c.name, id = c.id, idTouched = true,
             argv = c.argv.joinToString("\n"), cwd = c.cwd.orEmpty(),
             grace = (c.graceMillis ?: RunCommandForm.DEFAULT_GRACE_MILLIS).toString(),
-            secrets = c.secrets.joinToString("\n"),
+            secrets = c.secrets.joinToString("\n"), detached = c.detached,
         )
     }
 }
@@ -207,7 +210,7 @@ class RunPaneHost internal constructor(
     /** RUN-SCOPE-1: moves the unassigned command [c] into the shown project, its cwd unchanged (relative to the folder). */
     fun assign(c: CommandSpecView) {
         val p = project ?: return
-        act { context.saveCommand(c.id, c.name, c.argv, c.cwd, c.graceMillis ?: RunCommandForm.DEFAULT_GRACE_MILLIS, c.secrets, p.id) }
+        act { context.saveCommand(c.id, c.name, c.argv, c.cwd, c.graceMillis ?: RunCommandForm.DEFAULT_GRACE_MILLIS, c.secrets, p.id, c.detached) }
     }
 
     /** RUN-SCOPE-1: registers [directory] as the shown project's folder. */
@@ -247,7 +250,7 @@ class RunPaneHost internal constructor(
             scope.launch {
                 val r = context.saveCommand(
                     d.id.trim(), d.name.trim(), RunCommandForm.argvOf(d.argv), RunCommandForm.cwdOf(d.cwd), grace,
-                    RunCommandForm.secretsOf(d.secrets), project?.id,
+                    RunCommandForm.secretsOf(d.secrets), project?.id, d.detached,
                 )
                 if (r is CommandResult.Refused) { localError.value = r.reason; savedAt.value = null }
             }
@@ -639,6 +642,13 @@ private fun CommandEditor(
             supportingText = { Text("How long Stop waits before it kills the process tree.", fontSize = 11.sp) },
             modifier = Modifier.fillMaxWidth().testTag(RUN_FORM_GRACE_TAG),
         )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = draft.detached, onCheckedChange = { onChange(draft.copy(detached = it)) }, enabled = enabled,
+                modifier = Modifier.testTag(RUN_FORM_DETACHED_TAG),
+            )
+            Text("Detached (launch an app that stays open)", color = Palette.Muted, fontSize = 12.sp)
+        }
         if (secretNames != null) {
             OutlinedTextField(
                 value = draft.secrets,

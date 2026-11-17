@@ -6,6 +6,7 @@ import com.superiorsoftllc.infantry.daemon.api.runs.RunHandle
 import com.superiorsoftllc.infantry.daemon.api.runs.RunListener
 import com.superiorsoftllc.infantry.daemon.api.runs.RunSpec
 import com.superiorsoftllc.infantry.daemon.api.runs.Runs
+import com.superiorsoftllc.infantry.runner.DetachedLauncher
 import com.superiorsoftllc.infantry.runner.ProcessListener
 import com.superiorsoftllc.infantry.runner.ProcessRunner
 import com.superiorsoftllc.infantry.runner.ProcessSpec
@@ -63,6 +64,7 @@ class LocalRuns(
     override fun start(spec: RunSpec, listener: RunListener): RunHandle {
         require(spec.argv.isNotEmpty() && spec.argv.none { it.isBlank() }) { "a run needs a non-empty argv" }
         val dir = resolve(root(spec.projectId), spec.cwd)
+        if (spec.detached) return startDetached(spec, dir, listener)
         val ps = ProcessSpec(spec.argv, dir, spec.env)
         val terminal = pty
         if (spec.terminal && terminal != null) {
@@ -81,6 +83,25 @@ class LocalRuns(
         })
         runCatching { p.closeInput() }
         return PipeHandle(p)
+    }
+
+    /** RUN-TAB-1: one line and an exit, off the caller's thread (the run manager assigns its handle after this returns). */
+    private fun startDetached(spec: RunSpec, dir: File, listener: RunListener): RunHandle {
+        val pid = DetachedLauncher.launch(spec.argv, dir, spec.env)
+        Thread({
+            runCatching { listener.onLine("stdout", "launched detached (PID $pid)") }
+            listener.onExit(0)
+        }, "infantry-run-detached").apply { isDaemon = true }.start()
+        return DetachedHandle(pid)
+    }
+
+    private class DetachedHandle(override val pid: Long?) : RunHandle {
+        override val isAlive get() = false
+        override val terminal get() = false
+        override fun write(bytes: ByteArray) = throw IllegalStateException("the run has no terminal")
+        override fun resize(cols: Int, rows: Int) {}
+        override fun terminate() {}
+        override fun killTree() {}
     }
 
     private class PtyHandle(private val p: TerminalProcess) : RunHandle {

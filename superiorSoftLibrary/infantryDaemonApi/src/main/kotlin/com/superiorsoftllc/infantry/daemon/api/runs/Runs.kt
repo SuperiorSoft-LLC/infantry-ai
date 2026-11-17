@@ -53,6 +53,12 @@ data class RunSpec(
     val terminal: Boolean = false,
     val cols: Int = 120,
     val rows: Int = 32,
+    /**
+     * RUN-TAB-1 (additive): launch [argv] as a process that outlives the run and the daemon (no pipes, outside the daemon's
+     * kill-on-close job on Windows). The run reports one "launched detached (PID n)" line, then exits 0 at once; [RunHandle.pid]
+     * is the new process. Default false: every other run is tracked, piped and killed with the daemon.
+     */
+    val detached: Boolean = false,
 )
 
 /** Output callbacks, on the run's own drain threads. A pty run calls [onBytes]; a piped run calls [onLine]. [onExit] is last, once. */
