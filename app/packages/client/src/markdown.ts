@@ -13,7 +13,8 @@ export type Span =
 
 export type Block =
   | { kind: "heading"; level: 1 | 2 | 3; spans: Span[] }
-  | { kind: "code"; lang: string; text: string }
+  /** [lang] is the whole info string (`ts`, `card:news id=a1`); [open] marks a fence still unclosed (streaming). */
+  | { kind: "code"; lang: string; text: string; open?: true }
   | { kind: "list"; ordered: boolean; start: number; items: Span[][] }
   | { kind: "quote"; blocks: Block[] }
   | { kind: "table"; align: ("left" | "center" | "right")[]; head: Span[][]; rows: Span[][][] }
@@ -84,7 +85,7 @@ export function parseInline(text: string): Span[] {
   return out;
 }
 
-const FENCE = /^\s*(```|~~~)\s*([\w+#.-]*)\s*$/;
+const FENCE = /^\s*(```|~~~)\s*([^`~]*?)\s*$/;
 const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const BULLET = /^\s*[-*+]\s+(.*)$/;
 const NUMBERED = /^\s*(\d{1,9})[.)]\s+(.*)$/;
@@ -117,7 +118,9 @@ export function parseMarkdown(text: string): Block[] {
       const body: string[] = [];
       i += 1;
       while (i < lines.length && !lines[i].trim().startsWith(fence[1])) body.push(lines[i++]);
-      blocks.push({ kind: "code", lang: fence[2], text: body.join("\n") });
+      const code: Block = { kind: "code", lang: fence[2], text: body.join("\n") };
+      if (i >= lines.length) code.open = true;
+      blocks.push(code);
       i += 1;
       continue;
     }

@@ -3,13 +3,14 @@
 // The session transcript, virtualised (TanStack Virtual): only the rows in view (plus an overscan) are in the DOM, each
 // measured after it renders. Rows are memoised by item identity: the client hands back the same object for an item that
 // did not change, so a streaming append re-renders only the row it touched. The list sticks to the bottom while the
-// reader is there and stays put once they scroll up.
+// reader is there and stays put once they scroll up. Ctrl+F opens the search bar: Enter / Shift+Enter step through
+// the matching rows (scrolled into view and ringed), Esc closes.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, MessageSquareDashed } from "lucide-react";
+import { ArrowDown, ChevronDown, ChevronUp, MessageSquareDashed, Search, X } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useShallow } from "zustand/react/shallow";
-import type { PendingSend, TranscriptItem } from "@infantry/client";
-import { EmptyState, IconButton } from "@infantry/ui";
+import { CHAT_SEARCH_EVENT, searchItems, type PendingSend, type TranscriptItem } from "@infantry/client";
+import { EmptyState, IconButton, Input, cn } from "@infantry/ui";
 import type { Agent } from "@/mock/types";
 import { useDaemon } from "@/daemon/daemon";
 import { AgentAvatar } from "@/components/agents/agent-avatar";
@@ -72,6 +73,20 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState("");
+  const [hit, setHit] = useState(0);
+  const hits = useMemo(() => searchItems(items ?? [], query), [items, query]);
+  const current = hits.length ? hits[Math.min(hit, hits.length - 1)] : -1;
+  useEffect(() => {
+    const open = () => setSearching(true);
+    window.addEventListener(CHAT_SEARCH_EVENT, open);
+    return () => window.removeEventListener(CHAT_SEARCH_EVENT, open);
+  }, []);
+  useEffect(() => {
+    setSearching(false);
+    setQuery("");
+  }, [sessionId]);
   const [away, setAway] = useState(false);
   const v = useVirtualizer({
     count: rows.length,
@@ -95,6 +110,15 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
     if (rows.length > 0) v.scrollToIndex(rows.length - 1, { align: "end" });
   }, [rows.length, v]);
 
+  useEffect(() => {
+    if (current < 0) return;
+    stick.current = false;
+    setAway(true);
+    v.scrollToIndex(current, { align: "center" });
+  }, [current, v]);
+  const step = (d: 1 | -1) => hits.length && setHit((h) => (Math.min(h, hits.length - 1) + d + hits.length) % hits.length);
+  const closeSearch = () => (setSearching(false), setQuery(""));
+
   // A new session starts at its newest line.
   useLayoutEffect(() => {
     stick.current = true;
@@ -117,6 +141,33 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
   }
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
+      {searching && (
+        <div className="flex items-center gap-1.5 border-b px-4 py-1.5" role="search" aria-label="Search this chat">
+          <Search className="size-3.5 text-muted-foreground" />
+          <Input
+            autoFocus
+            aria-label="Search this chat"
+            placeholder="Search this chat"
+            className="h-7 max-w-64 text-xs"
+            value={query}
+            onChange={(e) => (setQuery(e.target.value), setHit(0))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.preventDefault(), step(e.shiftKey ? -1 : 1));
+              else if (e.key === "Escape") (e.preventDefault(), closeSearch());
+            }}
+          />
+          <span className="text-[11px] text-muted-foreground tabular-nums">{query.trim() ? (hits.length ? `${Math.min(hit, hits.length - 1) + 1} of ${hits.length}` : "no match") : ""}</span>
+          <IconButton label="Previous match" variant="ghost" disabled={!hits.length} onClick={() => step(-1)}>
+            <ChevronUp />
+          </IconButton>
+          <IconButton label="Next match" variant="ghost" disabled={!hits.length} onClick={() => step(1)}>
+            <ChevronDown />
+          </IconButton>
+          <IconButton label="Close search" variant="ghost" onClick={closeSearch}>
+            <X />
+          </IconButton>
+        </div>
+      )}
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]" data-testid="transcript-scroll">
         <ol className="relative px-4 py-3" aria-label="Transcript" style={{ height: total + 24 }}>
           {v.getVirtualItems().map((vi) => {
@@ -126,7 +177,7 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
                 key={vi.key}
                 data-index={vi.index}
                 ref={v.measureElement}
-                className="absolute top-3 right-4 left-4 pb-3"
+                className={cn("absolute top-3 right-4 left-4 pb-3", vi.index === current && "rounded-md ring-2 ring-warn/70")}
                 style={{ transform: `translateY(${vi.start}px)` }}
               >
                 {row.item ? <ItemRow item={row.item} avatar={avatar} /> : <PendingRow p={row.pending} onRetry={retry} />}

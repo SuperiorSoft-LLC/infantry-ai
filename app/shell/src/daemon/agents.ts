@@ -8,10 +8,12 @@ import { isRunning, type AgentProfile, type ProjectSummary, type SessionView, ty
 import type { Agent, AgentStatus } from "@/mock/types";
 import { useDaemon } from "./daemon";
 
-function statusOf(v: SessionView): AgentStatus {
+/** [ticketStatus]: the board lane of the session's ticket; a quiet session whose ticket is Pending is ready to check. */
+function statusOf(v: SessionView, ticketStatus?: string): AgentStatus {
   const s = v.record.state;
   if (s === "WAITING_INPUT" || v.record.waiting) return "needs-input";
   if (isRunning(v.record)) return "working";
+  if (ticketStatus === "pending") return "review";
   if (s === "FAILED" || s === "ORPHANED") return "error";
   if (s === "EXITED") return "done";
   return "idle";
@@ -68,7 +70,7 @@ export function toAgent(
     tin += u.input;
     tout += u.output;
   }
-  const status = statusOf(v);
+  const status = statusOf(v, r.ticketId ? tickets[r.ticketId]?.status : undefined);
   return {
     id: r.id,
     name: profile?.name ?? (r.role ? title(r.role) : "Session"),

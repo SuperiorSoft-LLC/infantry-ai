@@ -46,13 +46,13 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Board button with count | yes | done | *(fixed today)* The count was a fixed 3. It now counts To Do + In Progress. |
 | Search agents | yes | done | Ctrl+K works *(fixed today)*. |
 | Role filter chips | yes | done | *(fixed today)* They listed sample roles. They now list the daemon's roles. |
-| Groups by status (Waiting on you / Ready to check / Running / Quiet) | yes | partial | Rust has Running / Quiet only. UI only. |
+| Groups by status (Waiting on you / Ready to check / Running / Quiet) | yes | done | *(RUST-UI-9)* Ready to check = a quiet session whose ticket is in Pending. |
 | Card: avatar, state dot, role, last line, age, ticket | yes | done | |
 | Card badges: AUTO, report-back, watchdog, progress bar, runner | yes | partial | Progress line and ticket only. The rest is UI only (fields are on the session/agent frames). |
 | Pulsing border while busy, selected stripes | yes | partial | Live ring only. Cosmetic. |
-| Card "⋯" menu: Open, Resume, Assign to project, Remove | yes | missing | UI only (`resume`, `session_project`, `session_delete`). Remove exists in the composer today. |
-| Card ticket block: change / unassign ticket, ticket picker | yes | missing | UI only (`ticket_assign`, `agent_switch`, `ticket_unassign`). |
-| Card queue (running + queued tickets, move up/down, remove) | yes | missing | UI only (`agent_queue`). |
+| Card "⋯" menu: Open, Resume, Assign to project, Remove | yes | partial | *(RUST-UI-8)* "⋯" or right-click: Open, Resume (ended sessions), ticket actions, Remove with confirm. No "Assign to project": daemon (`session_project` has no handler). |
+| Card ticket block: change / unassign ticket, ticket picker | yes | done | *(RUST-UI-8)* In the card menu: a searchable To Do picker (Assign / Queue, held tickets behind a toggle) and Unassign. Needs an agent profile on the session. |
+| Card queue (running + queued tickets, move up/down, remove) | yes | partial | *(RUST-UI-8)* The picker can queue a ticket. No queue list with move / remove: UI only (`agent_queue`). |
 | Drag a ticket onto an agent card to assign it | yes | missing | UI only (`ticket_assign`). |
 | Empty states | yes | done | |
 | "Working in every project" dialog (experimental) | yes | missing | UI only. |
@@ -62,7 +62,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Feature | Kotlin | Rust | Notes |
 |---|---|---|---|
 | Header: role, id, harness/provider/model chips | yes | done | |
-| Context-limit and effort chips | yes | missing | UI only. Data is on the session record. |
+| Context-limit and effort chips | yes | done | *(RUST-UI-8)* From the session record. The duplicated provider chips were removed. |
 | Switch agent (provider/model) | yes | done | |
 | Interrupt, restart (with force) | yes | done | |
 | Session stats | yes | done | |
@@ -86,12 +86,12 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | File-edit diff boxes | yes | done | |
 | To-do box ("To do 3/7") | yes | missing | UI only, if the harness sends todo events. |
 | Images in the transcript, full-size viewer | yes | missing | UI only (`image`). |
-| Chat cards (`card:<type>` fences, plugin renderers, folded updates) | yes | missing | They show as code blocks. Needs a card renderer registry: UI only. |
-| Background-jobs row | yes | missing | UI only (`bg_job`). |
+| Chat cards (`card:<type>` fences, plugin renderers, folded updates) | yes | partial | *(RUST-UI-8)* Card fences parse like Kotlin (`id`, `op=set/append/replace`), draw through a renderer registry (`registerChatCard`) or a generic card (title, text, link, fields, lists, JSON toggle), and later fences of one id fold into the first. Folding works within one message only (Kotlin: the whole chat). No plugin ships a renderer yet. Card images need daemon `card_image`. |
+| Background-jobs row | yes | done | *(RUST-UI-8)* Label, pid and age from the record's `bgJobs`, above the composer. Stopping them is in the Run tab. |
 | Pending send: sending / sent / retry | yes | done | No "Discard this message": UI only. |
 | Jump to latest, stick to bottom | yes | done | |
 | Load older pages on scroll up | yes | partial | History loads on open. No paging: UI only. |
-| Search this chat (Ctrl+F) | yes | missing | *(fixed today)* A dead button was removed. UI only. |
+| Search this chat (Ctrl+F) | yes | done | *(RUST-UI-9)* Ctrl+F opens a search bar over the transcript: match count, Enter / Shift+Enter step through matches (scrolled into view and ringed), Esc closes. Searches loaded history only. |
 | Expand / collapse all, history buttons | yes | missing | *(fixed today)* These were dead buttons and were removed. UI only. |
 | Read comms aloud | yes | missing | *(fixed today)* A dead button was removed. Needs a TTS plugin (`spoken` frame exists). |
 
@@ -104,11 +104,11 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Stop turn, Send | yes | done | |
 | Resume, Swap agent, Restart, Cancel turn | yes | done | |
 | Delete / remove session with confirm | yes | done | *(fixed today)* It was a dead button. It now confirms, then sends `session_delete`. |
-| Attachments: file picker, paste image, drag and drop | yes | missing | *(fixed today)* A dead button was removed. UI only (`image_upload`). |
-| Slash commands with autocomplete | yes | missing | UI only (`command_catalog`). |
-| Notice strip for command results | yes | missing | UI only (`command_result`). |
+| Attachments: file picker, paste image, drag and drop | yes | missing | *(fixed today)* A dead button was removed. Daemon: an `image_upload` handler (RUST-UI-8 found the frame name only; the Chat plugin notes it as a host need). |
+| Slash commands with autocomplete | yes | missing | Daemon: a `command_catalog` handler (frame name only, no handler). |
+| Notice strip for command results | yes | missing | Daemon: `command_result` (frame name only). |
 | Stop background processes (Ctrl+Shift+K) | yes | missing | UI only (`processes_reap`). |
-| End session (Ctrl+Alt+K) | yes | missing | UI only (`kill`). |
+| End session (Ctrl+Alt+K) | yes | done | *(RUST-UI-8)* Graceful `kill`, so the session can be resumed. |
 | Minimize / expand composer | yes | missing | UI only. |
 | Composer action slot (voice etc.) | yes | missing | *(fixed today)* The dead mic button was removed. Needs a plugin slot: UI only. |
 | Disconnected: "commands are disabled" | yes | done | *(fixed today)* Now on the status line above the box. |
@@ -118,9 +118,9 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Feature | Kotlin | Rust | Notes |
 |---|---|---|---|
 | Tool approval card (allow once / session / always / deny, expiry) | yes | done | |
-| Approval card keys (arrows, Enter, Esc) | yes | missing | UI only. |
+| Approval card keys (arrows, Enter, Esc) | yes | done | *(RUST-UI-9)* A focused card: arrows move, 1-4 or Enter decide, Esc denies. |
 | Question card: options, Recommended, multi-select, Other | yes | done | |
-| Question keys (digits, arrows, Space) and auto-select timer line | yes | missing | UI only. |
+| Question keys (digits, arrows, Space) and auto-select timer line | yes | partial | *(RUST-UI-9)* Keys done (digits, arrows, Enter; Space toggles a multi-select). The timer shows as the "answers itself in ~N min" chip, not a live countdown line. |
 | Questions pill for questions in other sessions | yes | missing | UI only. The Attention tab lists them. |
 | Cancel question / Later | yes | missing | UI only (`question_cancel`). |
 
@@ -132,12 +132,12 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Drag between lanes and reorder (mouse, touch, keyboard) | yes | done | |
 | Filters (epic, role, assignee, text) | yes | done | |
 | New / edit ticket: title, description, type | yes | done | |
-| Ticket form: epic, assignee, executor, effort, context limit, runner, images | yes | missing | UI only (`ticket_save` carries `epicId`; `image_upload`). |
+| Ticket form: epic, assignee, executor, effort, context limit, runner, images | yes | partial | *(RUST-UI-9)* Epic picker (the current project's epics by name; No epic clears it). Assignee is the card menu's ticket picker. Executor, effort, context limit and runner: UI only, needing their `ticket_save` fields checked. Images need the daemon `image_upload` handler. |
 | Delete ticket | yes | done | |
-| Collapse a lane | yes | missing | UI only. |
+| Collapse a lane | yes | done | *(RUST-UI-8)* The lane header folds it to title and count, remembered per lane; a folded lane still takes drops. |
 | "All projects" toggle | yes | missing | UI only. |
-| Start next | yes | missing | UI only (`ticket_start_next`). |
-| Card buttons: Start, Done, Back, Reopen, Park, Archive | yes | partial | Drag does the moves. No buttons: UI only (`ticket_move`). |
+| Start next | yes | done | *(RUST-UI-8)* Button in the filter bar sends `ticket_start_next` for the current project; a refusal toasts *(RUST-UI-9)*. |
+| Card buttons: Start, Done, Back, Reopen, Park, Archive | yes | partial | *(RUST-UI-9)* Per lane: Start (`ticket_start`; a refusal toasts), To review, Done, Back, Reopen, To do. No Park or Archive yet. |
 | Assign / switch / queue / unassign from a card | yes | missing | UI only (`ticket_assign`, `agent_switch`, `agent_queue`, `ticket_unassign`). |
 | Multi-select and move to epic | yes | missing | UI only (`ticket_save`). |
 | Card badges: epic, runner, waiting, has work, queued | yes | partial | Role, assignee and branch only. UI only. |
@@ -154,7 +154,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Question history, "Change to" an auto-picked answer | yes | missing | UI only (`question_list`). |
 | Clear stale, Open agent per item | yes | missing | UI only. |
 | Watchdog list (stalled / quiet / unreported agents) | yes | missing | UI only. |
-| Toast stack (bottom right), prompt toasts | yes | missing | No toast component. Notices appear only in the Attention tab. UI only. |
+| Toast stack (bottom right), prompt toasts | yes | partial | *(RUST-UI-9)* Toast stack bottom right (newest first, repeats counted, auto-expire, dismiss): refusals of UI requests with no inline view (card menu, Start next) and pushed notifications. No prompt toasts (approve from a toast). |
 | Desktop OS notifications, sounds | yes | missing | Daemon: `notify_push` / `notify_sounds` (the Rust protocol has only `notify`). Tauri notification plugin. |
 | Spoken alerts | yes | missing | `spoken` frame exists. Needs a TTS presenter. |
 | "Update available" notice | yes | done | Added by RUST-UPD-1. *(fixed today)* The status-bar pill was fixed text; it now shows only for a real update. |
@@ -184,9 +184,10 @@ All *(fixed today)*: before this sweep no window-wide key worked, and the hints 
 | Ctrl+, settings | yes | done | |
 | Ctrl+/ focus the composer | yes | done | |
 | Ctrl+0..9 tabs, Ctrl+8 board | yes | done | ^3 Changes and ^4 Review hints added. |
-| Ctrl+Shift+N switch agent, Ctrl+Shift+K stop bg, Ctrl+Alt+K end session | yes | missing | UI only. |
+| Ctrl+Shift+N switch agent, Ctrl+Alt+K end session | yes | done | *(RUST-UI-8)* |
+| Ctrl+Shift+K stop background processes | yes | missing | UI only (`processes_reap`, per session). |
 | Ctrl+L connect dialog | yes | missing | UI only. |
-| Ctrl+F chat search | yes | missing | See transcript. |
+| Ctrl+F chat search | yes | done | *(RUST-UI-9)* |
 
 ## Settings and appearance
 
@@ -202,8 +203,8 @@ All *(fixed today)*: before this sweep no window-wide key worked, and the hints 
 | Daemon picker, "Start daemon with the app" | n/a | n/a | *(fixed today)* Sample rows were removed. Remote daemon, embedded runner and phone pairing rows are real. |
 | Secrets vault (reveal behind Windows Hello) | yes | done | |
 | Phone pairing, `infantry` on PATH, updater | yes | done | RUST-UPD-1. |
-| Tool approval settings (timer, expiry, rules) | yes | missing | UI only (`approval_rules`, `tool_approval_set`). |
-| Setup wizard (install Node, providers) | yes | missing | UI only (`harness_install`, `cli_locations`). |
+| Tool approval settings (timer, expiry, rules) | yes | missing | Rules: UI only (`approval_rules`). Timer and expiry: daemon (`tool_approval_set` has no handler). |
+| Setup wizard (install Node, providers) | yes | missing | Daemon: `harness_install` / `cli_locations` handlers (frame names only). |
 | Plugin drop-in install, consent dialog | yes | missing | UI only (`plugin_admin`). |
 | About: version | yes | done | *(fixed today)* It was a fixed string. |
 
@@ -222,7 +223,7 @@ All *(fixed today)*: before this sweep no window-wide key worked, and the hints 
 | Run: commands, console, stop | yes | done | |
 | Run: start on branch | yes | missing | Daemon: `run_branches` (not in the Rust protocol). |
 | Git: working tree, diff, history, branches | yes | done | |
-| Git: base branch picker, project folder, verification pipeline | yes | missing | UI only (`project_base`, `project_save`, `pipeline_config`, `pipeline_show`). |
+| Git: base branch picker, project folder, verification pipeline | yes | missing | Base branch and folder: UI only (`project_base`, `project_save`). Pipeline: daemon (`pipeline_config` / `pipeline_show` have no handler). |
 | Processes | yes | done | No auto-reap toggle: UI only (`settings_set`). |
 | Health | yes | done | |
 | Plugins: list, on/off, settings | yes | partial | No Browse / Sources / install-from-file / roll back: UI only (`plugin_admin`). |
@@ -255,14 +256,14 @@ All *(fixed today)*: before this sweep no window-wide key worked, and the hints 
 
 ## Counts
 
-Graded rows, excluding the 2 n/a rows and the out-of-scope table: **81 done, 16 partial, 61 missing** (158 rows).
+Graded rows, excluding the 2 n/a rows and the out-of-scope table: **92 done, 21 partial, 46 missing** (159 rows). RUST-UI-8 had 87 / 20 / 52; RUST-PARITY-1 had 81 / 16 / 61.
 This sweep changed 38 rows:
 
 - 27 now work: markdown and code Copy, keyboard shortcuts, real counts, the real New ticket dialog, delete session,
   Stats, the Prompts and Skills panels, and the version.
 - 11 had sample data or dead buttons removed. They now read as missing instead of looking finished.
 
-Most missing rows are **UI only**: the Rust daemon already has the frames. Only six rows need new daemon frames:
+Most missing rows are **UI only**: the Rust daemon already handles the frames. RUST-UI-8 found that some frames named in the protocol have no handler (`image_upload`, `command_catalog`, `command_result`, `session_project`, `pipeline_*`, `tool_approval_set`, `harness_install`, `cli_locations`, `timeline_list`); those rows now say "Daemon". Only six rows need new daemon frames:
 
 - ticket comments;
 - `notify_push` / `notify_sounds`;

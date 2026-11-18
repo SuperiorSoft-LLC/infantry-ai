@@ -2,10 +2,12 @@
 // Copyright (c) SuperiorSoft LLC
 // The window-wide keyboard shortcuts (@infantry/client shortcutOf), run against the UI state. Mounted once by AppShell.
 import { useEffect, useRef } from "react";
-import { shortcutOf, stepThrough, type Shortcut } from "@infantry/client";
+import { CHAT_SEARCH_EVENT, shortcutOf, stepThrough, type Shortcut } from "@infantry/client";
 import { useAgentList } from "@/daemon/agents";
 import { useTabs } from "@/plugins/catalog";
 import { useUi } from "@/state/ui-state";
+import { daemonStore } from "@/daemon/daemon";
+import { openSessionDialog } from "@/components/session/session-actions";
 
 export const AGENT_SEARCH_ID = "agent-search";
 
@@ -29,6 +31,19 @@ export function useShortcuts(): void {
         case "search":
           if (!ui.leftOpen) ui.toggle("leftOpen");
           focusLater(`#${AGENT_SEARCH_ID}`);
+          return true;
+        case "chatSearch":
+          if (!ui.selectedAgentId) return false;
+          ui.set("sessionTab", "cli");
+          window.dispatchEvent(new Event(CHAT_SEARCH_EVENT));
+          return true;
+        case "switchAgent":
+          if (!ui.selectedAgentId) return false;
+          openSessionDialog("swap", ui.selectedAgentId);
+          return true;
+        case "endSession":
+          if (!ui.selectedAgentId) return false;
+          daemonStore().getState().sendFrame({ type: "kill", data: "", sessionId: ui.selectedAgentId });
           return true;
         case "newAgent":
           ui.set("dialog", "new-agent");

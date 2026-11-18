@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // Draws chat markdown (@infantry/client parseMarkdown): headings, code blocks with a language label and Copy, lists,
-// quotes, tables with sideways scroll. No raw HTML; links open outside the app.
+// quotes, tables with sideways scroll, `card:<type>` fences as chat cards (chat-cards.tsx). No raw HTML; links open
+// outside the app.
 import { memo, useMemo, useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
-import { parseMarkdown, type Block, type Span } from "@infantry/client";
+import { cardOf, foldCards, parseMarkdown, type Block, type Span } from "@infantry/client";
+import { CardUpdateLine, ChatCardView } from "./chat-cards";
 import { cn } from "@infantry/ui";
 
 function Spans({ spans }: { spans: Span[] }): ReactNode {
@@ -50,7 +52,7 @@ function CodeBlock({ lang, text }: { lang: string; text: string }) {
   return (
     <div className="overflow-hidden rounded-md border bg-muted/40">
       <div className="flex items-center gap-2 border-b px-2 py-1 text-[11px] text-muted-foreground">
-        <span className="font-mono">{lang || "text"}</span>
+        <span className="font-mono">{lang.split(/\s+/)[0] || "text"}</span>
         <span className="flex-1" />
         <button type="button" onClick={copy} className="flex items-center gap-1 hover:text-foreground" aria-label="Copy code">
           {copied ? <Check className="size-3" /> : <Copy className="size-3" />} {copied ? "Copied" : "Copy"}
@@ -133,12 +135,18 @@ function BlockView({ b }: { b: Block }): ReactNode {
 
 /** One message's markdown. Memoised: transcript rows re-render often, the text rarely changes. */
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
-  const blocks = useMemo(() => parseMarkdown(text), [text]);
+  const { blocks, cards } = useMemo(() => {
+    const blocks = parseMarkdown(text);
+    return { blocks, cards: foldCards(blocks.map((b) => (b.kind === "code" ? cardOf(b.lang, b.text, b.open) : null))) };
+  }, [text]);
   return (
     <>
-      {blocks.map((b, i) => (
-        <BlockView key={i} b={b} />
-      ))}
+      {blocks.map((b, i) => {
+        const c = cards[i];
+        if (c === "update") return <CardUpdateLine key={i} type={b.kind === "code" ? b.lang.split(/\s+/)[0].slice(5) : ""} />;
+        if (c) return <ChatCardView key={i} card={c} />;
+        return <BlockView key={i} b={b} />;
+      })}
     </>
   );
 });
