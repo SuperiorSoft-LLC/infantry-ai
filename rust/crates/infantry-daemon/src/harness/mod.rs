@@ -78,6 +78,19 @@ pub enum HarnessEvent {
     TurnEnded { end: TurnEnd, exit_code: Option<i32>, reason: Option<String>, process_alive: bool },
     /// The process went away outside a turn end (a crash, the CLI's own exit).
     Exited { code: Option<i32> },
+    /// A tool call began (its name): counted in the session's stats.
+    Tool(String),
+    /// Token usage of one model request, as the CLI reported it: the session's stats.
+    Usage(TokenUsage),
+}
+
+/// One model request's token counts as the harness reported them (never estimated).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TokenUsage {
+    pub input: u64,
+    pub cached: u64,
+    pub output: u64,
+    pub reasoning: u64,
 }
 
 /// Where a harness sends its events (one per daemon session, delivered in order).

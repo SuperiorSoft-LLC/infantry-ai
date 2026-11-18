@@ -20,11 +20,12 @@ pub struct Tools {
     scripting: OnceLock<ScriptingTools>,
     plugins: OnceLock<Option<Arc<PluginHost>>>,
     knowledge: OnceLock<Arc<infantry_knowledge::Knowledge>>,
+    runs: OnceLock<Arc<crate::run::RunManager>>,
 }
 
 impl Tools {
     pub fn new(daemon: Arc<Daemon>) -> Tools {
-        Tools { daemon, scripting: OnceLock::new(), plugins: OnceLock::new(), knowledge: OnceLock::new() }
+        Tools { daemon, scripting: OnceLock::new(), plugins: OnceLock::new(), knowledge: OnceLock::new(), runs: OnceLock::new() }
     }
 
     pub fn set_scripting(&self, t: ScriptingTools) {
@@ -33,6 +34,10 @@ impl Tools {
 
     pub fn set_knowledge(&self, k: Arc<infantry_knowledge::Knowledge>) {
         let _ = self.knowledge.set(k);
+    }
+
+    pub fn set_runs(&self, r: Arc<crate::run::RunManager>) {
+        let _ = self.runs.set(r);
     }
 
     pub fn set_plugins(&self, h: Option<Arc<PluginHost>>) {
@@ -83,6 +88,13 @@ impl ScriptHost for Tools {
                 });
             }
         }
+        if self.runs.get().is_some() {
+            for t in crate::run::tools::catalog() {
+                if !out.iter().any(|o| o.name == t.name) {
+                    out.push(t);
+                }
+            }
+        }
         if let Some(h) = self.plugins() {
             for t in h.tools() {
                 if out.iter().any(|o| o.name == t.decl.name) {
@@ -113,6 +125,9 @@ impl ScriptHost for Tools {
                     Err(e) => ToolResult::err(e),
                 };
             }
+        }
+        if let Some(r) = self.runs.get().and_then(|m| crate::run::tools::invoke(m, name, args, inv)) {
+            return r;
         }
         if let Some(h) = self.plugins() {
             if h.tool_owner(name).is_some() {

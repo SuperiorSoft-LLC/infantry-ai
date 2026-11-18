@@ -16,6 +16,7 @@ pub mod host_frames;
 mod plugins;
 pub mod scope;
 mod tools;
+mod watch;
 
 use crate::sessions::{Daemon, FrameUnits};
 use crate::wire;
@@ -233,6 +234,11 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
 
     // ---- the tool catalog + scripting ---------------------------------------------------------------------
     let tools = Arc::new(Tools::new(daemon.clone()));
+    let runs = {
+        let p = projects.clone();
+        crate::run::RunManager::new(state_dir, daemon.cfg.default_cwd.clone(), bus.clone(), daemon.clone(), Arc::new(move |id: &str| project_dir(&p, id)))
+    };
+    tools.set_runs(runs.clone());
     tools.set_knowledge(knowledge.clone());
     let engines = ScriptEngines::standard();
     let exts = engines.extensions();
@@ -324,12 +330,13 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         Arc::new(BoardUnit::with_dispatcher(dispatcher.clone())),
         Arc::new(UsageUnit::new(usage.clone())),
         Arc::new(MailUnit::new(mail.clone())),
-        Arc::new(AttentionUnit::new(attention)),
+        Arc::new(AttentionUnit::new(attention.clone())),
         Arc::new(NotificationsUnit::new(hub)),
         Arc::new(NotifyUnit::new(notify)),
         Arc::new(PromptsUnit::new(prompts, Some(rules))),
         Arc::new(QuestionsUnit::new(questions.clone(), asker_of)),
         Arc::new(tools::ToolsUnit { tools: tools.clone() }),
+        Arc::new(crate::run::RunUnit { runs: runs.clone() }),
         Arc::new(vault),
     ];
     units.extend(knowledge.units());
@@ -376,6 +383,10 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
 
     // ---- session life -> usage, mail wakes, the done protocol ----------------------------------------------
     daemon.observe(Arc::new(adapters::WorkObserver { dispatcher, usage: usage.clone(), mail: mail.clone(), handle: handle.clone() }));
+
+    // ---- RUST-SESS-2: the watchdog (never fails a session) and the done-worker reaper -----------------------
+    daemon.start_watchdog(Arc::new(watch::Ports { daemon: daemon.clone(), mail: mail.clone(), attention: attention.clone() }), crate::sessions::WatchConfig::default());
+    watch::spawn_reaper(daemon.clone(), c.projects.clone(), &bus);
 
     // ---- background: bus -> clients, hooks, timers, usage, mail tick, exec ticker -------------------------
     {

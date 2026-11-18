@@ -11,7 +11,7 @@ use crate::held;
 use crate::store::JsonSessionStore;
 use crate::wire;
 use infantry_protocol::session::{AgentWatch, KillOutcome, QueuedTurn, SessionRecord, SessionState};
-use infantry_protocol::agents::AgentListRequest;
+use infantry_protocol::agents::{AgentListRequest, SessionSwap};
 use infantry_protocol::Envelope;
 use serde::Deserialize;
 use serde_json::json;
@@ -21,6 +21,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
+
+mod lifecycle;
+pub use lifecycle::{evaluate, Pending, Stats, WatchConfig, WatchPorts, CARRY_MAX_CHARS};
+use infantry_protocol::frames as pf;
 
 /// The inbound frame types this unit serves; the strangler gateway routes these here (with `agent_list`, read from the
 /// db until the agents unit moves).
@@ -38,6 +42,9 @@ pub fn owns(ty: &str) -> bool {
             | wire::INTERRUPT
             | wire::KILL
             | wire::SESSION_DELETE
+            | pf::SESSION_RESTART
+            | pf::SESSION_SWAP
+            | pf::SESSION_STATS_GET
     )
 }
 
@@ -157,11 +164,32 @@ struct Entry {
     removed: bool,
     /// (sequence, encoded frame) of the last [Config::replay_kept] frames.
     history: std::collections::VecDeque<(i64, String)>,
+    /// HARNESS-CARRY-1: the earlier conversation, sent with the next first turn (after a swap across harness or role).
+    carry: Option<String>,
+    /// What the harness reported (`session_stats`).
+    stats: Stats,
+    /// The watchdog's current episode.
+    episode: Option<lifecycle::Episode>,
+    /// The done-worker reaper waits for this turn's end.
+    reap_pending: bool,
 }
 
 impl Entry {
     fn new(rec: SessionRecord, turn_active: bool, turn_started: i64) -> Entry {
-        Entry { rec, seq: 0, hs: None, turn_active, turn_started, gen: 0, removed: false, history: Default::default() }
+        Entry {
+            rec,
+            seq: 0,
+            hs: None,
+            turn_active,
+            turn_started,
+            gen: 0,
+            removed: false,
+            history: Default::default(),
+            carry: None,
+            stats: Stats::default(),
+            episode: None,
+            reap_pending: false,
+        }
     }
 }
 
@@ -191,6 +219,8 @@ pub struct Daemon {
     pub health: Arc<crate::health::Health>,
     /// What every agent process is told about this daemon (set once the port is bound).
     launch: Mutex<crate::harness::launch::LaunchBase>,
+    /// Whether a role exists (`session_swap` to a role); unset = any well-formed role.
+    role_known: std::sync::OnceLock<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
 }
 
 fn encode(ty: &str, data: String, session: Option<&str>, seq: Option<i64>) -> String {
@@ -244,7 +274,9 @@ impl Daemon {
             rec.is_process_alive = false;
             rec.child_pid = None;
             cache.push(rec.clone());
-            list.push((rec.id.clone(), Arc::new(Mutex::new(Entry::new(rec, false, 0)))));
+            let mut entry = Entry::new(rec, false, 0);
+            entry.stats = Stats::load(&cfg.state_dir, &entry.rec.id);
+            list.push((entry.rec.id.clone(), Arc::new(Mutex::new(entry))));
         }
         let cfg_dir = cfg.state_dir.clone();
         let d = Arc::new(Daemon {
@@ -265,6 +297,7 @@ impl Daemon {
             units: std::sync::OnceLock::new(),
             health: Arc::new(crate::health::Health::new(&cfg_dir)),
             launch: Mutex::new(Default::default()),
+            role_known: std::sync::OnceLock::new(),
         });
         d.refresh_held();
         Ok(d)
@@ -577,6 +610,35 @@ impl Daemon {
                 self.kill(&target, rest.contains(&"force")).map_err(Refusal::from)
             }
             wire::SESSION_DELETE => self.delete(sid.as_deref().unwrap_or(env.data.trim())).map_err(Refusal::from),
+            pf::SESSION_RESTART => {
+                let v: serde_json::Value = serde_json::from_str(&env.data).unwrap_or(serde_json::Value::Null);
+                let s = v["sessionId"].as_str().map(String::from).or(sid.clone()).unwrap_or_default();
+                let force = matches!(&v["force"], serde_json::Value::Bool(true)) || v["force"].as_str() == Some("true");
+                return match self.restart(s.trim(), force) {
+                    Ok(()) => vec![encode_req(wire::SESSIONS, self.sessions_json(), None, None, req.as_deref())],
+                    Err(m) => vec![encode_req(wire::ERROR, format!("session_restart refused: {m}"), sid.as_deref(), None, req.as_deref())],
+                };
+            }
+            pf::SESSION_SWAP => {
+                let r = serde_json::from_str::<SessionSwap>(&env.data).map_err(|e| format!("bad request ({e})")).and_then(|q| self.swap(q));
+                return match r {
+                    Ok(done) => {
+                        self.broadcast(pf::SESSION_SWAPPED, serde_json::to_string(&done).unwrap_or_default());
+                        Vec::new()
+                    }
+                    Err(m) => vec![encode_req(wire::ERROR, format!("session_swap refused: {m}"), sid.as_deref(), None, req.as_deref())],
+                };
+            }
+            pf::SESSION_STATS_GET => {
+                let v: serde_json::Value = serde_json::from_str(&env.data).unwrap_or(serde_json::Value::Null);
+                let s = v["sessionId"].as_str().map(String::from).or(sid.clone()).unwrap_or_default();
+                let s = s.trim();
+                let r = if s.is_empty() { Err("sessionId is blank".to_string()) } else { self.stats_json(s) };
+                return match r {
+                    Ok(body) => vec![encode_req(pf::SESSION_STATS, body, Some(s), None, req.as_deref())],
+                    Err(m) => vec![encode_req(wire::ERROR, format!("session_stats_get refused: {m}"), sid.as_deref(), None, req.as_deref())],
+                };
+            }
             other => Err(format!("{other} refused: this daemon does not serve that frame yet").into()),
         };
         match r {
@@ -805,7 +867,15 @@ impl Daemon {
                 Err(err) => return self.fail_start(e, err),
             }
         }
-        let turn = Turn { prompt: text, resume: e.rec.provider_session_id.clone() };
+        e.stats.turn(e.rec.model.as_deref());
+        // HARNESS-CARRY-1: the first turn after a swap carries the conversation so far (the transcript shows the turn as typed).
+        let prompt = match e.carry.take().filter(|_| e.rec.provider_session_id.is_none()) {
+            Some(c) => format!("{c}
+
+{text}"),
+            None => text,
+        };
+        let turn = Turn { prompt, resume: e.rec.provider_session_id.clone() };
         match e.hs.as_mut().unwrap().send_turn(turn) {
             Ok(start) => {
                 let line = match start.pid {
@@ -885,6 +955,14 @@ impl Daemon {
                 self.emit(&mut e, wire::TEXT_DELTA, t);
             }
             HarnessEvent::Stderr(l) => self.emit(&mut e, wire::STDERR, l),
+            HarnessEvent::Tool(name) => {
+                e.rec.last_output_at = Some(now_ms());
+                e.stats.tool(&name);
+            }
+            HarnessEvent::Usage(u) => {
+                e.rec.last_output_at = Some(now_ms());
+                e.stats.usage(u);
+            }
             HarnessEvent::TurnEnded { end, exit_code, reason, process_alive } if e.turn_active => {
                 self.end_turn(&mut e, end, exit_code, reason, process_alive)
             }
@@ -925,7 +1003,11 @@ impl Daemon {
         };
         if end == TurnEnd::Failed {
             e.rec.last_error = Some(detail.clone());
+        } else {
+            e.stats.assistant_turns += 1;
         }
+        e.stats.last_at = Some(now_ms());
+        e.stats.save(&self.cfg.state_dir, &e.rec.id);
         Self::set_state(e, state);
         self.push(e);
         let st = state_word(state).to_ascii_uppercase();
@@ -933,9 +1015,19 @@ impl Daemon {
         self.emit(e, wire::FINISHED, wire::finished(code, outcome, &detail));
         self.emit(e, wire::STATUS, wire::status_run(&st, "idle", now_ms(), e.turn_started));
         self.notify(|o| o.on_turn_end(&e.rec, outcome, &detail));
-        if !e.rec.queued.is_empty() {
+        if std::mem::take(&mut e.reap_pending) {
+            self.reap_later(&e.rec.id.clone());
+        } else if !e.rec.queued.is_empty() {
             self.drain_later(&e.rec.id.clone());
         }
+    }
+
+    /// The done-worker reaper's deferred removal, after the turn's frames.
+    fn reap_later(self: &Arc<Self>, sid: &str) {
+        let (d, sid) = (self.clone(), sid.to_string());
+        tokio::spawn(async move {
+            let _ = tokio::task::spawn_blocking(move || d.reap_one(&sid)).await;
+        });
     }
 
     fn interrupt(self: &Arc<Self>, sid: &str) -> Result<(), String> {
@@ -1027,6 +1119,7 @@ impl Daemon {
             }
         }
         self.cache.lock().unwrap().retain(|r| r.id != sid);
+        Stats::remove(&self.cfg.state_dir, sid);
         self.dirty.store(true, Ordering::SeqCst);
         self.broadcast(wire::SESSIONS, self.sessions_json());
         Ok(())

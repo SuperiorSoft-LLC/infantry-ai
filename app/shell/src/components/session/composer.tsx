@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 // Prompt composer. Idle session: Enter sends the prompt. Busy session: red border, Enter queues the text as its next
 // turn; the queued turns are listed above with remove / send-now. No session: Enter starts a new one.
-// Stop interrupts the running turn. The other toolbar actions are still mock.
+// Stop interrupts the running turn; Swap agent and Restart session open the session dialogs. The others are still mock.
 import { useState } from "react";
 import { Paperclip, ArrowLeftRight, Play, CircleX, Trash2, RotateCw, Mic, Square, SendHorizontal, X, Zap } from "lucide-react";
 import { cn } from "@infantry/ui";
@@ -12,6 +12,7 @@ import type { QueuedTurnView } from "@infantry/client";
 import { useShallow } from "zustand/react/shallow";
 import { useDaemon } from "@/daemon/daemon";
 import { useUi } from "@/state/ui-state";
+import { openSessionDialog } from "./session-actions";
 
 const tools = [
   { label: "Attach file", icon: Paperclip },
@@ -32,6 +33,8 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
   const actions: Record<string, (() => void) | undefined> = {
     Resume: () => ui.set("dialog", "resume"),
     "Cancel turn": sessionId && busy ? () => interrupt(sessionId) : undefined,
+    "Swap agent": sessionId ? () => openSessionDialog("swap", sessionId) : undefined,
+    "Restart session": sessionId ? () => openSessionDialog("restart", sessionId) : undefined,
   };
   const queued = useDaemon((s) => (sessionId ? s.sessions[sessionId]?.record.queued : undefined)) ?? NO_QUEUE;
   const online = useDaemon((s) => s.connection.state === "open");

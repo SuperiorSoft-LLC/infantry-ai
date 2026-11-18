@@ -1,0 +1,261 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
+// Session actions (RUST-SESS-2): interrupt (the store's existing `interrupt`), restart (`session_restart`; a mid-turn
+// refusal offers a forced retry), switch provider/model (`session_swap`, providers from the launcher's harness list)
+// and stats (`session_stats_get`). The header buttons and the composer toolbar open the same dialogs; every dialog is
+// the one modal.
+import { useEffect, useState } from "react";
+import { createStore } from "zustand/vanilla";
+import { useStore } from "zustand";
+import { ArrowLeftRight, BarChart3, CircleX, RotateCw } from "lucide-react";
+import { createSessionActions, isMidTurnRefusal, modelsFor, type SessionActions, type SessionStats } from "@infantry/client";
+import { AppDialog, Button, IconButton, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@infantry/ui";
+import { daemonStore, useDaemon } from "@/daemon/daemon";
+import { useLauncher } from "@/components/dialogs/new-agent-dialog";
+import { Field } from "@/components/knowledge/parts";
+
+type Modal = "restart" | "swap" | "stats";
+
+const modal = createStore<{ open: Modal | null; sessionId: string | null }>(() => ({ open: null, sessionId: null }));
+
+/** Opens one of the session dialogs for [sessionId] (the composer toolbar uses this too). */
+export function openSessionDialog(kind: Modal, sessionId: string): void {
+  modal.setState({ open: kind, sessionId });
+}
+
+let actions: SessionActions | null = null;
+function sessionActions(): SessionActions {
+  return (actions ??= createSessionActions(daemonStore().getState()));
+}
+
+/** The header's action buttons. */
+export function SessionActionButtons({ sessionId, busy }: { sessionId: string; busy: boolean }) {
+  const interrupt = useDaemon((s) => s.interrupt);
+  const online = useDaemon((s) => s.connection.state === "open");
+  return (
+    <div role="toolbar" aria-label="Session controls" className="flex items-center gap-1">
+      <IconButton label="Interrupt" disabled={!busy || !online} onClick={() => interrupt(sessionId)}>
+        <CircleX />
+      </IconButton>
+      <IconButton label="Restart session" disabled={!online} onClick={() => openSessionDialog("restart", sessionId)}>
+        <RotateCw />
+      </IconButton>
+      <IconButton label="Switch provider or model" disabled={!online} onClick={() => openSessionDialog("swap", sessionId)}>
+        <ArrowLeftRight />
+      </IconButton>
+      <IconButton label="Session stats" disabled={!online} onClick={() => openSessionDialog("stats", sessionId)}>
+        <BarChart3 />
+      </IconButton>
+    </div>
+  );
+}
+
+/** Rendered once in the session view: whichever session dialog is open. */
+export function SessionDialogs() {
+  const { open, sessionId } = useStore(modal);
+  const close = (): void => modal.setState({ open: null });
+  if (!open || !sessionId) return null;
+  if (open === "restart") return <RestartDialog sessionId={sessionId} onClose={close} />;
+  if (open === "swap") return <SwapDialog sessionId={sessionId} onClose={close} />;
+  return <StatsDialog sessionId={sessionId} onClose={close} />;
+}
+
+function Refusal({ text }: { text: string | null }) {
+  return text ? (
+    <p role="alert" className="rounded-md border border-danger/60 bg-danger/10 px-3 py-2 text-xs text-danger">
+      {text}
+    </p>
+  ) : null;
+}
+
+function RestartDialog({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [why, setWhy] = useState<string | null>(null);
+  const midTurn = !!why && isMidTurnRefusal(why);
+  const go = (force: boolean): void => {
+    setBusy(true);
+    setWhy(null);
+    sessionActions()
+      .restart(sessionId, force)
+      .then(onClose, (e) => setWhy(String(e)))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <AppDialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title="Restart session"
+      description="Stops the agent process and starts it again on the same conversation."
+      footer={
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          {midTurn ? (
+            <Button variant="destructive" size="sm" disabled={busy} onClick={() => go(true)}>
+              Restart anyway
+            </Button>
+          ) : (
+            <Button size="sm" disabled={busy} onClick={() => go(false)}>
+              Restart
+            </Button>
+          )}
+        </div>
+      }
+    >
+      <div className="space-y-2 text-[13px]">
+        <p>
+          Restart <span className="font-mono text-xs">{sessionId.slice(0, 8)}</span>?
+        </p>
+        <Refusal text={why} />
+        {midTurn && <p className="text-xs text-muted-foreground">The session is mid-turn. Restarting anyway ends the running turn.</p>}
+      </div>
+    </AppDialog>
+  );
+}
+
+const CUSTOM = "__custom__";
+
+function SwapDialog({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+  const { harnesses, catalog } = useLauncher();
+  const record = useDaemon((s) => s.sessions[sessionId]?.record);
+  const [provider, setProvider] = useState(record?.provider ?? "");
+  const [model, setModel] = useState("");
+  const [effort, setEffort] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [why, setWhy] = useState<string | null>(null);
+  const [custom, setCustom] = useState(false);
+
+  useEffect(() => {
+    if (harnesses.length === 0) setCustom(true);
+    else if (!provider && harnesses.length) setProvider(harnesses.find((h) => h.default)?.id ?? harnesses[0].id);
+  }, [harnesses]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const models = [...new Set(modelsFor(provider, harnesses, catalog).flatMap((g) => g.models))];
+  const submit = (): void => {
+    setBusy(true);
+    setWhy(null);
+    sessionActions()
+      .swap({ sessionId, provider: provider.trim(), model: model.trim() || undefined, effort: effort.trim() || undefined })
+      .then(onClose, (e) => setWhy(String(e)))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <AppDialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title="Switch provider or model"
+      description={record ? `Now: ${record.provider}${record.model ? ` · ${record.model}` : ""}` : undefined}
+      footer={
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size="sm" disabled={busy || !provider.trim()} onClick={submit}>
+            Switch
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <Field id="swap-provider" label="Provider">
+          {custom ? (
+            <Input id="swap-provider" value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="claude" />
+          ) : (
+            <Select value={provider || undefined} onValueChange={(v) => (v === CUSTOM ? setCustom(true) : (setProvider(v), setModel("")))}>
+              <SelectTrigger id="swap-provider" className="w-full">
+                <SelectValue placeholder="Pick a provider" />
+              </SelectTrigger>
+              <SelectContent>
+                {harnesses.map((h) => (
+                  <SelectItem key={h.id} value={h.id} disabled={h.available === false}>
+                    {h.id}
+                    {h.available === false ? " (unavailable)" : ""}
+                  </SelectItem>
+                ))}
+                <SelectItem value={CUSTOM}>Other...</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </Field>
+        <Field id="swap-model" label="Model" hint="Empty = the provider's default model.">
+          <Input id="swap-model" list="swap-model-options" value={model} onChange={(e) => setModel(e.target.value)} placeholder="default" />
+          <datalist id="swap-model-options">
+            {models.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        </Field>
+        <Field id="swap-effort" label="Effort">
+          <Input id="swap-effort" list="swap-effort-options" value={effort} onChange={(e) => setEffort(e.target.value)} placeholder="default" />
+          <datalist id="swap-effort-options">
+            {["low", "medium", "high", "xhigh", "max"].map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        </Field>
+        <Refusal text={why} />
+      </div>
+    </AppDialog>
+  );
+}
+
+const dash = (v: unknown): string => (v == null || v === "" ? "-" : String(v));
+const when = (ms?: number | null): string => (ms ? new Date(ms).toLocaleString() : "-");
+function duration(ms?: number | null): string {
+  if (ms == null) return "-";
+  const s = Math.round(ms / 1000);
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+}
+
+function StatsDialog({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+  const [stats, setStats] = useState<SessionStats | null>(null);
+  const [why, setWhy] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    sessionActions()
+      .stats(sessionId)
+      .then(
+        (s) => live && setStats(s),
+        (e) => live && setWhy(String(e)),
+      );
+    return () => {
+      live = false;
+    };
+  }, [sessionId]);
+  const rows: [string, string][] = stats
+    ? [
+        ["Harness", dash(stats.harness)],
+        ["Provider session", dash(stats.providerSessionId)],
+        ["Status", dash(stats.status)],
+        ["Started", when(stats.startedAt)],
+        ["Ended", when(stats.endedAt)],
+        ["Duration", duration(stats.durationMs)],
+        ["Prompts", dash(stats.userPrompts)],
+        ["Assistant turns", dash(stats.assistantTurns)],
+        ["Tool uses", dash(stats.toolUses)],
+        ["Models", stats.models?.length ? stats.models.join(", ") : "-"],
+        ["Last context tokens", dash(stats.lastContextTokens?.toLocaleString())],
+        ["Billed tokens", dash(stats.billedTokens?.toLocaleString())],
+        ["Cost", stats.costTotal != null ? `$${stats.costTotal.toFixed(4)}` : "-"],
+      ]
+    : [];
+  return (
+    <AppDialog open onOpenChange={(o) => !o && onClose()} title="Session stats" description={sessionId}>
+      {why ? (
+        <Refusal text={why} />
+      ) : !stats ? (
+        <p className="text-xs text-muted-foreground">Loading...</p>
+      ) : (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
+          {rows.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="text-muted-foreground">{k}</dt>
+              <dd className="min-w-0 truncate font-mono text-xs leading-5">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </AppDialog>
+  );
+}

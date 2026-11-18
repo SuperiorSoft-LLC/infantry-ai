@@ -9,6 +9,7 @@ pub mod compose;
 pub mod harness;
 pub mod health;
 pub mod held;
+pub mod run;
 pub mod server;
 pub mod sessions;
 pub mod store;

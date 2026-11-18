@@ -4,7 +4,7 @@
 //! gets one thread with its own small runtime that owns the session's [`HarnessDriver`]: the daemon's calls become
 //! commands to it, the driver's events become daemon [`HarnessEvent`]s. Names no vendor.
 
-use super::{Capabilities, EventSink, Harness, HarnessEvent, HarnessSession, OpenRequest, RunStart, Turn, TurnEnd};
+use super::{Capabilities, EventSink, Harness, HarnessEvent, HarnessSession, OpenRequest, RunStart, TokenUsage, Turn, TurnEnd};
 use infantry_harness::{
     ApprovalMode, Harness as NeutralHarness, HarnessDriver, HarnessEvent as Ev, LaunchRequest, Runner, TurnDelivery,
     TurnEnd as End,
@@ -250,7 +250,14 @@ impl Worker {
                     self.state.alive.store(false, Ordering::SeqCst);
                     self.sink.emit(HarnessEvent::Exited { code });
                 }
-                Ev::TurnStarted | Ev::Reasoning(_) | Ev::ToolStarted { .. } | Ev::ToolFinished { .. } | Ev::Usage(_) => {}
+                Ev::ToolStarted { name, .. } => self.sink.emit(HarnessEvent::Tool(name)),
+                Ev::Usage(u) => self.sink.emit(HarnessEvent::Usage(TokenUsage {
+                    input: u.input_tokens,
+                    cached: u.cached_input_tokens,
+                    output: u.output_tokens,
+                    reasoning: u.reasoning_tokens,
+                })),
+                Ev::TurnStarted | Ev::Reasoning(_) | Ev::ToolFinished { .. } => {}
             }
         }
     }

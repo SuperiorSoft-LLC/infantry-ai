@@ -14,6 +14,7 @@ import { SessionTabBar } from "./session-tab-bar";
 import { Transcript } from "./transcript";
 import { FloatingViewButtons } from "./floating-view-buttons";
 import { Composer } from "./composer";
+import { SessionDialogs } from "./session-actions";
 
 export function SessionView() {
   const ui = useUi();
@@ -62,6 +63,7 @@ export function SessionView() {
       ) : (
         <TabContent tab={ui.sessionTab} />
       )}
+      <SessionDialogs />
     </main>
   );
 }

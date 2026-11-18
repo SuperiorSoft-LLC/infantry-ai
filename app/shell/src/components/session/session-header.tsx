@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// Session header: avatar, name, session id, role/status chips, provider/model chips, runs, tokens.
+// Session header: avatar, name, session id, role/status chips, provider/model chips, runs, tokens, and the session
+// controls (interrupt, restart, switch provider/model, stats).
 import type { Agent } from "@/mock/types";
 import { AgentAvatar } from "@/components/agents/agent-avatar";
 import { Chip } from "@infantry/ui";
+import { SessionActionButtons } from "./session-actions";
 
 export function SessionHeader({ agent }: { agent: Agent }) {
   return (
@@ -29,6 +31,7 @@ export function SessionHeader({ agent }: { agent: Agent }) {
         <Chip tone="blue">
           {agent.tokensIn} / {agent.tokensOut}
         </Chip>
+        <SessionActionButtons sessionId={agent.id} busy={agent.status === "working"} />
       </div>
     </div>
   );

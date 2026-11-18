@@ -32,7 +32,7 @@ function launcherStore(): LauncherStore {
 }
 
 /** Loads the harness and model lists once the link is open. */
-function useLauncher() {
+export function useLauncher() {
   const open = useDaemon((s) => s.connection.state) === "open";
   useEffect(() => {
     if (open) launcherStore().getState().ensureLoaded();
