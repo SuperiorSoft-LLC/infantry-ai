@@ -14,6 +14,7 @@ import { SessionTabBar } from "./session-tab-bar";
 import { Transcript } from "./transcript";
 import { FloatingViewButtons } from "./floating-view-buttons";
 import { Composer } from "./composer";
+import { PromptCards } from "./prompt-cards";
 import { SessionDialogs } from "./session-actions";
 
 export function SessionView() {
@@ -55,6 +56,7 @@ export function SessionView() {
             )}
             <FloatingViewButtons />
           </div>
+          {agent && <PromptCards sessionId={agent.id} />}
           <div className="px-4 pt-2 pb-1.5 font-mono text-[11px] text-muted-foreground">
             permissions: {permissionsLine.mode} · {permissionsLine.agents} agents · {busy ? permissionsLine.state : "idle"}
           </div>

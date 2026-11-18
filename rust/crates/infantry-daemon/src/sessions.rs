@@ -221,6 +221,8 @@ pub struct Daemon {
     launch: Mutex<crate::harness::launch::LaunchBase>,
     /// Whether a role exists (`session_swap` to a role); unset = any well-formed role.
     role_known: std::sync::OnceLock<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
+    /// Where tool approvals and questions go (the owner's prompt cards); unset = sessions run with allow-all.
+    prompter: std::sync::OnceLock<Arc<dyn crate::harness::Prompter>>,
 }
 
 fn encode(ty: &str, data: String, session: Option<&str>, seq: Option<i64>) -> String {
@@ -298,6 +300,7 @@ impl Daemon {
             health: Arc::new(crate::health::Health::new(&cfg_dir)),
             launch: Mutex::new(Default::default()),
             role_known: std::sync::OnceLock::new(),
+            prompter: std::sync::OnceLock::new(),
         });
         d.refresh_held();
         Ok(d)
@@ -897,6 +900,11 @@ impl Daemon {
         }
     }
 
+    /// Routes every session's tool approvals and questions (set once, at composition).
+    pub fn set_prompter(&self, p: Arc<dyn crate::harness::Prompter>) {
+        let _ = self.prompter.set(p);
+    }
+
     /// Sets what every agent process started from now on is told about this daemon.
     pub fn set_launch(&self, base: crate::harness::launch::LaunchBase) {
         *self.launch.lock().unwrap() = base;
@@ -913,6 +921,11 @@ impl Daemon {
             state_dir: self.cfg.state_dir.clone(),
             env,
             mcp,
+            approval: match self.prompter.get() {
+                Some(p) => p.mode(&e.rec.id, e.rec.project_id.as_deref(), e.rec.role.as_deref()),
+                None => infantry_harness::ApprovalMode::AllowAll,
+            },
+            prompter: self.prompter.get().cloned(),
         };
         let harness = self.harness_for(Some(&e.rec.provider)).ok_or_else(|| format!("no harness named `{}` on this daemon", e.rec.provider))?;
         let hs = harness.open(req, EventSink(tx))?;
@@ -1066,6 +1079,9 @@ impl Daemon {
         }
         if let Some(mut hs) = e.hs.take() {
             hs.close(force);
+        }
+        if let Some(p) = self.prompter.get() {
+            p.end(sid);
         }
         let now = now_ms();
         e.turn_active = false;

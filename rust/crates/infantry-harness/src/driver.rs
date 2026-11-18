@@ -469,6 +469,14 @@ impl HarnessDriver {
         self.deliver_outbound().await;
     }
 
+    /// The host's answers to [`HarnessEvent::QuestionAsked`] [id].
+    pub async fn answer_questions(&mut self, id: &str, answers: Vec<crate::HarnessAnswer>) {
+        if let Some(live) = self.live.as_mut() {
+            live.translator.answer_questions(id, answers);
+        }
+        self.deliver_outbound().await;
+    }
+
     /// Stops the running turn: the CLI's own interrupt when it has one, else the process tree is killed. False = no turn.
     pub async fn interrupt(&mut self) -> bool {
         if !self.turn_active {

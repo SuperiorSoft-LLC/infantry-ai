@@ -15,6 +15,7 @@ mod adapters;
 mod agent_tools;
 pub mod host_frames;
 mod plugins;
+mod prompter;
 mod settings;
 pub mod scope;
 mod tools;
@@ -87,6 +88,8 @@ pub struct Composed {
     pub tools: Arc<Tools>,
     pub knowledge: Arc<infantry_knowledge::Knowledge>,
     pub plugins: Option<Arc<infantry_plugin_host::PluginHost>>,
+    /// The open owner prompts (a new client is shown them).
+    pub prompts: Arc<PendingPrompts>,
     next_conn: AtomicU64,
 }
 
@@ -116,6 +119,10 @@ fn plugins_dir() -> Option<PathBuf> {
 pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, String> {
     let handle = tokio::runtime::Handle::current();
     let db = Arc::new(Db::open(state_dir.join("infantry.db")).map_err(|e| format!("infantry.db: {e}"))?);
+    // A fresh state dir: every table exists before any unit reads or adds its own.
+    if crate::fresh_schema::ensure(&db).map_err(|e| format!("infantry.db: {e}"))? {
+        log_line("infantry.db: a fresh database; the full schema was created");
+    }
     let bus = EventBus::new(BUS_CAPACITY);
     for h in crate::harness::all_except(daemon.harness.name()) {
         daemon.add_harness(h);
@@ -209,6 +216,11 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
             b.publish(e);
         });
     }
+    daemon.set_prompter(Arc::new(prompter::SessionPrompter {
+        prompts: prompts.clone(),
+        settings: settings::SettingsUnit { db: db.clone() },
+        handle: handle.clone(),
+    }));
     let notify = Arc::new(NotifyService::new(state_dir.to_path_buf(), Arc::new(NotifySettings::default), clock(), Arc::new(adapters::minute_of_day)));
     {
         let b = bus.clone();
@@ -346,7 +358,7 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         Arc::new(AttentionUnit::new(attention.clone())),
         Arc::new(NotificationsUnit::new(hub)),
         Arc::new(NotifyUnit::new(notify)),
-        Arc::new(PromptsUnit::new(prompts, Some(rules))),
+        Arc::new(PromptsUnit::new(prompts.clone(), Some(rules))),
         Arc::new(QuestionsUnit::new(questions.clone(), asker_of)),
         Arc::new(tools::ToolsUnit { tools: tools.clone() }),
         Arc::new(crate::run::RunUnit { runs: runs.clone() }),
@@ -389,6 +401,7 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         tools,
         knowledge: knowledge.clone(),
         plugins: plugin_host.clone(),
+        prompts: prompts.clone(),
         next_conn: AtomicU64::new(1),
     });
     if let Some(p) = &plugin_set {
@@ -519,9 +532,16 @@ impl FrameUnits for Composed {
         self.dispatch(&env, id, owner).unwrap_or_default()
     }
 
-    /// The other units' connection burst: the worktree list (the sessions unit sends ready/policy/sessions).
+    /// The other units' connection burst: the worktree list (the sessions unit sends ready/policy/sessions), then
+    /// every open prompt card.
     fn hello(&self) -> Vec<String> {
-        self.dispatch(&Envelope::new(wire::WORKTREES, ""), 0, true).unwrap_or_default()
+        let mut out = self.dispatch(&Envelope::new(wire::WORKTREES, ""), 0, true).unwrap_or_default();
+        for p in self.prompts.snapshot() {
+            let mut e = Envelope::new(infantry_protocol::frames::PROMPT_REQUEST, serde_json::to_string(&p).unwrap_or_default());
+            e.session_id = Some(p.session_id.clone());
+            out.push(serde_json::to_string(&e).unwrap_or_default());
+        }
+        out
     }
 
     fn http(&self) -> Option<axum::Router> {

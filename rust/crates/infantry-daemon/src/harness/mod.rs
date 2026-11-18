@@ -24,8 +24,19 @@ pub struct Capabilities {
     pub persistent_process: bool,
 }
 
+/// Where a session's tool approvals and questions go: the owner's prompt cards. Each call returns at once; [done] runs
+/// (on any thread) once the owner, the timer or the session's end resolved it.
+pub trait Prompter: Send + Sync {
+    /// The approval mode a session runs with (its scoped setting, else the env, else the default).
+    fn mode(&self, session: &str, project: Option<&str>, role: Option<&str>) -> infantry_harness::ApprovalMode;
+    fn approve(&self, session: &str, tool: &str, input: &str, done: Box<dyn FnOnce(bool) + Send>);
+    fn ask(&self, session: &str, questions: Vec<infantry_harness::HarnessQuestion>, done: Box<dyn FnOnce(Vec<infantry_harness::HarnessAnswer>) + Send>);
+    /// The session ended: its open cards close.
+    fn end(&self, _session: &str) {}
+}
+
 /// Opens one daemon session's harness side.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OpenRequest {
     /// The daemon session id.
     pub session_id: String,
@@ -38,6 +49,16 @@ pub struct OpenRequest {
     pub env: Vec<(String, String)>,
     /// The MCP servers the agent gets (the infantry entry when the CLI is found).
     pub mcp: infantry_harness::McpPlan,
+    /// What the session may do without asking.
+    pub approval: infantry_harness::ApprovalMode,
+    /// Where its approvals and questions go; None = nobody can answer (an ask is denied).
+    pub prompter: Option<std::sync::Arc<dyn Prompter>>,
+}
+
+impl std::fmt::Debug for OpenRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpenRequest").field("session_id", &self.session_id).field("cwd", &self.cwd).field("approval", &self.approval).finish_non_exhaustive()
+    }
 }
 
 /// One turn.

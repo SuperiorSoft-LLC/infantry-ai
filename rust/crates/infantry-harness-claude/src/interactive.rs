@@ -643,6 +643,15 @@ impl Translator for Interactive {
         self.out.extend(ob);
     }
 
+    fn answer_questions(&mut self, id: &str, answers: Vec<infantry_harness::HarnessAnswer>) {
+        let mut ob = Vec::new();
+        if self.answers.answer_questions(id, &answers, &mut ob) {
+            self.dialog_seen_at = None;
+            self.menu_seen_at = None;
+        }
+        self.out.extend(ob);
+    }
+
     fn inject(&mut self, text: &str) -> bool {
         let Some(t) = self.active.as_ref() else { return false };
         if self.exited || t.stop_at.is_some() || t.abort_at.is_some() || !(t.own || t.entered_at.is_some()) || !self.injects.is_empty() {

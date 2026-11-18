@@ -6,7 +6,7 @@
 
 use super::{Capabilities, EventSink, Harness, HarnessEvent, HarnessSession, OpenRequest, RunStart, TokenUsage, Turn, TurnEnd};
 use infantry_harness::{
-    ApprovalMode, Harness as NeutralHarness, HarnessDriver, HarnessEvent as Ev, LaunchRequest, Runner, TurnDelivery,
+    ApprovalMode, Harness as NeutralHarness, HarnessAnswer, HarnessDriver, HarnessEvent as Ev, LaunchRequest, Runner, TurnDelivery,
     TurnEnd as End,
 };
 use infantry_runner_local::{LocalConfig, LocalRunner};
@@ -59,7 +59,7 @@ impl Harness for Driven {
             .clone();
         let (tx, rx) = mpsc::unbounded_channel();
         let state = Arc::new(State::default());
-        let worker = Worker { harness: self.harness.clone(), runner, req, sink, state: state.clone(), discard_end: false };
+        let worker = Worker { harness: self.harness.clone(), runner, req, sink, state: state.clone(), discard_end: false, back: tx.downgrade() };
         std::thread::Builder::new()
             .name(format!("infantry-harness-{}", self.harness.id()))
             .spawn(move || worker.run(rx))
@@ -78,6 +78,10 @@ enum Cmd {
     Turn(Turn, std_mpsc::Sender<Result<RunStart, String>>),
     Interrupt,
     Close { force: bool },
+    /// The owner's answer to an approval the CLI asked for.
+    Approve { id: String, allow: bool },
+    /// The owner's answers to a CLI's questions.
+    Answer { id: String, answers: Vec<HarnessAnswer> },
 }
 
 struct DrivenSession {
@@ -117,6 +121,8 @@ struct Worker {
     state: Arc<State>,
     /// The end of a turn the daemon already ended (an interrupt) is not passed on.
     discard_end: bool,
+    /// This worker's own command channel (weak: the session's drop still ends the worker): an owner's answer comes back on it.
+    back: mpsc::WeakUnboundedSender<Cmd>,
 }
 
 impl Worker {
@@ -157,6 +163,16 @@ impl Worker {
                         }
                         self.state.turn.store(false, Ordering::SeqCst);
                     }
+                    Some(Cmd::Approve { id, allow }) => {
+                        if let Some(d) = driver.as_mut() {
+                            d.answer(&id, allow).await;
+                        }
+                    }
+                    Some(Cmd::Answer { id, answers }) => {
+                        if let Some(d) = driver.as_mut() {
+                            d.answer_questions(&id, answers).await;
+                        }
+                    }
                     Some(Cmd::Close { force }) => {
                         if let Some(mut d) = driver.take() {
                             if force {
@@ -188,8 +204,8 @@ impl Worker {
         let mut base = LaunchRequest::new(self.req.cwd.clone());
         base.model = self.req.model.clone();
         base.effort = self.req.effort.clone();
-        // Questions and approvals are not routed to a prompt card yet: sessions run with approval = allow all.
-        base.approval = ApprovalMode::AllowAll;
+        // With no prompter nobody can answer an ask: such a session runs as it always did (allow all).
+        base.approval = if self.req.prompter.is_some() { self.req.approval } else { ApprovalMode::AllowAll };
         base.resume = resume;
         base.env_remove = ENV_REMOVE.map(String::from).to_vec();
         base.env = self.req.env.clone();
@@ -227,10 +243,34 @@ impl Worker {
                 Ev::Stderr(l) => self.sink.emit(HarnessEvent::Stderr(l)),
                 Ev::Warning(w) => self.sink.emit(HarnessEvent::Stderr(format!("[harness] {w}"))),
                 Ev::Error(err) => self.sink.emit(HarnessEvent::Stderr(format!("[harness] error: {err}"))),
-                Ev::ApprovalRequested { id, tool, .. } => {
-                    self.sink.emit(HarnessEvent::Stderr(format!("[harness] {tool} needs an approval this daemon cannot ask yet: denied")));
-                    d.answer(&id, false).await;
-                }
+                Ev::ApprovalRequested { id, tool, input } => match self.req.prompter.clone() {
+                    Some(p) => {
+                        let back = self.back.clone();
+                        p.approve(&self.req.session_id, &tool, &input, Box::new(move |allow| {
+                            if let Some(b) = back.upgrade() {
+                                let _ = b.send(Cmd::Approve { id, allow });
+                            }
+                        }));
+                    }
+                    None => {
+                        self.sink.emit(HarnessEvent::Stderr(format!("[harness] {tool} needs an approval nobody can answer here: denied")));
+                        d.answer(&id, false).await;
+                    }
+                },
+                Ev::QuestionAsked { id, questions } => match self.req.prompter.clone() {
+                    Some(p) => {
+                        let back = self.back.clone();
+                        p.ask(&self.req.session_id, questions, Box::new(move |answers| {
+                            if let Some(b) = back.upgrade() {
+                                let _ = b.send(Cmd::Answer { id, answers });
+                            }
+                        }));
+                    }
+                    None => {
+                        let n = questions.len();
+                        d.answer_questions(&id, vec![HarnessAnswer::default(); n]).await;
+                    }
+                },
                 Ev::TurnEnded { end, reason } => {
                     self.state.turn.store(false, Ordering::SeqCst);
                     if std::mem::take(&mut self.discard_end) {

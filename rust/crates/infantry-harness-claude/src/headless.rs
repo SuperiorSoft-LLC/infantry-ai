@@ -84,6 +84,12 @@ impl Translator for Headless {
         self.out.extend(ob);
     }
 
+    fn answer_questions(&mut self, id: &str, answers: Vec<infantry_harness::HarnessAnswer>) {
+        let mut ob = Vec::new();
+        self.answers.answer_questions(id, &answers, &mut ob);
+        self.out.extend(ob);
+    }
+
     fn take_outbound(&mut self) -> Vec<Outbound> {
         std::mem::take(&mut self.out)
     }

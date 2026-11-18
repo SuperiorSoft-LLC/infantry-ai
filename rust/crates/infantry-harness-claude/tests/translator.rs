@@ -456,6 +456,38 @@ fn the_permission_hook_asks_only_under_ask_and_the_question_hook_asks_in_plain_t
     assert_eq!(ask_mode.replies[0].1["hookSpecificOutput"]["decision"]["behavior"], "deny");
 }
 
+#[test]
+fn ask_user_question_goes_to_the_owner_and_the_answer_fills_the_tool_input() {
+    let ask = r#"{"hook_event_name":"PreToolUse","tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Which db?","header":"DB","multiSelect":false,"options":[{"label":"Postgres (Recommended)","description":"robust"},{"label":"SQLite"}]}]}}"#;
+    let mut r = Rig::new(ApprovalMode::AllowAll);
+    r.feed(TranslatorInput::Hook { id: 9, body: ask.into() });
+    assert!(r.replies.is_empty(), "the hook call waits for the owner");
+    let q = r
+        .seen
+        .iter()
+        .find_map(|e| match e {
+            HarnessEvent::QuestionAsked { id, questions } => Some((id.clone(), questions.clone())),
+            _ => None,
+        })
+        .expect("a question event");
+    assert_eq!(q.1.len(), 1);
+    assert!(q.1[0].text.starts_with("[DB] Which db?") && q.1[0].text.contains("- Postgres (Recommended): robust"));
+    assert_eq!(q.1[0].recommended.as_deref(), Some("Postgres (Recommended)"));
+    assert!(q.1[0].allow_other);
+    r.t.answer_questions(&q.0, vec![infantry_harness::HarnessAnswer { answered: true, answers: vec!["SQLite".into()], other_text: Some("for now".into()) }]);
+    r.take();
+    let out = &r.replies[0].1["hookSpecificOutput"];
+    assert_eq!(r.replies[0].0, 9);
+    assert_eq!(out["permissionDecision"], "allow");
+    assert_eq!(out["updatedInput"]["answers"]["Which db?"], "SQLite, for now");
+
+    // No answer (timeout): denied with the carry-on reason.
+    r.feed(TranslatorInput::Hook { id: 10, body: ask.into() });
+    r.t.answer_questions("hook-10", vec![infantry_harness::HarnessAnswer::default()]);
+    r.take();
+    assert_eq!(r.replies[1].1["hookSpecificOutput"]["permissionDecisionReason"], hooks::QUESTION_NO_ANSWER);
+}
+
 // ---- own turns, inject, close -----------------------------------------------------------------------------------------
 
 #[test]
