@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // One agent in the sidebar. Selected = amber border + scrolling stripes (SelectedStripes); a busy PM card is striped (SelectedStripes.kt).
-import { memo } from "react";
+import { memo, useState } from "react";
 import { cn } from "@infantry/ui";
 import type { Agent } from "@/mock/types";
 import { AgentAvatar } from "./agent-avatar";
+import { AgentMenu } from "./agent-menu";
 import { ProgressLine, SelectedStripes } from "@infantry/ui";
 
 const chipTone: Record<Agent["status"], string> = {
@@ -20,7 +21,9 @@ const chipTone: Record<Agent["status"], string> = {
 export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: { agent: Agent; selected: boolean; onSelect: (id: string) => void }) {
   const striped = agent.roleId === "pm" && agent.status === "working";
   const compact = agent.group === "quiet";
+  const [menu, setMenu] = useState(false);
   return (
+    <div className="group/card relative" onContextMenu={(e) => (e.preventDefault(), setMenu(true))}>
     <button
       type="button"
       onClick={() => onSelect(agent.id)}
@@ -74,5 +77,7 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
         </div>
       </div>
     </button>
+    <AgentMenu sessionId={agent.id} open={menu} onOpenChange={setMenu} />
+    </div>
   );
 });

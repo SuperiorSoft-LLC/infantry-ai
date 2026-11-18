@@ -50,9 +50,9 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Card: avatar, state dot, role, last line, age, ticket | yes | done | |
 | Card badges: AUTO, report-back, watchdog, progress bar, runner | yes | partial | Progress line and ticket only. The rest is UI only (fields are on the session/agent frames). |
 | Pulsing border while busy, selected stripes | yes | partial | Live ring only. Cosmetic. |
-| Card "⋯" menu: Open, Resume, Assign to project, Remove | yes | missing | UI only (`resume`, `session_project`, `session_delete`). Remove exists in the composer today. |
-| Card ticket block: change / unassign ticket, ticket picker | yes | missing | UI only (`ticket_assign`, `agent_switch`, `ticket_unassign`). |
-| Card queue (running + queued tickets, move up/down, remove) | yes | missing | UI only (`agent_queue`). |
+| Card "⋯" menu: Open, Resume, Assign to project, Remove | yes | partial | *(RUST-UI-8)* "⋯" or right-click: Open, Resume (ended sessions), ticket actions, Remove with confirm. No "Assign to project" yet: UI only (`session_project`). |
+| Card ticket block: change / unassign ticket, ticket picker | yes | done | *(RUST-UI-8)* In the card menu: a searchable To Do picker (Assign / Queue, held tickets behind a toggle) and Unassign. Needs an agent profile on the session. |
+| Card queue (running + queued tickets, move up/down, remove) | yes | partial | *(RUST-UI-8)* The picker can queue a ticket. No queue list with move / remove: UI only (`agent_queue`). |
 | Drag a ticket onto an agent card to assign it | yes | missing | UI only (`ticket_assign`). |
 | Empty states | yes | done | |
 | "Working in every project" dialog (experimental) | yes | missing | UI only. |
