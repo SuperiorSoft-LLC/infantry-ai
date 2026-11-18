@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-scripting"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "Infantry AI scripting (L1 platform): sandboxed Lua 5.2 engine (mlua), the ih.* binding through a host trait, the two-phase action dispatcher, hooks on the event bus, timers, exec, the script store and run stats."
+publish = false
+
+[dependencies]
+infantry-core = { path = "../infantry-core" }
+mlua = { version = "0.10", features = ["lua52", "vendored"] }
+serde_json = "1"
+regex = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["rt", "time", "sync", "macros"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "sync", "macros"] }
+tempfile = "3"

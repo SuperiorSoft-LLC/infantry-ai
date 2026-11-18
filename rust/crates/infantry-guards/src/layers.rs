@@ -58,6 +58,7 @@ impl Layer {
 pub const LAYERS: &[(&str, Layer, u8)] = &[
     ("infantry-protocol", Layer::Wire, 0),
     ("infantry-core", Layer::Core, 0),
+    ("infantry-scripting", Layer::Core, 1),
     ("infantry-plugin-wit", Layer::Core, 0),
     ("infantry-plugin-host", Layer::Core, 1),
     ("infantry-plugin-sdk", Layer::Core, 1),
