@@ -30,7 +30,7 @@ impl Route {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct RouteTable {
     owned: fn(&str) -> bool,
     overrides: BTreeMap<String, Route>,

@@ -511,6 +511,7 @@ dependencies = [
  "sha2",
  "tokio",
  "tokio-tungstenite",
+ "tungstenite 0.24.0",
  "uuid",
 ]
 

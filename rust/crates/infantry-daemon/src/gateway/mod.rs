@@ -44,6 +44,8 @@ pub const MINTED_PREFIX: &str = "gw:";
 pub const SYNC_FRAME: &str = "gateway_sync";
 /// How long an unanswered forwarded frame is remembered (many frames are answered by a push, never directly).
 pub const PENDING_TTL: Duration = Duration::from_secs(600);
+/// Past this many remembered frames only the recent ones ([PENDING_REFUSE_WINDOW]) are kept.
+pub const PENDING_MAX: usize = 8192;
 /// An upstream lost within this time of forwarding a frame the client correlates refuses it, so the client does not wait.
 pub const PENDING_REFUSE_WINDOW: Duration = Duration::from_secs(60);
 /// How long a burst may take on a loaded backend.
@@ -427,6 +429,9 @@ impl Gateway {
             if p.len() >= 1024 {
                 let now = Instant::now();
                 p.retain(|_, e| now.duration_since(e.at) < PENDING_TTL);
+                if p.len() >= PENDING_MAX {
+                    p.retain(|_, e| now.duration_since(e.at) < PENDING_REFUSE_WINDOW);
+                }
             }
             let n = self.next_id.fetch_add(1, Ordering::SeqCst);
             let wire_id = match &original {
