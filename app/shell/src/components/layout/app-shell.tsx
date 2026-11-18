@@ -2,8 +2,9 @@
 // Copyright (c) SuperiorSoft LLC
 // Window layout: title bar, sidebar | session | right panel, status bar.
 // Wide: side panels sit inline. Narrow: they become overlay drawers over the session view.
-import { useEffect, type ReactNode } from "react";
-import { useNarrow, useUi } from "@/state/ui-state";
+import { useEffect, useRef, type ReactNode } from "react";
+import { panelsToClose, type Layout } from "@infantry/client";
+import { useLayout, useUi } from "@/state/ui-state";
 import { AgentSidebar } from "@/components/agents/agent-sidebar";
 import { SessionView } from "@/components/session/session-view";
 import { RightPanel } from "@/components/usage/right-panel";
@@ -16,28 +17,36 @@ function Drawer({ side, onClose, children }: { side: "left" | "right"; onClose: 
   return (
     <div className="absolute inset-0 z-30 flex" style={{ justifyContent: side === "left" ? "flex-start" : "flex-end" }}>
       <button type="button" aria-label="Close panel" className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative h-full shadow-2xl">{children}</div>
+      <div className="relative h-full max-w-[92vw] overflow-hidden shadow-2xl">{children}</div>
     </div>
   );
 }
 
 export function AppShell() {
   const ui = useUi();
-  const narrowLeft = useNarrow(900);
-  const narrowRight = useNarrow(1280);
+  const layout = useLayout();
+  const narrowLeft = !layout.leftInline;
+  const narrowRight = !layout.rightInline;
   const { set } = ui;
   usePluginsLoaded();
 
-  // Crossing into a narrow width collapses that panel; the title-bar toggles reopen it as a drawer.
+  // Crossing into a width where a panel becomes a drawer collapses it; the title-bar toggles reopen it (layout.ts).
+  const prev = useRef<Layout | null>(null);
   useEffect(() => {
-    if (narrowLeft) set("leftOpen", false);
-  }, [narrowLeft, set]);
+    const close = panelsToClose(prev.current, layout);
+    prev.current = layout;
+    if (close.left) set("leftOpen", false);
+    if (close.right) set("rightOpen", false);
+  }, [layout, set]);
+  // A phone or tablet: picking a session in the agents drawer closes it, so the session shows at once.
+  const picked = useRef(ui.selectedAgentId);
   useEffect(() => {
-    if (narrowRight) set("rightOpen", false);
-  }, [narrowRight, set]);
+    if (picked.current !== ui.selectedAgentId && layout.closeDrawerOnPick) set("leftOpen", false);
+    picked.current = ui.selectedAgentId;
+  }, [ui.selectedAgentId, layout.closeDrawerOnPick, set]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col" data-layout={layout.kind}>
       <TitleBar />
       <div className="relative flex min-h-0 flex-1">
         {ui.leftOpen && !narrowLeft && <AgentSidebar />}

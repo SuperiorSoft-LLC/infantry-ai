@@ -11,15 +11,18 @@ import { AvatarStrip } from "@/components/agents/avatar-strip";
 import { Brand } from "./brand";
 import { ProjectPicker } from "./project-picker";
 import { WindowControls } from "./window-controls";
+import { isMobile } from "@/daemon/daemon";
 
 export function TitleBar() {
   const ui = useUi();
   return (
-    <header data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-2 border-b bg-background pl-2 select-none">
+    <header data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-1 border-b bg-background pl-2 select-none sm:gap-2">
       <IconButton label={ui.leftOpen ? "Hide agents" : "Show agents"} onClick={() => ui.toggle("leftOpen")}>
         <PanelLeft />
       </IconButton>
-      <Brand />
+      <span className="hidden sm:contents">
+        <Brand />
+      </span>
       <ProjectPicker />
       <IconButton label="New ticket" variant="outline" className="border-danger/70 text-danger" onClick={() => ui.set("dialog", "new-ticket")}>
         <Plus />
@@ -41,7 +44,8 @@ export function TitleBar() {
         }}
         className="h-7 rounded border border-danger/70 px-2 text-xs whitespace-nowrap text-danger hover:bg-danger/10"
       >
-        {connection.attention} need attention
+        {connection.attention}
+        <span className="hidden sm:inline"> need attention</span>
       </button>
       <IconButton label={ui.rightOpen ? "Hide side panel" : "Show side panel"} onClick={() => ui.toggle("rightOpen")}>
         <PanelRight />
@@ -50,13 +54,13 @@ export function TitleBar() {
         <span className="size-1.5 rounded-full bg-foreground" /> {connection.host}
       </span>
       <ConnectionBadge showUrl className="hidden font-mono text-xs whitespace-nowrap xl:flex" />
-      <IconButton label={ui.theme === "dark" ? "Light theme" : "Dark theme"} onClick={ui.toggleTheme}>
+      <IconButton label={ui.theme === "dark" ? "Light theme" : "Dark theme"} className="hidden sm:inline-flex" onClick={ui.toggleTheme}>
         {ui.theme === "dark" ? <Sun /> : <Moon />}
       </IconButton>
       <IconButton label="Settings" onClick={() => ui.set("dialog", "settings")}>
         <Settings />
       </IconButton>
-      <WindowControls />
+      {!isMobile && <WindowControls />}
     </header>
   );
 }

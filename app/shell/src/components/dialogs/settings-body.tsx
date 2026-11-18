@@ -3,6 +3,7 @@
 // Settings dialog body: a side nav of sections and bordered setting rows.
 import { useEffect, useState } from "react";
 import { isTauri } from "@/daemon/daemon";
+import { RemoteRow } from "@/components/connect/connect-screen";
 import { cn } from "@infantry/ui";
 import { useUi } from "@/state/ui-state";
 import { Switch } from "@infantry/ui";
@@ -89,6 +90,7 @@ export function SettingsBody() {
         )}
         {!searching && section === "Daemon" && (
           <>
+            <RemoteRow />
             <RunnerRow />
             <PickerField id="set-daemon" label="Daemon" options={["This computer", "vps-runner-01"]} inheritLabel="This computer" />
             <SettingRow id="set-auto" title="Start daemon with the app" hint="Runs in the background">

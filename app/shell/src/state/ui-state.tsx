@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 // The ONE owner of view state. Components read it through useUi(); nothing duplicates it.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { layoutFor, type Layout } from "@infantry/client";
 
 /** A right-panel view id; which ones exist comes from the plugin registry (plugins/catalog.tsx). */
 export type RightTab = string;
@@ -76,6 +77,21 @@ export function useUi() {
 }
 
 /** True when the viewport is at or below `px` wide. */
+/** The responsive layout for the window's width (RUST-MOBILE-1, `layoutFor`): re-read on resize and rotation. */
+export function useLayout(): Layout {
+  const read = () => (typeof window === "undefined" ? layoutFor(1600) : layoutFor(window.innerWidth, window.matchMedia("(pointer: coarse)").matches));
+  const [l, setL] = useState(read);
+  useEffect(() => {
+    const on = () => setL((prev) => {
+      const next = read();
+      return prev.kind === next.kind && prev.leftInline === next.leftInline && prev.rightInline === next.rightInline && prev.tapTarget === next.tapTarget ? prev : next;
+    });
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  return l;
+}
+
 export function useNarrow(px: number) {
   const query = `(max-width: ${px}px)`;
   const [match, setMatch] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);

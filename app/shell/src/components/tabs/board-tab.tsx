@@ -2,7 +2,8 @@
 // Copyright (c) SuperiorSoft LLC
 // Kanban board on the live wire: one bordered lane per status, drag to move or reorder, click a card to edit.
 import { useEffect, useMemo, useState } from "react";
-import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCorners, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
+import { useLayout } from "@/state/ui-state";
+import { DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor, closestCorners, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { LayoutGrid, Plus, X } from "lucide-react";
 import { LANES, LANE_TITLES, laneOf, matchesFilter } from "@infantry/client";
@@ -38,7 +39,9 @@ export function BoardTab() {
     if (link === "open") boardStore().getState().ensureLoaded();
   }, [link]);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  // A phone: one lane per screen, a swipe snaps to the next; a card drags after a long press, so a swipe scrolls (layout.ts).
+  const layout = useLayout();
+  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 350, tolerance: 8 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const lanes = useMemo(
     () => LANES.map((status) => ({ status, all: laneOf(tickets, status) })).map((l) => ({ ...l, shown: l.all.filter((t) => matchesFilter(t, filter)) })),
     [tickets, filter],
@@ -88,7 +91,7 @@ export function BoardTab() {
         <EmptyState icon={<LayoutGrid className="size-6" />} title={link === "open" ? "Loading the board…" : "Waiting for the daemon…"} hint={link === "open" ? undefined : "The board appears when the connection opens."} />
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onStart} onDragOver={onOver} onDragEnd={onEnd} onDragCancel={() => (setDragId(null), setOverLane(null))}>
-          <div className="grid auto-cols-[minmax(240px,1fr)] grid-flow-col gap-3 overflow-x-auto pb-2">
+          <div className={layout.laneSnap ? "grid snap-x snap-mandatory auto-cols-[100%] grid-flow-col gap-3 overflow-x-auto overscroll-x-contain pb-2 [&>*]:snap-start" : "grid auto-cols-[minmax(240px,1fr)] grid-flow-col gap-3 overflow-x-auto pb-2"}>
             {lanes.map((l) => (
               <Lane key={l.status} status={l.status} title={LANE_TITLES[l.status]} tickets={l.shown} total={l.all.length} over={overLane === l.status && !!dragId} onOpen={setOpenId} />
             ))}
