@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// Bottom status bar: connection, resources, update, keyboard hints, build.
-import { AlertTriangle, Bug, Cpu } from "lucide-react";
-import { statusBar } from "@/mock/data";
+// Bottom status bar: connection, processes, an update the app found, keyboard hints, version.
+import { Cpu } from "lucide-react";
+import { SHORTCUT_HINTS } from "@infantry/client";
+import { useAttention } from "@/components/mail/use-mail";
+import { useAppVersionLine } from "./app-version";
 import { KeyHint } from "@infantry/ui";
 import { ConnectionBadge } from "./connection-badge";
 import { useUi } from "@/state/ui-state";
@@ -24,26 +26,32 @@ function ProcessesBadge() {
   );
 }
 
+/** The "update available" notice the start check posted (RUST-UPD-1); opens Settings > About. */
+function UpdatePill() {
+  const ui = useUi();
+  const note = useAttention((s) => s.notifications.find((n) => n.id.startsWith("app-update-")));
+  if (!note) return null;
+  return (
+    <button type="button" className="hidden truncate text-ok hover:underline md:inline" onClick={() => ui.set("dialog", "settings")}>
+      {note.title}
+    </button>
+  );
+}
+
 export function StatusBar() {
+  const version = useAppVersionLine();
   return (
     <footer className="flex h-6 shrink-0 items-center gap-4 border-t bg-background px-3 text-[11px] whitespace-nowrap">
       <ConnectionBadge />
-      <span className="hidden text-muted-foreground sm:inline">{statusBar.lastFrame}</span>
-      <span className="flex items-center gap-1 text-warn">
-        <AlertTriangle className="size-3" /> {statusBar.ramFree} · {statusBar.agentsCpu}
-      </span>
       <ProcessesBadge />
-      <button type="button" className="hidden truncate text-ok hover:underline md:inline">
-        {statusBar.update}
-      </button>
+      <UpdatePill />
       <span className="flex-1" />
       <span className="hidden items-center gap-3 xl:flex">
-        {statusBar.hints.map((h) => (
+        {SHORTCUT_HINTS.map((h) => (
           <KeyHint key={h}>{h}</KeyHint>
         ))}
       </span>
-      <span className="hidden font-mono text-muted-foreground lg:inline">{statusBar.build}</span>
-      <Bug className="size-3 text-muted-foreground" aria-hidden />
+      <span className="hidden font-mono text-muted-foreground lg:inline">{version}</span>
     </footer>
   );
 }

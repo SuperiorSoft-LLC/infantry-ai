@@ -14,7 +14,7 @@ import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { useLauncher } from "@/components/dialogs/new-agent-dialog";
 import { Field } from "@/components/knowledge/parts";
 
-type Modal = "restart" | "swap" | "stats";
+type Modal = "restart" | "swap" | "stats" | "delete";
 
 const modal = createStore<{ open: Modal | null; sessionId: string | null }>(() => ({ open: null, sessionId: null }));
 
@@ -57,6 +57,7 @@ export function SessionDialogs() {
   if (!open || !sessionId) return null;
   if (open === "restart") return <RestartDialog sessionId={sessionId} onClose={close} />;
   if (open === "swap") return <SwapDialog sessionId={sessionId} onClose={close} />;
+  if (open === "delete") return <DeleteDialog sessionId={sessionId} onClose={close} />;
   return <StatsDialog sessionId={sessionId} onClose={close} />;
 }
 
@@ -66,6 +67,35 @@ function Refusal({ text }: { text: string | null }) {
       {text}
     </p>
   ) : null;
+}
+
+/** Remove a session (`session_delete`): "This can't be undone", Cancel first. */
+function DeleteDialog({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+  const name = useDaemon((s) => s.sessions[sessionId]?.record.role ?? null);
+  const remove = (): void => {
+    daemonStore().getState().sendFrame({ type: "session_delete", data: sessionId, sessionId });
+    onClose();
+  };
+  return (
+    <AppDialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title={`Remove ${name ?? "this session"}?`}
+      description="The session and its transcript are removed. This can't be undone."
+      footer={
+        <>
+          <Button variant="ghost" autoFocus onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={remove}>
+            Remove
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-muted-foreground">A running turn is stopped first. Git branches and worktrees are not touched.</p>
+    </AppDialog>
+  );
 }
 
 function RestartDialog({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
@@ -208,7 +238,8 @@ function duration(ms?: number | null): string {
   return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
 }
 
-function StatsDialog({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+/** One session's numbers (`session_stats`): the Stats dialog and the Stats tab share it. */
+export function SessionStatsList({ sessionId }: { sessionId: string }) {
   const [stats, setStats] = useState<SessionStats | null>(null);
   const [why, setWhy] = useState<string | null>(null);
   useEffect(() => {
@@ -241,7 +272,7 @@ function StatsDialog({ sessionId, onClose }: { sessionId: string; onClose: () =>
       ]
     : [];
   return (
-    <AppDialog open onOpenChange={(o) => !o && onClose()} title="Session stats" description={sessionId}>
+    <>
       {why ? (
         <Refusal text={why} />
       ) : !stats ? (
@@ -256,6 +287,14 @@ function StatsDialog({ sessionId, onClose }: { sessionId: string; onClose: () =>
           ))}
         </dl>
       )}
+    </>
+  );
+}
+
+function StatsDialog({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+  return (
+    <AppDialog open onOpenChange={(o) => !o && onClose()} title="Session stats" description={sessionId}>
+      <SessionStatsList sessionId={sessionId} />
     </AppDialog>
   );
 }

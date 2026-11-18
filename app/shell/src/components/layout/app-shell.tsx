@@ -12,6 +12,7 @@ import { DialogHost } from "@/components/dialogs/dialog-host";
 import { TitleBar } from "./title-bar";
 import { StatusBar } from "./status-bar";
 import { usePluginsLoaded } from "@/plugins/use-plugins";
+import { useShortcuts } from "./use-shortcuts";
 
 function Drawer({ side, onClose, children }: { side: "left" | "right"; onClose: () => void; children: ReactNode }) {
   return (
@@ -29,6 +30,7 @@ export function AppShell() {
   const narrowRight = !layout.rightInline;
   const { set } = ui;
   usePluginsLoaded();
+  useShortcuts();
 
   // Crossing into a width where a panel becomes a drawer collapses it; the title-bar toggles reopen it (layout.ts).
   const prev = useRef<Layout | null>(null);

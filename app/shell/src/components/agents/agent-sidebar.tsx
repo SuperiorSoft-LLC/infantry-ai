@@ -15,6 +15,7 @@ import { KeyHint } from "@infantry/ui";
 import { SidebarCounters } from "./sidebar-counters";
 import { RoleFilterChips } from "./role-filter-chips";
 import { AgentGroup } from "./agent-group";
+import { AGENT_SEARCH_ID } from "@/components/layout/use-shortcuts";
 
 export function AgentSidebar() {
   const ui = useUi();
@@ -46,6 +47,7 @@ export function AgentSidebar() {
             onChange={(e) => ui.set("search", e.target.value)}
             placeholder="Search agents..."
             aria-label="Search agents"
+            id={AGENT_SEARCH_ID}
             className="h-10 bg-card pr-10 pl-8"
           />
           <KeyHint className="absolute top-1/2 right-3 -translate-y-1/2">^K</KeyHint>

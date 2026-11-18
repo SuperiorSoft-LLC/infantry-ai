@@ -3,7 +3,9 @@
 // Custom title bar: brand, project, new/quick, avatars, attention, host, connection, window controls.
 // Empty areas carry data-tauri-drag-region so the window moves by dragging the bar.
 import { PanelLeft, PanelRight, Plus, Wand2, Moon, Sun, Settings } from "lucide-react";
-import { connection } from "@/mock/data";
+import { attentionCount, hostLabel } from "@infantry/client";
+import { useAttention } from "@/components/mail/use-mail";
+import { useDaemon } from "@/daemon/daemon";
 import { ConnectionBadge } from "./connection-badge";
 import { useUi } from "@/state/ui-state";
 import { IconButton } from "@infantry/ui";
@@ -15,6 +17,8 @@ import { isMobile } from "@/daemon/daemon";
 
 export function TitleBar() {
   const ui = useUi();
+  const attention = useAttention(attentionCount);
+  const host = useDaemon((s) => hostLabel(s.connection.url));
   return (
     <header data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-1 border-b bg-background pl-2 select-none sm:gap-2">
       <IconButton label={ui.leftOpen ? "Hide agents" : "Show agents"} onClick={() => ui.toggle("leftOpen")}>
@@ -36,7 +40,7 @@ export function TitleBar() {
 
       <div data-tauri-drag-region className="h-full min-w-4 flex-1" />
 
-      <button
+      {attention > 0 && <button
         type="button"
         onClick={() => {
           ui.set("rightTab", "attention");
@@ -44,14 +48,14 @@ export function TitleBar() {
         }}
         className="h-7 rounded border border-danger/70 px-2 text-xs whitespace-nowrap text-danger hover:bg-danger/10"
       >
-        {connection.attention}
+        {attention}
         <span className="hidden sm:inline"> need attention</span>
-      </button>
+      </button>}
       <IconButton label={ui.rightOpen ? "Hide side panel" : "Show side panel"} onClick={() => ui.toggle("rightOpen")}>
         <PanelRight />
       </IconButton>
       <span className="hidden items-center gap-1.5 text-xs whitespace-nowrap md:flex">
-        <span className="size-1.5 rounded-full bg-foreground" /> {connection.host}
+        <span className="size-1.5 rounded-full bg-foreground" /> {host}
       </span>
       <ConnectionBadge showUrl className="hidden font-mono text-xs whitespace-nowrap xl:flex" />
       <IconButton label={ui.theme === "dark" ? "Light theme" : "Dark theme"} className="hidden sm:inline-flex" onClick={ui.toggleTheme}>

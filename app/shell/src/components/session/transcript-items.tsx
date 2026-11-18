@@ -3,10 +3,11 @@
 // The transcript building blocks: thinking, tool calls, file edit + diff, comms, the agent's reply, finished line, note,
 // spinner. Each renders one immutable item from @infantry/client.
 import { useState, type ReactNode } from "react";
-import { Brain, ChevronRight, Loader2, Pencil, Mail, Volume2, Wrench, RotateCw } from "lucide-react";
+import { Brain, ChevronRight, Loader2, Pencil, Mail, Wrench, RotateCw } from "lucide-react";
 import { cn } from "@infantry/ui";
 import type { DiffLine, TranscriptItem } from "@infantry/client";
 import type { CommsBody } from "@/mock/types";
+import { Markdown } from "./markdown";
 
 export function ThinkingBlock({ count, text }: { count: number; text: string }) {
   const [open, setOpen] = useState(false);
@@ -91,9 +92,7 @@ function CommsText({ body }: { body: CommsBody }) {
   return (
     <div className="space-y-2 text-[13.5px] leading-6 break-words">
       {body.paragraphs.map((p, i) => (
-        <p key={i} className="whitespace-pre-wrap">
-          {p}
-        </p>
+        <Markdown key={i} text={p} />
       ))}
       {body.bullets && (
         <ul className="list-disc space-y-0.5 pl-5">
@@ -109,7 +108,8 @@ function CommsText({ body }: { body: CommsBody }) {
   );
 }
 
-const paragraphs = (text: string): CommsBody => ({ paragraphs: text.split(/\n{2,}/).filter((p) => p.trim() !== "") });
+/** One message as one markdown body (markdown.tsx splits it into blocks). */
+const paragraphs = (text: string): CommsBody => ({ paragraphs: text.trim() ? [text] : [] });
 
 export function CommsCard({
   time,
@@ -139,9 +139,6 @@ export function CommsCard({
             <RotateCw className="size-3" /> not sent - retry
           </button>
         )}
-        <button type="button" aria-label="Read aloud" className="text-muted-foreground hover:text-foreground">
-          <Volume2 className="size-3.5" />
-        </button>
         <span className="font-mono font-normal text-muted-foreground">{time}</span>
       </div>
       <div className="px-3 py-2.5">
