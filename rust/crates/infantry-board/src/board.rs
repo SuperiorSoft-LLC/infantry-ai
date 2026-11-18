@@ -8,12 +8,17 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use infantry_core::db::{Db, DbError};
-use infantry_orchestrator_api::dto::{skills_mode, status, Ticket, TicketMove, TicketSave};
+use infantry_orchestrator_api::dto::{
+    link_type, skills_mode, status, Comment, CommentAdd, CommentAuthor, CommentQuery, Epic, EpicBaseRequest, EpicSave, NotifyEdit,
+    Ticket, TicketLinkRequest, TicketMove, TicketReorder, TicketSave,
+};
 use infantry_orchestrator_api::{BoardAnswer, OrchError, TicketAnswer};
 use infantry_protocol::Envelope;
 use rusqlite::{Connection, TransactionBehavior};
 
+use crate::comments::Comments;
 use crate::env::{normalize_role, BoardEnv};
+use crate::epics::Epics;
 use crate::rules::{self, board_order, take, Snapshot};
 use crate::store::{self, TicketRow};
 use crate::views::{views, CONTEXT_LIMIT_MAX, CONTEXT_LIMIT_MIN};
@@ -57,11 +62,16 @@ pub struct Board {
     db: Arc<Db>,
     env: Arc<dyn BoardEnv>,
     lock: Mutex<()>,
+    epics: Epics,
+    /// None when its tables could not be created (the comment calls then refuse, like Kotlin).
+    comments: Option<Comments>,
 }
 
 impl Board {
     pub fn new(db: Arc<Db>, env: Arc<dyn BoardEnv>) -> Board {
-        Board { db, env, lock: Mutex::new(()) }
+        let epics = Epics::new(db.clone(), env.clone());
+        let comments = Comments::new(db.clone(), env.clone()).ok();
+        Board { db, env, lock: Mutex::new(()), epics, comments }
     }
 
     /// The database the board works on.
@@ -599,4 +609,228 @@ fn new_id(env: &dyn BoardEnv, s: &Snapshot) -> rules::Rule<String> {
         }
     }
     Err("could not find a free ticket id".into())
+}
+
+/// What the comment calls answer when the comment store could not start (Kotlin `CommentsWiring.UNAVAILABLE`).
+pub const COMMENTS_UNAVAILABLE: &str =
+    "ticket comments are unavailable: the comment store did not start (see the daemon log 'ticket comments unavailable')";
+
+/// `ticket_link`'s request as one stored row: the asking ticket, and the link in its stored direction.
+fn normalise_link(req: &TicketLinkRequest) -> rules::Rule<(String, store::LinkRow)> {
+    let a = req.ticket_id.trim().to_string();
+    let b = req.related_id.trim().to_string();
+    if a.is_empty() || b.is_empty() {
+        return Err("ticketId and relatedId are both required".into());
+    }
+    if a == b {
+        return Err("a ticket cannot be linked to itself".into());
+    }
+    let row = |t: &str, r: &str, ty: &str| store::LinkRow { ticket_id: t.into(), related_id: r.into(), r#type: ty.into(), created_at: 0 };
+    let ty = req.r#type.trim().to_lowercase();
+    let link = match ty.as_str() {
+        link_type::BLOCKED_BY | link_type::DEPENDS_ON => row(&a, &b, link_type::BLOCKED_BY),
+        link_type::BLOCKS => row(&b, &a, link_type::BLOCKED_BY),
+        link_type::CHILD_OF => row(&a, &b, link_type::CHILD_OF),
+        link_type::PARENT_OF => row(&b, &a, link_type::CHILD_OF),
+        link_type::DUPLICATES => row(&a, &b, link_type::DUPLICATES),
+        link_type::DUPLICATED_BY => row(&b, &a, link_type::DUPLICATES),
+        // Symmetric: one row whichever way round it was asked for.
+        link_type::RELATES_TO => {
+            let (lo, hi) = if a <= b { (&a, &b) } else { (&b, &a) };
+            row(lo, hi, link_type::RELATES_TO)
+        }
+        other => return Err(format!("type '{}' is not a link type: {}", take(other, 40), link_type::ALL.join(", "))),
+    };
+    Ok((a, link))
+}
+
+impl Board {
+    /// `ticket_link`: idempotent; `blocked_by` and `child_of` refuse a cycle.
+    pub fn link(&self, req: TicketLinkRequest, publish: &dyn Fn(Envelope)) -> Result<TicketAnswer, OrchError> {
+        let _g = self.guard();
+        let (primary, link) = normalise_link(&req).map_err(OrchError::Refused)?;
+        let outcome = self.commit(|s, _| {
+            s.require(&link.ticket_id)?;
+            s.require(&link.related_id)?;
+            if link.r#type == link_type::BLOCKED_BY || link.r#type == link_type::CHILD_OF {
+                // The new edge closes a cycle exactly when its target already reaches its source.
+                if let Some(path) = s.path(&link.related_id, &link.ticket_id, &link.r#type) {
+                    let sep = format!(" {} ", link.r#type);
+                    return Err(format!(
+                        "{} {} {} would close a cycle: {} already",
+                        link.ticket_id,
+                        link.r#type,
+                        link.related_id,
+                        path.join(&sep)
+                    ));
+                }
+            }
+            let mut l = link.clone();
+            l.created_at = s.now;
+            s.add_link(l);
+            Ok(())
+        })?;
+        Ok(self.answer(&primary, outcome, publish))
+    }
+
+    /// `ticket_unlink`: refused when there is no such link.
+    pub fn unlink(&self, req: TicketLinkRequest, publish: &dyn Fn(Envelope)) -> Result<TicketAnswer, OrchError> {
+        let _g = self.guard();
+        let (primary, link) = normalise_link(&req).map_err(OrchError::Refused)?;
+        let outcome = self.commit(|s, _| {
+            s.require(&link.ticket_id)?;
+            s.require(&link.related_id)?;
+            if !s.remove_link(&link) {
+                return Err(format!(
+                    "no link '{} {} {}'",
+                    req.ticket_id.trim(),
+                    req.r#type.trim().to_lowercase(),
+                    req.related_id.trim()
+                ));
+            }
+            Ok(())
+        })?;
+        Ok(self.answer(&primary, outcome, publish))
+    }
+
+    /// `ticket_reorder`: the listed tickets go on top of their columns, in order; never across columns.
+    pub fn reorder(&self, req: TicketReorder, publish: &dyn Fn(Envelope)) -> Result<BoardAnswer, OrchError> {
+        let _g = self.guard();
+        let refuse = OrchError::Refused;
+        let ids: Vec<String> = req.ids.iter().map(|i| i.trim().to_string()).collect();
+        if ids.is_empty() {
+            return Err(refuse("ids is empty: list the tickets to put on top, in order".into()));
+        }
+        let mut seen = std::collections::HashSet::new();
+        if let Some(d) = ids.iter().find(|i| !seen.insert(i.as_str())) {
+            return Err(refuse(format!("ids names '{}' more than once", take(d, 80))));
+        }
+        let wanted_status = req.status.as_deref().map(rules::check_status).transpose().map_err(refuse)?;
+        let outcome = self.commit(|s, _| {
+            for id in &ids {
+                s.require(id)?;
+            }
+            if let Some(st) = &wanted_status {
+                let strays: Vec<&str> = ids.iter().filter(|i| &s.rows[*i].status != st).map(String::as_str).collect();
+                if !strays.is_empty() {
+                    return Err(format!(
+                        "{} {} not in {st}: a reorder never moves a ticket to another column (ticket_move does)",
+                        strays.join(", "),
+                        if strays.len() == 1 { "is" } else { "are" }
+                    ));
+                }
+            }
+            // Columns in first-appearance order, each with its listed ids.
+            let mut groups: Vec<(String, Vec<String>)> = Vec::new();
+            for id in &ids {
+                let col = s.rows[id].status.clone();
+                match groups.iter_mut().find(|(c, _)| *c == col) {
+                    Some((_, v)) => v.push(id.clone()),
+                    None => groups.push((col, vec![id.clone()])),
+                }
+            }
+            for (col, listed) in groups {
+                for (i, id) in listed.iter().enumerate() {
+                    s.place(id, &col, Some(i as i32));
+                }
+                s.named.extend(listed);
+            }
+            Ok(())
+        })?;
+        Ok(self.board_answer(outcome, publish))
+    }
+
+    /// A ticket by full id or its unique (8-char) suffix, the way the comment tools find one.
+    pub fn find(&self, requested: &str) -> Result<Ticket, OrchError> {
+        let want = requested.trim();
+        if want.is_empty() {
+            return Err(OrchError::Refused("a ticket id is required".into()));
+        }
+        let all = self.list(None, None)?;
+        if let Some(t) = all.iter().find(|t| t.id == want) {
+            return Ok(t.clone());
+        }
+        let hits: Vec<&Ticket> = all.iter().filter(|t| t.id.ends_with(want)).collect();
+        match hits.len() {
+            1 => Ok(hits[0].clone()),
+            0 => Err(OrchError::Refused(format!("no ticket '{}'", take(want, 80)))),
+            n => Err(OrchError::Refused(format!("'{}' matches {n} tickets: use the full id", take(want, 80)))),
+        }
+    }
+
+    /// Each epic's ticket ids, in board order.
+    fn ticket_ids_by_epic(&self) -> Result<HashMap<String, Vec<String>>, OrchError> {
+        let mut out: HashMap<String, Vec<String>> = HashMap::new();
+        for t in self.list(None, None)? {
+            if let Some(e) = t.epic_id {
+                out.entry(e).or_default().push(t.id);
+            }
+        }
+        Ok(out)
+    }
+
+    pub fn epics(&self, project_id: &str) -> Result<Vec<Epic>, OrchError> {
+        self.epics.list(project_id, &self.ticket_ids_by_epic()?)
+    }
+
+    pub fn epic(&self, id: &str) -> Result<Epic, OrchError> {
+        self.epics.get(id, &self.ticket_ids_by_epic()?)
+    }
+
+    pub fn epic_save(&self, req: EpicSave) -> Result<Epic, OrchError> {
+        self.epics.save(req, &self.ticket_ids_by_epic()?)
+    }
+
+    pub fn epic_base(&self, req: EpicBaseRequest) -> Result<Epic, OrchError> {
+        self.epics.base(req, &self.ticket_ids_by_epic()?)
+    }
+
+    /// The epic's base branch, if set (a ticket start in the epic cuts from it).
+    pub fn epic_base_branch(&self, id: &str) -> Option<String> {
+        self.epics.base_branch_of(id)
+    }
+
+    /// The comment store, or the refusal Kotlin answers when it did not start.
+    pub fn comment_store(&self) -> Result<&Comments, OrchError> {
+        self.comments.as_ref().ok_or_else(|| OrchError::Refused(COMMENTS_UNAVAILABLE.into()))
+    }
+
+    /// Records a new ticket's creator and starting notify list (the create tool calls this).
+    pub fn record_creator(&self, ticket_id: &str, creator: &CommentAuthor, notify: Option<Vec<String>>) -> Result<(), OrchError> {
+        let t = self.get(ticket_id)?;
+        self.comment_store()?.on_created(&t.id, t.project_id.as_deref(), creator, notify)
+    }
+
+    pub fn comment_add(&self, req: CommentAdd) -> Result<Comment, OrchError> {
+        let store = self.comment_store()?;
+        let t = self.find(&req.ticket_id)?;
+        if req.body.trim().is_empty() {
+            return Err(OrchError::Refused("a comment needs a body".into()));
+        }
+        let kind = req.kind.as_deref().map(|k| k.trim().to_lowercase()).filter(|k| !k.is_empty()).unwrap_or_else(|| "note".into());
+        let state =
+            req.state.as_deref().map(|k| k.trim().to_lowercase()).filter(|k| !k.is_empty()).unwrap_or_else(|| crate::comments::OPEN.into());
+        store.add(&t.id, t.project_id.as_deref(), &t.title, &req.author, &kind, &state, &req.body)
+    }
+
+    pub fn comment_resolve(&self, id: &str, by: &CommentAuthor) -> Result<Comment, OrchError> {
+        let store = self.comment_store()?;
+        let missing = || OrchError::Refused(format!("no comment '{}'", take(id.trim(), 80)));
+        let existing = store.get(id)?.ok_or_else(missing)?;
+        store.resolve(&existing.id, by)?.ok_or_else(missing)
+    }
+
+    pub fn comments(&self, q: CommentQuery) -> Result<Vec<Comment>, OrchError> {
+        let store = self.comment_store()?;
+        let t = self.find(&q.ticket_id)?;
+        let which = q.which.as_deref().map(str::trim).filter(|w| !w.is_empty()).unwrap_or("latestOpen");
+        let kind = q.kind.as_deref().map(|k| k.trim().to_lowercase()).filter(|k| !k.is_empty());
+        store.read(&t.id, which, kind.as_deref(), q.limit)
+    }
+
+    pub fn notify_edit(&self, req: NotifyEdit) -> Result<Vec<String>, OrchError> {
+        let store = self.comment_store()?;
+        let t = self.find(&req.ticket_id)?;
+        store.edit_notify(&t.id, req.set.as_deref(), &req.add, &req.remove)
+    }
 }

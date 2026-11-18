@@ -473,6 +473,165 @@ pub struct TicketUnassign {
     pub note: Option<String>,
 }
 
+/// `ticket_link` / `ticket_unlink`: `type` is any [`link_type::ALL`] name, stored in one direction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TicketLinkRequest {
+    pub ticket_id: String,
+    pub related_id: String,
+    pub r#type: String,
+}
+
+/// `ticket_reorder`: `ids` go to the top of their columns in that order; with `status`, all must be in it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TicketReorder {
+    #[serde(default)]
+    pub status: Option<String>,
+    pub ids: Vec<String>,
+}
+
+/// One epic of one project (`epic` frame). `story_ids`: the ids of the tickets filed under it, in board order.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Epic {
+    pub id: String,
+    pub project_id: String,
+    pub name: String,
+    #[serde(default)]
+    pub goal: String,
+    #[serde(default)]
+    pub story_ids: Vec<String>,
+    /// Empty = none set (the project's base applies).
+    #[serde(default)]
+    pub base_branch: String,
+}
+
+/// `epic_save`: create an epic in a project.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EpicSave {
+    pub project_id: String,
+    pub name: String,
+    #[serde(default)]
+    pub goal: String,
+}
+
+/// `epic_base`: `branch` sets, `clear` removes, neither reads.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EpicBaseRequest {
+    pub epic_id: String,
+    #[serde(default)]
+    pub branch: Option<String>,
+    #[serde(default)]
+    pub clear: bool,
+}
+
+/// Who wrote a comment: `owner`, `daemon`, or `session` (with its session and agent).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentAuthor {
+    pub kind: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub agent_id: Option<String>,
+}
+
+impl CommentAuthor {
+    pub const OWNER: &'static str = "owner";
+    pub const DAEMON: &'static str = "daemon";
+    pub const SESSION: &'static str = "session";
+
+    pub fn owner() -> CommentAuthor {
+        CommentAuthor { kind: Self::OWNER.into(), session_id: None, agent_id: None }
+    }
+
+    pub fn daemon() -> CommentAuthor {
+        CommentAuthor { kind: Self::DAEMON.into(), session_id: None, agent_id: None }
+    }
+
+    /// `owner`, `daemon`, or `<agent> (<last 8 of the session>)`.
+    pub fn label(&self) -> String {
+        match self.kind.as_str() {
+            Self::OWNER => "owner".into(),
+            Self::DAEMON => "daemon".into(),
+            _ => {
+                let agent = self.agent_id.clone().unwrap_or_else(|| "agent".into());
+                match &self.session_id {
+                    Some(s) => {
+                        let tail: String = s.chars().rev().take(8).collect::<Vec<_>>().into_iter().rev().collect();
+                        format!("{agent} ({tail})")
+                    }
+                    None => agent,
+                }
+            }
+        }
+    }
+}
+
+/// One ticket comment.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Comment {
+    pub id: String,
+    pub ticket_id: String,
+    pub author: CommentAuthor,
+    /// `done` | `issue` | `note` | `handoff`.
+    pub kind: String,
+    pub body: String,
+    /// `open` | `resolved`.
+    pub state: String,
+    pub created_at: i64,
+    #[serde(default)]
+    pub resolved_at: Option<i64>,
+    #[serde(default)]
+    pub resolved_by: Option<String>,
+    /// Notified agents that had no live session to wake.
+    #[serde(default)]
+    pub undelivered: Vec<String>,
+}
+
+/// Add a comment. `ticket_id`: full id or its 8-char suffix.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CommentAdd {
+    pub ticket_id: String,
+    pub body: String,
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub state: Option<String>,
+    pub author: CommentAuthor,
+}
+
+/// Read a ticket's comments: `which` = latestOpen (default) | latest | first | all.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CommentQuery {
+    pub ticket_id: String,
+    #[serde(default)]
+    pub which: Option<String>,
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub limit: Option<i32>,
+}
+
+/// Replace (`set`), add to and remove from a ticket's notify list (registry agent ids).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NotifyEdit {
+    pub ticket_id: String,
+    #[serde(default)]
+    pub set: Option<Vec<String>>,
+    #[serde(default)]
+    pub add: Vec<String>,
+    #[serde(default)]
+    pub remove: Vec<String>,
+}
+
 /// Strict decode (unknown keys refused): the error reads `malformed <what>: <why>`, Kotlin's prefix.
 pub fn decode_strict<T: serde::de::DeserializeOwned>(text: &str, what: &str) -> Result<T, String> {
     serde_json::from_str(text).map_err(|e| format!("malformed {what}: {e}"))

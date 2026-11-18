@@ -93,6 +93,26 @@ pub trait Orchestrator: Send + Sync {
     /// Change a ticket's column and/or place.
     fn move_lane(&self, request: TicketMove) -> BoxFuture<'_, OrchResult<TicketAnswer>>;
     fn delete(&self, id: String) -> BoxFuture<'_, OrchResult<BoardAnswer>>;
+    /// Link two tickets (idempotent); answered with `ticket_id`'s ticket.
+    fn link(&self, request: TicketLinkRequest) -> BoxFuture<'_, OrchResult<TicketAnswer>>;
+    /// Remove a link (refused when there is none); answered with `ticket_id`'s ticket.
+    fn unlink(&self, request: TicketLinkRequest) -> BoxFuture<'_, OrchResult<TicketAnswer>>;
+    /// Put the listed tickets on top of their columns, in order.
+    fn reorder(&self, request: TicketReorder) -> BoxFuture<'_, OrchResult<BoardAnswer>>;
+    /// Epics of a project, in creation order.
+    fn epics(&self, project_id: String) -> BoxFuture<'_, OrchResult<Vec<Epic>>>;
+    fn epic_save(&self, request: EpicSave) -> BoxFuture<'_, OrchResult<Epic>>;
+    /// Read, set or clear an epic's base branch.
+    fn epic_base(&self, request: EpicBaseRequest) -> BoxFuture<'_, OrchResult<Epic>>;
+    /// Record a new ticket's creator and its starting notify list (None = creator + project defaults).
+    fn record_creator(&self, ticket_id: String, creator: CommentAuthor, notify: Option<Vec<String>>) -> BoxFuture<'_, OrchResult<()>>;
+    /// Add a comment; wakes the notify list and emits the named event `ticket.commented`.
+    fn comment_add(&self, request: CommentAdd) -> BoxFuture<'_, OrchResult<Comment>>;
+    /// Resolve a comment by id or unique prefix (idempotent, no mail).
+    fn comment_resolve(&self, id: String, by: CommentAuthor) -> BoxFuture<'_, OrchResult<Comment>>;
+    fn comments(&self, query: CommentQuery) -> BoxFuture<'_, OrchResult<Vec<Comment>>>;
+    /// Edit a ticket's notify list; answers the list as it now stands.
+    fn notify_edit(&self, request: NotifyEdit) -> BoxFuture<'_, OrchResult<Vec<String>>>;
     fn assign(&self, request: TicketAssign) -> BoxFuture<'_, OrchResult<TicketAnswer>>;
     fn unassign(&self, request: TicketUnassign) -> BoxFuture<'_, OrchResult<TicketAnswer>>;
     fn spawn_limit(&self, project_id: Option<String>) -> BoxFuture<'_, OrchResult<Limit>>;

@@ -9,13 +9,27 @@
 use std::sync::Arc;
 
 use infantry_core::frames::{FrameCtx, FrameUnit, Refusal};
-use infantry_orchestrator_api::dto::{decode_strict, TicketListQuery, TicketMove, TicketSave};
+use infantry_orchestrator_api::dto::{
+    decode_strict, Epic, EpicBaseRequest, EpicSave, TicketLinkRequest, TicketListQuery, TicketMove, TicketReorder, TicketSave,
+};
 use infantry_orchestrator_api::OrchError;
 use infantry_protocol::Envelope;
 
 use crate::board::{ticket_envelope, tickets_envelope, Board};
 
-pub const FRAMES: &[&str] = &["ticket_list", "ticket_get", "ticket_save", "ticket_move", "ticket_delete"];
+pub const FRAMES: &[&str] = &[
+    "ticket_list",
+    "ticket_get",
+    "ticket_save",
+    "ticket_move",
+    "ticket_delete",
+    "ticket_link",
+    "ticket_unlink",
+    "ticket_reorder",
+    "epic_save",
+    "epic_list",
+    "epic_base",
+];
 
 pub struct BoardUnit {
     board: Arc<Board>,
@@ -25,6 +39,11 @@ impl BoardUnit {
     pub fn new(board: Arc<Board>) -> BoardUnit {
         BoardUnit { board }
     }
+}
+
+/// One epic as an `epic` frame, every field present.
+pub fn epic_envelope(e: &Epic) -> Envelope {
+    Envelope::new("epic", serde_json::to_string(e).expect("epic json"))
 }
 
 fn refusal(frame: &str, e: OrchError) -> Refusal {
@@ -82,6 +101,32 @@ impl FrameUnit for BoardUnit {
             "ticket_delete" => {
                 let a = self.board.delete(&env.data, &publish).map_err(r)?;
                 Ok(answer(a.pushed, tickets_envelope(&a.tickets)))
+            }
+            "ticket_link" | "ticket_unlink" => {
+                let req: TicketLinkRequest =
+                    decode_strict(&env.data, &format!("{frame} payload")).map_err(|m| r(OrchError::Refused(m)))?;
+                let a = if frame == "ticket_link" { self.board.link(req, &publish) } else { self.board.unlink(req, &publish) }.map_err(r)?;
+                Ok(answer(a.pushed, ticket_envelope(&a.ticket)))
+            }
+            "ticket_reorder" => {
+                let req: TicketReorder = decode_strict(&env.data, "ticket_reorder payload").map_err(|m| r(OrchError::Refused(m)))?;
+                let a = self.board.reorder(req, &publish).map_err(r)?;
+                Ok(answer(a.pushed, tickets_envelope(&a.tickets)))
+            }
+            // Epic frames are always answered directly (nothing is pushed).
+            "epic_save" => {
+                let req: EpicSave = decode_strict(&env.data, "epic_save payload").map_err(|m| r(OrchError::Refused(m)))?;
+                let e = self.board.epic_save(req).map_err(r)?;
+                Ok(answer(false, epic_envelope(&e)))
+            }
+            "epic_base" => {
+                let req: EpicBaseRequest = decode_strict(&env.data, "epic_base payload").map_err(|m| r(OrchError::Refused(m)))?;
+                let e = self.board.epic_base(req).map_err(r)?;
+                Ok(answer(false, epic_envelope(&e)))
+            }
+            "epic_list" => {
+                let es = self.board.epics(&env.data).map_err(r)?;
+                Ok(answer(false, Envelope::new("epics", serde_json::to_string(&es).expect("epics json"))))
             }
             other => Err(Refusal(format!("{other} refused: not a board frame"))),
         }

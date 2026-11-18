@@ -135,6 +135,44 @@ pub trait BoardEnv: Send + Sync {
     fn compact_max_tokens(&self) -> Option<i32> {
         None
     }
+    // ---- epics -----------------------------------------------------------------------------------------
+
+    /// A new epic id (`epic-` + 8 hex).
+    fn new_epic_id(&self) -> String {
+        format!("epic-{}", &uuid::Uuid::new_v4().to_string()[..8])
+    }
+    /// A new comment id (a UUID).
+    fn new_comment_id(&self) -> String {
+        uuid::Uuid::new_v4().to_string()
+    }
+    /// Validates and normalises a base-branch name (`ProjectBaseCheck.checkName`).
+    fn branch_name(&self, raw: &str) -> Result<String, String> {
+        Ok(raw.trim().to_string())
+    }
+    /// Checks that `branch` resolves to a commit in `project_id`'s repository. A host with no repository refuses.
+    fn check_base(&self, _project_id: &str, _branch: &str) -> Result<(), String> {
+        Err("this daemon has no repository to check a base branch against".into())
+    }
+
+    // ---- comments --------------------------------------------------------------------------------------
+
+    /// Is `id` an agent of the registry (a user-created / role agent)?
+    fn is_registry_agent(&self, _id: &str) -> bool {
+        false
+    }
+    /// Is `id` a session id (an invoked worker)? Only words a refusal.
+    fn is_session(&self, _id: &str) -> bool {
+        false
+    }
+    /// The live session ids of `agent_id` (in `project_id` when given).
+    fn live_sessions(&self, _agent_id: &str, _project_id: Option<&str>) -> Vec<String> {
+        Vec::new()
+    }
+    /// Wakes one session with a short mail line; true when delivered.
+    fn notify_session(&self, _session_id: &str, _subject: &str, _line: &str) -> bool {
+        false
+    }
+
     /// IMG-3: the images as stored relPaths, or why not. A host with no project files accepts only none.
     fn normalize_images(&self, _project_id: Option<&str>, images: &[String]) -> Result<Vec<String>, String> {
         if images.is_empty() {
@@ -161,6 +199,12 @@ pub struct StaticEnv {
     pub compact_max_tokens: Option<i32>,
     pub weight_context: Vec<(i32, WeightContextEntry)>,
     pub weight_executors: Vec<(i32, WeightExecutor)>,
+    /// Registry agent ids (comment notify targets).
+    pub registry: Vec<String>,
+    /// Live sessions as (agent id, session id).
+    pub live: Vec<(String, String)>,
+    /// Every delivered notify line, as "<session> <line>".
+    pub notified: Mutex<Vec<String>>,
 }
 
 impl StaticEnv {
@@ -212,5 +256,15 @@ impl BoardEnv for StaticEnv {
     }
     fn compact_max_tokens(&self) -> Option<i32> {
         self.compact_max_tokens
+    }
+    fn is_registry_agent(&self, id: &str) -> bool {
+        self.registry.iter().any(|r| r == id)
+    }
+    fn live_sessions(&self, agent_id: &str, _project_id: Option<&str>) -> Vec<String> {
+        self.live.iter().filter(|(a, _)| a == agent_id).map(|(_, s)| s.clone()).collect()
+    }
+    fn notify_session(&self, session_id: &str, _subject: &str, line: &str) -> bool {
+        self.notified.lock().unwrap_or_else(|p| p.into_inner()).push(format!("{session_id} {line}"));
+        true
     }
 }

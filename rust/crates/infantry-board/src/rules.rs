@@ -233,6 +233,30 @@ impl Snapshot {
         true
     }
 
+    /// The shortest chain `from -> ... -> to` along links of `type` (stored direction), if one exists.
+    pub fn path(&self, from: &str, to: &str, r#type: &str) -> Option<Vec<String>> {
+        let mut came_from: HashMap<String, String> = HashMap::new();
+        let mut queue = std::collections::VecDeque::from([from.to_string()]);
+        let mut seen: HashSet<String> = HashSet::from([from.to_string()]);
+        while let Some(node) = queue.pop_front() {
+            if node == to {
+                let mut chain = vec![to.to_string()];
+                while let Some(prev) = came_from.get(chain.last().expect("non-empty")) {
+                    chain.push(prev.clone());
+                }
+                chain.reverse();
+                return Some(chain);
+            }
+            for l in self.links.iter().filter(|l| l.r#type == r#type && l.ticket_id == node) {
+                if seen.insert(l.related_id.clone()) {
+                    came_from.insert(l.related_id.clone(), node.clone());
+                    queue.push_back(l.related_id.clone());
+                }
+            }
+        }
+        None
+    }
+
     /// The `blocked_by` prerequisites holding `id` right now.
     pub fn holding(&self, id: &str) -> Vec<&TicketRow> {
         let ids: Vec<String> = self
