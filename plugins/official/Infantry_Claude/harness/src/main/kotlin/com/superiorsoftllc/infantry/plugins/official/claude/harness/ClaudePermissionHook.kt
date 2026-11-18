@@ -131,7 +131,9 @@ class PermissionHookServer(private val bind: () -> ServerSocket = { ServerSocket
         // The token (unguessable, one per hook of a launch) picks the handler; the path segment before it only names the hook.
         val token = path.substringBefore('?').substringAfterLast('/')
         val handler = handlers[token].takeIf { requestLine.startsWith("POST ") && token.isNotEmpty() }
-        val answer = handler?.let { runCatching { it(body) }.getOrNull() } ?: ClaudePermissionHook.reply(false, "no infantry session answers this permission request")
+        val answer = handler?.let { runCatching { it(body) }.getOrNull() }
+            ?: if (path.startsWith(ClaudeQuestionHook.PATH)) ClaudeQuestionHook.deny("no infantry session answers this question; ask the owner in plain text")
+            else ClaudePermissionHook.reply(false, "no infantry session answers this permission request")
         val bytes = answer.toByteArray(Charsets.UTF_8)
         val out = client.getOutputStream()
         out.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray(Charsets.US_ASCII))
