@@ -1,0 +1,4 @@
+{
+  "request": "{\"type\":\"runner_link_hello\",\"data\":\"{}\",\"requestId\":\"<request-id>\"}",
+  "answer": "{\"type\":\"runner_link_reply\",\"data\":\"{\\\"runnerId\\\":\\\"<id>\\\",\\\"runnerName\\\":\\\"kotlin-runner\\\",\\\"contract\\\":\\\"1.11.0\\\",\\\"issuedAt\\\":0,\\\"harnesses\\\":[{\\\"id\\\":\\\"claude\\\",\\\"models\\\":[],\\\"loggedIn\\\":true},{\\\"id\\\":\\\"opencode\\\",\\\"models\\\":[],\\\"loggedIn\\\":true},{\\\"id\\\":\\\"pi\\\",\\\"models\\\":[],\\\"loggedIn\\\":true}],\\\"projects\\\":[\\\"*\\\"],\\\"capacity\\\":2147483647,\\\"os\\\":\\\"Windows 11\\\"}\",\"requestId\":\"<request-id>\"}"
+}

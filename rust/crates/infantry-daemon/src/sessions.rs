@@ -22,6 +22,25 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
+/// The inbound frame types this unit serves; the strangler gateway routes these here. The board reads `handle` also
+/// answers (agent/project/ticket lists, read-only from the db) are not on it: every writer of those tables is still
+/// Kotlin's, so a gateway sends them to the legacy backend until the board unit moves.
+pub fn owns(ty: &str) -> bool {
+    matches!(
+        ty,
+        wire::SESSIONS
+            | wire::NEW
+            | wire::REPLAY_REQUEST
+            | wire::PROMPT
+            | wire::QUEUE_ADD
+            | wire::QUEUE_REMOVE
+            | wire::QUEUE_FORCE
+            | wire::INTERRUPT
+            | wire::KILL
+            | wire::SESSION_DELETE
+    )
+}
+
 /// Frames buffered per connection before a slow client starts missing them.
 pub const BROADCAST_CAPACITY: usize = 4096;
 /// After a kill the run activity settles to `idle` on the next watch tick (Kotlin's `AgentWatchdog`), not at once.
