@@ -6,11 +6,6 @@ license = "Apache-2.0"
 description = "Infantry AI harness contract: any agent CLI (Claude, Codex, OpenCode, Pi, Gemini) described as a launch plan plus a translator, driven on any Runner"
 publish = false
 
-[features]
-# `pipe_runner::PipeRunner`: an interim tokio::process Runner (pipes only) for live harness tests until
-# infantry-runner-local lands.
-pipe-runner = ["tokio/process", "tokio/io-util", "tokio/rt"]
-
 [dependencies]
 infantry-runner-api = { path = "../infantry-runner-api" }
 tokio = { version = "1", features = ["sync", "time"] }

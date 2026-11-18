@@ -541,6 +541,7 @@ name = "infantry-harness-codex"
 version = "0.1.0"
 dependencies = [
  "infantry-harness",
+ "infantry-runner-local",
  "serde_json",
  "tokio",
 ]

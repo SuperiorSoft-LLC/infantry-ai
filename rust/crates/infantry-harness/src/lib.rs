@@ -22,8 +22,6 @@
 //! Nothing here knows orchestration (boards, tickets): an agent runs with no orchestrator.
 
 pub mod driver;
-#[cfg(feature = "pipe-runner")]
-pub mod pipe_runner;
 
 pub use driver::{DriverError, HarnessDriver};
 /// The runner contract (RUST-RUN-1), re-exported so a harness crate needs only this one.
