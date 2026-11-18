@@ -166,6 +166,18 @@ object DesktopPlugins {
         }
 
         PluginFaults.sink = say
+        // PLUGIN-ERR-NOTIFY-1: a UI fault is an error notice on the window's bus (bottom-right toast), once per module and generation.
+        PluginFaults.onFault = { module, reason, trace ->
+            relay.notify(com.superiorsoftllc.infantry.plugin.api.Notification(
+                title = "$module's screen crashed and was hidden",
+                body = reason.lineSequence().firstOrNull().orEmpty().take(300) + "\n\n" + trace.take(1500),
+                level = com.superiorsoftllc.infantry.plugin.api.NotificationLevel.ERROR,
+                id = "plugin-ui-fault:$module",
+                source = "plugins",
+                sticky = true,
+                dedupeKey = "plugin-ui-fault:$module",
+            ))
+        }
         val set = ModuleSet(say, bus, withBundles)
         set.load(resolution, registry(config))
         resolution.log.forEach(say)

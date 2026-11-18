@@ -239,6 +239,13 @@ class DaemonPluginHost private constructor(
         log = log,
     )
     private val statuses = ConcurrentHashMap<String, String>()
+    /** PLUGIN-ERR-NOTIFY-1: plugin failures raise an error notice on the notification bus (once per plugin and kind). */
+    internal val failureNotices by lazy { PluginFailureNotices(notifications) }
+    private fun statusDown(id: String, status: String) {
+        statuses[id] = status
+        val kind = if (status.startsWith("failed")) PluginFailureKind.START else PluginFailureKind.REFUSED
+        runCatching { failureNotices.raise(id, kind, status) }
+    }
     private val toolEntries = ConcurrentHashMap<String, ToolEntry>()
     private val frameHandlers = ConcurrentHashMap<String, FrameEntry>()
     private val routeEntries = ConcurrentHashMap<String, RouteEntry>()
@@ -880,7 +887,7 @@ class DaemonPluginHost private constructor(
         return out.copy(notes = out.notes + leaked.map { "$it did not unload cleanly: its old daemon half stays in memory until the next daemon start" })
     }
 
-    fun load(id: String, source: HotSource): HotOutcome = synchronized(lifecycle) { loadLocked(id, source) }
+    fun load(id: String, source: HotSource): HotOutcome = synchronized(lifecycle) { failureNotices.reset(id); loadLocked(id, source) }
 
     /** Unload then load of [id], then every module that had to leave with it, in dependency order. */
     fun reload(id: String, source: HotSource): HotOutcome = synchronized(lifecycle) {
@@ -922,7 +929,7 @@ class DaemonPluginHost private constructor(
         if (daemon != null && "orchestratorBinding" in daemon.hooks) notes += "an orchestrator binding of $id is offered to the hub at daemon start only"
         if (daemon != null && "runnerBinding" in daemon.hooks) notes += "a runner binding of $id is offered to the runner pool at daemon start only"
         runCatching { load(s, src.config, src.trust) }
-            .onFailure { statuses[id] = "refused: ${it.message}"; log("[plugins] daemon half of $id refused: ${it.message}") }
+            .onFailure { statusDown(id, "refused: ${it.message}"); log("[plugins] daemon half of $id refused: ${it.message}") }
         // A start that failed leaves a disabled plugin behind: free its class loader at once (the status keeps the reason).
         loaded.firstOrNull { it.id == id }?.takeIf { it.guard.disabled }?.let { failed -> retire(failed); loaded.remove(failed) }
         val status = statuses[id] ?: "refused"
@@ -1089,7 +1096,7 @@ class DaemonPluginHost private constructor(
         val d = m.daemon ?: return
         val entry = d.entry?.takeIf { it.isNotBlank() } ?: return
         val id = m.name
-        fun refuse(why: String) { statuses[id] = "refused: $why"; log("[plugins] daemon half of $id refused: $why") }
+        fun refuse(why: String) { statusDown(id, "refused: $why"); log("[plugins] daemon half of $id refused: $why") }
         val setting = config.setting(id)
         val dir = File(status.dir ?: return refuse("no folder"))
         refusal(status.tier, d, setting, id)?.let { return refuse(it) }
@@ -1116,7 +1123,7 @@ class DaemonPluginHost private constructor(
     internal fun startInProcess(manifest: ModuleManifest, tier: Tier, setting: ModuleSetting, plugin: DaemonPlugin): String? = synchronized(lifecycle) {
         val d = manifest.daemon ?: DaemonCapabilities()
         val id = manifest.name
-        refusal(tier, d, setting, id)?.let { statuses[id] = "refused: $it"; return statuses[id] }
+        refusal(tier, d, setting, id)?.let { statusDown(id, "refused: $it"); return statuses[id] }
         resolvedModules = resolvedModules.filter { it.name != id } + HostUpdates.Module(id, tier, manifest, setting.allow.toSet())
         loadedViews = loadedViews.filter { it.id != id } + com.superiorsoftllc.infantry.daemon.api.plugins.LoadedModule(id, tier.name.lowercase(), manifest, null)
         capabilities.install(resolvedModules.map { it.name to it.manifest })
@@ -1127,11 +1134,11 @@ class DaemonPluginHost private constructor(
     private fun start(id: String, tier: Tier, d: DaemonCapabilities, setting: ModuleSetting, loader: URLClassLoader, dependencies: List<String>, newPlugin: () -> DaemonPlugin) {
         val cpu = d.limits.cpuMsPerCall ?: maxOf(d.limits.callTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_CALL_TIMEOUT_MS), d.limits.toolTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_TOOL_TIMEOUT_MS))
         lateinit var p: Loaded
-        val guard = PluginGuard(id, loader, cpu, log, hangCeilingMs = services.limit(LimitRegistry.PLUGIN_HANG_CEILING_MS), poolSize = services.limit(LimitRegistry.PLUGIN_POOL_SIZE).toInt(), queueLimit = services.limit(LimitRegistry.PLUGIN_QUEUE_LIMIT).toInt(), timeoutStrikes = services.limit(LimitRegistry.PLUGIN_GUARD_STRIKES).toInt(), cooldownMs = services.limit(LimitRegistry.PLUGIN_GUARD_COOLDOWN_MS), onTripped = { why -> announceTrip(id, why) }, onRecovered = { announceRecovered(id) }, onDisabled = { why -> if (!p.unloading) { val atRunTime = statuses[id] == "loaded"; unregister(p); announceFailure(id, why, if (atRunTime) scheduleAutoReload(id) else "It did not start; it stays down until the daemon restarts or the plugin is reloaded.") } })
+        val guard = PluginGuard(id, loader, cpu, log, hangCeilingMs = services.limit(LimitRegistry.PLUGIN_HANG_CEILING_MS), poolSize = services.limit(LimitRegistry.PLUGIN_POOL_SIZE).toInt(), queueLimit = services.limit(LimitRegistry.PLUGIN_QUEUE_LIMIT).toInt(), timeoutStrikes = services.limit(LimitRegistry.PLUGIN_GUARD_STRIKES).toInt(), cooldownMs = services.limit(LimitRegistry.PLUGIN_GUARD_COOLDOWN_MS), onTripped = { why -> announceTrip(id, why) }, onRecovered = { announceRecovered(id) }, onDisabled = { why -> if (!p.unloading) { val atRunTime = statuses[id] == "loaded"; unregister(p); runCatching { failureNotices.raise(id, if (atRunTime) PluginFailureKind.DISABLED else PluginFailureKind.START, why) }; announceFailure(id, why, if (atRunTime) scheduleAutoReload(id) else "It did not start; it stays down until the daemon restarts or the plugin is reloaded.") } })
         p = Loaded(id, tier, d, setting, guard, loader, dependencies)
         if (d.mcpServers.isNotEmpty()) {
             runCatching { com.superiorsoftllc.infantry.mcp.McpPluginServers.shared.declare(id, d.mcpServers.map { it.toInput() }) }.onFailure {
-                statuses[id] = "refused: ${it.message}"; log("[plugins] daemon half of $id refused: ${it.message}"); runCatching { guard.retire(1) }; runCatching { loader.close() }; return
+                statusDown(id, "refused: ${it.message}"); log("[plugins] daemon half of $id refused: ${it.message}"); runCatching { guard.retire(1) }; runCatching { loader.close() }; return
             }
         }
         loaded += p
@@ -1142,7 +1149,7 @@ class DaemonPluginHost private constructor(
             plugin.start(api)
         }
         if (started.isFailure) {
-            statuses[id] = "failed: ${guard.disabledReason ?: started.exceptionOrNull()?.message}"
+            statusDown(id, "failed: ${guard.disabledReason ?: started.exceptionOrNull()?.message}")
             return
         }
         statuses[id] = "loaded"
@@ -1602,7 +1609,7 @@ class DaemonPluginHost private constructor(
             val host = DaemonPluginHost(services, stateDir, log)
             host.remember(resolution, config)
             for (s in resolution.loaded) runCatching { host.load(s, config, trust) }
-                .onFailure { host.statuses[s.name] = "refused: ${it.message}"; log("[plugins] daemon half of ${s.name} refused: ${it.message}") }
+                .onFailure { host.statusDown(s.name, "refused: ${it.message}"); log("[plugins] daemon half of ${s.name} refused: ${it.message}") }
             host.startTestSchedule()
             return host
         }
