@@ -61,6 +61,7 @@ pub const LAYERS: &[(&str, Layer, u8)] = &[
     ("infantry-plugin-wit", Layer::Core, 0),
     ("infantry-plugin-host", Layer::Core, 1),
     ("infantry-plugin-sdk", Layer::Core, 1),
+    ("infantry-usage", Layer::Core, 1),
     ("infantry-runner-api", Layer::Runner, 0),
     ("infantry-runner", Layer::Runner, 1),
     ("infantry-runner-local", Layer::Runner, 2),

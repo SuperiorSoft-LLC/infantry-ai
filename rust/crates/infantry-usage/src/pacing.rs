@@ -238,7 +238,7 @@ fn meter_usage(meter: &str, live: Option<&ProviderLimits>, manual: Option<&Manua
         resets_at,
         pace_delta: pace,
         source: source.into(),
-        windows,
+        windows: windows.clone(),
         reason: live.and_then(|l| l.reason.clone()),
         rule_allowance,
         r#override: ov.cloned(),
@@ -421,7 +421,7 @@ mod tests {
         let live = vec![ProviderLimits {
             provider: "claude".into(),
             status: "ok".into(),
-            windows: vec![w("Current session", 300, 10.0, 4 * H, now), w("Current week", 10_080, 80.0, 24 * H, now)],
+            windows: vec![w("Current session", 300, 10.0, 4 * H, now), w("Current week", 10_080, 85.0, 120 * H, now)],
             reason: None,
             observed_at: now,
             stale: false,
@@ -450,7 +450,7 @@ mod tests {
         let c = p.report().meters.remove(0);
         assert!(c.can_start && c.allowance.is_none());
         assert_eq!(text::override_line(&c, now).unwrap(), "allowance raised to no limit · ends in 2h 0m (pacing rule says 1)");
-        assert!(text::render(&p.report()).contains("claude: 80% used (Current week)"));
+        assert!(text::render(&p.report()).contains("claude: 85% used (Current week)"));
     }
 
     #[test]

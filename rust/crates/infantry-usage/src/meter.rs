@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use chrono::{Datelike, Duration as CDuration, NaiveDate, TimeZone, Utc};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::stream::{StreamEvent, StreamUsage, Totals, Turn};
@@ -488,10 +488,6 @@ impl UsageMeter {
         Ok(out)
     }
 
-    /// Tokens a session spent today (for a quick look without the whole report).
-    pub fn requests_count(&self) -> i64 {
-        self.conn().query_row("SELECT COUNT(*) FROM meter_request", [], |r| r.get(0)).optional().ok().flatten().unwrap_or(0)
-    }
 }
 
 #[cfg(test)]
