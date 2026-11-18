@@ -7,17 +7,26 @@
 import { useStore } from "zustand";
 import { browserTransport, createDaemonStore, startStress, type DaemonActions, type DaemonState, type DaemonStore, type StressOptions } from "@infantry/client";
 import { tauriTransport } from "./tauri-transport";
+import { localTransport } from "./local-transport";
 
 interface Endpoint {
   url: string;
   token: string | null;
   stress: boolean;
+  /** Agents run in this app's embedded runner (Tauri only). */
+  local?: boolean;
+  /** The perf harness's scenario (INFANTRY_PERF_SCENARIO), run by perf-scenario.ts. */
+  perf?: string | null;
 }
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 let store: DaemonStore | null = null;
 export let stressMode = false;
+/** True when the sessions run in this app's own embedded runner (no daemon). */
+export let localMode = false;
+/** The perf harness's scenario, when one was given. */
+export let perfScenario: string | null = null;
 
 async function resolveEndpoint(): Promise<Endpoint> {
   const q = new URLSearchParams(location.search);
@@ -42,8 +51,10 @@ export async function initDaemon(): Promise<DaemonStore> {
   if (store) return store;
   const e = await resolveEndpoint();
   stressMode = e.stress;
-  const transport = isTauri ? tauriTransport(e.url, e.token) : browserTransport(e.url, e.token);
-  store = createDaemonStore({ url: e.url, transport, offline: e.stress });
+  localMode = isTauri && e.local === true && !e.stress;
+  perfScenario = e.perf ?? null;
+  const transport = localMode ? localTransport() : isTauri ? tauriTransport(e.url, e.token) : browserTransport(e.url, e.token);
+  store = createDaemonStore({ url: localMode ? "embedded runner" : e.url, transport, offline: e.stress });
   if (e.stress) {
     const opts = Object.fromEntries(Object.entries(stressOptions()).filter(([, v]) => v !== undefined));
     startStress(store, opts);

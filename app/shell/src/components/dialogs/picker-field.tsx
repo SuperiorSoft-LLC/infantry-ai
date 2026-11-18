@@ -7,11 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 export const INHERIT = "__inherit__";
 
-export function PickerField({ id, label, options, inheritLabel = "Project default" }: { id: string; label: string; options: string[]; inheritLabel?: string }) {
+export function PickerField({
+  id, label, options, inheritLabel = "Project default", value, onChange,
+}: { id: string; label: string; options: string[]; inheritLabel?: string; value?: string; onChange?: (v: string) => void }) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
-      <Select defaultValue={INHERIT}>
+      <Select defaultValue={value === undefined ? INHERIT : undefined} value={value} onValueChange={onChange}>
         <SelectTrigger id={id} className="w-full">
           <SelectValue />
         </SelectTrigger>

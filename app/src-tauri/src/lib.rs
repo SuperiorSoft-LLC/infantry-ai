@@ -4,7 +4,13 @@
 //! tauri-plugin-websocket, so it carries no browser Origin (the daemon refuses a foreign Origin, CONTRACT §7) and a
 //! token rides a plain `Authorization: Bearer` header.
 
+mod local;
+
+use local::{Local, Project, Resumable};
 use serde::Serialize;
+use std::io::Write;
+use tauri::ipc::Channel;
+use tauri::{Manager, State};
 
 /// Where the daemon is, resolved like the `infantry` CLI: INFANTRY_URL, else INFANTRY_PORT on loopback, else 8787.
 /// The old AGENTHQ_* names are read as fallbacks (AGENTS.md §7).
@@ -14,6 +20,10 @@ struct Endpoint {
     token: Option<String>,
     /// INFANTRY_UI_STRESS=1: fake sessions and a fast stream instead of a daemon (the perf check).
     stress: bool,
+    /// No INFANTRY_URL / INFANTRY_PORT (or INFANTRY_UI_LOCAL=1): agents run in this app's own embedded runner (local.rs).
+    local: bool,
+    /// INFANTRY_PERF_SCENARIO: the perf harness's scenario (`agents=5;stream=1;...`), run in-page (perf-scenario.ts).
+    perf: Option<String>,
 }
 
 fn env(name: &str) -> Option<String> {
@@ -52,7 +62,38 @@ fn endpoint() -> Endpoint {
         .filter(|t| !t.is_empty())
         .or_else(|| env("TOKEN"));
     let stress = env("UI_STRESS").is_some_and(|v| v != "0" && v != "false");
-    Endpoint { url, token, stress }
+    let local = env("UI_LOCAL").map_or(env("URL").is_none() && env("PORT").is_none(), |v| v != "0" && v != "false");
+    Endpoint { url, token, stress, local, perf: env("PERF_SCENARIO") }
+}
+
+/// The embedded runner's link: the WebView's transport opens it with a channel that receives every outbound frame.
+#[tauri::command]
+fn local_connect(local: State<'_, Local>, channel: Channel<String>) {
+    local.connect(channel);
+}
+
+/// One frame from the WebView (an encoded envelope).
+#[tauri::command]
+fn local_send(local: State<'_, Local>, text: String) {
+    local.handle(&text);
+}
+
+#[tauri::command]
+fn local_set_project(local: State<'_, Local>, folder: String) -> Result<Project, String> {
+    local.set_project(&folder)
+}
+
+#[tauri::command]
+fn local_resumable(local: State<'_, Local>, folder: String) -> Vec<Resumable> {
+    local.resumable(&folder)
+}
+
+/// The perf harness: one JSON line appended to INFANTRY_PERF_OUT.
+#[tauri::command]
+fn perf_report(line: String) -> Result<(), String> {
+    let Some(path) = env("PERF_OUT") else { return Ok(()) };
+    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path).map_err(|e| e.to_string())?;
+    writeln!(f, "{}", line.replace('\n', " ")).map_err(|e| e.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -60,9 +101,25 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_websocket::init())
-        .invoke_handler(tauri::generate_handler![endpoint])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            // The runner's own files (per-session hook settings, the scratch folder). INFANTRY_STATE_DIR pins it for tests.
+            let dir = env("STATE_DIR").map(std::path::PathBuf::from).unwrap_or_else(|| {
+                app.path().app_local_data_dir().unwrap_or_else(|_| std::env::temp_dir().join("infantry-tauri"))
+            });
+            let _ = std::fs::create_dir_all(&dir);
+            app.manage(Local::new(dir));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![endpoint, local_connect, local_send, local_set_project, local_resumable, perf_report])
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, e| {
+            // Every session's process tree dies with the app (Job Objects); dropping them first makes it prompt.
+            if let tauri::RunEvent::Exit = e {
+                app.state::<Local>().shutdown();
+            }
+        });
 }
 
 #[cfg(test)]

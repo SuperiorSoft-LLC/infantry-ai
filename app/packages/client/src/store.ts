@@ -78,6 +78,8 @@ export interface DaemonActions {
   send(sessionId: string, text: string): void;
   /** A new session for [text]: `new`, then `prompt`. */
   spawn(text: string): void;
+  /** Start a session with `SpawnOptions` (the `new` frame's JSON data); false when the link is not open. */
+  spawnWith(options: Record<string, unknown>): boolean;
   interrupt(sessionId: string): void;
   unqueue(sessionId: string, itemId: string): void;
   forceQueued(sessionId: string, itemId: string): void;
@@ -360,6 +362,9 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
         if (!t) return;
         out({ type: Frame.NEW, data: "" });
         out({ type: Frame.PROMPT, data: t, requestId: conn?.newClientId() });
+      },
+      spawnWith(options) {
+        return out({ type: Frame.NEW, data: JSON.stringify(options) });
       },
       interrupt(sessionId) {
         out({ type: Frame.INTERRUPT, data: sessionId, sessionId });

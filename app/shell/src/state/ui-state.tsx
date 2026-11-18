@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { SessionTabId } from "@/mock/data";
 
 export type RightTab = "attention" | "usage" | "prompts" | "skills";
-export type DialogId = null | "settings" | "new-agent" | "new-ticket";
+export type DialogId = null | "settings" | "new-agent" | "new-ticket" | "resume";
 export type Theme = "dark" | "light";
 /** What the centre column shows: a session tab, or the Board (opened from the sidebar). */
 export type CentreView = SessionTabId | "board";

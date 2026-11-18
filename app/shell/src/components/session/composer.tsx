@@ -11,6 +11,7 @@ import { IconButton } from "@infantry/ui";
 import type { QueuedTurnView } from "@infantry/client";
 import { useShallow } from "zustand/react/shallow";
 import { useDaemon } from "@/daemon/daemon";
+import { useUi } from "@/state/ui-state";
 
 const tools = [
   { label: "Attach file", icon: Paperclip },
@@ -26,6 +27,12 @@ const NO_QUEUE: QueuedTurnView[] = [];
 
 export function Composer({ sessionId, busy }: { sessionId: string | null; busy: boolean }) {
   const [text, setText] = useState("");
+  const ui = useUi();
+  // Wired toolbar actions; the rest are still mock.
+  const actions: Record<string, (() => void) | undefined> = {
+    Resume: () => ui.set("dialog", "resume"),
+    "Cancel turn": sessionId && busy ? () => interrupt(sessionId) : undefined,
+  };
   const queued = useDaemon((s) => (sessionId ? s.sessions[sessionId]?.record.queued : undefined)) ?? NO_QUEUE;
   const online = useDaemon((s) => s.connection.state === "open");
   // Actions are stable: picking them shallowly keeps the composer out of every streaming flush.
@@ -85,6 +92,7 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
                 key={label}
                 label={label}
                 className={cn("rounded-full", danger && "bg-danger text-white hover:bg-danger/85 hover:text-white")}
+                onClick={actions[label]}
               >
                 <Icon />
               </IconButton>
