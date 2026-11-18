@@ -2,7 +2,9 @@
 // Copyright (c) SuperiorSoft LLC
 // Right panel: Attention / Usage / Prompts / Skills.
 import { Bell, Gauge, MessageSquare, Star, Sparkles, FileText } from "lucide-react";
-import { attention, prompts, skills } from "@/mock/data";
+import { prompts, skills } from "@/mock/data";
+import { attentionCount } from "@infantry/client";
+import { useAttention } from "@/components/mail/use-mail";
 import { useUi, type RightTab } from "@/state/ui-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@infantry/ui";
 import { ScrollArea } from "@infantry/ui";
@@ -12,7 +14,7 @@ import { UsagePanel } from "./usage-panel";
 import { AttentionPanel } from "./attention-panel";
 
 const tabs: { id: RightTab; label: string; icon: typeof Bell; hint?: string }[] = [
-  { id: "attention", label: `Attention (${attention.length})`, icon: Bell, hint: "^6" },
+  { id: "attention", label: "Attention", icon: Bell, hint: "^6" },
   { id: "usage", label: "Usage", icon: Gauge, hint: "^7" },
   { id: "prompts", label: "Prompts", icon: MessageSquare },
   { id: "skills", label: "Skills", icon: Star },
@@ -20,6 +22,7 @@ const tabs: { id: RightTab; label: string; icon: typeof Bell; hint?: string }[] 
 
 export function RightPanel() {
   const ui = useUi();
+  const pending = useAttention(attentionCount);
   return (
     <aside aria-label="Side panel" className="flex h-full w-[360px] shrink-0 flex-col border-l bg-background">
       <Tabs value={ui.rightTab} onValueChange={(v) => ui.set("rightTab", v as RightTab)} className="flex min-h-0 flex-1 flex-col gap-0">
@@ -31,7 +34,7 @@ export function RightPanel() {
               className="flex-none gap-1.5 px-2 text-xs data-[state=active]:text-danger after:bg-danger!"
             >
               <t.icon className="size-3.5" />
-              {t.label}
+              {t.id === "attention" && pending > 0 ? `${t.label} (${pending})` : t.label}
               {t.hint && <KeyHint>{t.hint}</KeyHint>}
             </TabsTrigger>
           ))}

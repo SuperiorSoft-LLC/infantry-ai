@@ -173,6 +173,73 @@ pub trait BoardEnv: Send + Sync {
         false
     }
 
+    // ---- the work-running half (starts, lanes, briefs, done) ---------------------------------------------
+
+    /// LANE-CAPS: the most workers of `role` that may run at once in `project_id` (at least 1).
+    fn lane_cap(&self, _project_id: Option<&str>, _role: &str) -> u32 {
+        1
+    }
+    /// The most ticket workers a project may run at once; None = no cap.
+    fn max_workers(&self, _project_id: Option<&str>) -> Option<u32> {
+        None
+    }
+    /// How many slow start phases (worktree cut + launch) may run at once; more are deferred, never waited on.
+    fn max_parallel_starts(&self) -> usize {
+        4
+    }
+    /// ROUTING-1: the project's routing rules, in order.
+    fn routing_rules(&self, _project_id: Option<&str>) -> Vec<infantry_orchestrator_api::RoutingRule> {
+        Vec::new()
+    }
+    /// RUNNER-POOL-3: `runners.default`.
+    fn default_runner(&self) -> String {
+        "local".into()
+    }
+    /// AGENT-TASKS-3: `limits.agentTasks.queueMax`.
+    fn queue_max(&self) -> usize {
+        10
+    }
+    /// AGENT-TASKS-2: `limits.agentTasks.unassignWaitSeconds`: how long a busy unassigned worker may finish its turn.
+    fn unassign_wait_secs(&self) -> u64 {
+        120
+    }
+    /// After a worker leaves its lane (done, failed, unassigned), start the lane's next ticket.
+    fn auto_start_next(&self) -> bool {
+        true
+    }
+    /// LANE-CAPS / INSTALL-PROFILE-1: save a new agent profile (a lane clone or a role's first profile); None = cannot.
+    fn create_agent(&self, _template: &BoardAgent) -> Option<BoardAgent> {
+        None
+    }
+    /// MCP-FAIL-1: why a ticket's `mcp.require` is not met, or None.
+    fn mcp_preflight(&self, _ticket_id: &str, _project_id: Option<&str>, _agent_id: Option<&str>, _mcp_json: &str) -> Option<String> {
+        None
+    }
+    /// USAGE-PACE: why one more worker on (provider, model) may not start, or None.
+    fn pacing_refusal(&self, _provider: Option<&str>, _model: Option<&str>) -> Option<String> {
+        None
+    }
+    /// The role / profile instructions a worker is briefed with.
+    fn instructions(&self, _role: Option<&str>, _agent_id: Option<&str>, _project_id: Option<&str>) -> Option<String> {
+        None
+    }
+    /// Host-rendered brief sections `(source, text)` (knowledge, skills, role notes), in order.
+    fn brief_sections(&self, _project_id: Option<&str>, _role: Option<&str>, _agent_id: Option<&str>, _ticket_id: &str) -> Vec<(String, String)> {
+        Vec::new()
+    }
+    /// The files a ticket touched (for the RELATED block), most relevant first.
+    fn ticket_files(&self, _ticket_id: &str) -> Vec<String> {
+        Vec::new()
+    }
+    /// A session's display name (its agent's name, else its role), for "report to"; None = no such session.
+    fn session_label(&self, _session_id: &str) -> Option<String> {
+        None
+    }
+    /// IMG-3: a stored image relPath as an absolute path the worker can read.
+    fn image_path(&self, _project_id: Option<&str>, rel: &str) -> Option<String> {
+        Some(rel.to_string())
+    }
+
     /// IMG-3: the images as stored relPaths, or why not. A host with no project files accepts only none.
     fn normalize_images(&self, _project_id: Option<&str>, images: &[String]) -> Result<Vec<String>, String> {
         if images.is_empty() {
@@ -205,6 +272,11 @@ pub struct StaticEnv {
     pub live: Vec<(String, String)>,
     /// Every delivered notify line, as "<session> <line>".
     pub notified: Mutex<Vec<String>>,
+    /// Lane cap per role (0 = the default 1).
+    pub lane_cap: u32,
+    pub rules: Vec<infantry_orchestrator_api::RoutingRule>,
+    /// Slow-start slots (0 = the default 4).
+    pub start_slots: usize,
 }
 
 impl StaticEnv {
@@ -266,5 +338,14 @@ impl BoardEnv for StaticEnv {
     fn notify_session(&self, session_id: &str, _subject: &str, line: &str) -> bool {
         self.notified.lock().unwrap_or_else(|p| p.into_inner()).push(format!("{session_id} {line}"));
         true
+    }
+    fn lane_cap(&self, _project_id: Option<&str>, _role: &str) -> u32 {
+        self.lane_cap.max(1)
+    }
+    fn max_parallel_starts(&self) -> usize {
+        if self.start_slots == 0 { 4 } else { self.start_slots }
+    }
+    fn routing_rules(&self, _project_id: Option<&str>) -> Vec<infantry_orchestrator_api::RoutingRule> {
+        self.rules.clone()
     }
 }

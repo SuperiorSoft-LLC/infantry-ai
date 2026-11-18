@@ -9,6 +9,7 @@
 //!
 //! Layer rule: agents and harnesses (L3) NEVER import this crate; an agent works with no orchestrator.
 pub mod dto;
+pub mod work;
 
 use std::future::Future;
 use std::pin::Pin;
@@ -16,6 +17,7 @@ use std::pin::Pin;
 use serde::{Deserialize, Serialize};
 
 pub use dto::*;
+pub use work::*;
 
 /// A boxed, `Send` future: keeps [`Orchestrator`] object-safe.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -117,6 +119,32 @@ pub trait Orchestrator: Send + Sync {
     fn unassign(&self, request: TicketUnassign) -> BoxFuture<'_, OrchResult<TicketAnswer>>;
     fn spawn_limit(&self, project_id: Option<String>) -> BoxFuture<'_, OrchResult<Limit>>;
     fn on_done(&self, report: DoneReport) -> BoxFuture<'_, OrchResult<()>>;
+    /// Start one ticket (the same as a move into in_progress). Never waits on another start: the
+    /// answer's `start` says started, queued, held or refused.
+    fn start(&self, request: TicketStartRequest) -> BoxFuture<'_, OrchResult<TicketAnswer>> {
+        let _ = request;
+        unsupported("ticket_start")
+    }
+    /// Start the highest ready todo ticket; refused (with each candidate's reason) when none starts.
+    fn start_next(&self, request: StartNextRequest) -> BoxFuture<'_, OrchResult<TicketAnswer>> {
+        let _ = request;
+        unsupported("ticket_start_next")
+    }
+    /// List or edit an agent's queue.
+    fn agent_queue(&self, request: AgentQueueRequest) -> BoxFuture<'_, OrchResult<AgentQueueState>> {
+        let _ = request;
+        unsupported("agent_queue")
+    }
+    /// The worker's done: done comment, move to done, next ticket of its lane.
+    fn done(&self, request: TicketDone) -> BoxFuture<'_, OrchResult<DoneAnswer>> {
+        let _ = request;
+        unsupported("ticket_done")
+    }
+}
+
+fn unsupported<T: Send + 'static>(what: &str) -> BoxFuture<'static, OrchResult<T>> {
+    let m = format!("{what} is not offered by this orchestrator");
+    Box::pin(async move { Err(OrchError::Unsupported(m)) })
 }
 
 #[cfg(test)]

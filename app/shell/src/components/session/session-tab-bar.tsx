@@ -9,6 +9,7 @@ import {
   GitBranch,
   IdCard,
   Layers,
+  Mail,
   Play,
   Puzzle,
   Server,
@@ -37,6 +38,7 @@ const icons: Record<string, LucideIcon> = {
   "bar-chart": BarChart3,
   "trending-up": TrendingUp,
   server: Server,
+  mail: Mail,
 };
 
 export function SessionTabBar({ value, onChange }: { value: string; onChange: (id: SessionTabId) => void }) {

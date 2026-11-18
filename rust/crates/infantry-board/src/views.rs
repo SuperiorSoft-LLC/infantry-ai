@@ -125,6 +125,27 @@ pub fn resolve_context_limit(env: &dyn BoardEnv, row: &TicketRow) -> Option<(i32
     }
 }
 
+/// ROUTING-1: the first rule of `row`'s project that matches it; None when the ticket pins its own provider or model.
+pub fn routing_choice(env: &dyn BoardEnv, row: &TicketRow, role: Option<&str>) -> Option<infantry_orchestrator_api::RoutingRule> {
+    if row.provider.is_some() || row.model.is_some() {
+        return None;
+    }
+    let rules = env.routing_rules(row.project_id.as_deref());
+    infantry_orchestrator_api::RoutingRule::first(&rules, row.weight, row.ticket_type.as_deref(), role).cloned()
+}
+
+/// The executor a start of `row` resolves to (the same resolver the view shows).
+pub fn executor_of(env: &dyn BoardEnv, row: &TicketRow) -> Option<EffectiveExecutor> {
+    let agents = env.agents();
+    Viewer { env, agents: &agents }.effective_executor(row)
+}
+
+/// The effort a start of `row` runs with (ticket, profile, role binding), before rule and weight defaults.
+pub fn effort_of(env: &dyn BoardEnv, row: &TicketRow) -> Option<String> {
+    let agents = env.agents();
+    Viewer { env, agents: &agents }.effective_effort(row).value
+}
+
 struct Viewer<'a> {
     env: &'a dyn BoardEnv,
     agents: &'a [BoardAgent],
@@ -208,6 +229,16 @@ impl Viewer<'_> {
             None
         };
         let field = |v: Option<String>, s: &str| ExecutorField { value: v, source: s.into() };
+        // ROUTING-1: the project's first matching rule beats the profile, the role binding and the weight mapping.
+        if let Some(rule) = routing_choice(self.env, row, role.as_deref()) {
+            return Some(EffectiveExecutor {
+                agent_id: profile.and_then(|p| p.id).or_else(|| (!is_role).then(|| assigned.to_string())),
+                role,
+                provider: Some(field(Some(rule.provider.clone()), "rule")),
+                model: Some(field(Some(rule.model.clone()), "rule")),
+                rule: Some(rule.name),
+            });
+        }
         let provider = if let Some(p) = &row.provider {
             field(Some(p.clone()), "ticket")
         } else if let Some(p) = by_weight.as_ref().and_then(|w| w.provider.clone()) {

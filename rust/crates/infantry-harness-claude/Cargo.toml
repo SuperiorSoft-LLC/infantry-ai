@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-harness-claude"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Infantry AI harness for Claude Code: the interactive `claude` in a PTY (screen, transcript tail, hooks), headless stream-json as the fallback"
+publish = false
+
+[dependencies]
+infantry-harness = { path = "../infantry-harness" }
+serde_json = { version = "1", features = ["preserve_order"] }
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+infantry-runner-local = { path = "../infantry-runner-local" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
