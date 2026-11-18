@@ -55,7 +55,10 @@ class ClaudeQuestionHookTest {
         assertEquals("Blue (Recommended)", asked[0].recommended, "the one marked label is the timer's pick")
         assertTrue(asked[0].question.startsWith("[Color] Which color?") && "- Red: warm" in asked[0].question && "- Blue (Recommended): calm" in asked[0].question, asked[0].question)
         assertNull(asked[1].recommended, "no mark, no pick")
-        assertTrue("Several allowed" in asked[1].question, "a multi-select question says how to pick several")
+        // ASK-OTHER-1: the card itself is multi-select (no "type them" hint) and every card takes the owner's own text.
+        assertTrue(asked[1].multiSelect && !asked[0].multiSelect, "the tool's multiSelect reaches the card")
+        assertTrue(asked.all { it.allowOther }, "every card has an Other field")
+        assertTrue("Several allowed" !in asked[1].question, "no typing hint any more")
     }
 
     @Test fun `an unanswered question denies the call with a reason instead of leaving the menu waiting`() {

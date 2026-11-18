@@ -83,7 +83,16 @@ data class HarnessQuestion(
     /** The option a timer picks at expiry; null = none. */
     val recommended: String? = null,
     val timeoutMillis: Long? = null,
-)
+    /** 2.20.0 (ASK-OTHER-1): the card offers an "Other" field for the owner's own text (default true, like every other question card). */
+    val allowOther: Boolean = true,
+    /** 2.20.0 (ASK-OTHER-1): the owner may pick several options; [HarnessAnswer.answers] then holds each one. */
+    val multiSelect: Boolean = false,
+) {
+    /** 2.0 - 2.19 binary compatibility: the old constructor (and its defaults) for a plugin compiled before 2.20.0. */
+    @Deprecated("binary compatibility only; use the primary constructor", level = DeprecationLevel.HIDDEN)
+    constructor(question: String, options: List<String>, recommended: String? = null, timeoutMillis: Long? = null) :
+        this(question, options, recommended, timeoutMillis, allowOther = true, multiSelect = false)
+}
 
 data class HarnessAnswer(val answers: List<String>, val otherText: String?, val answered: Boolean) {
     companion object {

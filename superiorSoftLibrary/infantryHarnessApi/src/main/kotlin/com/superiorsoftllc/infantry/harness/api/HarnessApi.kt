@@ -96,8 +96,11 @@ import java.io.File
  * 2.19.0 (MCP-SPEC-1, additive): harness-neutral MCP servers ([McpServerSpec], [McpServerStatus], [McpPlan]). [Harness.mcp] (the CLI's own
  * servers through its official commands), [Harness.loadsUserMcp], [HarnessHost.mcpServers] (a session's plan) and [SessionOutput.mcpServers]
  * (per-server state). A 2.0 - 2.18 plugin keeps the defaults: no CLI servers visible, the plan is the infantry entry alone, nothing reported.
+ *
+ * 2.20.0 (ASK-OTHER-1, additive): [HarnessQuestion.allowOther] (default true) and [HarnessQuestion.multiSelect] (default false), so a
+ * harness's question card has the same "Other" field and multi-select as every other question card. The 2.19 constructor stays (hidden).
  */
-const val HARNESS_API_VERSION: String = "2.19.0"
+const val HARNESS_API_VERSION: String = "2.20.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
