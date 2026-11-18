@@ -10,6 +10,8 @@
 
 #![allow(dead_code)]
 pub mod args;
+pub mod cmd_board;
+pub mod cmd_ticket;
 pub mod conn;
 pub mod registry;
 pub mod usage;
