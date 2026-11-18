@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # ik.sh <args>: this worktree's compiled infantry CLI pinned to an isolated daemon, env scrubbed.
 # IK_PORT (default 18841, the QA window's daemon) and IK_STATE (default C:/t83b/qa-state) pick the daemon; IK_LINK_PORT the runner link port.
 # Needs `:superiorSoftLibrary:infantry:installDist` (the launcher in build/install/infantry/bin).

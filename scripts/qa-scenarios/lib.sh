@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # Shared helpers. Usage: source lib.sh; PID=<java pid of the window>; wd dump | wd click "<text>" | shot name
 QA_WD="${QA_WD:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/windrive/wd.sh}"   # windrive11: windrive10 + drag, scrollto, typein
 SHOTS="${SHOTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/scratch/qa}"
