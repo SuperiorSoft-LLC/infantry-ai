@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// One agent in the sidebar. Selected = amber border; a busy PM card is striped (SelectedStripes.kt).
+// One agent in the sidebar. Selected = amber border + scrolling stripes (SelectedStripes); a busy PM card is striped (SelectedStripes.kt).
 import { memo } from "react";
 import { cn } from "@infantry/ui";
 import type { Agent } from "@/mock/types";
 import { AgentAvatar } from "./agent-avatar";
-import { ProgressLine } from "@infantry/ui";
+import { ProgressLine, SelectedStripes } from "@infantry/ui";
 
 /** Memoised: a card re-renders only when its own session (or the selection) changed. */
 export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: { agent: Agent; selected: boolean; onSelect: (id: string) => void }) {
@@ -24,7 +24,8 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
         striped && "stripes border-info/40",
       )}
     >
-      <div className="flex items-start gap-3">
+      <SelectedStripes active={selected} />
+      <div className="relative flex items-start gap-3">
         <AgentAvatar agent={agent} size="md" className="mt-4" />
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-baseline justify-between gap-2">

@@ -27,6 +27,7 @@ export * from "./blocks/list-row";
 export * from "./blocks/panel-card";
 export * from "./blocks/progress-line";
 export * from "./blocks/segmented-bar";
+export * from "./blocks/selected-stripes";
 export * from "./blocks/status-dot";
 export * from "./blocks/app-dialog";
 export * from "./lib/utils";

@@ -178,6 +178,44 @@
       background-position: 17px 0;
     }
   }
+  /* RUST-UI-2 SelectedStripes: "/" stripes, horizontal period 28px (19.8px perpendicular), 3s per period. */
+  .selected-stripes {
+    position: absolute;
+    inset: 0 0 0 -28px;
+    background-image: repeating-linear-gradient(
+      45deg,
+      color-mix(in oklab, var(--primary) 14%, transparent) 0 10px,
+      transparent 10px 19.799px
+    );
+    will-change: transform;
+    animation: selected-stripes-move 3s linear infinite;
+  }
+  @keyframes selected-stripes-move {
+    to {
+      transform: translateX(28px);
+    }
+  }
+  /* RUST-UI-2: busy = soft breathing dot, waiting = slower amber blink (RunPills.kt). */
+  .busy-pulse {
+    animation: busy-pulse 1.4s ease-in-out infinite;
+  }
+  .wait-pulse {
+    animation: busy-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes busy-pulse {
+    50% {
+      opacity: 0.35;
+      transform: scale(0.8);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .selected-stripes,
+    .stripes-info,
+    .busy-pulse,
+    .wait-pulse {
+      animation: none;
+    }
+  }
   .no-scrollbar {
     scrollbar-width: none;
   }
