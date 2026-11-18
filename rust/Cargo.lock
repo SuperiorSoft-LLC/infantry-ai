@@ -1050,6 +1050,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-chat-daemon"
+version = "1.0.0"
+dependencies = [
+ "infantry-plugin-host",
+ "infantry-plugin-sdk",
+ "infantry-plugin-wit",
+ "serde_json",
+]
+
+[[package]]
 name = "infantry-cli"
 version = "0.1.0"
 dependencies = [
@@ -1203,6 +1213,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-plugins-daemon"
+version = "1.0.0"
+dependencies = [
+ "infantry-plugin-host",
+ "infantry-plugin-sdk",
+ "infantry-plugin-wit",
+ "serde_json",
+]
+
+[[package]]
 name = "infantry-protocol"
 version = "0.1.0"
 dependencies = [
@@ -1260,6 +1280,16 @@ dependencies = [
  "uuid",
  "vt100",
  "windows-sys",
+]
+
+[[package]]
+name = "infantry-settings-daemon"
+version = "1.0.0"
+dependencies = [
+ "infantry-plugin-host",
+ "infantry-plugin-sdk",
+ "infantry-plugin-wit",
+ "serde_json",
 ]
 
 [[package]]
