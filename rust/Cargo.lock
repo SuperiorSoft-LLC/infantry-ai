@@ -1104,6 +1104,7 @@ dependencies = [
  "infantry-harness",
  "infantry-harness-claude",
  "infantry-protocol",
+ "infantry-runner",
  "infantry-runner-local",
  "rusqlite",
  "serde",
