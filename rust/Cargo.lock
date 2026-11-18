@@ -542,6 +542,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-runner-local"
+version = "0.1.0"
+dependencies = [
+ "infantry-runner",
+ "infantry-runner-api",
+ "libc",
+ "portable-pty",
+ "tokio",
+ "uuid",
+ "vt100",
+ "windows-sys",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
