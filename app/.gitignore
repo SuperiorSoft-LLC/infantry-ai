@@ -6,3 +6,4 @@ dist-ssr
 .tauri-build.log
 test-results
 playwright-report
+*.tsbuildinfo
