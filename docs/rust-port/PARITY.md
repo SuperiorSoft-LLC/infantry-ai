@@ -256,7 +256,7 @@ All *(fixed today)*: before this sweep no window-wide key worked, and the hints 
 
 ## Counts
 
-Graded rows, excluding the 2 n/a rows and the out-of-scope table: **81 done, 16 partial, 61 missing** (158 rows).
+Graded rows, excluding the 2 n/a rows and the out-of-scope table: **87 done, 20 partial, 52 missing** (159 rows; RUST-UI-8 split one row and changed 11). RUST-PARITY-1 had 81 / 16 / 61.
 This sweep changed 38 rows:
 
 - 27 now work: markdown and code Copy, keyboard shortcuts, real counts, the real New ticket dialog, delete session,
