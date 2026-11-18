@@ -388,3 +388,47 @@ export function GitTab() {
     </div>
   );
 }
+
+/**
+ * The right-panel Changes view (RUST-UI-7, the Kotlin `infantry.changes` tab): the same projects store and panes as the Git
+ * tab, stacked for a narrow column: the working tree's changes (or the picked worktree's), then the picked file's diff.
+ */
+export function ChangesPanel() {
+  useProjectsLoaded();
+  const loaded = useProjects((s) => s.loaded);
+  const current = useProjects((s) => s.projects.find((p) => p.id === s.currentId) ?? null);
+  const status = useProjects((s) => s.status);
+  const patch = useProjects((s) => s.patch);
+  const loading = useProjects((s) => s.patchLoading);
+  const target = useProjects((s) => s.target);
+  const error = useProjects((s) => s.error);
+  if (!loaded) return <p className="p-2 text-xs text-muted-foreground">Loading projects…</p>;
+  if (!current) return <EmptyState icon={<FolderGit2 className="size-6" />} title="No project yet" hint="Changes are read from the current project's directory." />;
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold">{current.name}</span>
+        {status?.branch && <Chip tone="blue">{status.branch}</Chip>}
+        <WorktreePicker />
+        <IconButton label="Refresh" variant="ghost" size="icon" className="size-7" onClick={() => projectsStore().getState().refresh()}>
+          <RefreshCw />
+        </IconButton>
+      </div>
+      {error && (
+        <div className="flex items-center gap-2 rounded-md bg-danger/10 px-2 py-1 text-xs text-danger">
+          <span className="min-w-0 flex-1 truncate">{error}</span>
+          <IconButton label="Dismiss" variant="ghost" size="icon" className="size-6" onClick={() => projectsStore().getState().clearError()}>
+            <X />
+          </IconButton>
+        </div>
+      )}
+      <ChangesPane />
+      {target && (
+        <div className="rounded-lg border">
+          <div className="truncate border-b px-2 py-1 font-mono text-[11px]">{target.path}</div>
+          <DiffView patch={patch} loading={loading} mode="unified" />
+        </div>
+      )}
+    </div>
+  );
+}

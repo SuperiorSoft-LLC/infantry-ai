@@ -16,6 +16,7 @@ import {
   Gauge,
   GitBranch,
   GitCompare,
+  GitPullRequest,
   Globe,
   IdCard,
   Layers,
@@ -36,9 +37,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { declLabel, type Contribution, type SlotRegistry } from "@infantry/client";
-import { epics, pods, profiles, prompts, services, skills } from "@/mock/data";
+import { prompts, skills } from "@/mock/data";
 import { ListRow } from "@infantry/ui";
-import { ListTab } from "@/components/tabs/list-tab";
+import { TabPage } from "@/components/tabs/tab-page";
+import { EpicsTab, PodsTab, ProfilesTab } from "@/components/panels/board-panels";
+import { McpPanel, ReviewPanel, ServicesTab, SitesPanel } from "@/components/panels/service-panels";
+import { SettingsPage } from "@/components/panels/settings-page";
 import { BoardTab } from "@/components/tabs/board-tab";
 import { CalendarTab } from "@/components/tabs/calendar-tab";
 import { StatsTab } from "@/components/tabs/stats-tab";
@@ -48,7 +52,7 @@ import { NotesTab } from "@/components/knowledge/notes-tab";
 import { SkillsTab } from "@/components/library/skills-tab";
 import { PromptsTab } from "@/components/library/prompts-tab";
 import { MailTab } from "@/components/mail/mail-tab";
-import { GitTab } from "@/components/git/git-tab";
+import { ChangesPanel, GitTab } from "@/components/git/git-tab";
 import { RunTab } from "@/components/run/run-tab";
 import { ProcessesTab } from "@/components/run/processes-tab";
 import { UsagePanel } from "@/components/usage/usage-panel";
@@ -81,12 +85,12 @@ type Def = Omit<TabEntry, "plugin">;
 const CENTRE: Def[] = [
   { id: "cli", declared: "infantry.cli", builtin: true, label: "CLI", icon: SquareTerminal, hint: "^1", render: () => null },
   { id: "mail", builtin: true, label: "Mail", icon: Mail, render: () => <MailTab /> },
-  { id: "pods", declared: "infantry.pods", label: "Pods", icon: Box, hint: "^2", render: () => <ListTab title="Pods" description="Groups of agents and where they run" rows={pods} icon={<Box className="size-4" />} actionLabel="New pod" /> },
+  { id: "pods", declared: "infantry.pods", label: "Pods", icon: Box, hint: "^2", render: () => <PodsTab /> },
   { id: "roles", declared: "infantry.roles", label: "Roles", icon: User, hint: "^5", render: () => <RolesTab /> },
-  { id: "profiles", declared: "infantry.profiles", label: "Profiles", icon: IdCard, hint: "^9", render: () => <ListTab title="Profiles" description="Harness, model and effort presets" rows={profiles} icon={<IdCard className="size-4" />} actionLabel="New profile" /> },
+  { id: "profiles", declared: "infantry.profiles", label: "Profiles", icon: IdCard, hint: "^9", render: () => <ProfilesTab /> },
   { id: "triggers", declared: "infantry.triggers", label: "Triggers", icon: Zap, hint: "^0", render: () => <TriggersTab /> },
   { id: "calendar", declared: "infantry.calendar", builtin: true, label: "Calendar", icon: Calendar, render: () => <CalendarTab /> },
-  { id: "epics", declared: "infantry.epics", label: "Epics", icon: Layers, render: () => <ListTab title="Epics" description="Groups of tickets" rows={epics} icon={<Layers className="size-4" />} actionLabel="New epic" /> },
+  { id: "epics", declared: "infantry.epics", label: "Epics", icon: Layers, render: () => <EpicsTab /> },
   { id: "notes", declared: "infantry.notes", label: "Notes", icon: FileText, render: () => <NotesTab /> },
   { id: "skills", builtin: true, label: "Skills", icon: Sparkles, render: () => <SkillsTab /> },
   { id: "prompts", builtin: true, label: "Prompts", icon: MessageSquare, render: () => <PromptsTab /> },
@@ -97,7 +101,9 @@ const CENTRE: Def[] = [
   { id: "plugins", declared: "infantry.settings.plugins", builtin: true, label: "Plugins", icon: Puzzle, render: () => <PluginManager /> },
   { id: "stats", declared: "infantry.stats", label: "Stats", icon: BarChart3, render: () => <StatsTab /> },
   { id: "pace", declared: "infantry.pace", label: "Pace", icon: TrendingUp, render: () => <PaceTab /> },
-  { id: "services", declared: "infantry.sites", builtin: true, label: "Services", icon: Server, render: () => <ListTab title="Services" description="Runner, orchestrator and web hosting" rows={services} icon={<Server className="size-4" />} /> },
+  { id: "services", declared: "infantry.account", builtin: true, label: "Services", icon: Server, render: () => <ServicesTab /> },
+  { id: "sites", declared: "infantry.sites", label: "Sites", icon: Globe, render: () => <TabPage title="Sites" description="Hosting servers (read-only here)"><SitesPanel /></TabPage> },
+  { id: "settings", declared: "infantry.settings", label: "Settings", icon: Settings, render: () => <SettingsPage /> },
 ];
 
 /** Right-panel tabs. */
@@ -105,6 +111,9 @@ const RIGHT: Def[] = [
   { id: "attention", declared: "infantry.attention", builtin: true, label: "Attention", icon: Bell, hint: "^6", render: () => <AttentionPanel /> },
   { id: "usage", declared: "infantry.usage", builtin: true, label: "Usage", icon: Gauge, hint: "^7", render: () => <UsagePanel /> },
   { id: "prompts", declared: "infantry.prompts", builtin: true, label: "Prompts", icon: MessageSquare, render: () => <div className="space-y-2">{prompts.map((p) => <ListRow key={p.id} row={p} icon={<FileText className="size-4" />} />)}</div> },
+  { id: "changes", declared: "infantry.changes", label: "Changes", icon: GitCompare, render: () => <ChangesPanel /> },
+  { id: "mcp", declared: "infantry.mcp", label: "MCP", icon: Plug, render: () => <McpPanel /> },
+  { id: "review", declared: "infantry.review", label: "Review", icon: GitPullRequest, render: () => <ReviewPanel /> },
   { id: "skills", declared: "infantry.skills", builtin: true, label: "Skills", icon: Star, render: () => <div className="space-y-2">{skills.map((s) => <ListRow key={s.id} row={s} icon={<Sparkles className="size-4" />} />)}</div> },
 ];
 

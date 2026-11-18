@@ -23,3 +23,5 @@ export * from "./stores/session-actions";
 export * from "./stores/plugins";
 export * from "./stores/health";
 export * from "./stores/triggers";
+export * from "./stores/query";
+export * from "./stores/panels";
