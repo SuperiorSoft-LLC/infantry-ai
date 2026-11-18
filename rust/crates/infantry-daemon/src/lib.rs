@@ -3,6 +3,7 @@
 //! The Infantry AI daemon, Rust port (RUST-DAEMON-1): the v1 WebSocket at `/ws` for the sessions frames, bearer auth as
 //! Kotlin's `AccessPolicy`, the session store in the state dir, and providers behind the [`harness::Harness`] seam.
 pub mod auth;
+pub mod gateway;
 pub mod harness;
 pub mod server;
 pub mod sessions;

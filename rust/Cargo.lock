@@ -502,6 +502,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "base64",
+ "futures-util",
  "infantry-conformance",
  "infantry-protocol",
  "infantry-runner",
@@ -509,6 +510,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tokio",
+ "tokio-tungstenite",
  "uuid",
 ]
 
