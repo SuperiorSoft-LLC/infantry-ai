@@ -18,7 +18,7 @@ function FieldRow({ entry, field, tail }: { entry: SecretEntryRow; field: string
   const s = secretsStore().getState();
   const [shown, setShown] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
   const ask = async (purpose: "reveal" | "copy") => {
     setNote("Waiting for Windows Hello...");
@@ -34,7 +34,7 @@ function FieldRow({ entry, field, tail }: { entry: SecretEntryRow; field: string
         setNote(`Copied; cleared in ${r.clearSeconds}s`);
         const copied = r.value;
         setTimeout(() => {
-          void navigator.clipboard.readText().then((now) => now === copied && navigator.clipboard.writeText(""), () => {});
+          void navigator.clipboard.readText().then((now) => { if (now === copied) return navigator.clipboard.writeText(""); }, () => {});
           setNote(null);
         }, r.clearSeconds * 1000);
       }
