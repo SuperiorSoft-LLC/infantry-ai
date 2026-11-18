@@ -16,3 +16,4 @@ export * from "./stores/projects";
 export * from "./stores/knowledge";
 export * from "./stores/roles";
 export * from "./stores/library";
+export * from "./stores/secrets";

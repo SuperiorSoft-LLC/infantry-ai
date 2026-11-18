@@ -8,9 +8,10 @@ import { useUi } from "@/state/ui-state";
 import { Switch } from "@infantry/ui";
 import { Label } from "@infantry/ui";
 import { PickerField } from "./picker-field";
+import { SecretsPanel } from "@/components/settings/secrets-panel";
 import { DeclaredSettings, SettingsSearch, useDeclaredTabs } from "@/components/settings/declared-settings";
 
-const sections = ["Appearance", "Daemon", "Notifications", "Voice", "About"] as const;
+const sections = ["Appearance", "Daemon", "Notifications", "Voice", "Secrets", "About"] as const;
 
 function SettingRow({ id, title, hint, children }: { id: string; title: string; hint: string; children: React.ReactNode }) {
   return (
@@ -105,6 +106,7 @@ export function SettingsBody() {
             <Switch id="set-tts" />
           </SettingRow>
         )}
+        {!searching && section === "Secrets" && <SecretsPanel />}
         {!searching && section === "About" && (
           <div className="rounded-lg border bg-card p-3 text-[13px]">
             <p className="font-semibold">Infantry AI</p>
