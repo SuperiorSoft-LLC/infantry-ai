@@ -1,0 +1,15 @@
+[package]
+name = "infantry-runner-api"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "Infantry AI location-transparent runner interface: the Runner trait a harness codes against, local or remote"
+publish = false
+
+[features]
+# `suite()`: the conformance tests every Runner implementation (local, remote link) must pass.
+test-support = ["tokio/time"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["sync"] }
