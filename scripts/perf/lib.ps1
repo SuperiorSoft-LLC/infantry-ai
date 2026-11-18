@@ -43,6 +43,8 @@ function Get-Role {
     param($Proc, [int]$Root, $ByPid)
     $n = $Proc.Name.ToLower()
     if ($Proc.ProcessId -eq $Root) { return 'app' }
+    # RUST-DAEMON-2: the Tauri app's sidecar (daemon mode).
+    if ($n -eq 'infantry-daemon.exe') { return 'daemon' }
     if ($n -like 'msedgewebview2*') { return 'webview' }
     if ($n -eq 'claude.exe' -or $n -eq 'node.exe') {
         # node under claude = an MCP server; claude itself = the agent CLI

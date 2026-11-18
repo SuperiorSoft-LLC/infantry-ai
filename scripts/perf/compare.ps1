@@ -4,6 +4,7 @@
 #
 #   pwsh scripts/perf/compare.ps1                         # both apps, 1/5/10 agents
 #   pwsh scripts/perf/compare.ps1 -Apps tauri -Agents 1   # one quick run
+#   pwsh scripts/perf/compare.ps1 -Apps tauri-daemon      # RUST-DAEMON-2: Tauri on its infantry-daemon sidecar
 #
 # Each run: a fresh temp root (state dir + an empty throwaway project folder), the app started with every
 # INFANTRY_* / AGENTHQ_* / CLAUDE* variable removed, then:
@@ -17,18 +18,20 @@
 # Kotlin one is driven over the daemon's WebSocket (kotlin-driver.mjs). Kotlin runs as a SEPARATE instance on a 189xx
 # port with its own temp state: never the owner's app. Everything started is killed by PID at the end of each run.
 param(
-    [ValidateSet('kotlin', 'tauri')][string[]]$Apps = @('kotlin', 'tauri'),
+    [ValidateSet('kotlin', 'tauri', 'tauri-daemon')][string[]]$Apps = @('kotlin', 'tauri'),
     [int[]]$Agents = @(1, 5, 10),
     [int]$IdleSec = 20,
     [string]$Model = 'haiku',
     [int]$Port = 18911,
     [string]$KotlinDir = 'C:\Users\antho\agenthq-dist\builds\20261117-181728-6afaed5e',
     [string]$TauriExe = "$PSScriptRoot\..\..\app\src-tauri\target\release\infantry-tauri.exe",
+    [string]$DaemonExe = "$PSScriptRoot\..\..\rust\target\release\infantry-daemon.exe",
+    [int]$DaemonPort = 18964,
     [string]$Out = "$PSScriptRoot\results.json"
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\lib.ps1"
-if ($Port -in 8787, 8788, 8797, 8798 -or $Port -lt 18900 -or $Port -gt 18999) { throw "test ports are 189xx only" }
+foreach ($p in @($Port, $DaemonPort)) { if ($p -in 8787, 8788, 8797, 8798 -or $p -lt 18900 -or $p -gt 18999) { throw "test ports are 189xx only" } }
 $TauriExe = (Resolve-Path $TauriExe).Path
 $driver = "$PSScriptRoot\kotlin-driver.mjs"
 
@@ -59,6 +62,11 @@ function Measure-Run([string]$app, [int]$n) {
         $extra = @{
             INFANTRY_UI_LOCAL = '1'; INFANTRY_STATE_DIR = $state; INFANTRY_PERF_OUT = $events
             INFANTRY_PERF_SCENARIO = "agents=$n;idle=$IdleSec;model=$Model;cwd=$work;delay=25"
+        }
+        if ($app -eq 'tauri-daemon') {
+            # The app starts infantry-daemon as its child (the sidecar), so the tree walk counts it ('daemon' role).
+            $extra.INFANTRY_UI_LOCAL = '0'; $extra.INFANTRY_UI_DAEMON_PORT = "$DaemonPort"
+            $extra.INFANTRY_DAEMON_BIN = (Resolve-Path $DaemonExe).Path
         }
     }
     $launchedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
@@ -124,7 +132,7 @@ function Get-Window2($s, $a, $b) { @($s | Where-Object { $_.t -ge $a -and $_.t -
 
 function Summarize($run) {
     $ev = @{}; foreach ($e in $run.events) { $ev[$e.event] = $e }
-    $roles = 'app', 'webview', 'mcp', 'agents', 'console', 'other'
+    $roles = 'app', 'daemon', 'webview', 'mcp', 'agents', 'console', 'other'
     $s = $run.samples
     $idle = if ($ev['idle-start'] -and $ev['idle-end']) { Get-Window2 $s $ev['idle-start'].t $ev['idle-end'].t } else { @() }
     $stream = if ($ev['stream-start'] -and $ev['stream-end']) { Get-Window2 $s $ev['stream-start'].t $ev['stream-end'].t } else { @() }

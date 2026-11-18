@@ -1,6 +1,6 @@
 [
   {
-    "data": "provider=stub contract=1.155.0 instance=d1c248d8-4aac-4e97-8ad3-cb8263aa98ee since=0 build=dev",
+    "data": "provider=stub contract=1.155.0 instance=dad2af0a-fecb-4739-9fbc-593f80287277 since=0 build=dev",
     "sequence": null,
     "sessionId": null,
     "type": "ready"

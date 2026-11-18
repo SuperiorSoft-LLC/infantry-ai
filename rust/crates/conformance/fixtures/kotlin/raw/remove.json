@@ -1,6 +1,6 @@
 [
   {
-    "data": "provider=stub contract=1.155.0 instance=d1c248d8-4aac-4e97-8ad3-cb8263aa98ee since=0 build=dev",
+    "data": "provider=stub contract=1.155.0 instance=dad2af0a-fecb-4739-9fbc-593f80287277 since=0 build=dev",
     "sequence": null,
     "sessionId": null,
     "type": "ready"
@@ -24,147 +24,147 @@
     "type": "worktrees"
   },
   {
-    "data": "{\"id\":\"e430312d-9916-4c70-ad6a-55d5e0526eab\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\agenthq-standalone\\\\.worktrees\\\\rust-conf-1\",\"spawnedAt\":1794996129241,\"lastHeartbeat\":1794996129241,\"state\":\"BUSY\",\"providerSessionId\":null,\"childPid\":null,\"runCount\":0,\"resumeCount\":0,\"lastExitCode\":null,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":false,\"dormant\":false,\"lastAction\":\"state busy\",\"lastEventAt\":1794996129291,\"live\":true,\"turnActive\":true}",
+    "data": "{\"id\":\"2d243198-0e7f-4513-8555-f1d812ff1395\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\7e6fe711e257d956\\\\07e6de2d-1c49-4496-a6a1-06bbfabe96da\\\\scratchpad\\\\kwork\",\"spawnedAt\":1794999581892,\"lastHeartbeat\":1794999581892,\"state\":\"BUSY\",\"providerSessionId\":null,\"childPid\":null,\"runCount\":0,\"resumeCount\":0,\"lastExitCode\":null,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":false,\"dormant\":false,\"lastAction\":\"state busy\",\"lastEventAt\":1794999581946,\"live\":true,\"turnActive\":true}",
     "sequence": 1,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "session"
   },
   {
-    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"runActivity\":{\"state\":\"thinking\",\"startedAt\":1794996129291,\"turnStartedAt\":1794996129291,\"lastEventAt\":1794996129291}}",
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"runActivity\":{\"state\":\"thinking\",\"startedAt\":1794999581946,\"turnStartedAt\":1794999581946,\"lastEventAt\":1794999581946}}",
     "sequence": 2,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "status"
   },
   {
     "data": "conformance: first turn",
     "sequence": 3,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "turn"
   },
   {
-    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"runActivity\":{\"state\":\"thinking\",\"startedAt\":1794996129298,\"turnStartedAt\":1794996129298,\"lastEventAt\":1794996129298}}",
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"runActivity\":{\"state\":\"thinking\",\"startedAt\":1794999581952,\"turnStartedAt\":1794999581952,\"lastEventAt\":1794999581952}}",
     "sequence": 4,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "status"
   },
   {
-    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"tool\":\"stub\",\"activity\":\"starting stub model default in C:\\\\Users\\\\antho\\\\agenthq-standalone\\\\.worktrees\\\\rust-conf-1\"}",
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"tool\":\"stub\",\"activity\":\"starting stub model default in C:\\\\Users\\\\antho\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\7e6fe711e257d956\\\\07e6de2d-1c49-4496-a6a1-06bbfabe96da\\\\scratchpad\\\\kwork\"}",
     "sequence": 5,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "status"
   },
   {
     "data": "[infantry] * session started (stub · default)",
     "sequence": 6,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "stderr"
   },
   {
     "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"tool\":\"stub\",\"activity\":\"process started (no OS process)\"}",
     "sequence": 7,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "status"
   },
   {
-    "data": "{\"id\":\"e430312d-9916-4c70-ad6a-55d5e0526eab\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\agenthq-standalone\\\\.worktrees\\\\rust-conf-1\",\"spawnedAt\":1794996129241,\"lastHeartbeat\":1794996129492,\"state\":\"BUSY\",\"providerSessionId\":\"stub-session-1\",\"childPid\":null,\"runCount\":1,\"resumeCount\":0,\"lastExitCode\":null,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":true,\"dormant\":false,\"lastAction\":\"state busy\",\"lastEventAt\":1794996129494,\"live\":true,\"turnActive\":true}",
+    "data": "{\"id\":\"2d243198-0e7f-4513-8555-f1d812ff1395\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\7e6fe711e257d956\\\\07e6de2d-1c49-4496-a6a1-06bbfabe96da\\\\scratchpad\\\\kwork\",\"spawnedAt\":1794999581892,\"lastHeartbeat\":1794999581972,\"state\":\"BUSY\",\"providerSessionId\":\"stub-session-1\",\"childPid\":null,\"runCount\":1,\"resumeCount\":0,\"lastExitCode\":null,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":true,\"dormant\":false,\"lastAction\":\"state busy\",\"lastEventAt\":1794999581974,\"live\":true,\"turnActive\":true}",
     "sequence": 8,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "session"
   },
   {
     "data": "{\"state\":\"BUSY\",\"detail\":\"\"}",
     "sequence": 9,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "status"
   },
   {
     "data": "{\"type\":\"step_start\",\"sessionID\":\"stub-session-1\"}",
     "sequence": 10,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "stdout"
   },
   {
     "data": "{\"type\":\"text\",\"text\":\"[stub] daemon is running without a provider CLI.\"}",
     "sequence": 11,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "stdout"
   },
   {
     "data": "[stub] daemon is running without a provider CLI.",
     "sequence": 12,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "text_delta"
   },
   {
     "data": "{\"type\":\"text\",\"text\":\"Every frame on this socket is the real protocol; only the text is scripted.\"}",
     "sequence": 13,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "stdout"
   },
   {
     "data": "Every frame on this socket is the real protocol; only the text is scripted.",
     "sequence": 14,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "text_delta"
   },
   {
     "data": "{\"type\":\"step_finish\"}",
     "sequence": 15,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "stdout"
   },
   {
     "data": "[stub] no provider process was started",
     "sequence": 16,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "stderr"
   },
   {
-    "data": "{\"id\":\"e430312d-9916-4c70-ad6a-55d5e0526eab\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\agenthq-standalone\\\\.worktrees\\\\rust-conf-1\",\"spawnedAt\":1794996129241,\"lastHeartbeat\":1794996130139,\"state\":\"IDLE\",\"providerSessionId\":\"stub-session-1\",\"childPid\":null,\"runCount\":1,\"resumeCount\":0,\"lastExitCode\":0,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":false,\"dormant\":false,\"lastAction\":\"state idle\",\"lastOutputAt\":1794996129922,\"lastEventAt\":1794996130141,\"live\":false,\"turnActive\":false}",
+    "data": "{\"id\":\"2d243198-0e7f-4513-8555-f1d812ff1395\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\7e6fe711e257d956\\\\07e6de2d-1c49-4496-a6a1-06bbfabe96da\\\\scratchpad\\\\kwork\",\"spawnedAt\":1794999581892,\"lastHeartbeat\":1794999582094,\"state\":\"IDLE\",\"providerSessionId\":\"stub-session-1\",\"childPid\":null,\"runCount\":1,\"resumeCount\":0,\"lastExitCode\":0,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":false,\"dormant\":false,\"lastAction\":\"state idle\",\"lastOutputAt\":1794999582051,\"lastEventAt\":1794999582097,\"live\":false,\"turnActive\":false}",
     "sequence": 17,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "session"
   },
   {
-    "data": "{\"state\":\"IDLE\",\"detail\":\"\",\"runActivity\":{\"state\":\"finished\",\"startedAt\":1794996130141,\"turnStartedAt\":1794996129298,\"lastEventAt\":1794996130141}}",
+    "data": "{\"state\":\"IDLE\",\"detail\":\"\",\"runActivity\":{\"state\":\"finished\",\"startedAt\":1794999582098,\"turnStartedAt\":1794999581952,\"lastEventAt\":1794999582098}}",
     "sequence": 18,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "status"
   },
   {
     "data": "{\"exitCode\":0,\"outcome\":\"SUCCEEDED\",\"detail\":\"\"}",
     "sequence": 19,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "finished"
   },
   {
-    "data": "{\"state\":\"IDLE\",\"detail\":\"\",\"runActivity\":{\"state\":\"idle\",\"startedAt\":1794996130148,\"turnStartedAt\":1794996129298,\"lastEventAt\":1794996130148}}",
+    "data": "{\"state\":\"IDLE\",\"detail\":\"\",\"runActivity\":{\"state\":\"idle\",\"startedAt\":1794999582107,\"turnStartedAt\":1794999581952,\"lastEventAt\":1794999582107}}",
     "sequence": 20,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "status"
   },
   {
-    "data": "{\"id\":\"e430312d-9916-4c70-ad6a-55d5e0526eab\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\agenthq-standalone\\\\.worktrees\\\\rust-conf-1\",\"spawnedAt\":1794996129241,\"lastHeartbeat\":1794996130154,\"state\":\"EXITED\",\"providerSessionId\":\"stub-session-1\",\"childPid\":null,\"runCount\":1,\"resumeCount\":0,\"lastExitCode\":null,\"killOutcome\":\"GRACEFUL\",\"killedBy\":\"client request\",\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":false,\"dormant\":false,\"lastAction\":\"state exited\",\"lastOutputAt\":1794996129922,\"lastEventAt\":1794996130160,\"lastTurnAt\":1794996130148,\"live\":false,\"turnActive\":false}",
+    "data": "{\"id\":\"2d243198-0e7f-4513-8555-f1d812ff1395\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\7e6fe711e257d956\\\\07e6de2d-1c49-4496-a6a1-06bbfabe96da\\\\scratchpad\\\\kwork\",\"spawnedAt\":1794999581892,\"lastHeartbeat\":1794999582115,\"state\":\"EXITED\",\"providerSessionId\":\"stub-session-1\",\"childPid\":null,\"runCount\":1,\"resumeCount\":0,\"lastExitCode\":null,\"killOutcome\":\"GRACEFUL\",\"killedBy\":\"client request\",\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":false,\"dormant\":false,\"lastAction\":\"state exited\",\"lastOutputAt\":1794999582051,\"lastEventAt\":1794999582124,\"lastTurnAt\":1794999582106,\"live\":false,\"turnActive\":false}",
     "sequence": 21,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "session"
   },
   {
     "data": "{\"state\":\"EXITED\",\"detail\":\"\"}",
     "sequence": 22,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "status"
   },
   {
     "data": "{\"exitCode\":null,\"outcome\":\"KILLED_GRACEFUL\",\"detail\":\"\"}",
     "sequence": 23,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "finished"
   },
   {
-    "data": "{\"state\":\"IDLE\",\"detail\":\"\",\"runActivity\":{\"state\":\"finished\",\"startedAt\":1794996130168,\"turnStartedAt\":1794996129298,\"lastEventAt\":1794996130168}}",
+    "data": "{\"state\":\"IDLE\",\"detail\":\"\",\"runActivity\":{\"state\":\"finished\",\"startedAt\":1794999582133,\"turnStartedAt\":1794999581952,\"lastEventAt\":1794999582133}}",
     "sequence": 24,
-    "sessionId": "e430312d-9916-4c70-ad6a-55d5e0526eab",
+    "sessionId": "2d243198-0e7f-4513-8555-f1d812ff1395",
     "type": "status"
   },
   {

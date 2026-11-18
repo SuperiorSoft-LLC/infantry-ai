@@ -116,7 +116,7 @@
     },
     {
       "data": {
-        "activity": "starting stub model default in C:\\Users\\antho\\agenthq-standalone\\.worktrees\\rust-conf-1",
+        "activity": "starting stub model default in <path>",
         "detail": "",
         "state": "BUSY",
         "tool": "stub"
@@ -434,7 +434,7 @@
     },
     {
       "data": {
-        "activity": "starting stub model default in C:\\Users\\antho\\agenthq-standalone\\.worktrees\\rust-conf-1",
+        "activity": "starting stub model default in <path>",
         "detail": "",
         "state": "BUSY",
         "tool": "stub"
@@ -461,6 +461,14 @@
       },
       "sessionId": "<id:1>",
       "type": "status"
+    },
+    {
+      "data": {
+        "sessionID": "stub-session-1",
+        "type": "step_start"
+      },
+      "sessionId": "<id:1>",
+      "type": "stdout"
     },
     {
       "data": "[infantry] turn interrupted by the owner; the session is at rest and keeps its conversation",

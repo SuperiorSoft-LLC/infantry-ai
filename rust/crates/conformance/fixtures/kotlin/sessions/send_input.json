@@ -116,7 +116,7 @@
     },
     {
       "data": {
-        "activity": "starting stub model default in C:\\Users\\antho\\agenthq-standalone\\.worktrees\\rust-conf-1",
+        "activity": "starting stub model default in <path>",
         "detail": "",
         "state": "BUSY",
         "tool": "stub"
@@ -434,7 +434,7 @@
     },
     {
       "data": {
-        "activity": "starting stub model default in C:\\Users\\antho\\agenthq-standalone\\.worktrees\\rust-conf-1",
+        "activity": "starting stub model default in <path>",
         "detail": "",
         "state": "BUSY",
         "tool": "stub"

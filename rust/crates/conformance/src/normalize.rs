@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 //! Turns a raw transcript into a stable one: ids become `<id:N>` by first appearance, timestamps `<ts>`, pids `<pid>`,
-//! machine paths `<path>`. The double-encoded `data` string is parsed so the fixture is readable and key-order free.
+//! machine paths `<path>` (folder-valued keys, and absolute paths inside any string). The double-encoded `data` string is parsed so the fixture is readable and key-order free.
 use infantry_protocol::Envelope;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -37,6 +37,50 @@ fn find_uuids(s: &str) -> Vec<(usize, usize)> {
     out
 }
 
+/// Where a path token ends: whitespace, a quote, or a closing bracket / separator punctuation.
+fn path_end(c: char) -> bool {
+    c.is_whitespace() || matches!(c, '"' | '\'' | '`' | ')' | ']' | '}' | ',' | ';' | '<' | '>' | '|')
+}
+
+/// Every absolute path in `s` as byte ranges: a drive path (`C:\..`, `C:/..`), a UNC path (`\\host\..`), or a Unix path
+/// (`/a/b`) at the start of a token. A path runs to the next [path_end] character, so a path with a space in it is
+/// blanked up to the space only. URLs are left alone (`ws://h/p` has no `/` at a token start).
+fn find_paths(s: &str) -> Vec<(usize, usize)> {
+    let b = s.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        let at_token = i == 0 || s[..i].chars().next_back().is_some_and(|c| path_end(c) || c == '(' || c == '[' || c == '=');
+        let drive = i + 2 < b.len() && b[i].is_ascii_alphabetic() && b[i + 1] == b':' && (b[i + 2] == b'\\' || b[i + 2] == b'/');
+        let unc = i + 2 < b.len() && b[i] == b'\\' && b[i + 1] == b'\\' && b[i + 2].is_ascii_alphanumeric();
+        let unix = b[i] == b'/' && i + 1 < b.len() && (b[i + 1].is_ascii_alphanumeric() || b[i + 1] == b'.' || b[i + 1] == b'_');
+        if at_token && (drive || unc || unix) {
+            let end = s[i..].char_indices().find(|(_, c)| path_end(*c)).map_or(s.len(), |(k, _)| i + k);
+            // A lone `/word` is a command or a route (`/exit`, `/health`), not a machine path.
+            if !unix || s[i + 1..end].contains('/') {
+                out.push((i, end));
+                i = end;
+                continue;
+            }
+        }
+        i += s[i..].chars().next().map_or(1, char::len_utf8);
+    }
+    out
+}
+
+/// `s` with every absolute path replaced by `<path>`.
+pub fn blank_paths(s: &str) -> String {
+    let mut out = String::new();
+    let mut last = 0;
+    for (a, b) in find_paths(s) {
+        out.push_str(&s[last..a]);
+        out.push_str("<path>");
+        last = b;
+    }
+    out.push_str(&s[last..]);
+    out
+}
+
 fn is_time_key(k: &str) -> bool {
     let l = k.to_ascii_lowercase();
     l.ends_with("at") || l.ends_with("since") || l.contains("heartbeat") || l.contains("timestamp")
@@ -54,6 +98,7 @@ impl Normalizer {
     }
 
     fn string(&mut self, s: &str) -> String {
+        let s = &blank_paths(s);
         let mut out = String::new();
         let mut last = 0;
         for (a, b) in find_uuids(s) {
@@ -129,5 +174,21 @@ impl Normalizer {
             }
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::blank_paths;
+
+    #[test]
+    fn absolute_paths_inside_strings_are_blanked() {
+        assert_eq!(blank_paths(r"starting stub model default in C:\Users\a\.worktrees\rust-conf-1"), "starting stub model default in <path>");
+        assert_eq!(blank_paths("in /home/a/work, then (D:/x/y)"), "in <path>, then (<path>)");
+        assert_eq!(blank_paths("share \\\\box\\s\\d done"), "share <path> done");
+        // Not paths: a URL, a slash command, a ratio, a route.
+        for keep in ["ws://127.0.0.1:18961/ws", "/exit", "3/4 done", "GET /health"] {
+            assert_eq!(blank_paths(keep), keep);
+        }
     }
 }
