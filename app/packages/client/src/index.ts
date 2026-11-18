@@ -8,3 +8,4 @@ export * from "./store";
 export * from "./stress";
 export * from "./stores/board";
 export * from "./stores/settings";
+export * from "./stores/prompts";
