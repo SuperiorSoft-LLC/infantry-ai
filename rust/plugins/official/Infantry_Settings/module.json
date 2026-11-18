@@ -1,0 +1,43 @@
+{
+  "name": "Infantry_Settings",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "description": "Project config tools (per-role caps, routing rules, experiments, project data) and scoped settings tools. Daemon half only.",
+  "tier": "official",
+  "sequence": [],
+  "daemon": {
+    "component": "daemon.component",
+    "apiAtLeast": "0.1.0",
+    "needs": [
+      "frames"
+    ],
+    "tools": [
+      {
+        "name": "infantry_project_config_get",
+        "action": "projects.save",
+        "kind": "write",
+        "description": "Read a project per-role caps on concurrent agents (a role not listed runs 1) and its task routing rules."
+      },
+      {
+        "name": "infantry_project_config_set",
+        "action": "projects.save",
+        "kind": "write",
+        "description": "Set a project per-role caps, autoRemoveDoneWorkers, routingRules (replace), experiment switches or generic project data."
+      },
+      {
+        "name": "infantry_settings_get",
+        "action": "settings.read",
+        "kind": "read",
+        "description": "Read a setting effective value and the scope it comes from (session > role > project > app > default)."
+      },
+      {
+        "name": "infantry_settings_set",
+        "action": "settings.save",
+        "kind": "write",
+        "description": "Set a setting at a scope (app, project, role or session) with the target ids."
+      }
+    ]
+  }
+}

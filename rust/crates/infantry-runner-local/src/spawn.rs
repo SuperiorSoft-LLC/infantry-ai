@@ -19,7 +19,35 @@ const READ_BUF: usize = 16 * 1024;
 
 /// On Windows a bare program name is looked up on PATH x PATHEXT (npm installs `.cmd` shims, which `CreateProcess` and std
 /// do not find by bare name). A name with a path part or an extension already given is left alone, as is any name not found.
+/// A `.cmd` shim that only launches an `.exe` next to it is followed to that `.exe` ([`shim_target`]).
 pub(crate) fn resolve_program(program: &str, env: &[(String, String)]) -> String {
+    let found = find_program(program, env);
+    if found.to_ascii_lowercase().ends_with(".cmd") {
+        let p = std::path::Path::new(&found);
+        if let (Some(dir), Ok(text)) = (p.parent(), std::fs::read_to_string(p)) {
+            if let Some(exe) = shim_target(&text, dir) {
+                return exe;
+            }
+        }
+    }
+    found
+}
+
+/// The `.exe` an npm `.cmd` shim runs (a line `"%dp0%\<rel>.exe" %*`), when it exists. Run through the shim, `cmd.exe`
+/// would sit between the runner and the program and own its console (keys typed into a pty) and its exit code.
+pub(crate) fn shim_target(shim: &str, dir: &std::path::Path) -> Option<String> {
+    shim.lines().find_map(|l| {
+        let rest = l.trim().strip_prefix("\"%dp0%\\")?;
+        let rel = &rest[..rest.find('"')?];
+        if !rel.to_ascii_lowercase().ends_with(".exe") {
+            return None;
+        }
+        let p = dir.join(rel);
+        p.is_file().then(|| p.to_string_lossy().into_owned())
+    })
+}
+
+fn find_program(program: &str, env: &[(String, String)]) -> String {
     if !cfg!(windows) || program.contains(['/', '\\', ':']) {
         return program.to_string();
     }
@@ -350,4 +378,28 @@ fn start_pty(spec: &ProcessSpec, size: Size, hub: Arc<Hub>, grace: Duration) -> 
             }
         }),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_npm_cmd_shim_is_followed_to_the_exe_it_runs() {
+        let dir = std::env::temp_dir().join(format!("infantry-shim-{}", uuid::Uuid::new_v4().simple()));
+        let bin = dir.join("node_modules").join("tool").join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("tool.exe"), b"MZ").unwrap();
+        let shim = "@ECHO off\r\nSETLOCAL\r\nCALL :find_dp0\r\n\"%dp0%\\node_modules\\tool\\bin\\tool.exe\"   %*\r\n";
+        assert_eq!(shim_target(shim, &dir).as_deref(), Some(bin.join("tool.exe").to_string_lossy().as_ref()));
+        // A shim that runs node (a script, not an exe) or an exe that is not there stays a shim.
+        assert_eq!(shim_target("\"%dp0%\\node.exe\" \"%dp0%\\x.js\" %*", &dir), None);
+        assert_eq!(shim_target("\"%_prog%\"  \"%dp0%\\cli.js\" %*", &dir), None);
+        if cfg!(windows) {
+            std::fs::write(dir.join("tool.cmd"), shim).unwrap();
+            let env = vec![("PATH".to_string(), dir.to_string_lossy().into_owned())];
+            assert_eq!(resolve_program("tool", &env), bin.join("tool.exe").to_string_lossy());
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

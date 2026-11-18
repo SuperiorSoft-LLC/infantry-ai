@@ -1,0 +1,18 @@
+{
+  "name": "Infantry_Mcp",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "description": "infantry_mcp: the agent face of the MCP registry (list, status, my_tools, grants; changes are refused to agents). Daemon half only.",
+  "tier": "official",
+  "sequence": [],
+  "daemon": {
+    "component": "daemon.component",
+    "apiAtLeast": "0.1.0",
+    "needs": ["frames"],
+    "tools": [
+      { "name": "infantry_mcp", "action": "mcp.read", "kind": "read", "description": "MCP servers. op list: every server. op status: one server (name). op my_tools: the servers THIS session was handed and why. op grants: who was granted what. add/remove/enable/disable/grant/revoke are refused to agents (ask the PM or owner)." }
+    ]
+  }
+}

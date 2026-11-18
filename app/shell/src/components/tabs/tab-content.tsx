@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // Picks the mock view for the active centre tab.
-import { Box, FileText, GitCommit, IdCard, Layers, Play, Server, Zap } from "lucide-react";
-import { epics, gitCommits, notes, pods, profiles, runCommands, services, triggers } from "@/mock/data";
+import { Box, FileText, IdCard, Layers, Play, Server, Zap } from "lucide-react";
+import { epics, notes, pods, profiles, runCommands, services, triggers } from "@/mock/data";
 import type { CentreView } from "@/state/ui-state";
 import { BoardTab } from "./board-tab";
 import { PluginsTab } from "./plugins-tab";
@@ -11,6 +11,7 @@ import { CalendarTab } from "./calendar-tab";
 import { StatsTab } from "./stats-tab";
 import { PaceTab } from "./pace-tab";
 import { ListTab } from "./list-tab";
+import { GitTab } from "@/components/git/git-tab";
 
 export function TabContent({ tab }: { tab: CentreView }) {
   switch (tab) {
@@ -33,7 +34,7 @@ export function TabContent({ tab }: { tab: CentreView }) {
     case "run":
       return <ListTab title="Run" description="Saved run commands" rows={runCommands} icon={<Play className="size-4" />} actionLabel="New command" />;
     case "git":
-      return <ListTab title="Git" description="ticket/e85faaeb · 3 recent commits" rows={gitCommits} icon={<GitCommit className="size-4" />} />;
+      return <GitTab />;
     case "plugins":
       return <PluginsTab />;
     case "stats":
