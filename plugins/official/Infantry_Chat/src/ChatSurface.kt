@@ -232,6 +232,7 @@ fun CenterHeader(
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val chipsMax = (maxWidth - 24.dp - 44.dp - HEADER_TITLE_MIN_WIDTH).coerceAtLeast(0.dp)
     val narrow = maxWidth < NARROW_HEADER_WIDTH
+    val panelMax = maxWidth - 24.dp
     val chips: @Composable () -> Unit = {
         if (a != null) {
         ExecutorChips(state.sessionExecutor(a))
@@ -276,11 +277,10 @@ fun CenterHeader(
             // BRANCH-PER-TASK 2/3: the branch of the started ticket this agent runs; nothing when it holds none.
             state.ticketBranchFor(a.id)?.branchLine()?.let { Text(it, color = Palette.Info, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, modifier = Modifier.testTag("agent-ticket-branch")) }
         }
-        if (!narrow) FlowRow(Modifier.widthIn(max = chipsMax), itemVerticalAlignment = Alignment.CenterVertically) { chips() } // wraps, never clipped to an empty box (QA F3)
-    }
-    // A phone-width header: the chips get their own row under the title and wrap onto more lines, never clipped.
-    if (narrow && a != null && !spawnMode) {
-        FlowRow(Modifier.fillMaxWidth().background(Palette.Panel).padding(12.dp, 0.dp, 12.dp, 8.dp).testTag(AGENT_HEADER_CHIPS_TAG), verticalArrangement = Arrangement.spacedBy(4.dp)) { chips() }
+        // SLIDE-TAB-1: the chip row is one icon tab; hover (tap on touch) slides the chips out as an overlay, nothing is pushed.
+        HoverRevealTab(AhqIcons.Activity, "Session details") {
+            FlowRow(Modifier.widthIn(max = if (narrow) panelMax else chipsMax.coerceAtLeast(240.dp)).testTag(AGENT_HEADER_CHIPS_TAG), itemVerticalAlignment = Alignment.CenterVertically) { chips() }
+        }
     }
     }
     }
