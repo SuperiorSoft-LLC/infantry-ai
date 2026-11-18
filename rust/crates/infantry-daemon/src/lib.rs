@@ -5,6 +5,7 @@
 pub mod auth;
 pub mod gateway;
 pub mod board;
+pub mod compose;
 pub mod harness;
 pub mod held;
 pub mod server;

@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
-//! The legacy backend process: the Kotlin daemon, started headless on a private loopback port with the SAME state dir
-//! (it takes `daemon.lock`; the Rust gateway does not). It runs in a Job Object, so it dies with the gateway however the
+//! The legacy backend process: the Kotlin daemon, started headless on a private loopback port. It shares the Rust
+//! daemon's DATABASE (`INFANTRY_DB` = `<state>/infantry.db`) but has its OWN state dir, [`LEGACY_DIR`] under the Rust
+//! one: Rust owns the session store (`sessions.json`), the mailbox and the other state files now, and the Kotlin child
+//! must never write them (two writers of one `sessions.json` lose sessions). The few files the child needs to agree
+//! with Rust on (the owner credential, the access token, the keystore) are copied in once when missing. It runs in a Job Object, so it dies with the gateway however the
 //! gateway ends, and it is restarted with backoff when it exits.
 
 use infantry_runner::job::Job;
@@ -23,6 +26,11 @@ pub const ENV_PORT: &str = "INFANTRY_PORT";
 pub const ENV_STATE_DIR: &str = "INFANTRY_STATE_DIR";
 pub const ENV_HOST: &str = "INFANTRY_HOST";
 pub const ENV_PORT_STRICT: &str = "INFANTRY_PORT_STRICT";
+pub const ENV_DB: &str = "INFANTRY_DB";
+/// The Kotlin child's own state dir, under the Rust state dir.
+pub const LEGACY_DIR: &str = "legacy";
+/// Files copied from the Rust state dir into [`LEGACY_DIR`] when missing there (credentials and the keystore only).
+pub const SHARED_FILES: [&str; 5] = ["owner.token", "remote.token", "keystore.json", "keystore.key.dpapi", "network.properties"];
 /// Names a client of ANOTHER daemon; the backend must not inherit it.
 pub const ENV_URL: &str = "INFANTRY_URL";
 
@@ -107,12 +115,31 @@ impl Legacy {
         }
     }
 
+    /// The Kotlin child's state dir (created, with the shared files copied in when missing).
+    pub fn own_dir(&self) -> PathBuf {
+        self.state_dir.join(LEGACY_DIR)
+    }
+
+    fn prepare_dir(&self) -> Result<PathBuf, String> {
+        let dir = self.own_dir();
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        for f in SHARED_FILES {
+            let (from, to) = (self.state_dir.join(f), dir.join(f));
+            if from.is_file() && !to.exists() {
+                let _ = std::fs::copy(&from, &to);
+            }
+        }
+        Ok(dir)
+    }
+
     fn start_once(&self) -> Result<String, String> {
         let job = Job::new().map_err(|e| format!("job object: {e}"))?;
+        let own = self.prepare_dir()?;
         let mut cmd = Command::new(&self.command[0]);
         cmd.args(&self.command[1..])
             .env(ENV_PORT, self.port.to_string())
-            .env(ENV_STATE_DIR, &self.state_dir)
+            .env(ENV_STATE_DIR, &own)
+            .env(ENV_DB, self.state_dir.join("infantry.db"))
             .env(ENV_HOST, "127.0.0.1")
             .env(ENV_PORT_STRICT, "true")
             .env_remove(ENV_URL)

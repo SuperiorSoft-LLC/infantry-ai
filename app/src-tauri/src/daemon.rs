@@ -29,6 +29,26 @@ const EXE: &str = "infantry-daemon";
 const ENV_DROP: [&str; 6] = ["INFANTRY_URL", "INFANTRY_PORT", "INFANTRY_HOST", "INFANTRY_TOKEN", "INFANTRY_TOKEN_FILE", "INFANTRY_STATE_DIR"];
 const ENV_DROP_PREFIX: [&str; 4] = ["AGENTHQ_", "INFANTRY_UI_", "INFANTRY_PERF_", "CLAUDE"];
 
+/// The sidecar's port when nothing pins it (`INFANTRY_UI_DAEMON_PORT`): fixed, so the app and `start.cmd` agree.
+pub const DEFAULT_PORT: u16 = 18990;
+/// Ports this app never connects to or starts on: the Kotlin app's daemon (8797) and the Kotlin dev daemon (8787).
+pub const FOREIGN_PORTS: [u16; 2] = [8797, 8787];
+/// The sidecar's state dir under `%LOCALAPPDATA%` when nothing pins it (the Rust app's own, never the Kotlin app's).
+pub const STATE_SUBDIR: [&str; 2] = ["SuperiorSoft", "InfantryAI-Rust"];
+
+/// `%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust` (None where there is no LOCALAPPDATA).
+pub fn default_state_dir() -> Option<PathBuf> {
+    let l = std::env::var_os("LOCALAPPDATA").filter(|v| !v.is_empty())?;
+    Some(STATE_SUBDIR.iter().fold(PathBuf::from(l), |p, s| p.join(s)))
+}
+
+/// Whether a URL or port names a daemon this app must leave alone.
+pub fn foreign(url_or_port: &str) -> bool {
+    let tail = url_or_port.trim().trim_end_matches('/').trim_end_matches("/ws");
+    let port = tail.rsplit(':').next().and_then(|p| p.split('/').next()).and_then(|p| p.parse::<u16>().ok());
+    port.is_some_and(|p| FOREIGN_PORTS.contains(&p))
+}
+
 /// A daemon this app found or started.
 pub struct Sidecar {
     pub url: String,
@@ -76,8 +96,11 @@ pub fn binary() -> Result<PathBuf, String> {
 
 /// The daemon for `state`: the one already running there, else a new sidecar on `port` (0 = any free port).
 pub fn ensure(state: &Path, port: u16, cwd: &Path) -> Result<Sidecar, String> {
+    if FOREIGN_PORTS.contains(&port) {
+        return Err(format!("port {port} belongs to the Kotlin app's daemon; this app never uses it"));
+    }
     std::fs::create_dir_all(state).map_err(|e| format!("state dir {}: {e}", state.display()))?;
-    if let Some(p) = read_port(state).filter(|p| healthy(*p)) {
+    if let Some(p) = read_port(state).filter(|p| !FOREIGN_PORTS.contains(p) && healthy(*p)) {
         return Ok(Sidecar { url: format!("ws://127.0.0.1:{p}/ws"), child: None });
     }
     let _ = std::fs::remove_file(port_file(state));
@@ -108,7 +131,7 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path) -> Result<Sidecar, String> {
         if let Ok(Some(status)) = child.try_wait() {
             return Err(format!("{} exited at start ({status}); see {}", bin.display(), state.join("daemon.log").display()));
         }
-        if let Some(p) = read_port(state) {
+        if let Some(p) = read_port(state).filter(|p| !FOREIGN_PORTS.contains(p)) {
             return Ok(Sidecar { url: format!("ws://127.0.0.1:{p}/ws"), child: Some(child) });
         }
         std::thread::sleep(Duration::from_millis(20));
@@ -126,5 +149,13 @@ mod tests {
         // Bind and drop: the port is free (nothing answers there).
         let p = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
         assert!(!healthy(p));
+    }
+
+    #[test]
+    fn the_kotlin_ports_are_foreign() {
+        assert!(foreign("ws://127.0.0.1:8797/ws"));
+        assert!(foreign("http://localhost:8787"));
+        assert!(!foreign("ws://127.0.0.1:18990/ws"));
+        assert!(ensure(Path::new("."), 8797, Path::new(".")).is_err());
     }
 }

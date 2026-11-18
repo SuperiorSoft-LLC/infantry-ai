@@ -50,7 +50,9 @@ fn start(dir: &Path) -> u16 {
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
-            let daemon = Daemon::new(Arc::new(Stub::default()), Config::new(dir.clone(), dir)).unwrap();
+            let daemon = Daemon::new(Arc::new(Stub::default()), Config::new(dir.clone(), dir.clone())).unwrap();
+            // RUST-WIRE-1: project frames moved from the session manager to the projects unit; compose like main.
+            infantry_daemon::compose::build(&daemon, &dir).unwrap();
             let policy = Arc::new(AccessPolicy::new("127.0.0.1", None).unwrap());
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             tx.send(listener.local_addr().unwrap().port()).unwrap();

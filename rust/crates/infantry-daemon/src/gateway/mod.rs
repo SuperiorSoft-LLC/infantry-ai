@@ -186,11 +186,14 @@ impl Gateway {
         format!("ws://127.0.0.1:{}/ws", self.legacy.port)
     }
 
-    /// The owner credential Kotlin generated into the shared state dir (None until it has started once).
+    /// The owner credential: the state dir's, else the one Kotlin generated into its own dir (None until it has
+    /// started once). The child is given the state dir's copy at start, so the two agree.
     pub fn owner_token(&self) -> Option<String> {
-        let t = std::fs::read_to_string(self.state_dir.join(OWNER_TOKEN_FILE)).ok()?;
-        let t = t.trim_start_matches('\u{feff}').trim().to_string();
-        (!t.is_empty()).then_some(t)
+        [self.state_dir.join(OWNER_TOKEN_FILE), self.legacy.own_dir().join(OWNER_TOKEN_FILE)].iter().find_map(|p| {
+            let t = std::fs::read_to_string(p).ok()?;
+            let t = t.trim_start_matches('\u{feff}').trim().to_string();
+            (!t.is_empty()).then_some(t)
+        })
     }
 
     /// Whether a client presented the owner credential (header, else the `infantry.owner.<base64url>` subprotocol).

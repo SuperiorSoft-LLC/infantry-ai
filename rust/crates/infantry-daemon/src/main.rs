@@ -8,8 +8,10 @@
 //! Kotlin daemon on a private loopback port (`--legacy-port`, else `INFANTRY_LEGACY_PORT`, else a free one) with the
 //! same state dir; frames no Rust unit owns are forwarded to it. `--gateway-routes` / `INFANTRY_GATEWAY_ROUTES`
 //! overrides the route of single frame types (`{"prompt":"legacy"}`; `"*"` for all).
-//! Defaults: `INFANTRY_PORT` else 8787, `INFANTRY_HOST` else 127.0.0.1, `INFANTRY_STATE_DIR` else `~/.infantry`,
-//! `INFANTRY_PROVIDER` else `claude`. The token comes from `INFANTRY_TOKEN_FILE` / `INFANTRY_TOKEN`.
+//! Defaults (the exe runs on its own, no launcher script): `INFANTRY_PORT` else 18990, `INFANTRY_HOST` else
+//! 127.0.0.1, `INFANTRY_STATE_DIR` else `%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust` (`~/.infantry-rust` where there is
+//! no LOCALAPPDATA), `INFANTRY_PROVIDER` else `claude`. The token comes from `INFANTRY_TOKEN_FILE` / `INFANTRY_TOKEN`.
+//! Port 8797 (the Kotlin app's daemon) is refused: this daemon never takes over or shares the Kotlin app's port.
 use infantry_daemon::auth::{self, AccessPolicy};
 use infantry_daemon::gateway::{self, legacy, Gateway, GatewayConfig, RouteTable};
 use infantry_daemon::harness;
@@ -18,7 +20,19 @@ use infantry_daemon::sessions::{Config, Daemon};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-pub const DEFAULT_PORT: u16 = 8787;
+pub const DEFAULT_PORT: u16 = 18990;
+/// The Kotlin app's daemon port; never bound by this daemon.
+pub const KOTLIN_APP_PORT: u16 = 8797;
+/// The default state dir under `%LOCALAPPDATA%` (the Rust app's own, never the Kotlin app's `InfantryAI`).
+pub const STATE_SUBDIR: [&str; 2] = ["SuperiorSoft", "InfantryAI-Rust"];
+
+fn default_state_dir() -> PathBuf {
+    if let Some(l) = std::env::var_os("LOCALAPPDATA").filter(|v| !v.is_empty()) {
+        return STATE_SUBDIR.iter().fold(PathBuf::from(l), |p, s| p.join(s));
+    }
+    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_else(|_| ".".into());
+    PathBuf::from(home).join(".infantry-rust")
+}
 
 fn fail(msg: String) -> ! {
     eprintln!("[infantry] refusing to start: {msg}");
@@ -36,11 +50,11 @@ fn main() {
         Some(p) => p.trim().parse().unwrap_or_else(|_| fail(format!("bad port `{p}`"))),
         None => DEFAULT_PORT,
     };
+    if port == KOTLIN_APP_PORT {
+        fail(format!("port {KOTLIN_APP_PORT} belongs to the Kotlin app's daemon; pick another"));
+    }
     let host = arg("--host").or_else(|| auth::env("INFANTRY_HOST")).unwrap_or_else(|| "127.0.0.1".into());
-    let state_dir = arg("--state-dir").or_else(|| auth::env("INFANTRY_STATE_DIR")).map(PathBuf::from).unwrap_or_else(|| {
-        let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_else(|_| ".".into());
-        PathBuf::from(home).join(".infantry")
-    });
+    let state_dir = arg("--state-dir").or_else(|| auth::env("INFANTRY_STATE_DIR")).map(PathBuf::from).unwrap_or_else(default_state_dir);
     if let Err(e) = std::fs::create_dir_all(&state_dir) {
         fail(format!("state dir {}: {e}", state_dir.display()));
     }
@@ -51,6 +65,13 @@ fn main() {
     };
     let token = auth::token_from_environment().unwrap_or_else(|e| fail(e));
     let policy = AccessPolicy::new(&host, token.as_deref()).unwrap_or_else(|e| fail(e));
+    let cfg = Config::new(state_dir.clone(), std::env::current_dir().unwrap_or_else(|_| state_dir.clone()));
+    let daemon = Daemon::new(harness, cfg).unwrap_or_else(|e| fail(e));
+    let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap_or_else(|e| fail(e.to_string()));
+    // Every unit, registered over the session manager (inside the runtime: units start background tasks).
+    if let Err(e) = rt.block_on(async { infantry_daemon::compose::build(&daemon, &state_dir).map(|_| ()) }) {
+        eprintln!("[infantry] units not composed, serving the sessions frames only: {e}");
+    }
     let gateway = arg("--legacy-backend").or_else(|| auth::env("INFANTRY_LEGACY_BACKEND")).map(|cmdline| {
         let legacy_port: u16 = match arg("--legacy-port").or_else(|| auth::env("INFANTRY_LEGACY_PORT")) {
             Some(p) => p.trim().parse().unwrap_or_else(|_| fail(format!("bad legacy port `{p}`"))),
@@ -60,7 +81,8 @@ fn main() {
             fail(format!("the legacy backend needs its own port, not {port}"));
         }
         let overrides = arg("--gateway-routes").or_else(|| auth::env(gateway::routes::ROUTES_SETTING)).unwrap_or_default();
-        let routes = RouteTable::new(infantry_daemon::sessions::owns).with_overrides(&overrides).unwrap_or_else(|e| fail(e));
+        let d = daemon.clone();
+        let routes = RouteTable::new(move |t: &str| d.owns_frame(t)).with_overrides(&overrides).unwrap_or_else(|e| fail(e));
         Gateway::new(GatewayConfig {
             legacy_command: legacy::split_command(&cmdline),
             legacy_port,
@@ -70,9 +92,6 @@ fn main() {
         })
         .unwrap_or_else(|e| fail(e))
     });
-    let cfg = Config::new(state_dir.clone(), std::env::current_dir().unwrap_or_else(|_| state_dir.clone()));
-    let daemon = Daemon::new(harness, cfg).unwrap_or_else(|e| fail(e));
-    let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap_or_else(|e| fail(e.to_string()));
     rt.block_on(async move {
         let listener = tokio::net::TcpListener::bind((host.as_str(), port)).await.unwrap_or_else(|e| fail(format!("port {port} could not be bound ({e})")));
         let bound = listener.local_addr().map(|a| a.port()).unwrap_or(port);

@@ -22,13 +22,13 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
-/// The inbound frame types this unit serves; the strangler gateway routes these here. The board reads `handle` also
-/// answers (agent/project/ticket lists, read-only from the db) are not on it: every writer of those tables is still
-/// Kotlin's, so a gateway sends them to the legacy backend until the board unit moves.
+/// The inbound frame types this unit serves; the strangler gateway routes these here (with `agent_list`, read from the
+/// db until the agents unit moves).
 pub fn owns(ty: &str) -> bool {
     matches!(
         ty,
         wire::SESSIONS
+            | wire::AGENT_LIST
             | wire::NEW
             | wire::REPLAY_REQUEST
             | wire::PROMPT
@@ -88,6 +88,52 @@ pub struct NewOpts {
     pub name: Option<String>,
     /// A first turn to send at once (the app's `spawnWith({prompt})`); without it the session waits at rest.
     pub prompt: Option<String>,
+    /// The harness to run (a registered provider name); None = the daemon's default.
+    pub provider: Option<String>,
+    // Set by a board start (the work half), never by a client's `new`:
+    #[serde(skip)]
+    pub ticket_id: Option<String>,
+    #[serde(skip)]
+    pub project_id: Option<String>,
+    #[serde(skip)]
+    pub agent_id: Option<String>,
+    #[serde(skip)]
+    pub context_limit: Option<i32>,
+    #[serde(skip)]
+    pub runner: Option<String>,
+    #[serde(skip)]
+    pub unattended: bool,
+    #[serde(skip)]
+    pub spawner: Option<String>,
+    /// (branch, base, repo root) of the worktree in `cwd`.
+    #[serde(skip)]
+    pub worktree: Option<(String, String, String)>,
+}
+
+/// What other units learn of a session's life (usage metering, mail wakes, the board's done protocol). Called with
+/// the session's lock held: an observer must not call back into the session manager on the same thread.
+pub trait SessionObserver: Send + Sync {
+    /// A turn started with `text`.
+    fn on_turn(&self, _rec: &SessionRecord, _text: &str) {}
+    /// One raw provider stdout line.
+    fn on_stdout(&self, _rec: &SessionRecord, _line: &str) {}
+    /// The turn ended: `outcome` is a `FinishedPayload.Outcome` name (SUCCEEDED, FAILED, KILLED_*).
+    fn on_turn_end(&self, _rec: &SessionRecord, _outcome: &str, _detail: &str) {}
+    /// The session's process is gone (killed, deleted, crashed or exited).
+    fn on_exit(&self, _rec: &SessionRecord) {}
+}
+
+/// The other frame units beside the session manager (the composition root's registry): the server sends a frame
+/// there when the session manager does not own it.
+pub trait FrameUnits: Send + Sync {
+    fn owns(&self, ty: &str) -> bool;
+    /// One frame from a client (`owner` = it holds the owner credential); the encoded replies for that client.
+    /// Blocking: call it on the blocking pool.
+    fn handle(&self, env: Envelope, owner: bool) -> Vec<String>;
+    /// Frames for a new connection's burst, after the session manager's.
+    fn hello(&self) -> Vec<String>;
+    /// HTTP routes the units serve beside `/ws` (behind the same access policy).
+    fn http(&self) -> Option<axum::Router>;
 }
 
 /// Per connection: a bare `new` waiting for its first prompt, or the session a JSON `new` bound (BIND-AT-CREATION).
@@ -135,6 +181,10 @@ pub struct Daemon {
     source: Option<held::Source>,
     /// Session id -> the app running it now: listed as `heldBy`, a turn into it refused.
     held: Mutex<BTreeMap<String, String>>,
+    /// The other harnesses by provider name; a session runs its record's provider ([`Daemon::harness`] is the default).
+    harnesses: Mutex<Vec<Arc<dyn Harness>>>,
+    observers: Mutex<Vec<Arc<dyn SessionObserver>>>,
+    units: std::sync::OnceLock<Arc<dyn FrameUnits>>,
 }
 
 fn encode(ty: &str, data: String, session: Option<&str>, seq: Option<i64>) -> String {
@@ -204,6 +254,9 @@ impl Daemon {
             board: Board::new(&cfg_dir),
             source: held::Source::of(&cfg_dir),
             held: Mutex::new(BTreeMap::new()),
+            harnesses: Mutex::new(Vec::new()),
+            observers: Mutex::new(Vec::new()),
+            units: std::sync::OnceLock::new(),
         });
         d.refresh_held();
         Ok(d)
@@ -241,6 +294,99 @@ impl Daemon {
         }
     }
 
+    /// Registers another harness (a provider a session or a board start may name); the same name is replaced.
+    pub fn add_harness(&self, h: Arc<dyn Harness>) {
+        let mut hs = self.harnesses.lock().unwrap();
+        hs.retain(|x| x.name() != h.name());
+        hs.push(h);
+    }
+
+    /// The harness for `provider` (the default one when it names none).
+    pub fn harness_for(&self, provider: Option<&str>) -> Option<Arc<dyn Harness>> {
+        match provider.map(str::trim).filter(|p| !p.is_empty()) {
+            None => Some(self.harness.clone()),
+            Some(p) if p == self.harness.name() => Some(self.harness.clone()),
+            Some(p) => self.harnesses.lock().unwrap().iter().find(|h| h.name() == p).cloned(),
+        }
+    }
+
+    /// The provider names this daemon can run, the default first.
+    pub fn providers(&self) -> Vec<String> {
+        let mut out = vec![self.harness.name().to_string()];
+        out.extend(self.harnesses.lock().unwrap().iter().map(|h| h.name().to_string()).filter(|n| n != self.harness.name()));
+        out
+    }
+
+    pub fn observe(&self, o: Arc<dyn SessionObserver>) {
+        self.observers.lock().unwrap().push(o);
+    }
+
+    /// Attaches the other frame units (once).
+    pub fn set_units(&self, u: Arc<dyn FrameUnits>) {
+        let _ = self.units.set(u);
+    }
+
+    pub fn units(&self) -> Option<Arc<dyn FrameUnits>> {
+        self.units.get().cloned()
+    }
+
+    /// Whether this daemon answers `ty` itself (the session manager or a registered unit); the gateway routes the
+    /// rest to the legacy backend.
+    pub fn owns_frame(&self, ty: &str) -> bool {
+        owns(ty) || self.units.get().is_some_and(|u| u.owns(ty))
+    }
+
+    fn notify(&self, f: impl Fn(&dyn SessionObserver)) {
+        let obs: Vec<_> = self.observers.lock().unwrap().clone();
+        for o in obs {
+            f(&*o);
+        }
+    }
+
+    /// Pushes an already encoded frame to every client (the bridge from the core event bus).
+    pub fn publish_raw(&self, frame: String) {
+        let _ = self.out.send(frame);
+    }
+
+    /// Every session record now.
+    pub fn records(&self) -> Vec<SessionRecord> {
+        self.cache.lock().unwrap().clone()
+    }
+
+    pub fn record(&self, id: &str) -> Option<SessionRecord> {
+        self.cache.lock().unwrap().iter().find(|r| r.id == id).cloned()
+    }
+
+    /// Whether a turn of `id` is running now (None = no such session).
+    pub fn turn_active(&self, id: &str) -> Option<bool> {
+        self.find(id).map(|e| e.lock().unwrap().turn_active)
+    }
+
+    /// Creates a session at rest (running `opts.prompt` as its first turn when set) and returns its id: the board's
+    /// session launcher uses this; a client sends `new`.
+    pub fn launch(self: &Arc<Self>, opts: NewOpts) -> Result<String, String> {
+        let mut conn = Conn::default();
+        self.bind_new(opts, &mut conn)?;
+        conn.active.ok_or_else(|| "launch failed: no session was created".to_string())
+    }
+
+    /// A turn into `id` now when it is at rest, else held in its queue (mail, a board nudge).
+    pub fn deliver(self: &Arc<Self>, id: &str, text: &str) -> Result<(), String> {
+        self.not_held("prompt", id)?;
+        self.queue_add(id, text.to_string())
+    }
+
+    /// Ends `id`'s process (idempotent); `reason` is recorded as who killed it.
+    pub fn stop_session(self: &Arc<Self>, id: &str, reason: &str) -> Result<(), String> {
+        self.kill(id, false)?;
+        if let Some(entry) = self.find(id) {
+            let mut e = entry.lock().unwrap();
+            e.rec.killed_by = Some(reason.to_string());
+            self.push(&mut e);
+        }
+        Ok(())
+    }
+
     pub fn held_count(&self) -> usize {
         self.held.lock().unwrap().len()
     }
@@ -249,13 +395,13 @@ impl Daemon {
         self.out.subscribe()
     }
 
-    /// The connection burst after the handshake: ready, policy, sessions, worktrees.
+    /// The connection burst after the handshake: ready, policy, sessions. The composition root adds the other units'
+    /// burst frames (worktrees, ...) after these.
     pub fn hello(&self, build: &str) -> Vec<String> {
         vec![
             encode(wire::READY, wire::ready(self.harness.name(), &self.instance, build), None, None),
             encode(wire::POLICY, wire::policy(), None, None),
             encode(wire::SESSIONS, self.sessions_json(), None, None),
-            encode(wire::WORKTREES, wire::array(vec![]), None, None),
         ]
     }
 
@@ -383,21 +529,11 @@ impl Daemon {
                     Err(msg) => vec![encode_req(wire::ERROR, msg, sid.as_deref(), None, req.as_deref())],
                 };
             }
-            // Projects and profiles from the state dir's db, read-only (RUST-MIGRATE-1). No tickets here yet.
+            // Agent profiles from the state dir's db, read-only (RUST-MIGRATE-1). Projects and tickets are their units'.
             wire::AGENT_LIST => {
                 let p = serde_json::from_str::<AgentListRequest>(&env.data).ok().and_then(|r| r.project_id);
                 return self.board_reply(wire::AGENTS, req.as_deref(), self.board.agents(p.as_deref()).map(|a| serde_json::to_string(&a)));
             }
-            wire::PROJECT_LIST => return self.board_reply(wire::PROJECTS, req.as_deref(), self.board.projects().map(|p| serde_json::to_string(&p))),
-            wire::PROJECT_GET => {
-                let id = env.data.trim();
-                return match self.board.project(id) {
-                    Ok(Some(p)) => vec![encode_req(wire::PROJECT, serde_json::to_string(&p).unwrap_or_default(), None, None, req.as_deref())],
-                    Ok(None) => vec![encode_req(wire::ERROR, format!("project_get refused: no project {id}"), None, None, req.as_deref())],
-                    Err(e) => vec![encode_req(wire::ERROR, format!("project_get failed: {e}"), None, None, req.as_deref())],
-                };
-            }
-            wire::TICKET_LIST => return vec![encode(wire::TICKETS, "[]".into(), None, None)],
             wire::PROMPT => match (&sid, conn.active.clone().filter(|a| self.find(a).is_some())) {
                 (None, Some(active)) => self.prompt_into(&active, env.data),
                 (None, None) => self.prompt_new(conn.pending_new.take().unwrap_or_default(), env.data).map_err(Refusal::from),
@@ -465,9 +601,12 @@ impl Daemon {
         if !cwd.is_dir() {
             return Err(format!("{verb} refused: {} is not a folder", cwd.display()));
         }
+        let harness = self.harness_for(opts.provider.as_deref()).ok_or_else(|| {
+            format!("{verb} refused: no harness named `{}` (this daemon runs {})", opts.provider.as_deref().unwrap_or(""), self.providers().join(", "))
+        })?;
         let now = now_ms();
         let mut rec: SessionRecord = serde_json::from_value(json!({
-            "id": uuid::Uuid::new_v4().to_string(), "provider": self.harness.name(), "workingDir": cwd.to_string_lossy(),
+            "id": uuid::Uuid::new_v4().to_string(), "provider": harness.name(), "workingDir": cwd.to_string_lossy(),
             "spawnedAt": now, "lastHeartbeat": now, "state": state,
         }))
         .map_err(|e| e.to_string())?;
@@ -475,6 +614,21 @@ impl Daemon {
         rec.model = some(&opts.model);
         rec.effort = some(&opts.effort);
         rec.role = some(&opts.role).or_else(|| some(&opts.name).map(|n| n.trim().to_lowercase()));
+        rec.ticket_id = some(&opts.ticket_id);
+        rec.project_id = some(&opts.project_id);
+        rec.agent_id = some(&opts.agent_id);
+        rec.context_limit = opts.context_limit;
+        rec.unattended = opts.unattended;
+        rec.spawner_session_id = some(&opts.spawner);
+        if let Some(r) = some(&opts.runner) {
+            rec.runner = r;
+        }
+        if let Some((branch, base, root)) = &opts.worktree {
+            rec.worktree_path = Some(cwd.to_string_lossy().into_owned());
+            rec.worktree_branch = Some(branch.clone());
+            rec.worktree_base_ref = Some(base.clone());
+            rec.repo_root = Some(root.clone());
+        }
         Ok(rec)
     }
 
@@ -565,7 +719,7 @@ impl Daemon {
         if e.turn_active {
             return Err(format!(
                 "queue_force refused: the {} harness cannot take a message mid-turn; it stays queued for the next turn",
-                self.harness.name()
+                e.rec.provider
             ));
         }
         let item = e.rec.queued.remove(i);
@@ -610,7 +764,8 @@ impl Daemon {
 
     /// Starts the turn's run: the start-up lines, the harness turn, then the record that announces the run.
     fn run(self: &Arc<Self>, e: &mut Entry, text: String) {
-        let provider = self.harness.name().to_string();
+        let provider = e.rec.provider.clone();
+        self.notify(|o| o.on_turn(&e.rec, &text));
         let model = e.rec.model.clone().unwrap_or_else(|| "default".into());
         let resumed = e.rec.run_count > 0;
         // A persistent process (an interactive CLI) that is still up takes the turn as is: nothing is resumed.
@@ -663,7 +818,8 @@ impl Daemon {
             effort: e.rec.effort.clone(),
             state_dir: self.cfg.state_dir.clone(),
         };
-        let hs = self.harness.open(req, EventSink(tx))?;
+        let harness = self.harness_for(Some(&e.rec.provider)).ok_or_else(|| format!("no harness named `{}` on this daemon", e.rec.provider))?;
+        let hs = harness.open(req, EventSink(tx))?;
         let (d, id) = (self.clone(), e.rec.id.clone());
         tokio::spawn(async move {
             while let Some(ev) = rx.recv().await {
@@ -682,6 +838,7 @@ impl Daemon {
         let now = now_ms();
         self.emit(e, wire::STATUS, wire::status_run("FAILED", "finished", now, e.turn_started));
         self.emit(e, wire::FINISHED, wire::finished(None, "FAILED", &err));
+        self.notify(|o| o.on_turn_end(&e.rec, "FAILED", &err));
     }
 
     fn on_event(self: &Arc<Self>, id: &str, ev: HarnessEvent) {
@@ -694,6 +851,7 @@ impl Daemon {
             HarnessEvent::ProviderSession(p) => e.rec.provider_session_id = Some(p),
             HarnessEvent::Stdout(l) if e.turn_active => {
                 e.rec.last_output_at = Some(now_ms());
+                self.notify(|o| o.on_stdout(&e.rec, &l));
                 self.emit(&mut e, wire::STDOUT, l);
             }
             HarnessEvent::Text(t) if e.turn_active => {
@@ -706,6 +864,7 @@ impl Daemon {
             }
             HarnessEvent::Exited { code } => {
                 e.hs = None;
+                self.notify(|o| o.on_exit(&e.rec));
                 if e.turn_active {
                     let end = if code == Some(0) { TurnEnd::Completed } else { TurnEnd::Failed };
                     self.end_turn(&mut e, end, code, None, false);
@@ -747,6 +906,7 @@ impl Daemon {
         self.emit(e, wire::STATUS, wire::status_run(&st, "finished", now_ms(), e.turn_started));
         self.emit(e, wire::FINISHED, wire::finished(code, outcome, &detail));
         self.emit(e, wire::STATUS, wire::status_run(&st, "idle", now_ms(), e.turn_started));
+        self.notify(|o| o.on_turn_end(&e.rec, outcome, &detail));
         if !e.rec.queued.is_empty() {
             self.drain_later(&e.rec.id.clone());
         }
@@ -804,6 +964,10 @@ impl Daemon {
         self.emit(&mut e, wire::STATUS, wire::status("EXITED"));
         let word = if force { "KILLED_FORCED" } else { "KILLED_GRACEFUL" };
         self.emit(&mut e, wire::FINISHED, wire::finished(None, word, ""));
+        self.notify(|o| {
+            o.on_turn_end(&e.rec, word, "");
+            o.on_exit(&e.rec);
+        });
         let started = e.turn_started;
         self.emit(&mut e, wire::STATUS, wire::status_run("IDLE", "finished", now, started));
         let (gen, d, ms) = (e.gen, self.clone(), self.cfg.kill_settle_ms);

@@ -1,0 +1,434 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) SuperiorSoft LLC
+//! The composition root (RUST-WIRE-1): every unit built for the port, registered in one infantry-core [`Registry`]
+//! with its real dependencies. The daemon's session manager stays the owner of the sessions frames; everything else
+//! a client sends goes through the registry here (on the blocking pool), and every push a unit makes on the core
+//! [`EventBus`] reaches every client.
+//!
+//! What is wired: projects + project git + worktrees (infantry-projects), the board with its work half (Dispatcher:
+//! starts, lanes, queues, the done protocol) over a session launcher and a workspace provider built on the session
+//! manager and the projects' ticket branches, usage, mail and the notification units, scripting (tools, hooks,
+//! timers, `mail.incoming`, exec), the plugin host (WASM daemon halves of `plugins/official`), and the tool frames
+//! (`plugin_tools` / `plugin_tool_call`) over one tool catalog.
+
+mod adapters;
+mod plugins;
+mod tools;
+
+use crate::sessions::{Daemon, FrameUnits};
+use crate::wire;
+use infantry_board::{Board as TicketBoard, BoardUnit, Dispatcher, LocalOrchestrator};
+use infantry_core::db::Db;
+use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Registry};
+use infantry_core::bus::EventBus;
+use infantry_mail::mail::mailbox::Mailbox;
+use infantry_mail::mail::router::{IncomingVerdict, MailRouter, RouterConfig};
+use infantry_mail::mail::store::JsonMailStore;
+use infantry_mail::notify::approvals::ApprovalRules;
+use infantry_mail::notify::attention::AttentionStore;
+use infantry_mail::notify::hub::{NotificationHub, NotificationSettings};
+use infantry_mail::notify::prompts::{ApprovalRulesHook, PendingPrompts, TimeoutPolicy};
+use infantry_mail::notify::push::{NotifyService, NotifySettings};
+use infantry_mail::notify::questions::{Asker, OwnerQuestions, QuestionLimits};
+use infantry_mail::units::{AttentionUnit, MailUnit, NotificationsUnit, NotifyUnit, PromptsUnit, QuestionsUnit};
+use infantry_projects::git::SystemGit;
+use infantry_projects::service::GitViewConfig;
+use infantry_projects::Projects;
+use infantry_scripting::dispatcher::ScriptDispatcher;
+use infantry_scripting::engine::{ScriptEngines, ScriptLimits};
+use infantry_scripting::exec::ExecTools;
+use infantry_scripting::hooks::{BuiltinHook, HookStore, HooksConfig, IncomingMail, ScriptHooks};
+use infantry_scripting::runlog::ScriptRunLog;
+use infantry_scripting::store::{self as script_store, ScriptStore};
+use infantry_scripting::tools::ScriptingTools;
+use infantry_usage::service::UsageDeps;
+use infantry_usage::{UsageService, UsageUnit};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+
+pub use tools::Tools;
+
+/// Core bus capacity (frames + named events buffered per subscriber).
+pub const BUS_CAPACITY: usize = 4096;
+/// How often the mail router re-checks deferred wakes.
+pub const MAIL_TICK_MS: u64 = 5_000;
+/// The shortest timer-hook period (`scripting.hooks.timerMinSeconds` default).
+pub const TIMER_MIN_SECS: u64 = 60;
+/// Where plugin daemon halves are installed (`<dir>/official/<Module>/module.json`); else `<exe dir>/plugins`.
+pub const PLUGINS_DIR_ENV: &str = "INFANTRY_PLUGINS_DIR";
+/// The repository ticket starts cut from when a project's own folder is not one.
+pub const REPO_ENV: &str = "INFANTRY_REPO";
+
+pub fn now_ms() -> i64 {
+    crate::sessions::now_ms()
+}
+
+/// Everything the composition built; the daemon holds it as its [`FrameUnits`].
+pub struct Composed {
+    pub state_dir: PathBuf,
+    pub db: Arc<Db>,
+    pub bus: EventBus,
+    pub registry: Registry,
+    pub daemon: Arc<Daemon>,
+    pub projects: Arc<Projects>,
+    pub board: Arc<TicketBoard>,
+    pub dispatcher: Arc<Dispatcher>,
+    pub orchestrator: Arc<LocalOrchestrator>,
+    pub usage: Arc<UsageService>,
+    pub mail: Arc<MailRouter>,
+    pub hooks: Arc<ScriptHooks>,
+    pub tools: Arc<Tools>,
+    pub plugins: Option<Arc<infantry_plugin_host::PluginHost>>,
+    next_conn: AtomicU64,
+}
+
+fn clock() -> Arc<dyn Fn() -> i64 + Send + Sync> {
+    Arc::new(now_ms)
+}
+
+fn log_line(m: &str) {
+    eprintln!("[infantry] {m}");
+}
+
+/// `<dir>` of a project (its `directory`), when it names one.
+pub fn project_dir(projects: &Projects, id: &str) -> Option<PathBuf> {
+    let p = projects.store.get(id).ok()?;
+    let d = p.directory.trim();
+    (!d.is_empty()).then(|| PathBuf::from(d))
+}
+
+fn plugins_dir() -> Option<PathBuf> {
+    if let Some(d) = crate::auth::env(PLUGINS_DIR_ENV) {
+        return Some(PathBuf::from(d));
+    }
+    std::env::current_exe().ok()?.parent().map(|p| p.join("plugins"))
+}
+
+/// Builds every unit over `daemon` and attaches them to it. Call inside the tokio runtime.
+pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, String> {
+    let handle = tokio::runtime::Handle::current();
+    let db = Arc::new(Db::open(state_dir.join("infantry.db")).map_err(|e| format!("infantry.db: {e}"))?);
+    let bus = EventBus::new(BUS_CAPACITY);
+    for h in crate::harness::all_except(daemon.harness.name()) {
+        daemon.add_harness(h);
+    }
+    let repo = crate::auth::env(REPO_ENV).map(PathBuf::from);
+
+    // ---- projects ------------------------------------------------------------------------------------------
+    let projects = Arc::new(Projects::new(SystemGit::shared(), Some(db.clone()), GitViewConfig::default())?);
+    let mut projects_unit = projects.projects_unit(repo.clone());
+    {
+        let d = daemon.clone();
+        projects_unit.routing = Arc::new(move |rules| adapters::validate_routing(&d, rules));
+    }
+    let mut git_unit = projects.git_unit();
+    {
+        let d = daemon.clone();
+        git_unit.session_checkout = Arc::new(move |sid: &str| {
+            let r = d.record(sid)?;
+            Some(r.worktree_path.clone().filter(|p| !p.trim().is_empty()).unwrap_or(r.working_dir))
+        });
+    }
+    let worktrees_unit = projects.worktrees_unit(repo.clone());
+
+    // ---- usage ---------------------------------------------------------------------------------------------
+    let usage = {
+        let d = daemon.clone();
+        let meters: infantry_usage::service::WorkerMeters = Arc::new(move || {
+            d.records()
+                .iter()
+                .filter(|r| r.ticket_id.is_some() && !adapters::ended(r))
+                .map(|r| infantry_usage::pacing::meter_for(&r.provider, r.model.as_deref()))
+                .collect()
+        });
+        UsageService::open(UsageDeps::new(state_dir, meters))
+    };
+
+    // ---- the board + its work half -------------------------------------------------------------------------
+    let env = Arc::new(adapters::DaemonBoardEnv::new(daemon.clone(), projects.clone(), state_dir, usage.clone()));
+    let board = Arc::new(TicketBoard::new(db.clone(), env.clone()));
+    let workspaces = Arc::new(adapters::DaemonWorkspaces { projects: projects.clone(), repo: repo.clone() });
+    let launcher = Arc::new(adapters::DaemonLauncher { daemon: daemon.clone(), handle: handle.clone() });
+    let dispatcher = Dispatcher::new(board.clone(), workspaces, launcher, bus.clone());
+    let orchestrator = Arc::new(LocalOrchestrator::with_dispatcher(dispatcher.clone(), bus.clone()));
+
+    // ---- mail + notifications -------------------------------------------------------------------------------
+    let mailbox = Arc::new(Mailbox::new(Arc::new(JsonMailStore::in_state_dir(state_dir))));
+    mailbox.load();
+    let dir = Arc::new(adapters::Directory { daemon: daemon.clone(), projects: projects.clone() });
+    let turns = Arc::new(adapters::Turns { daemon: daemon.clone(), handle: handle.clone() });
+    let mail = Arc::new(MailRouter::new(mailbox, dir, turns, Arc::new(RouterConfig::default)));
+    MailUnit::attach_bus(&mail, bus.clone());
+
+    let attention = Arc::new(AttentionStore::new(db.clone(), clock()).map_err(|e| format!("attention: {e}"))?);
+    {
+        let b = bus.clone();
+        attention.set_broadcast(move |item| {
+            b.publish(Envelope::new(infantry_protocol::frames::ATTENTION, serde_json::to_string(item).unwrap_or_default()));
+        });
+    }
+    let questions = Arc::new(
+        OwnerQuestions::new(db.clone(), Arc::new(adapters::Questions { daemon: daemon.clone(), handle: handle.clone() }), Arc::new(QuestionLimits::default), clock())
+            .map_err(|e| format!("questions: {e}"))?,
+    );
+    {
+        let b = bus.clone();
+        questions.set_sink(move |q| {
+            b.publish(Envelope::new(infantry_protocol::frames::QUESTION, serde_json::to_string(q).unwrap_or_default()));
+        });
+    }
+    let asker_of: infantry_mail::notify::units::AskerOf = {
+        let d = daemon.clone();
+        Arc::new(move |sid: &str| match d.record(sid) {
+            Some(r) => Asker { session_id: sid.into(), agent_id: r.agent_id.clone(), role: r.role.clone(), project_id: r.project_id.clone() },
+            None => Asker { session_id: sid.into(), ..Default::default() },
+        })
+    };
+    let rules = Arc::new(ApprovalRules::new(db.clone(), clock()).map_err(|e| format!("approval rules: {e}"))?);
+    let prompts = {
+        let d = daemon.clone();
+        let hook: Arc<dyn ApprovalRulesHook> = rules.clone();
+        Arc::new(PendingPrompts::new(Some(hook), Arc::new(move |sid: &str| d.record(sid).and_then(|r| r.project_id)), Arc::new(|_: &str| TimeoutPolicy::default()), clock()))
+    };
+    {
+        let b = bus.clone();
+        prompts.set_sink(move |ty, data, session| {
+            let mut e = Envelope::new(ty, data);
+            e.session_id = (!session.is_empty()).then(|| session.to_string());
+            b.publish(e);
+        });
+    }
+    let notify = Arc::new(NotifyService::new(state_dir.to_path_buf(), Arc::new(NotifySettings::default), clock(), Arc::new(adapters::minute_of_day)));
+    {
+        let b = bus.clone();
+        notify.set_push(move |m| {
+            b.publish(Envelope::new(infantry_protocol::frames::NOTIFY, serde_json::to_string(m).unwrap_or_default()));
+        });
+    }
+    let hub = Arc::new(NotificationHub::new(Arc::new(NotificationSettings::default)));
+    {
+        let b = bus.clone();
+        hub.set_broadcast(move |ty, data| {
+            b.publish(Envelope::new(ty, data));
+        });
+    }
+
+    // ---- the tool catalog + scripting ---------------------------------------------------------------------
+    let tools = Arc::new(Tools::new(daemon.clone()));
+    let engines = ScriptEngines::standard();
+    let exts = engines.extensions();
+    let global_dir = state_dir.join("global-scripts");
+    let project_dirs: script_store::ProjectDirs = {
+        let p = projects.clone();
+        Arc::new(move |id: &str| project_dir(&p, id).map(|d| d.join(".infantry")))
+    };
+    let ext_list = exts.clone();
+    let scripts = ScriptStore::new(project_dirs.clone(), Arc::new(move || ext_list.clone())).with_global(&global_dir);
+    if let Some(g) = &scripts.global {
+        if let Err(e) = script_store::seed(g, state_dir, &script_store::bundled(), &exts, &log_line) {
+            log_line(&format!("global scripts not seeded: {e}"));
+        }
+    }
+    let host: Arc<dyn infantry_scripting::host::ScriptHost> = tools.clone();
+    let script_dispatcher = ScriptDispatcher::new(host, Arc::new(std::collections::BTreeMap::new), Arc::new(|| 3));
+    let hook_store = Arc::new(HookStore::new(project_dirs, Some(state_dir.join("global-hooks.json"))));
+    let run_log = Arc::new(ScriptRunLog::default());
+    let project_ids: Arc<dyn Fn() -> Vec<String> + Send + Sync> = {
+        let p = projects.clone();
+        Arc::new(move || p.store.list().into_iter().map(|p| p.id).collect())
+    };
+    let tip: Arc<dyn Fn(&str, &str) -> Option<String> + Send + Sync> = {
+        let p = projects.clone();
+        Arc::new(move |project: &str, branch: &str| infantry_scripting::hooks::git_tip(&project_dir(&p, project)?, branch))
+    };
+    let hooks = Arc::new(ScriptHooks::new(
+        hook_store.clone(),
+        scripts.clone(),
+        engines.clone(),
+        script_dispatcher.clone(),
+        run_log.clone(),
+        HooksConfig {
+            projects: project_ids,
+            tip,
+            log: Arc::new(log_line),
+            builtins: Arc::new(BuiltinHook::shipped),
+            executor: infantry_scripting::hooks::Executor::Tokio(handle.clone()),
+            ..HooksConfig::default()
+        },
+    ));
+    let exec = {
+        let p = projects.clone();
+        Arc::new(ExecTools::new(Arc::new(|_: &str| None), Arc::new(move |id: &str| project_dir(&p, id)), Some(bus.clone()), Arc::new(log_line)))
+    };
+    tools.set_scripting(ScriptingTools {
+        engines,
+        store: scripts,
+        hooks: hook_store,
+        dispatcher: script_dispatcher,
+        run_log,
+        exec: exec.clone(),
+        limits: Arc::new(ScriptLimits::default),
+        config: Arc::new(|_: &str| None),
+    });
+    {
+        let h = hooks.clone();
+        mail.on_incoming(move |m| {
+            let im = IncomingMail {
+                id: m.id.clone(),
+                from: m.from.clone(),
+                to: m.to.clone(),
+                subject: m.subject.clone(),
+                body: m.body.clone(),
+                recipient_session_id: Some(m.to.clone()),
+                thread_id: Some(m.thread_id.clone()),
+                ..Default::default()
+            };
+            match h.incoming(&im) {
+                Some(v) if v.handled => IncomingVerdict::Handled,
+                Some(v) => v.text.map(IncomingVerdict::Replace).unwrap_or(IncomingVerdict::Pass),
+                None => IncomingVerdict::Pass,
+            }
+        });
+    }
+
+    // ---- plugins ------------------------------------------------------------------------------------------
+    let plugin_set = plugins::start(state_dir, plugins_dir(), bus.clone(), handle.clone());
+    let plugin_host = plugin_set.as_ref().map(|p| p.host.clone());
+    tools.set_plugins(plugin_host.clone());
+
+    // ---- the registry --------------------------------------------------------------------------------------
+    let mut registry = Registry::new();
+    let mut units: Vec<Arc<dyn FrameUnit>> = vec![
+        Arc::new(projects_unit),
+        Arc::new(git_unit),
+        Arc::new(worktrees_unit),
+        Arc::new(BoardUnit::with_dispatcher(dispatcher.clone())),
+        Arc::new(UsageUnit::new(usage.clone())),
+        Arc::new(MailUnit::new(mail.clone())),
+        Arc::new(AttentionUnit::new(attention)),
+        Arc::new(NotificationsUnit::new(hub)),
+        Arc::new(NotifyUnit::new(notify)),
+        Arc::new(PromptsUnit::new(prompts, Some(rules))),
+        Arc::new(QuestionsUnit::new(questions, asker_of)),
+        Arc::new(tools::ToolsUnit { tools: tools.clone() }),
+    ];
+    if let Some(p) = &plugin_set {
+        units.extend(plugins::frame_units(p));
+    }
+    for u in units {
+        let name = u.name();
+        if let Err(e) = registry.register(u) {
+            log_line(&format!("unit {name} not registered: {e}"));
+        }
+    }
+
+    let c = Arc::new(Composed {
+        state_dir: state_dir.to_path_buf(),
+        db,
+        bus: bus.clone(),
+        registry,
+        daemon: daemon.clone(),
+        projects,
+        board,
+        dispatcher: dispatcher.clone(),
+        orchestrator,
+        usage: usage.clone(),
+        mail: mail.clone(),
+        hooks: hooks.clone(),
+        tools,
+        plugins: plugin_host.clone(),
+        next_conn: AtomicU64::new(1),
+    });
+    if let Some(p) = &plugin_set {
+        plugins::attach(p, &c);
+    }
+
+    // ---- session life -> usage, mail wakes, the done protocol ----------------------------------------------
+    daemon.observe(Arc::new(adapters::WorkObserver { dispatcher, usage: usage.clone(), mail: mail.clone(), handle: handle.clone() }));
+
+    // ---- background: bus -> clients, hooks, timers, usage, mail tick, exec ticker -------------------------
+    {
+        let mut rx = bus.subscribe();
+        let d = daemon.clone();
+        tokio::spawn(async move {
+            loop {
+                match rx.recv().await {
+                    Ok(e) => d.publish_raw(serde_json::to_string(&e).unwrap_or_default()),
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(_) => break,
+                }
+            }
+        });
+    }
+    hooks.attach(&bus);
+    hooks.spawn_timers(Arc::new(|| TIMER_MIN_SECS));
+    exec.spawn_ticker();
+    usage.start_background(bus.clone());
+    {
+        let m = mail.clone();
+        tokio::spawn(async move {
+            let mut t = tokio::time::interval(Duration::from_millis(MAIL_TICK_MS));
+            loop {
+                t.tick().await;
+                let m = m.clone();
+                let _ = tokio::task::spawn_blocking(move || m.tick()).await;
+            }
+        });
+    }
+    let frames = c.registry.frame_table().len();
+    log_line(&format!(
+        "composed {} units ({frames} frame types){}",
+        c.registry.units().len(),
+        plugin_host.as_ref().map(|h| format!(", plugins: {}", h.loaded().iter().map(|p| p.id.clone()).collect::<Vec<_>>().join(", "))).unwrap_or_default()
+    ));
+    daemon.set_units(c.clone());
+    Ok(c)
+}
+
+impl Composed {
+    /// Dispatches `env` through the registry as one client (`owner`); the replies encoded, a refusal as an `error`.
+    pub fn dispatch(&self, env: &Envelope, conn_id: u64, owner: bool) -> Option<Vec<String>> {
+        let ctx = FrameCtx { conn_id, owner, bus: self.bus.clone() };
+        let r = self.registry.dispatch(env, &ctx)?;
+        Some(match r {
+            Ok(out) => out.iter().map(|e| serde_json::to_string(e).unwrap_or_default()).collect(),
+            Err(refusal) => {
+                let mut e = Envelope::new(wire::ERROR, refusal.0);
+                e.request_id = env.request_id.clone();
+                e.session_id = env.session_id.clone();
+                vec![serde_json::to_string(&e).unwrap_or_default()]
+            }
+        })
+    }
+
+    /// The same, as envelopes (for in-process callers: plugins, tools).
+    pub fn request(&self, env: &Envelope, owner: bool) -> Result<Vec<Envelope>, String> {
+        let ctx = FrameCtx { conn_id: 0, owner, bus: self.bus.clone() };
+        match self.registry.dispatch(env, &ctx) {
+            Some(r) => r.map_err(|e| e.0),
+            None => Err(format!("{} refused: no unit serves this frame", env.r#type)),
+        }
+    }
+}
+
+impl FrameUnits for Composed {
+    fn owns(&self, ty: &str) -> bool {
+        self.registry.owner(ty).is_some()
+    }
+
+    fn handle(&self, env: Envelope, owner: bool) -> Vec<String> {
+        let id = self.next_conn.fetch_add(1, Ordering::Relaxed);
+        self.dispatch(&env, id, owner).unwrap_or_default()
+    }
+
+    /// The other units' connection burst: the worktree list (the sessions unit sends ready/policy/sessions).
+    fn hello(&self) -> Vec<String> {
+        self.dispatch(&Envelope::new(wire::WORKTREES, ""), 0, true).unwrap_or_default()
+    }
+
+    fn http(&self) -> Option<axum::Router> {
+        Some(infantry_mail::mail::http::routes(self.mail.clone()))
+    }
+}

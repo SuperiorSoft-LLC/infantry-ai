@@ -7,6 +7,7 @@
 
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 /// The Infantry setting (env var of the same name, or `--gateway-routes`) holding the override, a JSON object:
 /// `{"memory_save":"rust","prompt":"legacy","*":"legacy"}`.
@@ -30,16 +31,25 @@ impl Route {
     }
 }
 
-#[derive(Clone, Debug)]
+/// Answers whether a Rust unit serves a frame type.
+pub type Owned = Arc<dyn Fn(&str) -> bool + Send + Sync>;
+
+impl std::fmt::Debug for RouteTable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RouteTable").field("overrides", &self.overrides).finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone)]
 pub struct RouteTable {
-    owned: fn(&str) -> bool,
+    owned: Owned,
     overrides: BTreeMap<String, Route>,
 }
 
 impl RouteTable {
     /// `owned` answers whether a Rust unit serves a frame type (the default route).
-    pub fn new(owned: fn(&str) -> bool) -> RouteTable {
-        RouteTable { owned, overrides: BTreeMap::new() }
+    pub fn new(owned: impl Fn(&str) -> bool + Send + Sync + 'static) -> RouteTable {
+        RouteTable { owned: Arc::new(owned), overrides: BTreeMap::new() }
     }
 
     /// The table with the override `json` applied (blank = none). A bad value is refused whole, naming the key.

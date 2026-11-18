@@ -41,6 +41,20 @@ fn env(name: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+/// INFANTRY_URL, else INFANTRY_PORT on loopback; None when unset or when it names a foreign daemon.
+fn connect_target() -> Option<String> {
+    let url = match (env("URL"), env("PORT")) {
+        (Some(u), _) => ws_url(&u),
+        (_, Some(p)) => format!("ws://127.0.0.1:{p}/ws"),
+        _ => return None,
+    };
+    if daemon::foreign(&url) {
+        eprintln!("[infantry] ignoring {url}: the Kotlin app's daemon; using this app's own daemon");
+        return None;
+    }
+    Some(url)
+}
+
 fn ws_url(raw: &str) -> String {
     let u = raw.trim_end_matches('/');
     let u = if let Some(rest) = u.strip_prefix("http://") {
@@ -70,8 +84,10 @@ fn truthy(v: &str) -> bool {
 
 /// INFANTRY_URL / INFANTRY_PORT = connect to that daemon; else INFANTRY_UI_LOCAL (1 = embedded, 0 = daemon); else the
 /// `runner` setting in ui.json (`embedded` | `daemon`); else daemon mode.
+/// An endpoint naming the Kotlin app's daemon (8797/8787; a shell set up for the `infantry` CLI carries one) is ignored:
+/// this app never connects there.
 fn mode(settings: &UiSettings) -> Mode {
-    if env("URL").is_some() || env("PORT").is_some() {
+    if connect_target().is_some() {
         return Mode::Connect;
     }
     match env("UI_LOCAL") {
@@ -120,11 +136,7 @@ async fn endpoint(state: State<'_, AppState>) -> Result<Endpoint, String> {
     let perf = env("PERF_SCENARIO");
     let (url, token, error, mode) = match state.mode {
         Mode::Connect => {
-            let url = match (env("URL"), env("PORT")) {
-                (Some(u), _) => ws_url(&u),
-                (_, Some(p)) => format!("ws://127.0.0.1:{p}/ws"),
-                _ => unreachable!(),
-            };
+            let url = connect_target().expect("connect mode has a target");
             (url, token, None, "connect")
         }
         Mode::Embedded => ("embedded runner".into(), None, None, "embedded"),
@@ -219,13 +231,15 @@ pub fn run() {
             let mode = mode(&settings);
             let sidecar = Arc::new((Mutex::new(None), Condvar::new()));
             if mode == Mode::Daemon {
-                // INFANTRY_UI_DAEMON_PORT pins the sidecar's port (tests use 189xx); 0 = any free port.
-                let port = env("UI_DAEMON_PORT").and_then(|p| p.parse().ok()).unwrap_or(0u16);
-                // INFANTRY_UI_DAEMON_STATE_DIR, else ui.json `daemonStateDir`, else <app data>/daemon.
+                // INFANTRY_UI_DAEMON_PORT pins the sidecar's port (tests use 189xx; 0 = any free port), else 18990.
+                let port = env("UI_DAEMON_PORT").and_then(|p| p.parse().ok()).unwrap_or(daemon::DEFAULT_PORT);
+                // INFANTRY_UI_DAEMON_STATE_DIR, else ui.json `daemonStateDir`, else %LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust
+                // (the state `infantry-migrate` fills and start.cmd uses), else <app data>/daemon.
                 let state = env("UI_DAEMON_STATE_DIR")
                     .or_else(|| settings.daemon_state_dir.clone())
                     .filter(|s| !s.trim().is_empty())
                     .map(PathBuf::from)
+                    .or_else(daemon::default_state_dir)
                     .unwrap_or_else(|| dir.join("daemon"));
                 let cell = sidecar.clone();
                 let cwd = std::env::current_dir().unwrap_or_else(|_| dir.clone());

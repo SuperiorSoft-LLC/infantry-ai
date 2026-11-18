@@ -101,10 +101,29 @@ async fn ws(
     }
 }
 
+/// The connection burst: the session manager's frames, then the other units'.
+async fn hello(daemon: &Arc<Daemon>) -> Vec<String> {
+    let mut out = daemon.hello(BUILD);
+    if let Some(u) = daemon.units() {
+        out.extend(tokio::task::spawn_blocking(move || u.hello()).await.unwrap_or_default());
+    }
+    out
+}
+
+/// One frame this daemon answers: the session manager's own, else the unit that owns it (on the blocking pool).
+async fn answer(daemon: &Arc<Daemon>, env: Envelope, conn: &mut Conn, owner: bool) -> Vec<String> {
+    if !crate::sessions::owns(&env.r#type) {
+        if let Some(u) = daemon.units().filter(|u| u.owns(&env.r#type)) {
+            return tokio::task::spawn_blocking(move || u.handle(env, owner)).await.unwrap_or_default();
+        }
+    }
+    daemon.handle(env, conn)
+}
+
 async fn connection(daemon: Arc<Daemon>, mut socket: WebSocket) {
     // Subscribe first so nothing pushed during the burst is lost.
     let mut rx = daemon.subscribe();
-    for f in daemon.hello(BUILD) {
+    for f in hello(&daemon).await {
         if socket.send(Message::Text(f.into())).await.is_err() {
             return;
         }
@@ -118,8 +137,9 @@ async fn connection(daemon: Arc<Daemon>, mut socket: WebSocket) {
                     Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
                     Some(Ok(_)) => continue,
                 };
+                // A client that passed the access policy without the gateway is the owner (local, or the token holder).
                 let replies = match serde_json::from_str::<Envelope>(&text) {
-                    Ok(env) => daemon.handle(env, &mut conn),
+                    Ok(env) => answer(&daemon, env, &mut conn, true).await,
                     Err(e) => vec![serde_json::to_string(&Envelope::new(crate::wire::ERROR, format!("frame refused: not an envelope ({e})"))).unwrap_or_default()],
                 };
                 for r in replies {
@@ -142,7 +162,7 @@ async fn connection(daemon: Arc<Daemon>, mut socket: WebSocket) {
 async fn gateway_connection(daemon: Arc<Daemon>, gw: Arc<Gateway>, owner: bool, mut socket: WebSocket) {
     let mut rx = daemon.subscribe();
     let (id, mut relay) = gw.register();
-    for f in gw.hello(owner, daemon.hello(BUILD)).await {
+    for f in gw.hello(owner, hello(&daemon).await).await {
         if socket.send(Message::Text(f.into())).await.is_err() {
             gw.unregister(id);
             return;
@@ -158,7 +178,7 @@ async fn gateway_connection(daemon: Arc<Daemon>, gw: Arc<Gateway>, owner: bool, 
                     Some(Ok(_)) => continue,
                 };
                 let replies = match serde_json::from_str::<Envelope>(&text) {
-                    Ok(env) if gw.routes.is_rust(&env.r#type) => daemon.handle(env, &mut conn),
+                    Ok(env) if gw.routes.is_rust(&env.r#type) => answer(&daemon, env, &mut conn, owner).await,
                     Ok(_) => gw.forward(&text, id, owner).into_iter().collect(),
                     Err(e) => vec![serde_json::to_string(&Envelope::new(crate::wire::ERROR, format!("frame refused: not an envelope ({e})"))).unwrap_or_default()],
                 };
@@ -189,8 +209,21 @@ pub fn router(app: App) -> Router {
     router_with(app, None)
 }
 
+/// The units' HTTP routes (`/mail/*`) pass the same access policy as `/ws`.
+async fn guarded(State(s): State<Shared>, req: axum::extract::Request, next: axum::middleware::Next) -> Response {
+    if let Some(r) = check(&s.app, req.uri(), req.headers()) {
+        return r;
+    }
+    next.run(req).await
+}
+
 fn router_with(app: App, gateway: Option<Arc<Gateway>>) -> Router {
-    Router::new().route("/ws", get(ws)).route("/health", get(health)).with_state(Shared { app, gateway })
+    let shared = Shared { app: app.clone(), gateway };
+    let mut r = Router::new().route("/ws", get(ws)).route("/health", get(health)).with_state(shared.clone());
+    if let Some(extra) = app.daemon.units().and_then(|u| u.http()) {
+        r = r.merge(extra.layer(axum::middleware::from_fn_with_state(shared, guarded)));
+    }
+    r
 }
 
 /// Serves until the listener fails or `shutdown` resolves; the store is flushed every [FLUSH_MS] and at the end.
