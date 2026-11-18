@@ -355,6 +355,36 @@ pub struct EventsAnswer {
     pub events: Vec<EventWire>,
 }
 
+/// The orchestrator's read-only health check of a runner (the fields a Rust runner reads; the rest are ignored).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckRequest {
+    #[serde(default)]
+    pub project_id: Option<String>,
+    #[serde(default)]
+    pub harness: Option<String>,
+    #[serde(default)]
+    pub git_remote: Option<String>,
+    #[serde(default)]
+    pub contract: Option<String>,
+}
+
+/// One checked thing (`contract`, `harness:<id>`, `disk`, ...) and the fix when it failed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CheckRow {
+    pub id: String,
+    pub ok: bool,
+    pub detail: String,
+    #[serde(default)]
+    pub fix: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct CheckAnswer {
+    #[serde(default)]
+    pub rows: Vec<CheckRow>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FramesPullRequest {

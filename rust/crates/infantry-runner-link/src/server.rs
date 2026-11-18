@@ -58,6 +58,10 @@ pub trait Backend: Send + Sync + 'static {
     fn events(&self, _r: &EventsRequest) -> Vec<EventWire> {
         Vec::new()
     }
+    /// The runner-side rows of a health check (after the `contract` row the server writes itself).
+    fn check(&self, _r: &CheckRequest) -> Vec<CheckRow> {
+        Vec::new()
+    }
     /// `None` = frames_pull is not offered.
     fn frames_pull(&self, _r: &FramesPullRequest, _wait: Duration, _max: usize) -> Option<FramesPullAnswer> {
         None
@@ -95,6 +99,19 @@ fn decode<T: serde::de::DeserializeOwned>(data: &str) -> Option<T> {
 
 fn is_id(s: &str) -> bool {
     !s.is_empty() && s.len() <= 64 && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+}
+
+fn contract_row(peer: Option<&str>) -> CheckRow {
+    match peer {
+        None => CheckRow { id: "contract".into(), ok: true, detail: format!("this runner speaks contract {CONTRACT}"), fix: None },
+        Some(p) if p == CONTRACT => CheckRow { id: "contract".into(), ok: true, detail: format!("this runner speaks contract {CONTRACT}"), fix: None },
+        Some(p) => CheckRow {
+            id: "contract".into(),
+            ok: false,
+            detail: format!("this runner speaks contract {CONTRACT}, the orchestrator {p}"),
+            fix: Some("update the runner to the same release as the orchestrator (restart it with the current image or install), then check again".into()),
+        },
+    }
 }
 
 impl LinkServer {
@@ -208,6 +225,14 @@ impl LinkServer {
                 Some(r) => {
                     let a = self.backend.start(&r);
                     self.ok(&seat, t, from, &a)
+                }
+                None => malformed(),
+            },
+            wire::CHECK => match decode::<CheckRequest>(data) {
+                Some(r) => {
+                    let mut rows = vec![contract_row(r.contract.as_deref())];
+                    rows.extend(self.backend.check(&r));
+                    self.ok(&seat, t, from, &CheckAnswer { rows })
                 }
                 None => malformed(),
             },
@@ -364,7 +389,8 @@ mod tests {
         assert!(pair(&s, &code, "inf-b").data.contains("a one-time code cannot move it"));
         let moved: PairAnswer = serde_json::from_str(&pair(&s, &v.secret, "inf-b").data).unwrap();
         assert_eq!(moved.replaced_orchestrator.as_deref(), Some("inf-a"));
-        assert!(pair(&s, "wrong", "inf-c").data.contains("wrong pairing code"));
+        // The code was spent by the refused move (as on Kotlin), so a wrong secret now reads as a wrong bearer.
+        assert!(pair(&s, "wrong", "inf-c").data.contains("wrong bearer"));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
