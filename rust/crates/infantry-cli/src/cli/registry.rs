@@ -14,6 +14,7 @@ pub static COMMANDS: &[&Command] = &[
     // -- mail / sessions --
     // -- health / usage / settings / scripts / secrets / run / install --
     // -- runner --
+    &super::cmd_runner::RUNNER,
 ];
 
 pub fn find(name: &str) -> Option<&'static Command> {
