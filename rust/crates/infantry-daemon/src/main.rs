@@ -43,7 +43,7 @@ fn main() {
     let a: Vec<String> = std::env::args().skip(1).collect();
     let arg = |k: &str| a.iter().position(|x| x == k).and_then(|i| a.get(i + 1)).cloned();
     if a.iter().any(|x| x == "--help" || x == "-h") {
-        println!("infantry-daemon [--port N] [--host H] [--state-dir DIR] [--provider NAME] [--legacy-backend CMD] [--legacy-port N] [--gateway-routes JSON]");
+        println!("infantry-daemon [--port N] [--host H] [--mode both|runner|orchestrator] [--state-dir DIR] [--provider NAME] [--legacy-backend CMD] [--legacy-port N] [--gateway-routes JSON]");
         return;
     }
     let port: u16 = match arg("--port").or_else(|| auth::env("INFANTRY_PORT")) {
@@ -53,6 +53,8 @@ fn main() {
     if port == KOTLIN_APP_PORT {
         fail(format!("port {KOTLIN_APP_PORT} belongs to the Kotlin app's daemon; pick another"));
     }
+    // RUNNER-POOL-10: --mode, then INFANTRY_MODE; an unknown value refuses to start.
+    let mode = infantry_daemon::mode::Mode::resolve(&[arg("--mode").as_deref(), auth::env("INFANTRY_MODE").as_deref()]).unwrap_or_else(|e| fail(e));
     let host = arg("--host").or_else(|| auth::env("INFANTRY_HOST")).unwrap_or_else(|| "127.0.0.1".into());
     let state_dir = arg("--state-dir").or_else(|| auth::env("INFANTRY_STATE_DIR")).map(PathBuf::from).unwrap_or_else(default_state_dir);
     if let Err(e) = std::fs::create_dir_all(&state_dir) {
@@ -69,7 +71,7 @@ fn main() {
     let daemon = Daemon::new(harness, cfg).unwrap_or_else(|e| fail(e));
     let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap_or_else(|e| fail(e.to_string()));
     // Every unit, registered over the session manager (inside the runtime: units start background tasks).
-    if let Err(e) = rt.block_on(async { infantry_daemon::compose::build(&daemon, &state_dir).map(|_| ()) }) {
+    if let Err(e) = rt.block_on(async { infantry_daemon::compose::build_with_mode(&daemon, &state_dir, mode).map(|_| ()) }) {
         eprintln!("[infantry] units not composed, serving the sessions frames only: {e}");
     }
     let gateway = arg("--legacy-backend").or_else(|| auth::env("INFANTRY_LEGACY_BACKEND")).map(|cmdline| {

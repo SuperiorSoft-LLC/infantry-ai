@@ -123,6 +123,11 @@ fn plugins_dir() -> Option<PathBuf> {
 
 /// Builds every unit over `daemon` and attaches them to it. Call inside the tokio runtime.
 pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, String> {
+    build_with_mode(daemon, state_dir, crate::mode::Mode::Both)
+}
+
+/// [`build`] for a deployment mode: a runner daemon keeps the orchestration units only to refuse their frames.
+pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode::Mode) -> Result<Arc<Composed>, String> {
     let handle = tokio::runtime::Handle::current();
     let db = Arc::new(Db::open(state_dir.join("infantry.db")).map_err(|e| format!("infantry.db: {e}"))?);
     // A fresh state dir: every table exists before any unit reads or adds its own.
@@ -403,13 +408,15 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
 
     // ---- the registry --------------------------------------------------------------------------------------
     let mut registry = Registry::new();
+    // The board family (tickets, pipeline, pods, mail, knowledge records) lives on the orchestrator.
+    let board_side = |u: Arc<dyn FrameUnit>| -> Arc<dyn FrameUnit> { if mode.has_board() { u } else { Arc::new(crate::mode::ModeGated { inner: u }) } };
     let mut units: Vec<Arc<dyn FrameUnit>> = vec![
         Arc::new(projects_unit),
         Arc::new(git_unit),
         Arc::new(worktrees_unit),
-        Arc::new(BoardUnit::with_dispatcher(dispatcher.clone())),
+        board_side(Arc::new(BoardUnit::with_dispatcher(dispatcher.clone()))),
         Arc::new(UsageUnit::new(usage.clone())),
-        Arc::new(MailUnit::new(mail.clone())),
+        board_side(Arc::new(MailUnit::new(mail.clone()))),
         Arc::new(AttentionUnit::new(attention.clone())),
         Arc::new(NotificationsUnit::new(hub)),
         Arc::new(NotifyUnit::new(notify)),
@@ -420,11 +427,11 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         Arc::new(settings::SettingsUnit { db: db.clone() }),
         vault.clone(),
         Arc::new(crate::mcp::McpUnit { registry: mcp.clone() }),
-        Arc::new(crate::pods::PodsUnit { pods: pods.clone() }),
+        board_side(Arc::new(crate::pods::PodsUnit { pods: pods.clone() })),
         Arc::new(crate::account::AccountUnit { account }),
         Arc::new(timeline_unit),
     ];
-    units.extend(knowledge.units());
+    units.extend(knowledge.units().into_iter().map(board_side));
     if let Some(p) = &plugin_set {
         units.extend(plugins::frame_units(p));
     }

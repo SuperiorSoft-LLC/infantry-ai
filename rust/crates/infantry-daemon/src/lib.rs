@@ -11,6 +11,7 @@ pub mod fresh_schema;
 pub mod harness;
 pub mod health;
 pub mod mcp;
+pub mod mode;
 pub mod pods;
 pub mod held;
 pub mod run;
