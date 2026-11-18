@@ -1,0 +1,12 @@
+[package]
+name = "infantry-protocol"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "Infantry AI wire contract: Envelope, DTOs and frame names (byte-compatible with the Kotlin infantryProtocol)"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ts-rs = { version = "10", features = ["serde-json-impl"] }

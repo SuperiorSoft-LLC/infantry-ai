@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-conformance"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Black-box v1 WebSocket conformance suite: scripted scenarios, record and compare, runnable against ANY daemon URL (RUST-CONF-1)"
+publish = false
+
+[lib]
+name = "infantry_conformance"
+path = "src/lib.rs"
+
+[[bin]]
+name = "infantry-conformance"
+path = "src/main.rs"
+
+[dependencies]
+infantry-protocol = { path = "../infantry-protocol" }
+serde_json = "1"
+tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
