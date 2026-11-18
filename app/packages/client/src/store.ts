@@ -87,6 +87,10 @@ export interface DaemonActions {
   requestHistory(sessionId: string): void;
   /** Feed frames as if the daemon sent them (stress mode, tests). */
   ingest(env: Envelope): void;
+  /** Send any frame (the board and settings stores use it); false when the link is not open. */
+  sendFrame(env: Envelope): boolean;
+  /** Watch every inbound frame, synchronously, before it is queued. Returns the unsubscribe. */
+  onFrame(listener: (env: Envelope) => void): () => void;
 }
 
 export type DaemonStore = StoreApi<DaemonState & DaemonActions>;
@@ -104,6 +108,7 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
   const cfg: StoreSettings = { ...DEFAULT_SETTINGS, ...opts.settings };
   const io: Internal = { queue: [], held: new Map(), raf: null, fallback: null, ackTimers: new Map() };
   let conn: DaemonConnection | null = null;
+  const taps = new Set<(env: Envelope) => void>();
 
   const store = createStore<DaemonState & DaemonActions>()((set, get) => {
     const out = (env: Envelope) => conn?.send(env) ?? false;
@@ -399,7 +404,15 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
         set({ sessions: { ...get().sessions, [sessionId]: { ...v, historyAsked: true } } });
         out({ type: Frame.REPLAY_REQUEST, data: JSON.stringify({ lastSequence: v.cursor }), sessionId });
       },
+      sendFrame(env) {
+        return out(env);
+      },
+      onFrame(listener) {
+        taps.add(listener);
+        return () => void taps.delete(listener);
+      },
       ingest(env) {
+        for (const t of taps) t(env);
         io.queue.push(env);
         schedule();
       },

@@ -212,3 +212,5 @@ com/superiorsoftllc/infantry/runners/RunnerConnect.kt:SHOWN_LINES|layout: how ma
 com/superiorsoftllc/infantry/runners/RunnerConnect.kt:SHOWN_CHARS|layout: the longest quote of the runner's output in a connect error
 com/superiorsoftllc/infantry/keystore/VaultBackup.kt:NONCE_BYTES|vault backup file format v1: the AES-GCM nonce size, not a tunable limit
 com/superiorsoftllc/infantry/keystore/VaultBackup.kt:SALT_BYTES|vault backup file format v1: the PBKDF2 salt size, not a tunable limit
+com/superiorsoftllc/infantry/runner/ChildReaper.kt:EXTENDED_LIMIT_INFORMATION|Win32 API constant (JobObjectExtendedLimitInformation class id), not a tunable limit
+com/superiorsoftllc/infantry/runner/DetachedLauncher.kt:CREATE_NO_WINDOW|Win32 CreateProcess flag value, not a tunable limit

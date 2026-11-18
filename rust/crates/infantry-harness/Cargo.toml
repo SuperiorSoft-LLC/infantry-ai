@@ -1,0 +1,15 @@
+[package]
+name = "infantry-harness"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Infantry AI harness contract: any agent CLI (Claude, Codex, OpenCode, Pi, Gemini) described as a launch plan plus a translator, driven on any Runner"
+publish = false
+
+[dependencies]
+infantry-runner-api = { path = "../infantry-runner-api" }
+tokio = { version = "1", features = ["sync", "time"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
+serde_json = "1"
