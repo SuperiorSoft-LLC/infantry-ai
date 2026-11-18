@@ -466,6 +466,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-board"
+version = "0.1.0"
+dependencies = [
+ "infantry-core",
+ "infantry-orchestrator-api",
+ "infantry-protocol",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "infantry-cli"
 version = "0.1.0"
 dependencies = [
@@ -516,6 +529,14 @@ dependencies = [
 name = "infantry-guards"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "infantry-orchestrator-api"
+version = "0.1.0"
+dependencies = [
+ "serde",
  "serde_json",
 ]
 
