@@ -64,6 +64,11 @@ impl Board {
         Board { db, env, lock: Mutex::new(()) }
     }
 
+    /// The database the board works on.
+    pub fn db(&self) -> &Arc<Db> {
+        &self.db
+    }
+
     fn guard(&self) -> std::sync::MutexGuard<'_, ()> {
         self.lock.lock().unwrap_or_else(|p| p.into_inner())
     }

@@ -13,7 +13,8 @@ use std::time::Duration;
 use rusqlite::{Connection, OpenFlags};
 
 /// The newest schema version this build can read and write.
-pub const MAX_USER_VERSION: i64 = 62;
+/// Kotlin stamps newest `.sqm` + 1: 62.sqm exists, so a fresh Kotlin database is version 63 (RUST-ORCH-1 checked one).
+pub const MAX_USER_VERSION: i64 = 63;
 /// How long a connection waits on a lock before SQLITE_BUSY.
 pub const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 /// Read connections kept open next to the writer.
@@ -137,13 +138,13 @@ mod tests {
             let db = Db::open(&p).unwrap();
             let mode: String = db.read(|c| c.query_row("PRAGMA journal_mode", [], |r| r.get(0))).unwrap();
             assert_eq!(mode.to_lowercase(), "wal");
-            db.write(|c| c.execute_batch("CREATE TABLE t(x); INSERT INTO t VALUES (41); PRAGMA user_version=62;")).unwrap();
+            db.write(|c| c.execute_batch("CREATE TABLE t(x); INSERT INTO t VALUES (41); PRAGMA user_version=63;")).unwrap();
             let x: i64 = db.read(|c| c.query_row("SELECT x+1 FROM t", [], |r| r.get(0))).unwrap();
             assert_eq!(x, 42);
             assert!(db.read(|c| c.execute("INSERT INTO t VALUES (1)", [])).is_err(), "readers are read-only");
-            assert_eq!(db.user_version().unwrap(), 62);
+            assert_eq!(db.user_version().unwrap(), 63);
         }
-        Db::open(&p).expect("62 is supported");
+        Db::open(&p).expect("63 is supported");
         let _ = std::fs::remove_dir_all(p.parent().unwrap());
     }
 
@@ -152,7 +153,7 @@ mod tests {
         let src = temp_db("src");
         {
             let c = Connection::open(&src).unwrap();
-            c.execute_batch("CREATE TABLE t(x); PRAGMA user_version=63;").unwrap();
+            c.execute_batch("CREATE TABLE t(x); PRAGMA user_version=64;").unwrap();
         }
         // work on a copy made with the backup API, as with real data
         let copy = src.with_file_name("copy.db");
@@ -162,9 +163,9 @@ mod tests {
             rusqlite::backup::Backup::new(&from, &mut to).unwrap().run_to_completion(64, Duration::ZERO, None).unwrap();
         }
         match Db::open(&copy) {
-            Err(DbError::TooNew { found, max, .. }) => assert_eq!((found, max), (63, 62)),
+            Err(DbError::TooNew { found, max, .. }) => assert_eq!((found, max), (64, 63)),
             Err(e) => panic!("wrong error: {e}"),
-            Ok(_) => panic!("user_version 63 must be refused"),
+            Ok(_) => panic!("user_version 64 must be refused"),
         }
         let _ = std::fs::remove_dir_all(src.parent().unwrap());
     }

@@ -56,9 +56,24 @@ pub fn schema_statements(sq: &str) -> Vec<String> {
             in_trigger = false;
         }
         if upper.starts_with("CREATE ") {
-            out.push(head.to_string());
+            out.push(strip_type_adapters(head));
         }
         cur.clear();
+    }
+    out
+}
+
+/// Drops SQLDelight's column type adapters (`INTEGER AS kotlin.Int`): not SQL, absent from the real file.
+fn strip_type_adapters(stmt: &str) -> String {
+    let mut out = stmt.to_string();
+    for ty in ["INTEGER", "TEXT", "REAL", "BLOB"] {
+        let pat = format!("{ty} AS ");
+        while let Some(i) = out.find(&pat) {
+            let start = i + ty.len();
+            let after = start + " AS ".len();
+            let end = out[after..].find(|c: char| c.is_whitespace() || c == ',' || c == ')').map_or(out.len(), |j| after + j);
+            out.replace_range(start..end, "");
+        }
     }
     out
 }
