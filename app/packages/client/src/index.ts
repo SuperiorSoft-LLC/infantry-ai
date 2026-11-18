@@ -31,3 +31,4 @@ export * from "./update";
 export * from "./markdown";
 export * from "./shortcuts";
 export * from "./cards";
+export * from "./toasts";

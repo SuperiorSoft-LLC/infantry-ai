@@ -136,7 +136,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Delete ticket | yes | done | |
 | Collapse a lane | yes | done | *(RUST-UI-8)* The lane header folds it to title and count, remembered per lane; a folded lane still takes drops. |
 | "All projects" toggle | yes | missing | UI only. |
-| Start next | yes | partial | *(RUST-UI-8)* Button in the filter bar sends `ticket_start_next` for the current project. A refusal is not shown yet (no toast host). |
+| Start next | yes | done | *(RUST-UI-8)* Button in the filter bar sends `ticket_start_next` for the current project; a refusal toasts *(RUST-UI-9)*. |
 | Card buttons: Start, Done, Back, Reopen, Park, Archive | yes | partial | Drag does the moves. No buttons: UI only (`ticket_move`). |
 | Assign / switch / queue / unassign from a card | yes | missing | UI only (`ticket_assign`, `agent_switch`, `agent_queue`, `ticket_unassign`). |
 | Multi-select and move to epic | yes | missing | UI only (`ticket_save`). |
@@ -154,7 +154,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Question history, "Change to" an auto-picked answer | yes | missing | UI only (`question_list`). |
 | Clear stale, Open agent per item | yes | missing | UI only. |
 | Watchdog list (stalled / quiet / unreported agents) | yes | missing | UI only. |
-| Toast stack (bottom right), prompt toasts | yes | missing | No toast component. Notices appear only in the Attention tab. UI only. |
+| Toast stack (bottom right), prompt toasts | yes | partial | *(RUST-UI-9)* Toast stack bottom right (newest first, repeats counted, auto-expire, dismiss): refusals of UI requests with no inline view (card menu, Start next) and pushed notifications. No prompt toasts (approve from a toast). |
 | Desktop OS notifications, sounds | yes | missing | Daemon: `notify_push` / `notify_sounds` (the Rust protocol has only `notify`). Tauri notification plugin. |
 | Spoken alerts | yes | missing | `spoken` frame exists. Needs a TTS presenter. |
 | "Update available" notice | yes | done | Added by RUST-UPD-1. *(fixed today)* The status-bar pill was fixed text; it now shows only for a real update. |
