@@ -1292,6 +1292,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-knowledge"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64",
+ "infantry-core",
+ "infantry-protocol",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
 name = "infantry-mail"
 version = "0.1.0"
 dependencies = [

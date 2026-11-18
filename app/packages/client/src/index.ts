@@ -13,3 +13,6 @@ export * from "./stores/mail";
 export * from "./stores/attention";
 export * from "./stores/usage";
 export * from "./stores/projects";
+export * from "./stores/knowledge";
+export * from "./stores/roles";
+export * from "./stores/library";

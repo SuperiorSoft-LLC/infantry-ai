@@ -17,6 +17,15 @@ const icons: Record<RoleIconName, LucideIcon> = {
   devops: Cloud,
 };
 
+/** The icon names a role may carry. */
+export const ROLE_ICON_NAMES = Object.keys(icons) as RoleIconName[];
+
+/** A role's glyph by its icon name (the daemon's `Role.icon`); unknown names draw the bot. */
+export function RoleGlyph({ icon, className }: { icon: string; className?: string }) {
+  const Icon = icons[icon as RoleIconName] ?? Bot;
+  return <Icon className={className} aria-hidden />;
+}
+
 export function RoleIcon({ roleId, className }: { roleId: string; className?: string }) {
   const role = roles.find((r) => r.id === roleId);
   const Icon = role ? icons[role.icon] : Bot;
