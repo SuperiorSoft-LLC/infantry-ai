@@ -244,7 +244,8 @@ impl Agent {
             }
             Ev::Exited { code } => self.on_exit(code),
             // Approvals are answered by the worker; a PTY's raw stdout is screen bytes; tool ends draw nothing yet.
-            Ev::ApprovalRequested { .. } | Ev::ToolFinished { .. } | Ev::Stdout(_) => {}
+            // Questions (RUST-PROMPT-1) are answered by the daemon path; the embedded runner has no prompt card yet.
+            Ev::ApprovalRequested { .. } | Ev::QuestionAsked { .. } | Ev::ToolFinished { .. } | Ev::Stdout(_) => {}
         }
     }
 

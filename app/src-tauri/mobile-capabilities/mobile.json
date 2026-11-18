@@ -1,0 +1,6 @@
+{
+  "identifier": "mobile",
+  "description": "Phone only (RUST-MOBILE-1): the QR scanner that pairs the app with a remote daemon.",
+  "windows": ["main"],
+  "permissions": ["barcode-scanner:default"]
+}

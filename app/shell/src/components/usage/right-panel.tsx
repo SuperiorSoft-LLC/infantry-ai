@@ -16,7 +16,7 @@ export function RightPanel() {
   const tabs = useTabs("right");
   const value = tabs.some((t) => t.id === ui.rightTab) ? ui.rightTab : (tabs[0]?.id ?? "");
   return (
-    <aside aria-label="Side panel" className="flex h-full w-[360px] shrink-0 flex-col border-l bg-background">
+    <aside aria-label="Side panel" className="flex h-full w-[360px] max-w-full shrink-0 flex-col border-l bg-background">
       <Tabs value={value} onValueChange={(v) => ui.set("rightTab", v)} className="flex min-h-0 flex-1 flex-col gap-0">
         <TabsList variant="line" className="no-scrollbar h-10! w-full shrink-0 justify-start gap-1 overflow-x-auto border-b px-2">
           {tabs.map((t) => (

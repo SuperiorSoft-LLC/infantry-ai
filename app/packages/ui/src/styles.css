@@ -138,6 +138,34 @@
   #root {
     @apply h-full;
   }
+  /* RUST-MOBILE-1: the visible height on a phone (the on-screen keyboard and browser bars shrink it), and no text boost. */
+  #root {
+    height: 100dvh;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  /* Touch: tap targets of at least 40px (layout.ts `tapTarget`), no double-tap zoom delay, inputs at 16px (no zoom). */
+  @media (pointer: coarse) {
+    button,
+    [role="button"],
+    [role="tab"],
+    [role="menuitem"],
+    [role="option"],
+    [data-slot="select-trigger"] {
+      min-height: 40px;
+      touch-action: manipulation;
+    }
+    button:has(> svg:only-child) {
+      min-width: 40px;
+    }
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
+  }
   html {
     @apply font-sans;
     font-size: 14px;
