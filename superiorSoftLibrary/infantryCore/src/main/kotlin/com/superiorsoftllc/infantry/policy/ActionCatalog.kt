@@ -66,6 +66,8 @@ object ActionCatalog {
         // PACE-TREND-1 (b4e46daf): Infantry_Pace answers this frame from its daemon half, so it has no Envelope constant.
         a("pace.read", READ, "pace_get"),
         a("secrets.plugin.read", READ, E.PLUGIN_SECRET_GET),
+        // VAULT-REVEAL-1: a value back to the owner's window, or every secret to an encrypted file, after the OS user check.
+        a("secrets.reveal", READ, E.SECRET_REVEAL, E.SECRET_BACKUP_EXPORT),
         a("stories.read", READ, E.STORY_GET, E.STORY_LIST),
         a("knowledge.read", READ, E.DECISION_LIST, E.DECISION_GET, E.ISSUE_LIST, E.ISSUE_GET, E.ISSUE_PRECHECK),
         a(
@@ -157,7 +159,7 @@ object ActionCatalog {
         a("commands.save", WRITE, E.COMMAND_SAVE, E.COMMAND_DELETE),
         a("runs.start", SPAWN, E.RUN_START, E.RUN_ATTACH, E.RUN_RESIZE, E.RUN_INPUT),
         a("runs.stop", DESTRUCTIVE, E.RUN_STOP),
-        a("secrets.save", WRITE, E.SECRET_SET, E.SECRET_CLEAR, E.SECRET_IMPORT, E.SECRET_FIELD_SET, E.SECRET_FIELD_DELETE, E.SECRET_DELETE, E.SECRET_MOVE, E.SECRET_LOGIN),
+        a("secrets.save", WRITE, E.SECRET_SET, E.SECRET_CLEAR, E.SECRET_IMPORT, E.SECRET_FIELD_SET, E.SECRET_FIELD_DELETE, E.SECRET_DELETE, E.SECRET_MOVE, E.SECRET_LOGIN, E.SECRET_BACKUP_IMPORT),
         a("runners.admin", WRITE, RUNNER_ADMIN),
         // PLUGIN-CLI-HOT-1: `infantry plugin install|update|enable|disable|...` through the daemon (hot apply).
         a("plugins.admin", WRITE, E.PLUGIN_ADMIN),

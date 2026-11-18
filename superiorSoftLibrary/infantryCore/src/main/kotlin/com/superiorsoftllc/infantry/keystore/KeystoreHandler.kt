@@ -123,6 +123,8 @@ class KeystoreHandler(
     private val authCheck: (String) -> Unit = {},
     /** ONBOARD-1: start / input / cancel the in-app sign-in of the harness whose key secret is named (secret name, action, text). */
     private val login: (String, String, String) -> Unit = { _, _, _ -> throw IllegalArgumentException("no in-app sign-in here") },
+    /** VAULT-REVEAL-1: reveal / copy / backup behind the OS user check; the daemon answers its frames off the request loop. */
+    val vault: SecretVault? = null,
 ) {
     private val base = knownBase
     private val known: List<KnownSecret> get() = base + extraKnown()

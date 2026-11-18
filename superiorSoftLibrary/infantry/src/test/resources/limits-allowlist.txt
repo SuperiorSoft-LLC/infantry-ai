@@ -210,3 +210,5 @@ com/superiorsoftllc/infantry/install/UserPathStore.kt:NOTIFY_TIMEOUT_MS|precisio
 com/superiorsoftllc/infantry/runners/RunnerConnect.kt:MAX_PORT|protocol constant: the highest TCP port number
 com/superiorsoftllc/infantry/runners/RunnerConnect.kt:SHOWN_LINES|layout: how many of the runner's last lines a connect error quotes
 com/superiorsoftllc/infantry/runners/RunnerConnect.kt:SHOWN_CHARS|layout: the longest quote of the runner's output in a connect error
+com/superiorsoftllc/infantry/keystore/VaultBackup.kt:NONCE_BYTES|vault backup file format v1: the AES-GCM nonce size, not a tunable limit
+com/superiorsoftllc/infantry/keystore/VaultBackup.kt:SALT_BYTES|vault backup file format v1: the PBKDF2 salt size, not a tunable limit

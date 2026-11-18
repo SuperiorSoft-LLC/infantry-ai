@@ -672,6 +672,55 @@ object LimitRegistry {
         min = 1, max = 100_000, zeroIsUnlimited = false,
     )
 
+    /** VAULT-REVEAL-1: how long a revealed value stays on screen before it is masked again. */
+    val SECRET_REVEAL_SECONDS = LimitDef(
+        "limits.secrets.revealSeconds", 30, "seconds",
+        "How long Reveal shows a secret's value in the owner's window before it is masked again.",
+        min = 1, max = 600, zeroIsUnlimited = false,
+    )
+
+    /** VAULT-REVEAL-1: how long a copied value stays on the clipboard. */
+    val SECRET_CLIPBOARD_CLEAR_SECONDS = LimitDef(
+        "limits.secrets.clipboardClearSeconds", 30, "seconds",
+        "How long a value copied with Copy stays on the clipboard; then it is cleared (if the clipboard still holds it).",
+        min = 1, max = 600, zeroIsUnlimited = false,
+    )
+
+    /** VAULT-REVEAL-1: how long one OS verification covers later reveals; 0 = ask every time. */
+    val SECRET_VERIFY_CACHE_SECONDS = LimitDef(
+        "limits.secrets.verifyCacheSeconds", 0, "seconds",
+        "How long one Windows Hello / OS verification covers later reveals, copies and exports. 0 = verify every time (the safest).",
+        min = 0, max = 3_600, zeroIsUnlimited = false,
+    )
+
+    /** VAULT-REVEAL-1: how long the vault waits for the person to answer the OS prompt. */
+    val SECRET_VERIFY_TIMEOUT_SECONDS = LimitDef(
+        "limits.secrets.verifyTimeoutSeconds", 120, "seconds",
+        "How long a reveal, copy or export waits for the person to answer the Windows Hello / OS prompt before it is refused.",
+        min = 10, max = 900, zeroIsUnlimited = false,
+    )
+
+    /** VAULT-REVEAL-1: PBKDF2-HMAC-SHA256 rounds that turn a backup passphrase into its key. */
+    val SECRET_BACKUP_KDF_ITERATIONS = LimitDef(
+        "limits.secrets.backupKdfIterations", 600_000, "rounds",
+        "PBKDF2-HMAC-SHA256 rounds for a new vault backup's passphrase key (higher = slower to guess, slower to open). A backup records its own count.",
+        min = 210_000, max = 10_000_000, zeroIsUnlimited = false,
+    )
+
+    /** VAULT-REVEAL-1: the shortest backup passphrase accepted. */
+    val SECRET_BACKUP_MIN_PASSPHRASE = LimitDef(
+        "limits.secrets.backupMinPassphrase", 12, "characters",
+        "The shortest passphrase a vault backup accepts.",
+        min = 8, max = 256, zeroIsUnlimited = false,
+    )
+
+    /** VAULT-REVEAL-1: the biggest backup file an import reads. */
+    val SECRET_BACKUP_MAX_BYTES = LimitDef(
+        "limits.secrets.backupMaxBytes", 16_777_216, "bytes",
+        "The biggest vault backup file an import will read; a larger one is refused.",
+        min = 1_024, max = 268_435_456, zeroIsUnlimited = false,
+    )
+
     /** SANDBOX-1 (ticket d4c1dbd9): confine agent CLIs (runner/Sandbox.kt); the dirs are `limits.sandbox.allowedDirs`. */
     val SANDBOX_MODE = LimitDef(
         "limits.sandbox.mode", 0, "mode",
@@ -1341,6 +1390,8 @@ object LimitRegistry {
         MODELS_CATALOG_TTL_MS, MODELS_CATALOG_WAIT_MS, CLI_ANSWER_TIMEOUT_MS, HARNESS_LOGIN_TIMEOUT_MS, HARNESS_PROBE_TIMEOUT_SECONDS,
         MCP_LIST_TTL_MS, MCP_LIST_WAIT_MS, MCP_SERVERS_MAX, MCP_GRANTS_MAX, MCP_PURPOSE_CHARS,
         RUN_MAX_SECRETS, SECRET_RENDER_MAX_BYTES, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
+        SECRET_REVEAL_SECONDS, SECRET_CLIPBOARD_CLEAR_SECONDS, SECRET_VERIFY_CACHE_SECONDS, SECRET_VERIFY_TIMEOUT_SECONDS,
+        SECRET_BACKUP_KDF_ITERATIONS, SECRET_BACKUP_MIN_PASSPHRASE, SECRET_BACKUP_MAX_BYTES,
         SANDBOX_MODE, USAGE_QUOTA_HIT_HOLD_MINUTES,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_BRIEF_ENVIRONMENT, HEALTH_EVENT_LOG_MAX, HEALTH_HEARTBEAT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
         MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,

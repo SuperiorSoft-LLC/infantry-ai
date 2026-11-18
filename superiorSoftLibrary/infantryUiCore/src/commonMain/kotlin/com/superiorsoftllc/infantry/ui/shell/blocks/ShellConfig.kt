@@ -64,6 +64,8 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
         val link = com.superiorsoftllc.infantry.ui.shell.LocalShellContext.current?.link
         if (!ui.showConfig) return
         val state = s.state
+        val vault = com.superiorsoftllc.infantry.ui.SecretVaultWire
+        val vaultOn = contractAtLeast(state.connection.contract, vault.SINCE_MAJOR, vault.SINCE_MINOR)
         val controller = s.controller
         val actionScope = s.actionScope
         val host = s.host
@@ -162,6 +164,10 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
                     }.toString()
                     link?.request("secret_render", body)?.data ?: "not connected"
                 },
+                // VAULT-REVEAL-1 (1.157.0): reveal / copy / backup, each behind the OS user check on the daemon's computer.
+                reveal = if (vaultOn) { n, f, p, purpose -> vault.result(vault.REVEAL, link?.request(vault.REVEAL, vault.reveal(n, f, p, purpose)), vault::revealed) } else null,
+                backupExport = if (vaultOn) { path, pass -> vault.result(vault.EXPORT, link?.request(vault.EXPORT, vault.export(path, pass)), vault::exported) } else null,
+                backupImport = if (vaultOn) { path, pass, answers -> vault.result(vault.IMPORT, link?.request(vault.IMPORT, vault.import(path, pass, answers)), vault::imported) } else null,
             ),
             onOpenRoles = { ui.showRoles = true },
             limits = state.limitCatalog,

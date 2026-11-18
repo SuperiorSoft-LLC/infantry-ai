@@ -20,6 +20,8 @@ there is no per-format parsing, so quote the placeholder yourself where the form
 
 Configuration shows each secret's placeholder next to it with a Copy button, and each field row has its own Copy for `{{secret:NAME#FIELD}}`, and a **Render file** card (template, output, Render). The card sends the owner-only `secret_render` frame; an agent connection is refused, and the result shows names and the path only.
 
+To read a value back yourself (Reveal, Copy value) or keep an encrypted backup of every secret, see [Vault](Vault.md): both need Windows Hello and the owner window; agents never can.
+
 ## Example: `.env`
 
 Template `docker.env.tmpl`:

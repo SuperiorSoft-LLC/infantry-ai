@@ -395,7 +395,8 @@ object EventVocabulary {
     // **1.154.0 (MCP-REGISTRY-1, ticket-7b276192) is ADDITIVE**: the MCP registry. Frames `mcp_list` / `mcp_get` / `mcp_add` / `mcp_update` / `mcp_remove` / `mcp_set_enabled` / `mcp_test` / `mcp_assign` / `mcp_revoke` / `mcp_grants` / `mcp_plan`, answers `mcp_servers` / `mcp_server` / `mcp_status` / `mcp_grants` / `mcp_plan`, event `mcp_changed`; sessions `mcpServers` [{name, state, detail?, toolCount?}]. User MCP servers are walled: a session gets one only through a grant. See CONTRACT.md.
     // **1.155.0 (TRIG-API-1, ticket-a5a09f2f) is ADDITIVE**: trigger fields `fireAt`, `deleteAfterFire`, `owner`, `ref` on `TriggerSave` / `TriggerView`; kind `at`, target `session:<id>` and disposition `target_gone` are specified (served from TRIG-2d; refused until then). Every default is today's behaviour. See CONTRACT.md.
     // **1.156.0 (PLUGIN-CLI-HOT-1, ticket-d74fc8bb) is ADDITIVE**: frame `plugin_admin` ({args}) -> `plugin_admin` ({code, out, err}), owner-only: `infantry plugin install|update|enable|disable|rollback|remove|grants` run on the daemon's own plugin manager and hot-apply. See CONTRACT.md.
-    const val VERSION = "1.156.0"
+    // **1.157.0 (VAULT-REVEAL-1, ticket-2c65aabe) is ADDITIVE**: owner-only `secret_reveal`, `secret_backup_export`, `secret_backup_import`, each answered with its own type after an OS user verification (export, reveal) on the daemon's computer. Settings `limits.secrets.revealSeconds|clipboardClearSeconds|verifyCacheSeconds|verifyTimeoutSeconds|backupKdfIterations|backupMinPassphrase|backupMaxBytes`. See CONTRACT.md and docs/wiki/Vault.md.
+    const val VERSION = "1.157.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

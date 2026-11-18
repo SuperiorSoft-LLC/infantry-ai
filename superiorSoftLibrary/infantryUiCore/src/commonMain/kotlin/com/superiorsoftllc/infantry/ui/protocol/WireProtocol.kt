@@ -230,6 +230,10 @@ data class Envelope(
         // answered by `plugin_secret` ({module, field, value}); only a module's EndpointAccess asks, and keeps the value to itself.
         const val PLUGIN_SECRET_GET = "plugin_secret_get"
         const val PLUGIN_SECRET = "plugin_secret"
+        // Contract 1.157.0 (VAULT-REVEAL-1): owner-only, answered with the request's own type after an OS user verification.
+        const val SECRET_REVEAL = "secret_reveal"
+        const val SECRET_BACKUP_EXPORT = "secret_backup_export"
+        const val SECRET_BACKUP_IMPORT = "secret_backup_import"
 
         // Contract 1.77.0 (PROMPT-1): a harness asks the owner mid-run. `prompt_request` (daemon -> every client,
         // [PromptRequestView], envelope sessionId = the asking session) opens a card; `prompt_response` (client ->
