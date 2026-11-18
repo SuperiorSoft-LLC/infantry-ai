@@ -56,6 +56,12 @@
   "daemon": {
     "entry": "com.superiorsoftllc.infantry.plugins.official.news.daemon.NewsDaemonPlugin",
     "component": "daemon.component",
+    "needs": ["http"],
+    "wants": ["settings"],
+    "endpoints": { "google_news": { "prod": "https://news.google.com/rss" } },
+    "tools": [
+      { "name": "news_headlines", "action": "news.read", "kind": "read", "description": "Current news headlines from Google News (capability news.headlines): args query, topic, source, max." }
+    ],
     "apiAtLeast": "1.59.0",
     "config": [
       {

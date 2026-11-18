@@ -1143,6 +1143,8 @@ dependencies = [
 name = "infantry-news"
 version = "1.0.1"
 dependencies = [
+ "infantry-plugin-host",
+ "infantry-plugin-wit",
  "quick-xml",
  "serde_json",
  "wit-bindgen 0.46.0",

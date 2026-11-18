@@ -79,7 +79,7 @@ mod guest {
         fn stop() {}
         fn call_tool(name: String, args: String, _ctx: CallContext) -> Result<String, String> {
             match name.as_str() {
-                "news.read" | "news.headlines" => headlines(&args),
+                "news_headlines" | "news.read" | "news.headlines" => headlines(&args),
                 other => Err(format!("unknown tool {other}")),
             }
         }
