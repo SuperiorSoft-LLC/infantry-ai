@@ -4,11 +4,14 @@
 //! tauri-plugin-websocket, so it carries no browser Origin (the daemon refuses a foreign Origin, CONTRACT §7) and a
 //! token rides a plain `Authorization: Bearer` header.
 
+mod daemon;
 mod local;
 
 use local::{Local, Project, Resumable};
 use serde::Serialize;
 use std::io::Write;
+use std::path::PathBuf;
+use std::sync::{Arc, Condvar, Mutex};
 use tauri::ipc::Channel;
 use tauri::{Manager, State};
 
@@ -20,8 +23,12 @@ struct Endpoint {
     token: Option<String>,
     /// INFANTRY_UI_STRESS=1: fake sessions and a fast stream instead of a daemon (the perf check).
     stress: bool,
-    /// No INFANTRY_URL / INFANTRY_PORT (or INFANTRY_UI_LOCAL=1): agents run in this app's own embedded runner (local.rs).
+    /// INFANTRY_UI_LOCAL=1, or the `runner` setting `embedded`: agents run in this app's own embedded runner (local.rs).
     local: bool,
+    /// `embedded` (local.rs), `daemon` (the sidecar this app started or found) or `connect` (INFANTRY_URL / INFANTRY_PORT).
+    mode: &'static str,
+    /// Daemon mode: why the sidecar could not start (the UI shows it; the URL is then unreachable).
+    error: Option<String>,
     /// INFANTRY_PERF_SCENARIO: the perf harness's scenario (`agents=5;stream=1;...`), run in-page (perf-scenario.ts).
     perf: Option<String>,
 }
@@ -49,21 +56,117 @@ fn ws_url(raw: &str) -> String {
     if after_scheme.contains('/') { u } else { format!("{u}/ws") }
 }
 
+/// Where the agents run.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Mode {
+    Embedded,
+    Daemon,
+    Connect,
+}
+
+fn truthy(v: &str) -> bool {
+    v != "0" && !v.eq_ignore_ascii_case("false")
+}
+
+/// INFANTRY_URL / INFANTRY_PORT = connect to that daemon; else INFANTRY_UI_LOCAL (1 = embedded, 0 = daemon); else the
+/// `runner` setting in ui.json (`embedded` | `daemon`); else daemon mode.
+fn mode(settings: &UiSettings) -> Mode {
+    if env("URL").is_some() || env("PORT").is_some() {
+        return Mode::Connect;
+    }
+    match env("UI_LOCAL") {
+        Some(v) if truthy(&v) => Mode::Embedded,
+        Some(_) => Mode::Daemon,
+        None if settings.runner.as_deref() == Some("embedded") => Mode::Embedded,
+        None => Mode::Daemon,
+    }
+}
+
+/// The app's own settings file (`<state>/ui.json`); read at start, so a change applies on the next start.
+#[derive(serde::Deserialize, Serialize, Default, Clone)]
+struct UiSettings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    runner: Option<String>,
+}
+
+fn settings_path(state: &std::path::Path) -> PathBuf {
+    state.join("ui.json")
+}
+
+fn load_settings(state: &std::path::Path) -> UiSettings {
+    std::fs::read_to_string(settings_path(state)).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+}
+
+/// The app's state: its dir, its settings, its mode, and (daemon mode) the sidecar once it is up.
+struct AppState {
+    dir: PathBuf,
+    mode: Mode,
+    settings: Mutex<UiSettings>,
+    sidecar: Arc<(Mutex<Option<Result<daemon::Sidecar, String>>>, Condvar)>,
+}
+
 #[tauri::command]
-fn endpoint() -> Endpoint {
-    let url = match (env("URL"), env("PORT")) {
-        (Some(u), _) => ws_url(&u),
-        (None, Some(p)) => format!("ws://127.0.0.1:{p}/ws"),
-        (None, None) => "ws://127.0.0.1:8787/ws".to_string(),
-    };
+async fn endpoint(state: State<'_, AppState>) -> Result<Endpoint, String> {
+    let stress = env("UI_STRESS").is_some_and(|v| truthy(&v));
     let token = env("TOKEN_FILE")
         .and_then(|f| std::fs::read_to_string(f).ok())
         .map(|t| t.trim().to_string())
         .filter(|t| !t.is_empty())
         .or_else(|| env("TOKEN"));
-    let stress = env("UI_STRESS").is_some_and(|v| v != "0" && v != "false");
-    let local = env("UI_LOCAL").map_or(env("URL").is_none() && env("PORT").is_none(), |v| v != "0" && v != "false");
-    Endpoint { url, token, stress, local, perf: env("PERF_SCENARIO") }
+    let perf = env("PERF_SCENARIO");
+    let (url, token, error, mode) = match state.mode {
+        Mode::Connect => {
+            let url = match (env("URL"), env("PORT")) {
+                (Some(u), _) => ws_url(&u),
+                (_, Some(p)) => format!("ws://127.0.0.1:{p}/ws"),
+                _ => unreachable!(),
+            };
+            (url, token, None, "connect")
+        }
+        Mode::Embedded => ("embedded runner".into(), None, None, "embedded"),
+        Mode::Daemon => {
+            // The sidecar starts on a thread at setup; wait for it off the main thread.
+            let cell = state.sidecar.clone();
+            let r = tauri::async_runtime::spawn_blocking(move || {
+                let (m, cv) = &*cell;
+                let g = cv.wait_while(m.lock().unwrap(), |s| s.is_none()).unwrap();
+                match g.as_ref().unwrap() {
+                    Ok(s) => Ok(s.url.clone()),
+                    Err(e) => Err(e.clone()),
+                }
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+            match r {
+                Ok(url) => (url, None, None, "daemon"),
+                Err(e) => ("ws://127.0.0.1:0/ws".into(), None, Some(e), "daemon"),
+            }
+        }
+    };
+    Ok(Endpoint { url, token, stress, local: mode == "embedded", mode, error, perf })
+}
+
+/// The `runner` setting (`embedded` | `daemon`); applies on the next start.
+#[tauri::command]
+fn ui_runner_get(state: State<'_, AppState>) -> (String, String) {
+    let s = state.settings.lock().unwrap();
+    let current = match state.mode {
+        Mode::Embedded => "embedded",
+        Mode::Daemon => "daemon",
+        Mode::Connect => "connect",
+    };
+    (s.runner.clone().unwrap_or_else(|| "daemon".into()), current.into())
+}
+
+#[tauri::command]
+fn ui_runner_set(state: State<'_, AppState>, runner: String) -> Result<(), String> {
+    if runner != "embedded" && runner != "daemon" {
+        return Err(format!("unknown runner `{runner}` (embedded | daemon)"));
+    }
+    let mut s = state.settings.lock().unwrap();
+    s.runner = Some(runner);
+    let text = serde_json::to_string_pretty(&*s).map_err(|e| e.to_string())?;
+    std::fs::write(settings_path(&state.dir), text).map_err(|e| e.to_string())
 }
 
 /// The embedded runner's link: the WebView's transport opens it with a channel that receives every outbound frame.
@@ -108,10 +211,29 @@ pub fn run() {
                 app.path().app_local_data_dir().unwrap_or_else(|_| std::env::temp_dir().join("infantry-tauri"))
             });
             let _ = std::fs::create_dir_all(&dir);
+            let settings = load_settings(&dir);
+            let mode = mode(&settings);
+            let sidecar = Arc::new((Mutex::new(None), Condvar::new()));
+            if mode == Mode::Daemon {
+                // INFANTRY_UI_DAEMON_PORT pins the sidecar's port (tests use 189xx); 0 = any free port.
+                let port = env("UI_DAEMON_PORT").and_then(|p| p.parse().ok()).unwrap_or(0u16);
+                let (cell, state) = (sidecar.clone(), dir.join("daemon"));
+                let cwd = std::env::current_dir().unwrap_or_else(|_| dir.clone());
+                std::thread::spawn(move || {
+                    let r = daemon::ensure(&state, port, &cwd);
+                    if let Err(e) = &r {
+                        eprintln!("[infantry] daemon mode: {e}");
+                    }
+                    let (m, cv) = &*cell;
+                    *m.lock().unwrap() = Some(r);
+                    cv.notify_all();
+                });
+            }
+            app.manage(AppState { dir: dir.clone(), mode, settings: Mutex::new(settings), sidecar });
             app.manage(Local::new(dir));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![endpoint, local_connect, local_send, local_set_project, local_resumable, perf_report])
+        .invoke_handler(tauri::generate_handler![endpoint, ui_runner_get, ui_runner_set, local_connect, local_send, local_set_project, local_resumable, perf_report])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, e| {

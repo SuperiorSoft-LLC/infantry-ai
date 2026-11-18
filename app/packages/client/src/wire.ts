@@ -59,6 +59,8 @@ export const Frame = {
 
 /** The `requestId` prefix of a client message id (CHAT-SENDING-1); the daemon dedupes on it. */
 export const CLIENT_SEND_PREFIX = "send:";
+/** The typed refusal of a prompt into a session with a run in flight (1.96.0): `run_in_flight <sessionId>: <reason>`. */
+export const RUN_IN_FLIGHT = "run_in_flight";
 
 /** Frames that belong to one session's sequenced stream (each carries a per-session `sequence`). */
 export const STREAM_FRAMES: ReadonlySet<string> = new Set([
@@ -66,67 +68,36 @@ export const STREAM_FRAMES: ReadonlySet<string> = new Set([
   Frame.ERROR, Frame.FINISHED, Frame.EXIT, Frame.USAGE,
 ]);
 
-export type SessionState = "STARTING" | "BUSY" | "WAITING_INPUT" | "IDLE" | "EXITED" | "ORPHANED" | "FAILED";
+// Session records come from the Rust protocol crate (ts-rs, `cargo test -p infantry-protocol` writes app/src/generated).
+import type { SessionRecord as WireSessionRecord } from "../../../src/generated/SessionRecord";
+import type { SessionState as WireSessionState } from "../../../src/generated/SessionState";
+import type { KillOutcome } from "../../../src/generated/KillOutcome";
+import type { QueuedTurn } from "../../../src/generated/QueuedTurn";
+import type { SessionProgress } from "../../../src/generated/SessionProgress";
+import type { SessionWaiting } from "../../../src/generated/SessionWaiting";
+
+/** ts-rs 10 writes i64 as `bigint`; `JSON.parse` gives numbers. */
+export type Num<T> = T extends bigint ? number : T extends readonly (infer U)[] ? Num<U>[] : T extends object ? { [K in keyof T]: Num<T[K]> } : T;
+/** The daemon omits default-valued keys (and the embedded runner sends fewer), so all but [Req] are optional. */
+type Loose<T, Req extends keyof T> = Pick<T, Req> & { [K in Exclude<keyof T, Req>]?: T[K] };
+
+export type SessionState = WireSessionState;
 export type Outcome = "SUCCEEDED" | "FAILED" | "KILLED_GRACEFUL" | "KILLED_FORCED" | "ORPHANED";
+export type { KillOutcome };
+export type ProgressView = Loose<Num<SessionProgress>, "mode" | "state" | "startedAt" | "updatedAt">;
+export type QueuedTurnView = Num<QueuedTurn>;
+export type WaitingView = Loose<Num<SessionWaiting>, "reason" | "since">;
 
-export interface ProgressView {
-  mode: string;
-  state: string;
-  percent?: number | null;
-  label?: string | null;
-  stepsTotal?: number | null;
-  stepsDone?: number | null;
-  step?: string | null;
-  startedAt: number;
-  updatedAt: number;
-  stale?: boolean | null;
-}
-
-export interface QueuedTurnView {
-  id: string;
-  text: string;
-  at: number;
-}
-
-export interface WaitingView {
-  reason: string;
-  since: number;
-  untilAt?: number | null;
-  expiresAt?: number | null;
-}
-
-/** SessionRecord as the `session` / `sessions` frames carry it. */
-export interface SessionRecord {
-  id: string;
-  provider: string;
-  workingDir: string;
-  spawnedAt: number;
-  lastHeartbeat: number;
-  state: SessionState;
-  providerSessionId?: string | null;
-  runCount?: number;
-  resumeCount?: number;
-  lastExitCode?: number | null;
-  killOutcome?: Outcome | null;
-  lastError?: string | null;
-  worktreePath?: string | null;
-  worktreeBranch?: string | null;
-  model?: string | null;
-  effort?: string | null;
-  agentId?: string | null;
-  role?: string | null;
-  ticketId?: string | null;
-  unattended?: boolean;
-  projectId?: string | null;
-  dormant?: boolean;
-  turnActive?: boolean | null;
-  global?: boolean;
+/** SessionRecord as the `session` / `sessions` frames carry it: the generated type, plus the computed keys its serializer appends. */
+export type SessionRecord = Loose<
+  Omit<Num<WireSessionRecord>, "progress" | "waiting">,
+  "id" | "provider" | "workingDir" | "spawnedAt" | "lastHeartbeat" | "state"
+> & {
   progress?: ProgressView | null;
   waiting?: WaitingView | null;
-  watchLabel?: string | null;
-  queued?: QueuedTurnView[];
-  runner?: string;
-}
+  turnActive?: boolean | null;
+  live?: boolean;
+};
 
 export interface FileWrite {
   path: string;

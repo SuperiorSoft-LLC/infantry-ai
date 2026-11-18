@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // Settings dialog body: a side nav of sections and bordered setting rows.
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { isTauri } from "@/daemon/daemon";
 import { cn } from "@infantry/ui";
 import { useUi } from "@/state/ui-state";
 import { Switch } from "@infantry/ui";
@@ -19,6 +20,31 @@ function SettingRow({ id, title, hint, children }: { id: string; title: string; 
       </div>
       {children}
     </div>
+  );
+}
+
+/** Settings > Daemon: where agents run (`ui.json` `runner`, read at start). Tauri only. */
+function RunnerRow() {
+  const [runner, setRunner] = useState<{ saved: string; current: string } | null>(null);
+  useEffect(() => {
+    if (!isTauri) return;
+    void import("@tauri-apps/api/core").then(({ invoke }) =>
+      invoke<[string, string]>("ui_runner_get").then(([saved, current]) => setRunner({ saved, current }), () => {}),
+    );
+  }, []);
+  if (!runner) return null;
+  const embedded = runner.saved === "embedded";
+  const change = (on: boolean) => {
+    const next = on ? "embedded" : "daemon";
+    void import("@tauri-apps/api/core").then(({ invoke }) =>
+      invoke("ui_runner_set", { runner: next }).then(() => setRunner({ ...runner, saved: next }), () => {}),
+    );
+  };
+  const hint = `Run agents inside this window instead of the infantry daemon. Now: ${runner.current}${runner.saved !== runner.current && runner.current !== "connect" ? " (restart to apply)" : ""}`;
+  return (
+    <SettingRow id="set-embedded" title="Embedded runner" hint={hint}>
+      <Switch id="set-embedded" checked={embedded} onCheckedChange={change} />
+    </SettingRow>
   );
 }
 
@@ -56,6 +82,7 @@ export function SettingsBody() {
         )}
         {section === "Daemon" && (
           <>
+            <RunnerRow />
             <PickerField id="set-daemon" label="Daemon" options={["This computer", "vps-runner-01"]} inheritLabel="This computer" />
             <SettingRow id="set-auto" title="Start daemon with the app" hint="Runs in the background">
               <Switch id="set-auto" defaultChecked />

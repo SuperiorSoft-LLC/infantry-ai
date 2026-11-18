@@ -11,7 +11,7 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import { DaemonConnection, type LinkState, type TransportFactory } from "./connection";
 import { applyFrames, type TranscriptItem } from "./transcript";
 import {
-  CLIENT_SEND_PREFIX, Frame, STREAM_FRAMES, isRunning, json, parseReady,
+  CLIENT_SEND_PREFIX, Frame, RUN_IN_FLIGHT, STREAM_FRAMES, isRunning, json, parseReady,
   type AgentProfile, type Envelope, type ProjectSummary, type ReadyInfo, type ReplayGap, type RunUsage, type SessionRecord,
   type StatusPayload, type TicketSummary,
 } from "./wire";
@@ -247,6 +247,20 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
           case Frame.PROJECTS: {
             const list = json<ProjectSummary[]>(env.data) ?? [];
             projects = list.map((p) => ({ id: p.id, name: p.name, directory: p.directory }));
+            break;
+          }
+          case Frame.ERROR: {
+            // 1.96.0: a send that met a turn already running (another client's, or a queued message) is refused typed;
+            // it goes to the daemon's queue instead (CHAT-QUEUE-1), as the Kotlin client does.
+            const p = env.requestId ? pending[env.requestId] : undefined;
+            if (p && env.data.startsWith(`${RUN_IN_FLIGHT} `)) {
+              const { [p.clientId]: _, ...rest } = pending;
+              pending = rest;
+              const t = io.ackTimers.get(p.clientId);
+              if (t) clearTimeout(t);
+              io.ackTimers.delete(p.clientId);
+              out({ type: Frame.QUEUE_ADD, data: p.text, sessionId: p.sessionId });
+            }
             break;
           }
           case Frame.PROMPT_ACK: {

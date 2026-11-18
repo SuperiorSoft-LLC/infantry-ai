@@ -2,8 +2,11 @@
 // Copyright (c) SuperiorSoft LLC
 // RUST-PERF-1: end-to-end check of agents in the Tauri app, driven in-page over the WebView2 DevTools protocol (DOM
 // events inside the page; no desktop input). ui-smoke.ps1 starts the app with a debugging port and a throwaway folder.
-//   node ui-smoke.mjs <devtools port> <throwaway project folder>
-const [port, folder] = process.argv.slice(2);
+//   node ui-smoke.mjs <devtools port> <throwaway project folder> [embedded|daemon]
+// RUST-DAEMON-2: `daemon` = the app runs on its infantry-daemon sidecar (the daemon's folder is the project folder).
+// The resume steps are embedded-only (the daemon serves no resume list yet); both modes run two agents at once.
+const [port, folder, mode = "embedded"] = process.argv.slice(2);
+const embedded = mode === "embedded";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let targets = [];
@@ -47,6 +50,11 @@ await js(`
       ta.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     },
     main() { return document.querySelector("main")?.innerText ?? ""; },
+    card(name) {
+      const el = [...document.querySelectorAll('aside[aria-label="Agents"] [role], aside[aria-label="Agents"] button')].find((e) => e.innerText?.includes(name));
+      if (!el) throw new Error("no card " + name);
+      el.click();
+    },
     count(s) { return this.main().split(s).length - 1; },
   };
   true;
@@ -62,7 +70,8 @@ let all = true;
 const check = (name, ok, detail = "") => { all &&= ok; console.log(`${ok ? "PASS" : "FAIL"} ${name} ${detail}`); };
 
 // 1. New agent dialog -> a session in the throwaway folder, card in the sidebar.
-await js(`window.__TAURI_INTERNALS__.invoke("local_set_project", { folder: ${JSON.stringify(folder)} }).then(() => true)`);
+if (embedded) await js(`window.__TAURI_INTERNALS__.invoke("local_set_project", { folder: ${JSON.stringify(folder)} }).then(() => true)`);
+else check("daemon mode", await until(`window.__TAURI_INTERNALS__.invoke("endpoint").then((e) => e.mode === "daemon" && !e.error)`, 15000, "daemon endpoint"));
 await js(`__t.click("New agent"); true`);
 await sleep(300);
 await js(`__t.set(document.getElementById("agent-name"), "Smoke"); __t.click("Create agent"); true`);
@@ -80,13 +89,38 @@ await js(`__t.prompt("Write 800 words about mountains, in plain prose. Do not us
 await until(`!!__t.btn("Stop") && !__t.btn("Stop").disabled`, 20000, "busy");
 await sleep(5000);
 await js(`__t.click("Stop"); true`);
-check("interrupt", await until(`__t.count("finished: interrupted") >= 1`, 60000, "interrupted"));
+// The embedded runner ends an interrupted turn with `finished: interrupted`; the daemon (as Kotlin's) with a note.
+check("interrupt", await until(`__t.count("finished: interrupted") >= 1 || __t.count("turn interrupted by the owner") >= 1`, 60000, "interrupted"));
 
 // 4. A second agent runs alongside.
 await js(`__t.click("New agent"); true`);
 await sleep(300);
 await js(`__t.set(document.getElementById("agent-name"), "Second"); __t.click("Create agent"); true`);
 check("two agents in the sidebar", await until(`(() => { const t = document.querySelector('aside[aria-label="Agents"]').innerText; return t.includes("Smoke") && t.includes("Second"); })()`, 15000, "two cards"));
+
+// 4b. Both agents stream at once: Second starts a reply, and Smoke gets its own while Second's still runs.
+await js(`__t.card("Second"); true`);
+await sleep(800);
+await js(`__t.prompt("Write about 200 words about lakes, in plain prose. Do not use any tools."); true`);
+await until(`!!__t.btn("Stop") && !__t.btn("Stop").disabled`, 30000, "second busy");
+await js(`__t.card("Smoke"); true`);
+await sleep(800);
+const smokeBefore = await js(`__t.count("finished: succeeded")`);
+await js(`__t.prompt("Write about 200 words about forests, in plain prose. Do not use any tools."); true`);
+await sleep(1500);
+await js(`__t.card("Second"); true`);
+await sleep(500);
+check("second still running when the first starts", await js(`__t.count("finished: succeeded") === 0`));
+const secondDone = await until(`__t.count("finished: succeeded") >= 1`, 180000, "second finish");
+await js(`__t.card("Smoke"); true`);
+await sleep(500);
+const smokeDone = await until(`__t.count("finished: succeeded") > ${smokeBefore}`, 180000, "first finish");
+check("two agents stream at once", secondDone && smokeDone);
+if (!embedded) {
+  console.log(all ? "UI SMOKE OK" : "UI SMOKE FAILED");
+  ws.close();
+  process.exit(all ? 0 : 1);
+}
 
 // 5. Resume: exit the first session (/exit), then resume it from the Resume dialog and ask what it said first.
 const list0 = await js(`window.__TAURI_INTERNALS__.invoke("local_resumable", { folder: ${JSON.stringify(folder)} })`);

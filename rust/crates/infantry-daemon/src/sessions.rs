@@ -26,6 +26,8 @@ pub const KILL_SETTLE_MS: u64 = 1_500;
 pub const QUEUE_MAX: usize = 20;
 /// `limits.chat.sentIdsKept` default (CHAT-SENDING-1): client message ids remembered daemon-wide.
 pub const SENT_IDS_KEPT: usize = 500;
+/// Frames kept per session for `replay_request` (a reconnecting or late client rebuilds the transcript from them).
+pub const REPLAY_KEPT: usize = 5_000;
 
 pub fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
@@ -40,12 +42,14 @@ pub struct Config {
     pub queue_max: usize,
     /// `limits.chat.sentIdsKept`.
     pub sent_ids_kept: usize,
+    /// Frames kept per session for `replay_request`.
+    pub replay_kept: usize,
 }
 
 impl Config {
     /// The defaults Kotlin ships with.
     pub fn new(state_dir: PathBuf, default_cwd: PathBuf) -> Config {
-        Config { state_dir, default_cwd, kill_settle_ms: KILL_SETTLE_MS, queue_max: QUEUE_MAX, sent_ids_kept: SENT_IDS_KEPT }
+        Config { state_dir, default_cwd, kill_settle_ms: KILL_SETTLE_MS, queue_max: QUEUE_MAX, sent_ids_kept: SENT_IDS_KEPT, replay_kept: REPLAY_KEPT }
     }
 }
 
@@ -56,12 +60,19 @@ pub struct NewOpts {
     pub cwd: Option<String>,
     pub model: Option<String>,
     pub effort: Option<String>,
+    pub role: Option<String>,
+    /// A display name; without a role it becomes the role (lowercased), as the app's embedded runner does.
+    pub name: Option<String>,
+    /// A first turn to send at once (the app's `spawnWith({prompt})`); without it the session waits at rest.
+    pub prompt: Option<String>,
 }
 
-/// Per connection: a `new` waiting for its first prompt.
+/// Per connection: a bare `new` waiting for its first prompt, or the session a JSON `new` bound (BIND-AT-CREATION).
 #[derive(Default)]
 pub struct Conn {
     pub pending_new: Option<NewOpts>,
+    /// The session the last JSON `new` created: a session-less `prompt` on this connection goes into it.
+    pub active: Option<String>,
 }
 
 struct Entry {
@@ -73,6 +84,14 @@ struct Entry {
     /// Bumped by each kill and turn: a delayed settle that sees another value is stale.
     gen: u64,
     removed: bool,
+    /// (sequence, encoded frame) of the last [Config::replay_kept] frames.
+    history: std::collections::VecDeque<(i64, String)>,
+}
+
+impl Entry {
+    fn new(rec: SessionRecord, turn_active: bool, turn_started: i64) -> Entry {
+        Entry { rec, seq: 0, hs: None, turn_active, turn_started, gen: 0, removed: false, history: Default::default() }
+    }
 }
 
 pub struct Daemon {
@@ -140,7 +159,7 @@ impl Daemon {
             rec.is_process_alive = false;
             rec.child_pid = None;
             cache.push(rec.clone());
-            list.push((rec.id.clone(), Arc::new(Mutex::new(Entry { rec, seq: 0, hs: None, turn_active: false, turn_started: 0, gen: 0, removed: false }))));
+            list.push((rec.id.clone(), Arc::new(Mutex::new(Entry::new(rec, false, 0)))));
         }
         Ok(Arc::new(Daemon {
             harness,
@@ -195,7 +214,32 @@ impl Daemon {
 
     fn emit(&self, e: &mut Entry, ty: &str, data: String) {
         e.seq += 1;
-        let _ = self.out.send(encode(ty, data, Some(&e.rec.id), Some(e.seq)));
+        let f = encode(ty, data, Some(&e.rec.id), Some(e.seq));
+        e.history.push_back((e.seq, f.clone()));
+        while e.history.len() > self.cfg.replay_kept.max(1) {
+            e.history.pop_front();
+        }
+        let _ = self.out.send(f);
+    }
+
+    /// `replay_request` (`{lastSequence}`): the session's kept frames after that sequence, a `replay_gap` first when some
+    /// were dropped. Answers this connection only.
+    fn replay(&self, sid: &str, data: &str) -> Result<Vec<String>, String> {
+        let entry = self.find(sid).ok_or_else(|| format!("replay_request refused: unknown session {sid}"))?;
+        let last = serde_json::from_str::<serde_json::Value>(data).ok().and_then(|v| v["lastSequence"].as_i64()).unwrap_or(0);
+        let e = entry.lock().unwrap();
+        let mut out = Vec::new();
+        if let (Some(first), Some(latest)) = (e.history.front().map(|h| h.0), e.history.back().map(|h| h.0)) {
+            if first > last + 1 {
+                let gap = json!({
+                    "requestedAfterSequence": last, "oldestAvailableSequence": first,
+                    "latestAvailableSequence": latest, "evictedCount": first - last - 1,
+                });
+                out.push(encode(wire::REPLAY_GAP, gap.to_string(), Some(sid), None));
+            }
+        }
+        out.extend(e.history.iter().filter(|(s, _)| *s > last).map(|(_, f)| f.clone()));
+        Ok(out)
     }
 
     fn broadcast(&self, ty: &str, data: String) {
@@ -239,12 +283,32 @@ impl Daemon {
         let r: Result<(), Refusal> = match env.r#type.as_str() {
             wire::SESSIONS => return vec![encode(wire::SESSIONS, self.sessions_json(), None, None)],
             wire::NEW => {
-                conn.pending_new = Some(serde_json::from_str::<NewOpts>(&env.data).unwrap_or_default());
-                Ok(())
+                conn.active = None;
+                conn.pending_new = None;
+                if env.data.trim_start().starts_with('{') {
+                    // BIND-AT-CREATION (Kotlin): an options object creates the session now, at rest and addressable.
+                    match serde_json::from_str::<NewOpts>(&env.data) {
+                        Ok(o) => self.bind_new(o, conn).map_err(Refusal::from),
+                        Err(e) => Err(format!("new refused: bad options ({e})").into()),
+                    }
+                } else {
+                    Ok(())
+                }
             }
-            wire::PROMPT => match &sid {
-                None => self.prompt_new(conn.pending_new.take().unwrap_or_default(), env.data).map_err(Refusal::from),
-                Some(s) => self.prompt_into(s, env.data),
+            wire::REPLAY_REQUEST => {
+                return match self.replay(sid.as_deref().unwrap_or(""), &env.data) {
+                    Ok(frames) => frames,
+                    Err(msg) => vec![encode_req(wire::ERROR, msg, sid.as_deref(), None, req.as_deref())],
+                };
+            }
+            // No board here yet: the lists the app asks for on connect are empty.
+            wire::AGENT_LIST => return vec![encode(wire::AGENTS, "[]".into(), None, None)],
+            wire::PROJECT_LIST => return vec![encode(wire::PROJECTS, "[]".into(), None, None)],
+            wire::TICKET_LIST => return vec![encode(wire::TICKETS, "[]".into(), None, None)],
+            wire::PROMPT => match (&sid, conn.active.clone().filter(|a| self.find(a).is_some())) {
+                (None, Some(active)) => self.prompt_into(&active, env.data),
+                (None, None) => self.prompt_new(conn.pending_new.take().unwrap_or_default(), env.data).map_err(Refusal::from),
+                (Some(s), _) => self.prompt_into(s, env.data),
             },
             wire::QUEUE_ADD => self.queue_add(sid.as_deref().unwrap_or(""), env.data).map_err(Refusal::from),
             wire::QUEUE_REMOVE => self.queue_remove(sid.as_deref().unwrap_or(""), env.data.trim()).map_err(Refusal::from),
@@ -296,21 +360,51 @@ impl Daemon {
         self.sent.lock().unwrap().retain(|k| k != key);
     }
 
-    fn prompt_new(self: &Arc<Self>, opts: NewOpts, text: String) -> Result<(), String> {
+    /// A new session's record (not yet listed).
+    fn new_record(&self, opts: &NewOpts, state: &str, verb: &str) -> Result<SessionRecord, String> {
         let cwd = opts.cwd.as_deref().filter(|c| !c.trim().is_empty()).map(PathBuf::from).unwrap_or_else(|| self.cfg.default_cwd.clone());
         if !cwd.is_dir() {
-            return Err(format!("prompt refused: {} is not a folder", cwd.display()));
+            return Err(format!("{verb} refused: {} is not a folder", cwd.display()));
         }
         let now = now_ms();
-        let id = uuid::Uuid::new_v4().to_string();
         let mut rec: SessionRecord = serde_json::from_value(json!({
-            "id": id, "provider": self.harness.name(), "workingDir": cwd.to_string_lossy(),
-            "spawnedAt": now, "lastHeartbeat": now, "state": "BUSY",
+            "id": uuid::Uuid::new_v4().to_string(), "provider": self.harness.name(), "workingDir": cwd.to_string_lossy(),
+            "spawnedAt": now, "lastHeartbeat": now, "state": state,
         }))
         .map_err(|e| e.to_string())?;
-        rec.model = opts.model.filter(|m| !m.trim().is_empty());
-        rec.effort = opts.effort.filter(|m| !m.trim().is_empty());
-        let entry = Arc::new(Mutex::new(Entry { rec, seq: 0, hs: None, turn_active: true, turn_started: now, gen: 0, removed: false }));
+        let some = |v: &Option<String>| v.clone().filter(|m| !m.trim().is_empty());
+        rec.model = some(&opts.model);
+        rec.effort = some(&opts.effort);
+        rec.role = some(&opts.role).or_else(|| some(&opts.name).map(|n| n.trim().to_lowercase()));
+        Ok(rec)
+    }
+
+    /// A JSON `new`: the session exists now, at rest with no run (`neverRun`); its first prompt is its first run.
+    fn bind_new(self: &Arc<Self>, opts: NewOpts, conn: &mut Conn) -> Result<(), String> {
+        let mut rec = self.new_record(&opts, "IDLE", "new")?;
+        let id = rec.id.clone();
+        rec.last_action = Some("state idle".into());
+        let entry = Arc::new(Mutex::new(Entry::new(rec, false, 0)));
+        self.list.lock().unwrap().push((id.clone(), entry.clone()));
+        {
+            let mut e = entry.lock().unwrap();
+            self.push(&mut e);
+            self.emit(&mut e, wire::STATUS, wire::status("IDLE"));
+        }
+        conn.active = Some(id.clone());
+        match opts.prompt.filter(|p| !p.trim().is_empty()) {
+            Some(p) => match self.prompt_into(&id, p) {
+                Ok(()) => Ok(()),
+                Err(Refusal::Plain(m) | Refusal::InFlight(m)) => Err(m),
+            },
+            None => Ok(()),
+        }
+    }
+
+    fn prompt_new(self: &Arc<Self>, opts: NewOpts, text: String) -> Result<(), String> {
+        let rec = self.new_record(&opts, "BUSY", "prompt")?;
+        let (id, now) = (rec.id.clone(), rec.spawned_at);
+        let entry = Arc::new(Mutex::new(Entry::new(rec, true, now)));
         self.list.lock().unwrap().push((id.clone(), entry.clone()));
         let mut e = entry.lock().unwrap();
         Self::set_state(&mut e, SessionState::Busy);

@@ -12,7 +12,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 fn start() -> u16 {
-    let dir = std::env::temp_dir().join(format!("infantry-daemon-queue-{}", std::process::id()));
+    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = N.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let dir = std::env::temp_dir().join(format!("infantry-daemon-queue-{}-{n}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -67,4 +69,36 @@ fn mid_turn_prompts_are_refused_typed_queued_and_acknowledged_once() {
     let dup = c.wait_for(t, |e| e.r#type == "prompt_ack" || e.r#type == "turn").unwrap();
     assert_eq!((dup.r#type.as_str(), dup.data.as_str()), ("prompt_ack", "duplicate"));
     c.close();
+}
+
+#[test]
+fn a_json_new_binds_a_session_at_rest_and_replay_rebuilds_its_stream() {
+    let port = start();
+    let mut c = Client::connect(&format!("ws://127.0.0.1:{port}"), None).unwrap();
+    let t = Duration::from_secs(20);
+    c.wait_for(t, |e| e.r#type == "ready").unwrap();
+    c.send_frame("new", r#"{"name":"Smoke"}"#, None).unwrap();
+    let s = c.wait_for(t, |e| e.r#type == "session").unwrap();
+    let sid = s.session_id.clone().unwrap();
+    assert!(s.data.contains("\"state\":\"IDLE\"") && s.data.contains("\"role\":\"smoke\""), "{}", s.data);
+    // A session-less prompt on this connection goes into the bound session.
+    c.send_frame("prompt", "first", None).unwrap();
+    let turn = c.wait_for(t, |e| e.r#type == "turn").unwrap();
+    assert_eq!(turn.session_id.as_deref(), Some(sid.as_str()));
+    let fin = c.wait_for(t, |e| e.r#type == "finished").unwrap();
+    // A second client asks for the history and gets every frame up to the finish, in order.
+    let mut c2 = Client::connect(&format!("ws://127.0.0.1:{port}"), None).unwrap();
+    c2.wait_for(t, |e| e.r#type == "ready").unwrap();
+    c2.send(&frame("replay_request", r#"{"lastSequence":0}"#, &sid, None)).unwrap();
+    let mut seqs = Vec::new();
+    loop {
+        let e = c2.wait_for(t, |e| e.session_id.as_deref() == Some(sid.as_str())).unwrap();
+        seqs.push(e.sequence.unwrap());
+        if e.sequence == fin.sequence {
+            break;
+        }
+    }
+    assert_eq!(seqs, (1..=fin.sequence.unwrap()).collect::<Vec<_>>());
+    c.close();
+    c2.close();
 }

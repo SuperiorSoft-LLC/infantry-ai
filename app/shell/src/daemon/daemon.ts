@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // The one daemon store of this window, and where it connects.
-//   Tauri:   the `endpoint` command (INFANTRY_URL / INFANTRY_PORT / token file, like the CLI), socket from Rust.
+//   Tauri:   the `endpoint` command: `daemon` mode (default) = the infantry-daemon sidecar the app started or found;
+//            `connect` = INFANTRY_URL / INFANTRY_PORT (+ token file, like the CLI); `embedded` = the in-app runner
+//            (INFANTRY_UI_LOCAL=1 or the Settings > Daemon switch). The socket is opened from Rust.
 //   Browser: `?daemon=ws://…`, else VITE_INFANTRY_URL, else same-origin `/ws` (the daemon, or the dev proxy).
 //   Stress:  INFANTRY_UI_STRESS=1 (Tauri) or `?stress=1` (browser): fake sessions, no daemon.
 import { useStore } from "zustand";
@@ -17,6 +19,10 @@ interface Endpoint {
   local?: boolean;
   /** The perf harness's scenario (INFANTRY_PERF_SCENARIO), run by perf-scenario.ts. */
   perf?: string | null;
+  /** Tauri: `embedded` | `daemon` | `connect`. */
+  mode?: string;
+  /** Daemon mode: why the sidecar did not start. */
+  error?: string | null;
 }
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -27,6 +33,10 @@ export let stressMode = false;
 export let localMode = false;
 /** The perf harness's scenario, when one was given. */
 export let perfScenario: string | null = null;
+/** `embedded` | `daemon` | `connect` (Tauri), `browser` otherwise. */
+export let runnerMode = "browser";
+/** Daemon mode: why the sidecar did not start (null = it is up). */
+export let daemonError: string | null = null;
 
 async function resolveEndpoint(): Promise<Endpoint> {
   const q = new URLSearchParams(location.search);
@@ -53,8 +63,11 @@ export async function initDaemon(): Promise<DaemonStore> {
   stressMode = e.stress;
   localMode = isTauri && e.local === true && !e.stress;
   perfScenario = e.perf ?? null;
+  runnerMode = e.mode ?? (isTauri ? (localMode ? "embedded" : "connect") : "browser");
+  daemonError = e.error ?? null;
+  if (daemonError) console.error(`[infantry] daemon mode: ${daemonError}`);
   const transport = localMode ? localTransport() : isTauri ? tauriTransport(e.url, e.token) : browserTransport(e.url, e.token);
-  store = createDaemonStore({ url: localMode ? "embedded runner" : e.url, transport, offline: e.stress });
+  store = createDaemonStore({ url: localMode ? "embedded runner" : runnerMode === "daemon" ? `${e.url} (sidecar)` : e.url, transport, offline: e.stress });
   if (e.stress) {
     const opts = Object.fromEntries(Object.entries(stressOptions()).filter(([, v]) => v !== undefined));
     startStress(store, opts);

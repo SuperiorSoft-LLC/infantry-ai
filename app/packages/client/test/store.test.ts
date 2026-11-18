@@ -105,6 +105,19 @@ describe("daemon store", () => {
     expect(s.getState().pending[id]).toBeUndefined();
   });
 
+  it("queues a send the daemon refused as run_in_flight", async () => {
+    const { d, s } = connected();
+    d.push({ type: "ready", data: "instance=i1 since=0" });
+    d.push({ type: "sessions", data: JSON.stringify([rec("s1")]) });
+    await tick();
+    s.getState().send("s1", "racing");
+    const id = d.sent.find((e) => e.type === "prompt")!.requestId!;
+    d.push({ type: "error", data: "run_in_flight s1: session s1 already has a run in flight", requestId: id });
+    await tick();
+    expect(s.getState().pending[id]).toBeUndefined();
+    expect(d.sent.find((e) => e.type === "queue_add")).toMatchObject({ sessionId: "s1", data: "racing" });
+  });
+
   it("marks a send with no answer as failed after sendAckSeconds", async () => {
     const { d, s } = connected();
     d.push({ type: "ready", data: "instance=i1 since=0" });

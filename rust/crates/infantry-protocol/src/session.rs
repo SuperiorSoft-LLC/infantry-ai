@@ -177,7 +177,9 @@ macro_rules! session_record {
         /// in order (NEVER-default fields omitted), then the computed `live` and `turnActive`;
         /// an IDLE session with background work reads BUSY on the wire.
         #[derive(Debug, Clone, PartialEq, Deserialize, TS)]
-        #[serde(rename_all = "camelCase", from = "SessionRecordRaw")]
+        // Two attributes: ts-rs cannot parse `from`, and on one line it then drops `rename_all` too (snake_case keys in TS).
+        #[serde(rename_all = "camelCase")]
+        #[serde(from = "SessionRecordRaw")]
         #[ts(export)]
         pub struct SessionRecord { $($(#[$fm])* pub $f: $t,)* }
 
