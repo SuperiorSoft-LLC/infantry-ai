@@ -39,12 +39,19 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
             </div>
           )}
 
-          {!compact && !striped && <div className="truncate text-xs text-muted-foreground">{agent.statusLine}</div>}
+          {agent.heldBy ? (
+            <div className="truncate text-xs font-medium text-warn" title="Running in the other app: resume it there, or stop it there first">
+              {agent.statusLine}
+            </div>
+          ) : (
+            !compact && !striped && <div className="truncate text-xs text-muted-foreground">{agent.statusLine}</div>
+          )}
           {agent.progress !== undefined && !compact && <ProgressLine value={agent.progress} className="my-1.5" />}
 
           <div className="flex min-w-0 items-center gap-2 text-xs">
             <span className={cn("shrink-0 font-medium", agent.roleId === "pm" ? "text-warn" : "text-info")}>{agent.roleId}</span>
             <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{agent.sessionId}</span>
+            {agent.projectName && <span className="shrink-0 truncate text-foreground/80">{agent.projectName}</span>}
             <span className="truncate text-muted-foreground">{agent.lastLine}</span>
           </div>
 

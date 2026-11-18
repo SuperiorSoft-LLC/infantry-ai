@@ -1047,14 +1047,19 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "base64",
+ "futures-util",
  "infantry-conformance",
  "infantry-protocol",
  "infantry-runner",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",
  "tokio",
+ "tokio-tungstenite",
+ "tungstenite 0.24.0",
  "uuid",
+ "windows-sys",
 ]
 
 [[package]]
@@ -1081,6 +1086,18 @@ dependencies = [
  "infantry-runner-local",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "infantry-migrate"
+version = "0.1.0"
+dependencies = [
+ "infantry-protocol",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "windows-sys",
 ]
 
 [[package]]
@@ -1144,6 +1161,23 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "tokio",
+]
+
+[[package]]
+name = "infantry-runner-link"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "getrandom 0.2.17",
+ "infantry-protocol",
+ "infantry-runner-api",
+ "infantry-runner-local",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tungstenite 0.24.0",
+ "uuid",
 ]
 
 [[package]]
