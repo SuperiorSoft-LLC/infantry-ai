@@ -302,7 +302,14 @@ internal object Cli {
         // PLUGIN-MANAGER-1: `plugin ...` works on this host's plugins root; no daemon, no global flags.
         // CLI-LOGIN-1: `login` / `logout` / `whoami` manage the saved default connection; no daemon needed.
         if (args.firstOrNull() in setOf("login", "logout", "whoami")) return LoginCli.run(args[0], args.drop(1), out, err, getenv, input)
-        if (args.firstOrNull() == "plugin") return PluginCli.run(args.drop(1), out, err, getenv)
+        // PLUGIN-CLI-HOT-1: a change goes to the daemon on this machine when one answers (owner token), so it hot-applies.
+        if (args.firstOrNull() == "plugin") return PluginCli.run(args.drop(1), out, err, getenv, daemon = {
+            resolveTarget(parseArgs(emptyArray(), DiscardAppendable) ?: error("no connection target"), getenv).let { t ->
+                Target(t.url, t.token, t.tokenSource, t.answerTimeoutMs, com.superiorsoftllc.infantry.daemon.OwnerCredential.stored(
+                    com.superiorsoftllc.infantry.session.stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) },
+                ), t.sessionId)
+            }
+        })
         if (args.firstOrNull() == "run-watched") return run(arrayOf("bg", "run", "--notify") + args.drop(1), out, err, getenv, input, cwd, rawInput)
         if (args.firstOrNull() == "unwatched") return run(arrayOf("bg") + args, out, err, getenv, input, cwd, rawInput)
         // STALL-4: `watch-file <path> [--until-pid N] [--idle-seconds S]` follows a file another process writes (detached).
