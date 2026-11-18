@@ -49,12 +49,18 @@ object PluginFaults {
     /** CARD-LIVE-1: where a recorded fault is also written loudly (the host sets its plugin log line writer); null in tests. */
     var sink: ((String) -> Unit)? = null
 
+    /** PLUGIN-ERR-NOTIFY-1: told once per module and reload generation (never per redraw) with the module and a short reason; the host posts an error notice. */
+    var onFault: ((module: String, reason: String, trace: String) -> Unit)? = null
+
     fun record(module: String, error: Throwable, generation: Int) {
         val fault = PluginFault(module, error.toString().take(400), generation, error.stackTraceToString().take(4000))
         val before = byModule[module]
         byModule[module] = fault
         // A fault is logged once per module, generation and message (a draw records it again on every recomposition).
-        if (before?.generation != generation || before.message != fault.message) sink?.invoke("[plugins] $module: its UI faulted while drawing and fell back (${fault.message})")
+        if (before?.generation != generation || before.message != fault.message) {
+            sink?.invoke("[plugins] $module: its UI faulted while drawing and fell back (${fault.message})")
+            if (before?.generation != generation) runCatching { onFault?.invoke(module, fault.message, fault.trace) }
+        }
     }
 
     fun clear(module: String) { byModule.remove(module) }
