@@ -201,12 +201,17 @@ pub fn state_dir(getenv: Getenv) -> PathBuf {
 }
 
 /// The environment as the target resolution sees it: `INFANTRY_STATE_DIR` defaults to the Rust state dir, and when nothing
-/// names a daemon (`INFANTRY_URL`, `INFANTRY_PORT`, a `daemon.port` there) `INFANTRY_PORT` defaults to 18990.
+/// names a daemon (`INFANTRY_URL`, `INFANTRY_PORT`, an explicit `INFANTRY_STATE_DIR`, a `daemon.port` in the default one)
+/// `INFANTRY_PORT` defaults to 18990.
 pub fn rust_env(getenv: Getenv, name: &str) -> Option<String> {
     let given = getenv(name).filter(|v| !v.trim().is_empty());
     match name {
         "INFANTRY_STATE_DIR" | "AGENTHQ_STATE_DIR" => given.or_else(|| Some(rust_default_state_dir(getenv).to_string_lossy().to_string())),
         "INFANTRY_PORT" | "AGENTHQ_PORT" => given.or_else(|| {
+            // A state dir named explicitly never falls back to the default daemon (Kotlin's `envTargetUrl` refuses).
+            if getenv("INFANTRY_STATE_DIR").is_some_and(|v| !v.trim().is_empty()) {
+                return None;
+            }
             let dir = state_dir(getenv);
             let recorded = dir.join("daemon.port").is_file() || dir.join("network.properties").is_file();
             let url = getenv("INFANTRY_URL").filter(|v| !v.trim().is_empty());
