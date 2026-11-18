@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"01a1eebb-fd93-7db3-9bf3-0f2223341fa7"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Codex is ignoring 2 unrecognized configuration settings. Check for typos or deprecated settings.\n  user (C:\\Users\\user\\.codex\\config.toml): `windows.model` is ignored.\n  user (C:\\Users\\user\\.codex\\config.toml): `windows.model_provider` is ignored."}}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"Codex is ignoring 2 unrecognized configuration settings. Check for typos or deprecated settings.\n  user (C:\\Users\\user\\.codex\\config.toml): `windows.model` is ignored.\n  user (C:\\Users\\user\\.codex\\config.toml): `windows.model_provider` is ignored."}}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"ok"}}
+{"type":"turn.completed","usage":{"input_tokens":15671,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0}}

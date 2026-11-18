@@ -9,3 +9,7 @@ publish = false
 [dependencies]
 infantry-harness = { path = "../infantry-harness" }
 serde_json = { version = "1", features = ["preserve_order"] }
+
+[dev-dependencies]
+infantry-harness = { path = "../infantry-harness", features = ["pipe-runner"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }

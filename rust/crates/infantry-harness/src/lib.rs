@@ -22,13 +22,16 @@
 //! Nothing here knows orchestration (boards, tickets): an agent runs with no orchestrator.
 
 pub mod driver;
+#[cfg(feature = "pipe-runner")]
 pub mod pipe_runner;
-pub mod stub_runner;
 
 pub use driver::{DriverError, HarnessDriver};
-pub use stub_runner::{ProcEvent, Process, ProcessSpec, PtySize, Runner, StdinMode};
+/// The runner contract (RUST-RUN-1), re-exported so a harness crate needs only this one.
+pub use infantry_runner_api as runner;
+pub use infantry_runner_api::{ProcessSpec, Runner, Size};
 
 use std::path::{Path, PathBuf};
+
 
 /// What a session may do without asking. Each harness maps it onto its own flags.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -124,6 +127,18 @@ pub struct LaunchRequest {
     pub env: Vec<(String, String)>,
     /// Environment names or prefixes (ending in `*`) removed from the inherited environment.
     pub env_remove: Vec<String>,
+    /// The hook channel the driver opened on the runner ([`Capabilities::hook_channel`]); the harness wires its CLI's
+    /// hooks to it.
+    pub hooks: Option<HookTarget>,
+}
+
+/// Where a CLI's hooks report, on the runner's host.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HookTarget {
+    /// The loopback URL a blocking hook POSTs its JSON to (answered through [`Outbound::HookReply`]).
+    pub url: String,
+    /// The file a command hook appends one event word per line to (fed as [`TranslatorInput::HookEvent`]).
+    pub events_file: String,
 }
 
 impl LaunchRequest {
@@ -137,6 +152,7 @@ impl LaunchRequest {
             prompt: None,
             env: Vec::new(),
             env_remove: Vec::new(),
+            hooks: None,
         }
     }
 }
@@ -154,33 +170,33 @@ impl std::fmt::Display for LaunchError {
 /// What to run and how to read it.
 pub struct LaunchPlan {
     pub spec: ProcessSpec,
+    /// Bytes written to stdin right after spawn, then stdin is closed (a prompt for a CLI that reads to EOF).
+    /// None = stdin stays open for [`Outbound::Stdin`].
+    pub stdin: Option<Vec<u8>>,
     pub translator: Box<dyn Translator>,
-    /// Files the host tails for the translator ([`Capabilities::file_tail`]).
-    pub tail: Vec<PathBuf>,
-}
-
-/// One call on the hook channel (a CLI's hook script reporting to the host).
-#[derive(Debug, Clone, PartialEq)]
-pub struct HookCall {
-    pub event: String,
-    pub payload: serde_json::Value,
-}
-
-/// One new line in a tailed file.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TailLine {
-    pub path: PathBuf,
-    pub line: String,
+    /// Files on the runner's host the driver tails for the translator ([`Capabilities::file_tail`]).
+    pub tail: Vec<String>,
 }
 
 /// What a translator is fed.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TranslatorInput {
-    Proc(ProcEvent),
-    Hook(HookCall),
-    Tail(TailLine),
-    /// The current screen text of a PTY session, [now] ms after spawn.
-    Screen { text: String, now: u64 },
+    /// One stdout line of a piped process (line ending trimmed).
+    Stdout(String),
+    /// One stderr line of a piped process.
+    Stderr(String),
+    /// Raw terminal bytes of a PTY process.
+    Pty(Vec<u8>),
+    /// The process ended (always the last process input).
+    Exited { code: i32 },
+    /// A blocking hook call: answer it with [`Outbound::HookReply`] carrying the same [id].
+    Hook { id: u64, body: String },
+    /// One event word a command hook appended to [`HookTarget::events_file`].
+    HookEvent(String),
+    /// One new line in a tailed file.
+    Tail { path: String, line: String },
+    /// The PTY screen's visible rows, [now] ms after spawn.
+    Screen { rows: Vec<String>, now: u64 },
 }
 
 /// Traffic a translator asks the driver to deliver.
@@ -190,6 +206,8 @@ pub enum Outbound {
     Stdin(Vec<u8>),
     /// A request to the harness's own server ([`Capabilities::http`]).
     Http { method: String, path: String, body: String },
+    /// The response body (JSON) to the blocking hook call [id] ([`TranslatorInput::Hook`]).
+    HookReply { id: u64, body: String },
 }
 
 /// Token usage of one turn.
@@ -222,7 +240,7 @@ pub enum HarnessEvent {
     /// A tool call began; `input` is the tool's input as text (a command line, JSON).
     ToolStarted { id: String, name: String, input: String },
     ToolFinished { id: String, output: String, exit_code: Option<i32>, ok: bool },
-    /// The CLI wants permission (answered by the host through the translator's channel).
+    /// The CLI wants permission; the host answers with [`HarnessDriver::answer`] (same [id]).
     ApprovalRequested { id: String, tool: String, input: String },
     Usage(Usage),
     /// A non-fatal problem the CLI reported.
@@ -247,6 +265,8 @@ pub trait Translator: Send {
     fn interrupt(&mut self) -> bool {
         false
     }
+    /// The host's answer to [`HarnessEvent::ApprovalRequested`] [id] (typically queued as an [`Outbound::HookReply`]).
+    fn answer(&mut self, _id: &str, _allow: bool) {}
     /// Drains the traffic to deliver.
     fn take_outbound(&mut self) -> Vec<Outbound> {
         Vec::new()

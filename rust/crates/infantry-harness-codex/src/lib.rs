@@ -10,8 +10,8 @@
 //! sandbox is set with `-c sandbox_mode="..."`, which both forms accept.
 
 use infantry_harness::{
-    ApprovalMode, Capabilities, Harness, HarnessEvent, LaunchError, LaunchPlan, LaunchRequest, ModelInfo, Probe, ProcEvent,
-    ProcessSpec, StdinMode, Translator, TranslatorInput, TurnDelivery, TurnEnd, Usage,
+    ApprovalMode, Capabilities, Harness, HarnessEvent, LaunchError, LaunchPlan, LaunchRequest, ModelInfo, Probe, ProcessSpec,
+    Translator, TranslatorInput, TurnDelivery, TurnEnd, Usage,
 };
 use serde_json::Value;
 use std::path::PathBuf;
@@ -118,12 +118,15 @@ impl Harness for CodexHarness {
 
     fn launch(&self, req: &LaunchRequest) -> Result<LaunchPlan, LaunchError> {
         let prompt = req.prompt.as_deref().ok_or_else(|| LaunchError("codex runs a process per turn: a prompt is required".into()))?;
-        let mut spec = ProcessSpec::new(self.program.clone(), req.cwd.clone());
-        spec.args = self.args(req);
+        let mut spec = ProcessSpec::new(self.program.clone(), self.args(req)).cwd(req.cwd.to_string_lossy());
         spec.env = req.env.clone();
         spec.env_remove = req.env_remove.clone();
-        spec.stdin = StdinMode::Bytes(prompt.as_bytes().to_vec());
-        Ok(LaunchPlan { spec, translator: Box::new(CodexTranslator::default()), tail: Vec::new() })
+        Ok(LaunchPlan {
+            spec,
+            stdin: Some(prompt.as_bytes().to_vec()),
+            translator: Box::new(CodexTranslator::default()),
+            tail: Vec::new(),
+        })
     }
 }
 
@@ -278,20 +281,20 @@ fn usage(u: &Value) -> Usage {
 impl Translator for CodexTranslator {
     fn feed(&mut self, input: TranslatorInput) -> Vec<HarnessEvent> {
         match input {
-            TranslatorInput::Proc(ProcEvent::Stdout(line)) => {
+            TranslatorInput::Stdout(line) => {
                 if line.trim().is_empty() {
                     Vec::new()
                 } else {
                     self.line(&line)
                 }
             }
-            TranslatorInput::Proc(ProcEvent::Stderr(line)) => {
+            TranslatorInput::Stderr(line) => {
                 if !line.trim().is_empty() {
                     self.last_stderr = Some(line.clone());
                 }
                 vec![HarnessEvent::Stderr(line)]
             }
-            TranslatorInput::Proc(ProcEvent::Exited { code }) => self.exited(code),
+            TranslatorInput::Exited { code } => self.exited(Some(code)),
             _ => Vec::new(),
         }
     }
