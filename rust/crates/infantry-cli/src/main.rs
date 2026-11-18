@@ -4,6 +4,7 @@
 //! exit codes, and hands every other command to the JVM launcher unchanged. Swapping the binary a session's MCP entry runs
 //! is the only change (docs/rust-port/MCP-BRIDGE.md).
 
+mod cli;
 mod config;
 mod env;
 mod frames;
@@ -227,12 +228,11 @@ fn main() {
             err_line(&format!("error: {m}"));
             2
         }
-        Parsed::Delegate => launcher::run_inherited(&getenv, &args).unwrap_or_else(|e| {
-            err_line(&format!(
-                "error: this native infantry serves only `infantry mcp serve`, and no JVM launcher was found for the rest ({e}); set INFANTRY_BIN to the folder of infantry.cmd"
-            ));
-            2
-        }),
+        Parsed::Delegate => {
+            let mut io = cli::StdIo { ascii: env::get("INFANTRY_CLI_ASCII").is_some_and(|v| v.trim() == "1") };
+            let delegate = |a: &[String]| launcher::run_inherited(&getenv, a).ok();
+            cli::run(&args, &mut io, &getenv, Some(&delegate))
+        }
     };
     std::process::exit(code);
 }
