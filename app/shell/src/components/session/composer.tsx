@@ -4,7 +4,7 @@
 // turn; the queued turns are listed above with remove / send-now. No session: Enter starts a new one.
 // Stop interrupts the running turn; Swap agent and Restart session open the session dialogs. The others are still mock.
 import { useState } from "react";
-import { Paperclip, ArrowLeftRight, Play, CircleX, Trash2, RotateCw, Mic, Square, SendHorizontal, X, Zap } from "lucide-react";
+import { ArrowLeftRight, Play, CircleX, Trash2, RotateCw, Square, SendHorizontal, X, Zap } from "lucide-react";
 import { cn } from "@infantry/ui";
 import { Textarea } from "@infantry/ui";
 import { IconButton } from "@infantry/ui";
@@ -15,13 +15,11 @@ import { useUi } from "@/state/ui-state";
 import { openSessionDialog } from "./session-actions";
 
 const tools = [
-  { label: "Attach file", icon: Paperclip },
   { label: "Swap agent", icon: ArrowLeftRight },
   { label: "Resume", icon: Play },
   { label: "Cancel turn", icon: CircleX },
   { label: "Delete session", icon: Trash2, danger: true },
   { label: "Restart session", icon: RotateCw },
-  { label: "Voice input", icon: Mic },
 ];
 
 const NO_QUEUE: QueuedTurnView[] = [];
@@ -29,12 +27,12 @@ const NO_QUEUE: QueuedTurnView[] = [];
 export function Composer({ sessionId, busy }: { sessionId: string | null; busy: boolean }) {
   const [text, setText] = useState("");
   const ui = useUi();
-  // Wired toolbar actions; the rest are still mock.
   const actions: Record<string, (() => void) | undefined> = {
     Resume: () => ui.set("dialog", "resume"),
     "Cancel turn": sessionId && busy ? () => interrupt(sessionId) : undefined,
     "Swap agent": sessionId ? () => openSessionDialog("swap", sessionId) : undefined,
     "Restart session": sessionId ? () => openSessionDialog("restart", sessionId) : undefined,
+    "Delete session": sessionId ? () => openSessionDialog("delete", sessionId) : undefined,
   };
   const queued = useDaemon((s) => (sessionId ? s.sessions[sessionId]?.record.queued : undefined)) ?? NO_QUEUE;
   const online = useDaemon((s) => s.connection.state === "open");

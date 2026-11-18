@@ -9,11 +9,11 @@ import { cn } from "@infantry/ui";
 import { useUi } from "@/state/ui-state";
 import { Switch } from "@infantry/ui";
 import { Label } from "@infantry/ui";
-import { PickerField } from "./picker-field";
+import { appVersionLine } from "@/components/layout/app-version";
 import { SecretsPanel } from "@/components/settings/secrets-panel";
 import { DeclaredSettings, SettingsSearch, useDeclaredTabs } from "@/components/settings/declared-settings";
 
-const sections = ["Appearance", "Daemon", "Notifications", "Voice", "Secrets", "About"] as const;
+const sections = ["Appearance", "Daemon", "Secrets", "About"] as const;
 
 function SettingRow({ id, title, hint, children }: { id: string; title: string; hint: string; children: React.ReactNode }) {
   return (
@@ -83,10 +83,6 @@ export function SettingsBody() {
             <SettingRow id="set-dark" title="Dark theme" hint="Light theme when off">
               <Switch id="set-dark" checked={ui.theme === "dark"} onCheckedChange={ui.toggleTheme} />
             </SettingRow>
-            <SettingRow id="set-compact" title="Compact agent cards" hint="Fit more agents in the sidebar">
-              <Switch id="set-compact" />
-            </SettingRow>
-            <PickerField id="set-accent" label="Accent" options={["Red", "Amber", "Blue", "Green"]} inheritLabel="Default (Red)" />
           </>
         )}
         {!searching && section === "Daemon" && (
@@ -95,27 +91,13 @@ export function SettingsBody() {
             <PairingRows />
             <RunnerRow />
             <CliPathRow />
-            <PickerField id="set-daemon" label="Daemon" options={["This computer", "vps-runner-01"]} inheritLabel="This computer" />
-            <SettingRow id="set-auto" title="Start daemon with the app" hint="Runs in the background">
-              <Switch id="set-auto" defaultChecked />
-            </SettingRow>
           </>
-        )}
-        {!searching && section === "Notifications" && (
-          <SettingRow id="set-toast" title="Milestone toasts" hint="One toast when a goal is met">
-            <Switch id="set-toast" defaultChecked />
-          </SettingRow>
-        )}
-        {!searching && section === "Voice" && (
-          <SettingRow id="set-tts" title="Read comms aloud" hint="Uses the TTS plugin when installed">
-            <Switch id="set-tts" />
-          </SettingRow>
         )}
         {!searching && section === "Secrets" && <SecretsPanel />}
         {!searching && section === "About" && (
           <div className="rounded-lg border bg-card p-3 text-[13px]">
             <p className="font-semibold">Infantry AI</p>
-            <p className="font-mono text-xs text-muted-foreground">build 1.6.0+20261117.2317.6afaed5e8 · Tauri v2 template</p>
+            <p className="font-mono text-xs text-muted-foreground">{appVersionLine()}</p>
           </div>
         )}
         {!searching && section === "About" && <UpdaterRows />}

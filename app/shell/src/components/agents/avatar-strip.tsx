@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// Title-bar strip of agent avatars plus the Assistant pill.
-import { Bot } from "lucide-react";
+// Title-bar strip of agent avatars.
 import { useAgentList } from "@/daemon/agents";
 import { useUi } from "@/state/ui-state";
 import { useRolesLoaded } from "@/components/knowledge/use-knowledge";
@@ -36,12 +35,6 @@ export function AvatarStrip() {
           </TooltipContent>
         </Tooltip>
       ))}
-      <button
-        type="button"
-        className="ml-1 inline-flex h-7 items-center gap-1.5 rounded-full border border-danger/70 px-2.5 text-xs font-medium whitespace-nowrap hover:bg-danger/10"
-      >
-        <Bot className="size-3.5 text-danger" /> Assistant
-      </button>
     </div>
   );
 }

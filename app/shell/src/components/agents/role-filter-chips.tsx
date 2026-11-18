@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// Horizontally scrolling role filter (ArrowScrollRow.kt): all, architect, assistant, backend...
-import { useRef } from "react";
+// Horizontally scrolling role filter (ArrowScrollRow.kt): all, then the daemon's roles in their usual order.
+import { useMemo, useRef } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { cn } from "@infantry/ui";
-import { roles } from "@/mock/data";
-import { RoleIcon } from "./role-icon";
-import { IconButton } from "@infantry/ui";
+import { roleList } from "@infantry/client";
+import { cn, IconButton } from "@infantry/ui";
+import { useRoles } from "@/components/knowledge/use-knowledge";
+import { RoleGlyph } from "./role-icon";
 
 export function RoleFilterChips({ value, onChange }: { value: string; onChange: (id: string) => void }) {
   const row = useRef<HTMLDivElement>(null);
+  const roles = useRoles((s) => s.roles);
   const scroll = (dx: number) => row.current?.scrollBy({ left: dx, behavior: "smooth" });
-  const items = [{ id: "all", label: "all" }, ...roles];
+  const items = useMemo(() => [{ id: "all", name: "all", icon: "" }, ...roleList(roles).filter((r) => !r.disabled)], [roles]);
 
   return (
     <div className="flex items-center gap-1">
@@ -32,8 +33,8 @@ export function RoleFilterChips({ value, onChange }: { value: string; onChange: 
                 active ? "border-danger/70 text-danger" : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {r.id !== "all" && <RoleIcon roleId={r.id} className="size-3" />}
-              {r.label}
+              {r.id !== "all" && <RoleGlyph icon={r.icon} className="size-3" />}
+              {r.name}
             </button>
           );
         })}

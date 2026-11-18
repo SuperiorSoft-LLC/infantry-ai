@@ -37,8 +37,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { declLabel, type Contribution, type SlotRegistry } from "@infantry/client";
-import { prompts, skills } from "@/mock/data";
-import { ListRow } from "@infantry/ui";
 import { TabPage } from "@/components/tabs/tab-page";
 import { EpicsTab, PodsTab, ProfilesTab } from "@/components/panels/board-panels";
 import { McpPanel, ReviewPanel, ServicesTab, SitesPanel } from "@/components/panels/service-panels";
@@ -89,7 +87,7 @@ const CENTRE: Def[] = [
   { id: "roles", declared: "infantry.roles", label: "Roles", icon: User, hint: "^5", render: () => <RolesTab /> },
   { id: "profiles", declared: "infantry.profiles", label: "Profiles", icon: IdCard, hint: "^9", render: () => <ProfilesTab /> },
   { id: "triggers", declared: "infantry.triggers", label: "Triggers", icon: Zap, hint: "^0", render: () => <TriggersTab /> },
-  { id: "calendar", declared: "infantry.calendar", builtin: true, label: "Calendar", icon: Calendar, render: () => <CalendarTab /> },
+  { id: "calendar", declared: "infantry.calendar", label: "Calendar", icon: Calendar, render: () => <CalendarTab /> },
   { id: "epics", declared: "infantry.epics", label: "Epics", icon: Layers, render: () => <EpicsTab /> },
   { id: "notes", declared: "infantry.notes", label: "Notes", icon: FileText, render: () => <NotesTab /> },
   { id: "skills", builtin: true, label: "Skills", icon: Sparkles, render: () => <SkillsTab /> },
@@ -110,11 +108,11 @@ const CENTRE: Def[] = [
 const RIGHT: Def[] = [
   { id: "attention", declared: "infantry.attention", builtin: true, label: "Attention", icon: Bell, hint: "^6", render: () => <AttentionPanel /> },
   { id: "usage", declared: "infantry.usage", builtin: true, label: "Usage", icon: Gauge, hint: "^7", render: () => <UsagePanel /> },
-  { id: "prompts", declared: "infantry.prompts", builtin: true, label: "Prompts", icon: MessageSquare, render: () => <div className="space-y-2">{prompts.map((p) => <ListRow key={p.id} row={p} icon={<FileText className="size-4" />} />)}</div> },
-  { id: "changes", declared: "infantry.changes", label: "Changes", icon: GitCompare, render: () => <ChangesPanel /> },
+  { id: "prompts", declared: "infantry.prompts", builtin: true, label: "Prompts", icon: MessageSquare, render: () => <PromptsTab /> },
+  { id: "changes", declared: "infantry.changes", label: "Changes", icon: GitCompare, hint: "^3", render: () => <ChangesPanel /> },
   { id: "mcp", declared: "infantry.mcp", label: "MCP", icon: Plug, render: () => <McpPanel /> },
-  { id: "review", declared: "infantry.review", label: "Review", icon: GitPullRequest, render: () => <ReviewPanel /> },
-  { id: "skills", declared: "infantry.skills", builtin: true, label: "Skills", icon: Star, render: () => <div className="space-y-2">{skills.map((s) => <ListRow key={s.id} row={s} icon={<Sparkles className="size-4" />} />)}</div> },
+  { id: "review", declared: "infantry.review", label: "Review", icon: GitPullRequest, hint: "^4", render: () => <ReviewPanel /> },
+  { id: "skills", declared: "infantry.skills", builtin: true, label: "Skills", icon: Star, render: () => <SkillsTab /> },
 ];
 
 /** Icons for declared tabs that have no renderer yet (the generic view draws them). */

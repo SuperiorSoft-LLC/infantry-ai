@@ -28,3 +28,5 @@ export * from "./stores/panels";
 export * from "./layout";
 export * from "./pairing";
 export * from "./update";
+export * from "./markdown";
+export * from "./shortcuts";
