@@ -68,6 +68,12 @@ object LimitRegistry {
         "limits.concurrency.mcpMaxSpawns", 4, "sessions",
         "How many sessions one MCP connection may hold open at once (`--max-spawns` / .infantry/mcp.json lower or raise it per connection).",
     )
+    /** START-HANG-1: one slow start may not block the next (a jammed plugin pool); a start that waits longer is refused with the reason. */
+    val START_WAIT_MS = LimitDef(
+        "limits.concurrency.startWaitMs", 1_000, "ms",
+        "How long a spawn or ticket start waits for another start still running on this daemon before it is refused (retry shortly); 0 = refuse at once.",
+        zeroIsUnlimited = false,
+    )
     val LANE_DEFAULT = LimitDef(
         "limits.concurrency.laneDefault", 1, "agents",
         "Agents of one role that may run at once in a project, when the project sets no lane cap of its own; never lower than limits.workers.maxParallel (Max parallel workers).",
@@ -1373,7 +1379,7 @@ object LimitRegistry {
         KNOWLEDGE_PLUGINS_MAX_CHARS, KNOWLEDGE_PLUGINS_SUMMARY_MAX_CHARS,
         MCP_MAX_RESULT_CHARS, MCP_TOOLS_WATCH_SECONDS,
         TOOLS_INBOX_LIMIT, TOOLS_LIST_LIMIT, TOOLS_SESSION_TAIL_LINES, TOOLS_BOARD_QUEUE_SHOWN, TOOLS_BOARD_DONE_SHOWN,
-        MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
+        MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, START_WAIT_MS, LANE_DEFAULT, PACING_CEILING,
         USAGE_STALE_MAX_HOURS, USAGE_BACKOFF_MAX_MINUTES, USAGE_MANUAL_REFRESH_FLOOR_SECONDS,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, WAITING_DEFAULT_MINUTES, WAITING_GRACE_MINUTES, WAITING_CLEAR_ON_OUTPUT, WAITING_OUTPUT_GRACE_SECONDS, WAITING_MAX_MINUTES, WAITING_REASON_CHARS, IDLE_NUDGE_MINUTES, MAIL_WAKE_MAX_SECONDS, IDLE_NOTICE_MINUTES, IDLE_COMMENT, FINISH_ONCE, UNBRIEFED_GRACE_MINUTES,
