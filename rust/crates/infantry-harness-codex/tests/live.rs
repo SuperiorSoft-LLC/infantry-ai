@@ -12,9 +12,7 @@ use std::time::Duration;
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "spends real codex tokens"]
 async fn a_real_turn_then_a_resumed_turn() {
-    // GAP (RUST-RUN-1): LocalRunner's piped spawn does not apply PATHEXT, so the npm `codex.cmd` shim is "program not
-    // found" by bare name. Until it does, this test hands the harness the full path it finds on PATH.
-    let harness = Arc::new(CodexHarness { program: on_path("codex").expect("codex on PATH") });
+    let harness = Arc::new(CodexHarness { program: "codex".into() });
     if let Some(problem) = harness.sign_in_problem(&LocalProbe) {
         panic!("codex cannot run here: {problem}");
     }
@@ -56,12 +54,4 @@ async fn a_real_turn_then_a_resumed_turn() {
     assert_eq!(sessions, vec![thread], "the second turn resumed the same thread");
     d.close().await;
     let _ = std::fs::remove_dir_all(&dir);
-}
-
-fn on_path(name: &str) -> Option<String> {
-    let exts: &[&str] = if cfg!(windows) { &[".cmd", ".exe", ""] } else { &[""] };
-    std::env::split_paths(&std::env::var_os("PATH")?)
-        .flat_map(|d| exts.iter().map(move |e| d.join(format!("{name}{e}"))))
-        .find(|p| p.is_file())
-        .map(|p| p.to_string_lossy().to_string())
 }
