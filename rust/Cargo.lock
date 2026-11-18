@@ -1166,7 +1166,11 @@ name = "infantry-cli"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "chrono",
+ "infantry-protocol",
+ "infantry-usage",
  "native-tls",
+ "serde",
  "serde_json",
  "tungstenite 0.24.0",
  "uuid",

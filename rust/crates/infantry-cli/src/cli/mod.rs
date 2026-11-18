@@ -13,6 +13,7 @@ pub mod args;
 pub mod plugin_tools;
 pub mod tools_cmds;
 pub mod usage_settings;
+pub mod health;
 pub mod conn;
 pub mod registry;
 pub mod usage;

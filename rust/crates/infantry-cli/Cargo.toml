@@ -21,6 +21,7 @@ path = "src/bin/mcp_conformance.rs"
 # preserve_order: key order is kept exactly as the Kotlin bridge keeps it (kotlinx JsonObject is a LinkedHashMap).
 # arbitrary_precision: a number is written back exactly as it was read, as kotlinx's JsonLiteral does.
 serde_json = { version = "1", features = ["preserve_order", "arbitrary_precision"] }
+serde = "1"
 tungstenite = { version = "0.24", default-features = false, features = ["handshake", "native-tls"] }
 native-tls = "0.2"
 base64 = "0.22"
