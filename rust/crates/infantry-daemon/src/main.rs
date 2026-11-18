@@ -96,6 +96,7 @@ fn main() {
         let listener = tokio::net::TcpListener::bind((host.as_str(), port)).await.unwrap_or_else(|e| fail(format!("port {port} could not be bound ({e})")));
         let bound = listener.local_addr().map(|a| a.port()).unwrap_or(port);
         let _ = std::fs::write(state_dir.join("daemon.port"), bound.to_string());
+        daemon.health.started(bound, server::BUILD);
         println!("[infantry] listening on ws://{host}:{bound}/ws (health: http://{host}:{bound}/health)");
         println!(
             "{}",

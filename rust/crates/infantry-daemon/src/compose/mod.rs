@@ -12,7 +12,9 @@
 //! (`plugin_tools` / `plugin_tool_call`) over one tool catalog.
 
 mod adapters;
+pub mod host_frames;
 mod plugins;
+pub mod scope;
 mod tools;
 
 use crate::sessions::{Daemon, FrameUnits};
@@ -48,7 +50,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-pub use tools::Tools;
+pub use tools::{Tools, PLUGIN_TOOL_CALL};
 
 /// Core bus capacity (frames + named events buffered per subscriber).
 pub const BUS_CAPACITY: usize = 4096;
@@ -132,6 +134,9 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
             Some(r.worktree_path.clone().filter(|p| !p.trim().is_empty()).unwrap_or(r.working_dir))
         });
     }
+    // The worktree registry lives in memory: rebuild it from the persisted sessions (Kotlin's startup reconcile), or
+    // the hello `worktrees` frame lists nothing after a restart or a migration.
+    projects.worktrees.reconcile(&daemon.records().iter().filter_map(adapters::worktree_ref).collect::<Vec<_>>());
     let worktrees_unit = projects.worktrees_unit(repo.clone());
 
     // ---- usage ---------------------------------------------------------------------------------------------
@@ -151,7 +156,7 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
     let env = Arc::new(adapters::DaemonBoardEnv::new(daemon.clone(), projects.clone(), state_dir, usage.clone()));
     let board = Arc::new(TicketBoard::new(db.clone(), env.clone()));
     let workspaces = Arc::new(adapters::DaemonWorkspaces { projects: projects.clone(), repo: repo.clone() });
-    let launcher = Arc::new(adapters::DaemonLauncher { daemon: daemon.clone(), handle: handle.clone() });
+    let launcher = Arc::new(adapters::DaemonLauncher { daemon: daemon.clone(), handle: handle.clone(), worktrees: projects.worktrees.clone() });
     let dispatcher = Dispatcher::new(board.clone(), workspaces, launcher, bus.clone());
     let orchestrator = Arc::new(LocalOrchestrator::with_dispatcher(dispatcher.clone(), bus.clone()));
 
@@ -323,7 +328,7 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         Arc::new(NotificationsUnit::new(hub)),
         Arc::new(NotifyUnit::new(notify)),
         Arc::new(PromptsUnit::new(prompts, Some(rules))),
-        Arc::new(QuestionsUnit::new(questions, asker_of)),
+        Arc::new(QuestionsUnit::new(questions.clone(), asker_of)),
         Arc::new(tools::ToolsUnit { tools: tools.clone() }),
         Arc::new(vault),
     ];
@@ -331,6 +336,15 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
     if let Some(p) = &plugin_set {
         units.extend(plugins::frame_units(p));
     }
+    units.push(Arc::new(health_unit(daemon, &projects, plugin_host.clone(), hooks.store().clone())));
+    units.push(Arc::new(host_frames::HostFrames {
+        daemon: daemon.clone(),
+        plugins: plugin_host.clone(),
+        plugins_dir: plugins_dir(),
+        roles: knowledge.roles.clone(),
+        questions,
+        state_dir: state_dir.to_path_buf(),
+    }));
     for u in units {
         let name = u.name();
         if let Err(e) = registry.register(u) {
@@ -400,6 +414,48 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
     ));
     daemon.set_units(c.clone());
     Ok(c)
+}
+
+/// The `health` frame over this composition: plugin statuses, hooks, harnesses and a call's session or project paths.
+fn health_unit(
+    daemon: &Arc<Daemon>,
+    projects: &Arc<Projects>,
+    plugins: Option<Arc<infantry_plugin_host::PluginHost>>,
+    hook_store: Arc<HookStore>,
+) -> crate::health::HealthUnit {
+    use crate::health::{current_branch, HealthSources, HealthUnit};
+    let hook_projects = projects.clone();
+    let d = daemon.clone();
+    let paths_d = daemon.clone();
+    let paths_p = projects.clone();
+    HealthUnit {
+        health: daemon.health.clone(),
+        sources: HealthSources {
+            build: crate::server::BUILD.into(),
+            plugins: Box::new(move || plugins.as_ref().map(|h| h.statuses()).unwrap_or_default()),
+            hooks: Box::new(move || {
+                let mut ids = std::collections::BTreeSet::new();
+                for p in hook_projects.store.list() {
+                    ids.extend(hook_store.list(&p.id).into_iter().map(|h| h.id));
+                }
+                Some(ids.len())
+            }),
+            harnesses: Box::new(move || d.providers()),
+            paths: Box::new(move |session, project| {
+                let dir = |p: &Path| Some(p.to_string_lossy().into_owned());
+                if let Some(r) = session.and_then(|s| paths_d.record(s)) {
+                    let project = r.project_id.as_deref().and_then(|p| project_dir(&paths_p, p)).unwrap_or_else(|| PathBuf::from(&r.working_dir));
+                    let wt = r.worktree_path.clone().filter(|w| !w.trim().is_empty());
+                    let branch = r.worktree_branch.clone().or_else(|| current_branch(Path::new(wt.as_deref().unwrap_or(&r.working_dir))));
+                    return (dir(&project), wt, branch);
+                }
+                match project.and_then(|p| project_dir(&paths_p, p)) {
+                    Some(p) => (dir(&p), None, current_branch(&p)),
+                    None => (None, None, None),
+                }
+            }),
+        },
+    }
 }
 
 impl Composed {

@@ -41,15 +41,33 @@ fn write_line(stdin: &Mutex<ChildStdin>, line: &Line) -> Result<(), String> {
     w.write_all(text.as_bytes()).and_then(|_| w.flush()).map_err(|e| format!("sidecar stdin: {e}"))
 }
 
+/// The `daemon.env` variables to pass: (name, value) for each declared name set in `get` (blank names skipped).
+pub fn declared_env(names: &[String], get: impl Fn(&str) -> Option<String>) -> Vec<(String, String)> {
+    names
+        .iter()
+        .map(|n| n.trim())
+        .filter(|n| !n.is_empty() && !n.contains('='))
+        .filter_map(|n| {
+            let v = get(n).or_else(|| n.strip_prefix("INFANTRY_").and_then(|r| get(&format!("AGENTHQ_{r}"))))?;
+            Some((n.to_string(), v))
+        })
+        .collect()
+}
+
 impl SidecarPlugin {
     /// Starts `exe` (inside the module folder `dir`) and waits up to `hello_ms` for its hello line.
-    pub fn spawn(exe: &Path, args: &[String], dir: &Path, imports: Arc<PluginImports>, hello_ms: u64) -> Result<SidecarPlugin, String> {
+    /// `env` names the variables the manifest's `daemon.env` lets the sidecar read; each is passed from the daemon's
+    /// own environment when set there (an `INFANTRY_<X>` name falls back to the old `AGENTHQ_<X>`). Nothing else is.
+    pub fn spawn(exe: &Path, args: &[String], dir: &Path, env: &[String], imports: Arc<PluginImports>, hello_ms: u64) -> Result<SidecarPlugin, String> {
         let mut cmd = Command::new(exe);
         cmd.args(args).current_dir(dir).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).env_clear();
         for k in KEPT_ENV {
             if let Ok(v) = std::env::var(k) {
                 cmd.env(k, v);
             }
+        }
+        for (k, v) in declared_env(env, |k| std::env::var(k).ok()) {
+            cmd.env(k, v);
         }
         #[cfg(windows)]
         {
@@ -227,5 +245,21 @@ impl Plugin for SidecarPlugin {
     }
     fn memory_bytes(&self) -> Option<u64> {
         None
+    }
+}
+
+#[cfg(test)]
+mod env_tests {
+    use super::declared_env;
+
+    #[test]
+    fn passes_only_declared_names_with_the_legacy_fallback() {
+        let get = |k: &str| match k {
+            "A" => Some("1".to_string()),
+            "AGENTHQ_TOKEN" => Some("t".to_string()),
+            _ => None,
+        };
+        let names = vec!["A".to_string(), "INFANTRY_TOKEN".to_string(), "MISSING".to_string(), "B=x".to_string()];
+        assert_eq!(declared_env(&names, get), vec![("A".into(), "1".into()), ("INFANTRY_TOKEN".into(), "t".into())]);
     }
 }

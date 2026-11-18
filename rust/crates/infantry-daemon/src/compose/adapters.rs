@@ -220,6 +220,20 @@ impl WorkspaceProvider for DaemonWorkspaces {
 pub struct DaemonLauncher {
     pub daemon: Arc<Daemon>,
     pub handle: tokio::runtime::Handle,
+    /// The worktree registry a ticket worker's checkout is registered in (the hello `worktrees` frame lists it).
+    pub worktrees: Arc<infantry_projects::worktree::WorktreeManager>,
+}
+
+/// A session's worktree as the registry knows it (Kotlin `SessionRecord.toWorktreeRef`); None without all four parts.
+pub fn worktree_ref(r: &SessionRecord) -> Option<infantry_projects::wire::WorktreeRef> {
+    let some = |v: &Option<String>| v.clone().filter(|s| !s.trim().is_empty());
+    Some(infantry_projects::wire::WorktreeRef {
+        session_id: r.id.clone(),
+        repo_root: some(&r.repo_root)?,
+        path: some(&r.worktree_path)?,
+        branch: some(&r.worktree_branch)?,
+        base_ref: r.worktree_base_ref.clone()?,
+    })
 }
 
 impl SessionLauncher for DaemonLauncher {
@@ -244,6 +258,9 @@ impl SessionLauncher for DaemonLauncher {
             worktree: r.workspace.as_ref().map(|w| (w.branch.clone(), w.base.clone(), r.folder.clone().unwrap_or_default())),
         };
         let id = self.daemon.launch(opts)?;
+        if let Some(w) = self.daemon.record(&id).as_ref().and_then(worktree_ref) {
+            self.worktrees.reconcile(&[w]);
+        }
         Ok(LaunchedSession { session_id: id, note: None, workspace: r.workspace.clone() })
     }
     fn stop(&self, session_id: &str, reason: &str) {

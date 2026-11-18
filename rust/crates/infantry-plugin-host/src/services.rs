@@ -3,7 +3,7 @@
 //! What the daemon gives the plugin host: the back ends of the WIT imports. The host does the per-plugin part
 //! (grants, the `<Module>.` settings prefix, the endpoint filter, the storage table rule); a [`HostServices`]
 //! only carries it out. [`MemoryServices`] is a complete in-process implementation for tests and tools.
-use infantry_plugin_wit::jsonl::{Frame, HttpRequest, HttpResponse, LogLevel, NamedEvent};
+use infantry_plugin_wit::jsonl::{CallContext, Frame, HttpRequest, HttpResponse, LogLevel, NamedEvent};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -19,8 +19,11 @@ pub trait HostServices: Send + Sync + 'static {
     fn setting_get(&self, key: &str) -> Option<String>;
     fn setting_set(&self, key: &str, value: &str) -> Result<(), String>;
     fn setting_remove(&self, key: &str) -> Result<(), String>;
-    /// A frame into the daemon (DaemonApi ToolCall.request); the reply frame.
-    fn frame_request(&self, module: &str, frame: Frame, timeout_ms: u32) -> Result<Frame, String>;
+    /// A frame into the daemon (DaemonApi ToolCall.request); the reply frame. `caller` is who the plugin is working
+    /// for: the call context of the tool call, frame or capability running when it asked (None = the plugin's own
+    /// work, a hook, an event or a route). The daemon scopes the frame to that caller (spawn depth, kill scope,
+    /// project scope).
+    fn frame_request(&self, module: &str, frame: Frame, caller: Option<&CallContext>, timeout_ms: u32) -> Result<Frame, String>;
     /// Publishes a named event as `module` (source); the stored event.
     fn publish(&self, module: &str, name: &str, payload: &str, cause_id: Option<&str>) -> Result<NamedEvent, String>;
     /// Pushes a frame to every connected client.
@@ -104,7 +107,7 @@ impl HostServices for MemoryServices {
         self.settings.lock().unwrap().remove(key);
         Ok(())
     }
-    fn frame_request(&self, module: &str, frame: Frame, _timeout_ms: u32) -> Result<Frame, String> {
+    fn frame_request(&self, module: &str, frame: Frame, _caller: Option<&CallContext>, _timeout_ms: u32) -> Result<Frame, String> {
         (self.frame_handler)(module, frame)
     }
     fn publish(&self, module: &str, name: &str, payload: &str, cause_id: Option<&str>) -> Result<NamedEvent, String> {

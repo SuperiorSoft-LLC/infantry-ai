@@ -1,0 +1,406 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) SuperiorSoft LLC
+//! The frames plugin guests ask the host for (RUST-PLUGINS-A "HOST NEEDS"), served from what the daemon already holds:
+//!
+//! - `session_get` `{"sessionId"|"id", "lines"?}` -> `session`: the record plus `transcript` (the replay buffer tail)
+//!   and `transcriptTruncated`.
+//! - `session_jobs` `{"sessionId"}` -> `jobs` `[{id,label,startedAt,running,exitCode?}]`; `session_job_log`
+//!   `{"sessionId","jobId","from","maxBytes"}` -> `job_log` `{text,nextOffset,size,reset,job}`.
+//! - `module_cards` `{}` -> `cards` `[{type,module,summary,spec,hosts}]` from every module.json in the plugins folder
+//!   (spec resolved to text: a file inside the module, else the text; the first declaration of a type wins).
+//! - `agent_registry` `{"op": list|get|enable|disable, "id"?}` -> `agent_registry`: the role catalog, then the modules'
+//!   `agents` blocks, under the user's enable/disable overrides (`agent-overrides.json` in the state dir).
+//! - `plugins_op` `{"op": list|status|search|show|import|request, ...}` -> `plugins`: the plugin catalog of this host
+//!   (the plugins folder, the loaded daemon halves and the imported list files). `request` asks the owner and installs
+//!   nothing.
+use crate::sessions::Daemon;
+use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Refusal};
+use infantry_knowledge::roles::RoleService;
+use infantry_mail::notify::questions::{Asker, OwnerQuestions};
+use infantry_plugin_host::PluginHost;
+use infantry_protocol::prompts::{PromptOption, QuestionAsk};
+use serde_json::{json, Map, Value};
+use std::io::{Read, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+pub const SESSION_GET: &str = "session_get";
+pub const SESSION_JOBS: &str = "session_jobs";
+pub const SESSION_JOB_LOG: &str = "session_job_log";
+pub const MODULE_CARDS: &str = "module_cards";
+pub const AGENT_REGISTRY: &str = "agent_registry";
+pub const PLUGINS_OP: &str = "plugins_op";
+const FRAMES: &[&str] = &[SESSION_GET, SESSION_JOBS, SESSION_JOB_LOG, MODULE_CARDS, AGENT_REGISTRY, PLUGINS_OP];
+
+/// Transcript frames `session_get` returns when the caller names no `lines`.
+pub const TRANSCRIPT_LINES: usize = 40;
+/// The most bytes one `session_job_log` read returns when the caller names no `maxBytes`, and its ceiling.
+pub const JOB_LOG_BYTES: u64 = 16_384;
+pub const JOB_LOG_BYTES_MAX: u64 = 262_144;
+/// The module tiers the catalog scans, in precedence order.
+const TIERS: &[&str] = &["official", "core", "community"];
+/// State-dir files: the user's agent overrides and the imported plugin list locations.
+pub const AGENT_OVERRIDES_FILE: &str = "agent-overrides.json";
+pub const PLUGIN_LISTS_FILE: &str = "plugin-lists.json";
+/// The owner's answers to a plugin request.
+pub const INSTALL: &str = "Install";
+pub const DECLINE: &str = "Decline";
+
+pub struct HostFrames {
+    pub daemon: Arc<Daemon>,
+    pub plugins: Option<Arc<PluginHost>>,
+    pub plugins_dir: Option<PathBuf>,
+    pub roles: Arc<RoleService>,
+    pub questions: Arc<OwnerQuestions>,
+    pub state_dir: PathBuf,
+}
+
+/// One module.json found in the plugins folder.
+struct Module {
+    id: String,
+    tier: String,
+    dir: PathBuf,
+    manifest: Value,
+}
+
+fn s<'a>(v: &'a Value, k: &str) -> &'a str {
+    v.get(k).and_then(Value::as_str).map(str::trim).unwrap_or("")
+}
+
+fn strings(v: Option<&Value>) -> Vec<String> {
+    v.and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default()
+}
+
+fn reply(ty: &str, env: &Envelope, data: String) -> Vec<Envelope> {
+    let mut e = Envelope::new(ty, data);
+    e.session_id = env.session_id.clone();
+    e.request_id = env.request_id.clone();
+    vec![e]
+}
+
+impl HostFrames {
+    fn modules(&self) -> Vec<Module> {
+        let Some(root) = &self.plugins_dir else { return vec![] };
+        let mut out: Vec<Module> = vec![];
+        for tier in TIERS {
+            let Ok(rd) = std::fs::read_dir(root.join(tier)) else { continue };
+            let mut dirs: Vec<PathBuf> = rd.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.join("module.json").is_file()).collect();
+            dirs.sort();
+            for dir in dirs {
+                let Some(manifest) = std::fs::read_to_string(dir.join("module.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else { continue };
+                let id = Some(s(&manifest, "name")).filter(|n| !n.is_empty()).map(String::from).or_else(|| dir.file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_default();
+                if out.iter().any(|m| m.id == id) {
+                    continue;
+                }
+                out.push(Module { id, tier: tier.to_string(), dir, manifest });
+            }
+        }
+        out
+    }
+
+    // ---- sessions --------------------------------------------------------------------------------------------
+
+    fn session_of(env: &Envelope, d: &Value) -> Option<String> {
+        [s(d, "sessionId"), s(d, "id")].into_iter().find(|v| !v.is_empty()).map(String::from).or_else(|| env.session_id.clone().filter(|v| !v.trim().is_empty()))
+    }
+
+    fn session_get(&self, env: &Envelope, d: &Value) -> Result<Vec<Envelope>, Refusal> {
+        let sid = Self::session_of(env, d).ok_or_else(|| Refusal::new(SESSION_GET, "sessionId is required"))?;
+        let rec = self.daemon.record(&sid).ok_or_else(|| Refusal::new(SESSION_GET, format!("unknown session {sid}")))?;
+        let mut v = serde_json::to_value(&rec).unwrap_or(Value::Null);
+        let brief = d.get("brief").and_then(Value::as_bool) == Some(true);
+        let lines = d.get("lines").and_then(Value::as_u64).map(|n| n as usize).unwrap_or(TRANSCRIPT_LINES);
+        if let Some(o) = v.as_object_mut() {
+            let (tail, truncated) = if brief { (vec![], false) } else { self.daemon.transcript_tail(&sid, lines).unwrap_or_default() };
+            o.insert("transcript".into(), Value::Array(tail));
+            o.insert("transcriptTruncated".into(), truncated.into());
+        }
+        Ok(reply(crate::wire::SESSION, env, v.to_string()))
+    }
+
+    fn job_json(j: &infantry_protocol::session::BgJob) -> Value {
+        json!({ "id": j.id, "label": j.label, "startedAt": j.started_at, "running": crate::health::pid_alive(j.pid), "logPath": j.log_path })
+    }
+
+    fn session_jobs(&self, env: &Envelope, d: &Value) -> Result<Vec<Envelope>, Refusal> {
+        let sid = Self::session_of(env, d).ok_or_else(|| Refusal::new(SESSION_JOBS, "sessionId is required"))?;
+        let jobs: Vec<Value> = self.daemon.record(&sid).map(|r| r.bg_jobs.iter().map(Self::job_json).collect()).unwrap_or_default();
+        Ok(reply("jobs", env, Value::Array(jobs).to_string()))
+    }
+
+    fn session_job_log(&self, env: &Envelope, d: &Value) -> Result<Vec<Envelope>, Refusal> {
+        let sid = Self::session_of(env, d).ok_or_else(|| Refusal::new(SESSION_JOB_LOG, "sessionId is required"))?;
+        let job_id = s(d, "jobId");
+        let rec = self.daemon.record(&sid).ok_or_else(|| Refusal::new(SESSION_JOB_LOG, format!("unknown session {sid}")))?;
+        let job = rec.bg_jobs.iter().find(|j| j.id == job_id).ok_or_else(|| Refusal::new(SESSION_JOB_LOG, format!("unknown job {job_id}")))?;
+        let path = job.log_path.as_deref().filter(|p| !p.trim().is_empty()).ok_or_else(|| Refusal::new(SESSION_JOB_LOG, format!("job {job_id} keeps no log")))?;
+        let from = d.get("from").and_then(Value::as_u64).unwrap_or(0);
+        let max = d.get("maxBytes").and_then(Value::as_u64).unwrap_or(JOB_LOG_BYTES).clamp(1, JOB_LOG_BYTES_MAX);
+        let (text, next, size, reset) = read_chunk(Path::new(path), from, max).map_err(|e| Refusal::new(SESSION_JOB_LOG, e))?;
+        let data = json!({ "text": text, "nextOffset": next, "size": size, "reset": reset, "job": Self::job_json(job) });
+        Ok(reply("job_log", env, data.to_string()))
+    }
+
+    // ---- cards -----------------------------------------------------------------------------------------------
+
+    fn module_cards(&self, env: &Envelope) -> Vec<Envelope> {
+        let mut out: Vec<Value> = vec![];
+        for m in self.modules() {
+            for c in m.manifest.get("cards").and_then(Value::as_array).into_iter().flatten() {
+                let ty = s(c, "type");
+                if ty.is_empty() || out.iter().any(|o| o["type"] == ty) {
+                    continue;
+                }
+                let spec = s(c, "spec");
+                let file = m.dir.join(spec);
+                let inside = file.canonicalize().ok().zip(m.dir.canonicalize().ok()).is_some_and(|(f, d)| f.starts_with(d));
+                let text = if !spec.is_empty() && inside && file.is_file() { std::fs::read_to_string(&file).unwrap_or_default() } else { spec.to_string() };
+                let hosts = strings(c.get("images").and_then(|i| i.get("hosts")));
+                out.push(json!({ "type": ty, "module": m.id, "summary": s(c, "summary"), "spec": text, "hosts": hosts }));
+            }
+        }
+        reply("cards", env, Value::Array(out).to_string())
+    }
+
+    // ---- agent registry --------------------------------------------------------------------------------------
+
+    fn overrides(&self) -> Map<String, Value> {
+        std::fs::read_to_string(self.state_dir.join(AGENT_OVERRIDES_FILE)).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+    }
+
+    fn agents(&self) -> Vec<Value> {
+        let off = self.overrides();
+        let enabled = |id: &str| off.get(id).and_then(Value::as_bool).unwrap_or(true);
+        let mut out: Vec<Value> = vec![];
+        for r in self.roles.all() {
+            let def = json!({ "id": r.id, "name": r.name, "role": r.id });
+            out.push(json!({ "definition": def, "contributor": "roles", "source": "roles", "enabled": enabled(&r.id), "effectiveInstructions": r.persona }));
+        }
+        let mut mods = self.modules();
+        mods.sort_by(|a, b| a.id.cmp(&b.id));
+        for m in mods {
+            for a in m.manifest.get("agents").and_then(Value::as_array).into_iter().flatten() {
+                let id = s(a, "id");
+                if id.is_empty() || out.iter().any(|o| o["definition"]["id"] == id) {
+                    continue;
+                }
+                let own = s(a, "instructions").to_string();
+                let effective = if own.is_empty() { a.get("role").and_then(Value::as_str).and_then(|r| self.roles.persona(r)).unwrap_or_default() } else { own };
+                out.push(json!({ "definition": a, "contributor": m.id, "source": "manifest", "enabled": enabled(id), "effectiveInstructions": effective }));
+            }
+        }
+        out
+    }
+
+    fn agent_registry(&self, env: &Envelope, d: &Value, ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
+        let id = s(d, "id");
+        let found = |all: Vec<Value>| all.into_iter().find(|a| a["definition"]["id"] == id).ok_or_else(|| Refusal::new(AGENT_REGISTRY, format!("no agent has the id '{id}'")));
+        let data = match s(d, "op") {
+            "" | "list" => Value::Array(self.agents()),
+            "get" => found(self.agents())?,
+            op @ ("enable" | "disable") => {
+                if !ctx.owner {
+                    return Err(Refusal::new(AGENT_REGISTRY, "owner only"));
+                }
+                found(self.agents())?;
+                let mut off = self.overrides();
+                if op == "enable" {
+                    off.remove(id);
+                } else {
+                    off.insert(id.into(), false.into());
+                }
+                write_json(&self.state_dir.join(AGENT_OVERRIDES_FILE), &Value::Object(off)).map_err(|e| Refusal::new(AGENT_REGISTRY, e))?;
+                found(self.agents())?
+            }
+            other => return Err(Refusal::new(AGENT_REGISTRY, format!("unknown op '{other}' (list, get, enable, disable)"))),
+        };
+        Ok(reply(AGENT_REGISTRY, env, data.to_string()))
+    }
+
+    // ---- plugins ---------------------------------------------------------------------------------------------
+
+    fn summary(&self, m: &Module) -> Value {
+        let statuses = self.plugins.as_ref().map(|h| h.statuses()).unwrap_or_default();
+        let daemon = m.manifest.get("daemon");
+        let status = statuses.get(&m.id).cloned();
+        let has_daemon = daemon.is_some_and(|d| d.get("component").is_some() || d.get("sidecar").is_some());
+        let enabled = if has_daemon { status.as_deref() == Some("loaded") } else { m.tier != "community" };
+        json!({
+            "id": m.id, "version": s(&m.manifest, "version"), "class": Some(s(&m.manifest, "class")).filter(|c| !c.is_empty()).unwrap_or("plugin"),
+            "tier": m.tier, "bundled": m.tier != "community", "enabled": enabled,
+            "grants": strings(daemon.and_then(|d| d.get("needs"))), "requested": strings(daemon.and_then(|d| d.get("wants"))),
+            "license": s(&m.manifest, "license"), "source": "bundled", "yanked": false, "updateTo": Value::Null,
+            "status": status.unwrap_or_else(|| if has_daemon { "not loaded".into() } else { "ui only".into() }),
+        })
+    }
+
+    fn lists(&self) -> Vec<String> {
+        std::fs::read_to_string(self.state_dir.join(PLUGIN_LISTS_FILE)).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+    }
+
+    /// Every catalog item: the local modules, then each imported list's `plugins` entries (an id seen first wins).
+    fn catalog(&self) -> Vec<Value> {
+        let mut out: Vec<Value> = self
+            .modules()
+            .iter()
+            .map(|m| {
+                let d = m.manifest.get("daemon");
+                json!({
+                    "id": m.id, "name": s(&m.manifest, "displayName"), "description": s(&m.manifest, "description"), "tags": strings(m.manifest.get("tags")),
+                    "class": Some(s(&m.manifest, "class")).filter(|c| !c.is_empty()).unwrap_or("plugin"), "source": "bundled",
+                    "license": s(&m.manifest, "license"), "latest": s(&m.manifest, "version"), "grants": strings(d.and_then(|d| d.get("needs"))),
+                    "signer": Value::Null, "repo": Value::Null, "list": "local",
+                })
+            })
+            .collect();
+        for loc in self.lists() {
+            let Some(v) = std::fs::read_to_string(&loc).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else { continue };
+            for p in v.get("plugins").and_then(Value::as_array).into_iter().flatten() {
+                if s(p, "id").is_empty() || out.iter().any(|o| o["id"] == p["id"]) {
+                    continue;
+                }
+                let mut item = p.clone();
+                if let Some(o) = item.as_object_mut() {
+                    o.insert("list".into(), loc.clone().into());
+                }
+                out.push(item);
+            }
+        }
+        out
+    }
+
+    fn plugins_op(&self, env: &Envelope, d: &Value, ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
+        let r = |why: String| Refusal::new(PLUGINS_OP, why);
+        let id = Some(s(d, "id")).filter(|v| !v.is_empty()).or_else(|| Some(s(d, "ref")).filter(|v| !v.is_empty()));
+        let data = match s(d, "op") {
+            "" | "list" => Value::Array(self.modules().iter().map(|m| self.summary(m)).collect()),
+            "status" => match id {
+                None => Value::Array(self.modules().iter().map(|m| self.summary(m)).collect()),
+                Some(id) => self.modules().iter().find(|m| m.id == id).map(|m| self.summary(m)).ok_or_else(|| r(format!("no plugin '{id}' on this host")))?,
+            },
+            "search" => {
+                let q = s(d, "query").to_lowercase();
+                let hit = |v: &Value| q.is_empty() || ["id", "name", "description"].iter().any(|k| s(v, k).to_lowercase().contains(&q)) || strings(v.get("tags")).iter().any(|t| t.to_lowercase().contains(&q));
+                Value::Array(self.catalog().into_iter().filter(hit).collect())
+            }
+            "show" => {
+                let id = id.ok_or_else(|| r("id is required".into()))?;
+                let item = self.catalog().into_iter().find(|v| v["id"] == id).ok_or_else(|| r(format!("no plugin '{id}' in the catalog")))?;
+                let local = self.modules().into_iter().find(|m| m.id == id);
+                json!({
+                    "id": id, "version": local.as_ref().map(|m| s(&m.manifest, "version").to_string()).unwrap_or_else(|| s(&item, "latest").into()),
+                    "class": item["class"], "tier": local.as_ref().map(|m| m.tier.clone()).unwrap_or_else(|| "community".into()),
+                    "license": item["license"], "signer": item["signer"], "source": item["source"], "grants": item["grants"], "warnings": [],
+                })
+            }
+            "import" => {
+                if !ctx.owner {
+                    return Err(r("owner only".into()));
+                }
+                let loc = s(d, "location");
+                let loc = loc.strip_prefix("file://").unwrap_or(loc);
+                if loc.is_empty() {
+                    return Err(r("location is required".into()));
+                }
+                if loc.contains("://") {
+                    return Err(r(format!("{loc}: this daemon imports a list from a local file only")));
+                }
+                let n = std::fs::read_to_string(loc).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()).and_then(|v| v.get("plugins").and_then(Value::as_array).map(Vec::len)).ok_or_else(|| r(format!("{loc} is not a plugin list (a JSON object with a `plugins` array)")))?;
+                let mut lists = self.lists();
+                if !lists.iter().any(|l| l == loc) {
+                    lists.push(loc.to_string());
+                }
+                write_json(&self.state_dir.join(PLUGIN_LISTS_FILE), &json!(lists)).map_err(r)?;
+                json!({ "message": format!("imported {loc}: {n} plugin(s)") })
+            }
+            "request" => {
+                let id = id.ok_or_else(|| r("id is required".into()))?;
+                let item = self.catalog().into_iter().find(|v| v["id"] == id).ok_or_else(|| r(format!("no plugin '{id}' in the catalog")))?;
+                let sid = Self::session_of(env, d).unwrap_or_default();
+                let rec = self.daemon.record(&sid);
+                let asker = Asker { session_id: sid.clone(), agent_id: rec.as_ref().and_then(|r| r.agent_id.clone()), role: rec.as_ref().and_then(|r| r.role.clone()), project_id: rec.and_then(|r| r.project_id) };
+                let grants = strings(item.get("grants"));
+                let why = Some(s(d, "reason")).filter(|v| !v.is_empty()).unwrap_or("an agent asked for it");
+                let ask = QuestionAsk {
+                    question: format!("Install plugin {id}? It asks for: {}.", if grants.is_empty() { "no grants".to_string() } else { grants.join(", ") }),
+                    options: vec![
+                        PromptOption { label: INSTALL.into(), description: "install it with exactly these grants".into() },
+                        PromptOption { label: DECLINE.into(), description: "do not install it".into() },
+                    ],
+                    recommended: DECLINE.into(),
+                    reason: why.chars().take(QuestionAsk::REASON_MAX).collect(),
+                    allow_other: false,
+                    default_after_min: None,
+                };
+                let q = self.questions.ask(&asker, &ask).map_err(r)?;
+                json!({ "questionId": q.id, "message": format!("asked the owner to install {id}; nothing is installed until they answer") })
+            }
+            other => return Err(r(format!("unknown op '{other}' (list, status, search, show, import, request)"))),
+        };
+        Ok(reply("plugins", env, data.to_string()))
+    }
+}
+
+/// Reads `[from, from + max)` of `path`: (text, next offset, size, reset). A `from` past the end (the log was cut or
+/// rotated) starts again at 0 with `reset`.
+pub fn read_chunk(path: &Path, from: u64, max: u64) -> Result<(String, u64, u64, bool), String> {
+    let mut f = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let size = f.metadata().map(|m| m.len()).unwrap_or(0);
+    let (start, reset) = if from > size { (0, true) } else { (from, false) };
+    f.seek(SeekFrom::Start(start)).map_err(|e| e.to_string())?;
+    let mut buf = Vec::new();
+    f.take(max).read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    // Never end inside a UTF-8 sequence: hold the partial tail back for the next read.
+    let cut = match std::str::from_utf8(&buf) {
+        Ok(_) => buf.len(),
+        Err(e) if e.error_len().is_none() => e.valid_up_to(),
+        Err(_) => buf.len(),
+    };
+    Ok((String::from_utf8_lossy(&buf[..cut]).into_owned(), start + cut as u64, size, reset))
+}
+
+fn write_json(path: &Path, v: &Value) -> Result<(), String> {
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, serde_json::to_vec_pretty(v).unwrap_or_default()).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
+}
+
+impl FrameUnit for HostFrames {
+    fn name(&self) -> &'static str {
+        "host-frames"
+    }
+    fn frames(&self) -> &'static [&'static str] {
+        FRAMES
+    }
+    fn handle(&self, env: &Envelope, ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
+        let d: Value = serde_json::from_str(if env.data.trim().is_empty() { "{}" } else { &env.data }).unwrap_or(Value::Null);
+        match env.r#type.as_str() {
+            SESSION_GET => self.session_get(env, &d),
+            SESSION_JOBS => self.session_jobs(env, &d),
+            SESSION_JOB_LOG => self.session_job_log(env, &d),
+            MODULE_CARDS => Ok(self.module_cards(env)),
+            AGENT_REGISTRY => self.agent_registry(env, &d, ctx),
+            PLUGINS_OP => self.plugins_op(env, &d, ctx),
+            other => Err(Refusal::new(other, "not a host frame")),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_chunk;
+
+    #[test]
+    fn job_log_reads_from_the_offset_and_resets_past_the_end() {
+        let dir = std::env::temp_dir().join(format!("infantry-jl-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("job.log");
+        std::fs::write(&p, "hello world").unwrap();
+        assert_eq!(read_chunk(&p, 6, 100).unwrap(), ("world".into(), 11, 11, false));
+        assert_eq!(read_chunk(&p, 0, 5).unwrap(), ("hello".into(), 5, 11, false));
+        assert_eq!(read_chunk(&p, 99, 5).unwrap(), ("hello".into(), 5, 11, true));
+        std::fs::write(&p, "a\u{e9}").unwrap(); // 'é' is 2 bytes: a 2-byte read stops before it
+        assert_eq!(read_chunk(&p, 0, 2).unwrap(), ("a".into(), 1, 3, false));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

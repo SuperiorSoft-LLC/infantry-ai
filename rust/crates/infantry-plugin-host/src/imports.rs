@@ -5,7 +5,7 @@
 //! for outbound HTTP and the table rule for SQL.
 use crate::manifest::{DaemonDecl, Tier};
 use crate::services::HostServices;
-use infantry_plugin_wit::jsonl::{self, Frame, HttpRequest, HttpResponse, LogLevel, NamedEvent, SqlRows, SqlValue};
+use infantry_plugin_wit::jsonl::{self, CallContext, Frame, HttpRequest, HttpResponse, LogLevel, NamedEvent, SqlRows, SqlValue};
 use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
@@ -26,11 +26,22 @@ pub struct PluginImports {
     denied: BTreeSet<String>,
     subscriptions: Mutex<Vec<(u64, String)>>,
     next_subscription: AtomicU64,
+    /// The callers of the calls running now, innermost last (see [`PluginImports::acting_for`]).
+    active: Mutex<Vec<CallContext>>,
+}
+
+/// Pops the caller [`PluginImports::acting_for`] pushed, when the call ends (also on a fault).
+pub struct ActingFor<'a>(&'a PluginImports);
+
+impl Drop for ActingFor<'_> {
+    fn drop(&mut self) {
+        self.0.active.lock().unwrap().pop();
+    }
 }
 
 impl PluginImports {
     pub fn new(module_id: &str, tier: Tier, decl: DaemonDecl, services: Arc<dyn HostServices>, granted: BTreeSet<String>, denied: BTreeSet<String>) -> Self {
-        PluginImports { module_id: module_id.into(), tier, decl, services, granted, denied, subscriptions: Mutex::default(), next_subscription: AtomicU64::new(1) }
+        PluginImports { module_id: module_id.into(), tier, decl, services, granted, denied, subscriptions: Mutex::default(), next_subscription: AtomicU64::new(1), active: Mutex::default() }
     }
 
     /// Whether interface `name` is linked (granted or linked-as-denied).
@@ -263,9 +274,23 @@ impl PluginImports {
         self.services.http_send(&self.module_id, request)
     }
 
+    /// Marks `ctx` as the caller this plugin works for until the guard drops: a frame the plugin asks meanwhile is
+    /// scoped to it. A WASM instance runs one call at a time, so the innermost entry is the running call; a sidecar
+    /// that runs calls side by side is scoped to the latest one, never to none (the stricter reading).
+    pub fn acting_for(&self, ctx: CallContext) -> ActingFor<'_> {
+        self.active.lock().unwrap().push(ctx);
+        ActingFor(self)
+    }
+
+    /// The caller of the innermost running call, None outside any call.
+    pub fn caller(&self) -> Option<CallContext> {
+        self.active.lock().unwrap().last().cloned()
+    }
+
     pub fn frame_request(&self, r#type: &str, data: &str, session_id: Option<String>, timeout_ms: u32) -> Result<Frame, String> {
         self.check("frames")?;
-        self.services.frame_request(&self.module_id, Frame { r#type: r#type.into(), data: data.into(), session_id, request_id: None }, timeout_ms)
+        let caller = self.caller();
+        self.services.frame_request(&self.module_id, Frame { r#type: r#type.into(), data: data.into(), session_id, request_id: None }, caller.as_ref(), timeout_ms)
     }
 
     /// One sidecar `import` line: `<interface>.<func>` with its JSON params; the JSON ok value or the error.

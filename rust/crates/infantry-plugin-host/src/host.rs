@@ -77,6 +77,7 @@ impl LoadedPlugin {
             return Err(CallError::Refused(format!("{name} refused: plugin {} does not declare it in daemon.tools", self.id)));
         }
         let what = format!("call-tool({name})");
+        let _acting = self.imports.acting_for(ctx.clone());
         self.guard.run(&what, &|| self.probe(), || self.runtime.call_tool(name, args, ctx, self.tool_budget()))
     }
 
@@ -89,6 +90,7 @@ impl LoadedPlugin {
             return Err(CallError::Refused(format!("{} refused: owner only", frame.r#type)));
         }
         let what = format!("handle-frame({})", frame.r#type);
+        let _acting = self.imports.acting_for(CallContext { caller: caller.clone(), client_session_id: caller.active_session.clone(), client_role: None, client_project_id: caller.project.clone() });
         self.guard.run(&what, &|| self.probe(), || self.runtime.handle_frame(frame, caller, self.call_budget()))
     }
 
@@ -226,7 +228,7 @@ impl PluginHost {
                 if cfg!(windows) && path.extension().is_none() {
                     path.set_extension("exe");
                 }
-                Box::new(SidecarPlugin::spawn(&path, &s.args, dir, imports.clone(), self.limits.sidecar_hello_ms)?)
+                Box::new(SidecarPlugin::spawn(&path, &s.args, dir, &decl.env, imports.clone(), self.limits.sidecar_hello_ms)?)
             }
             (None, None) => return Err("daemon.component (or daemon.sidecar) is not set".into()),
         };

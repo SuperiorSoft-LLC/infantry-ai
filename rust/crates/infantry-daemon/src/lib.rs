@@ -7,6 +7,7 @@ pub mod gateway;
 pub mod board;
 pub mod compose;
 pub mod harness;
+pub mod health;
 pub mod held;
 pub mod server;
 pub mod sessions;

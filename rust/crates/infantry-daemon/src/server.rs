@@ -112,6 +112,12 @@ async fn hello(daemon: &Arc<Daemon>) -> Vec<String> {
 
 /// One frame this daemon answers: the session manager's own, else the unit that owns it (on the blocking pool).
 async fn answer(daemon: &Arc<Daemon>, env: Envelope, conn: &mut Conn, owner: bool) -> Vec<String> {
+    // A tool call carrying a session id is that session's MCP bridge alive on this connection.
+    if env.r#type == crate::compose::PLUGIN_TOOL_CALL {
+        if let Some(sid) = serde_json::from_str::<serde_json::Value>(&env.data).ok().and_then(|v| v["client"]["sessionId"].as_str().map(String::from)) {
+            daemon.health.bridges.seen(&sid, &mut conn.bridges, &daemon.health.journal);
+        }
+    }
     if !crate::sessions::owns(&env.r#type) {
         if let Some(u) = daemon.units().filter(|u| u.owns(&env.r#type)) {
             return tokio::task::spawn_blocking(move || u.handle(env, owner)).await.unwrap_or_default();
@@ -142,11 +148,14 @@ async fn connection(daemon: Arc<Daemon>, mut socket: WebSocket) {
                     Ok(env) => answer(&daemon, env, &mut conn, true).await,
                     Err(e) => vec![serde_json::to_string(&Envelope::new(crate::wire::ERROR, format!("frame refused: not an envelope ({e})"))).unwrap_or_default()],
                 };
+                let mut gone = false;
                 for r in replies {
                     if socket.send(Message::Text(r.into())).await.is_err() {
-                        return;
+                        gone = true;
+                        break;
                     }
                 }
+                if gone { break }
             }
             f = rx.recv() => match f {
                 Ok(f) => if socket.send(Message::Text(f.into())).await.is_err() { break },
@@ -155,6 +164,7 @@ async fn connection(daemon: Arc<Daemon>, mut socket: WebSocket) {
             },
         }
     }
+    daemon.health.bridges.closed(&conn.bridges, Some("connection closed"), &daemon.health.journal);
 }
 
 /// A client of the strangler gateway: the frames a Rust unit owns are answered here, the rest go to the legacy backend;
@@ -202,6 +212,7 @@ async fn gateway_connection(daemon: Arc<Daemon>, gw: Arc<Gateway>, owner: bool, 
             },
         }
     }
+    daemon.health.bridges.closed(&conn.bridges, Some("connection closed"), &daemon.health.journal);
     gw.unregister(id);
 }
 
@@ -255,6 +266,7 @@ pub async fn serve_with(
             let _ = tokio::task::spawn_blocking(move || {
                 if refresh {
                     d.refresh_held();
+                    d.health.journal.heartbeat();
                 }
                 d.flush()
             })
@@ -267,6 +279,7 @@ pub async fn serve_with(
         g.stop();
     }
     flusher.abort();
+    daemon.health.journal.end(if r.is_ok() { "clean stop" } else { "server error" });
     tokio::task::spawn_blocking(move || daemon.shutdown()).await.ok();
     r
 }

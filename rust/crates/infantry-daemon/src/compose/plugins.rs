@@ -7,7 +7,7 @@ use super::Composed;
 use infantry_core::frames::{Envelope, FrameUnit};
 use infantry_core::bus::EventBus;
 use infantry_plugin_host::unit::PluginFrameUnit;
-use infantry_plugin_host::{Frame, HostServices, NamedEvent, PluginHost};
+use infantry_plugin_host::{CallContext, Frame, HostServices, NamedEvent, PluginHost};
 use infantry_plugin_wit::jsonl::{HttpRequest, HttpResponse, LogLevel};
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -72,8 +72,12 @@ impl HostServices for DaemonServices {
         s.remove(key);
         self.save_settings(&s)
     }
-    fn frame_request(&self, _module: &str, frame: Frame, _timeout_ms: u32) -> Result<Frame, String> {
+    fn frame_request(&self, _module: &str, frame: Frame, caller: Option<&CallContext>, _timeout_ms: u32) -> Result<Frame, String> {
         let c = self.composed.get().and_then(Weak::upgrade).ok_or("the daemon is still starting")?;
+        let max_depth = self.setting_get(super::scope::MAX_DEPTH_KEY).and_then(|v| v.trim().parse().ok()).unwrap_or(super::scope::MAX_DEPTH);
+        if let Some(why) = super::scope::refusal(&frame.r#type, &frame.data, frame.session_id.as_deref(), caller, &c.daemon.records(), max_depth) {
+            return Err(why);
+        }
         let _rt = self.handle.enter();
         let mut env = Envelope::new(frame.r#type.clone(), frame.data);
         env.session_id = frame.session_id;

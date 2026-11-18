@@ -142,6 +142,8 @@ pub struct Conn {
     pub pending_new: Option<NewOpts>,
     /// The session the last JSON `new` created: a session-less `prompt` on this connection goes into it.
     pub active: Option<String>,
+    /// The sessions whose MCP bridge called on this connection (dropped when it closes).
+    pub bridges: Vec<String>,
 }
 
 struct Entry {
@@ -185,6 +187,8 @@ pub struct Daemon {
     harnesses: Mutex<Vec<Arc<dyn Harness>>>,
     observers: Mutex<Vec<Arc<dyn SessionObserver>>>,
     units: std::sync::OnceLock<Arc<dyn FrameUnits>>,
+    /// The restart journal, the MCP bridges and the bound port (the `health` frame).
+    pub health: Arc<crate::health::Health>,
 }
 
 fn encode(ty: &str, data: String, session: Option<&str>, seq: Option<i64>) -> String {
@@ -257,6 +261,7 @@ impl Daemon {
             harnesses: Mutex::new(Vec::new()),
             observers: Mutex::new(Vec::new()),
             units: std::sync::OnceLock::new(),
+            health: Arc::new(crate::health::Health::new(&cfg_dir)),
         });
         d.refresh_held();
         Ok(d)
@@ -443,6 +448,16 @@ impl Daemon {
 
     /// `replay_request` (`{lastSequence}`): the session's kept frames after that sequence, a `replay_gap` first when some
     /// were dropped. Answers this connection only.
+    /// The last `lines` frames of a session's replay buffer (oldest first) and whether older ones were left out;
+    /// None for an unknown session.
+    pub fn transcript_tail(&self, sid: &str, lines: usize) -> Option<(Vec<serde_json::Value>, bool)> {
+        let entry = self.find(sid)?;
+        let e = entry.lock().unwrap();
+        let skip = e.history.len().saturating_sub(lines);
+        let tail = e.history.iter().skip(skip).filter_map(|(_, f)| serde_json::from_str(f).ok()).collect();
+        Some((tail, skip > 0))
+    }
+
     fn replay(&self, sid: &str, data: &str) -> Result<Vec<String>, String> {
         let entry = self.find(sid).ok_or_else(|| format!("replay_request refused: unknown session {sid}"))?;
         let last = serde_json::from_str::<serde_json::Value>(data).ok().and_then(|v| v["lastSequence"].as_i64()).unwrap_or(0);
