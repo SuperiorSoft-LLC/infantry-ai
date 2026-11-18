@@ -13,6 +13,9 @@ pub static COMMANDS: &[&Command] = &[
     // -- board / tickets --
     // -- mail / sessions --
     // -- health / usage / settings / scripts / secrets / run / install --
+    &super::tools_cmds::SCRIPT,
+    &super::tools_cmds::SECRET,
+    &super::tools_cmds::RUN_CMD,
     // -- runner --
 ];
 

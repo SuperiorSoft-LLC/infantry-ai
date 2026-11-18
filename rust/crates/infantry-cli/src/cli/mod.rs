@@ -10,6 +10,8 @@
 
 #![allow(dead_code)]
 pub mod args;
+pub mod plugin_tools;
+pub mod tools_cmds;
 pub mod conn;
 pub mod registry;
 pub mod usage;
