@@ -15,6 +15,7 @@ mod adapters;
 mod agent_tools;
 pub mod host_frames;
 mod plugins;
+mod settings;
 pub mod scope;
 mod tools;
 mod watch;
@@ -349,6 +350,7 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         Arc::new(QuestionsUnit::new(questions.clone(), asker_of)),
         Arc::new(tools::ToolsUnit { tools: tools.clone() }),
         Arc::new(crate::run::RunUnit { runs: runs.clone() }),
+        Arc::new(settings::SettingsUnit { db: db.clone() }),
         vault.clone(),
     ];
     units.extend(knowledge.units());
