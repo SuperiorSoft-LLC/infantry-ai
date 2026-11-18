@@ -1,0 +1,102 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
+// Kanban board on the live wire: one bordered lane per status, drag to move or reorder, click a card to edit.
+import { useEffect, useMemo, useState } from "react";
+import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCorners, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
+import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { LayoutGrid, Plus, X } from "lucide-react";
+import { LANES, LANE_TITLES, laneOf, matchesFilter } from "@infantry/client";
+import { Button, EmptyState } from "@infantry/ui";
+import { useDaemon } from "@/daemon/daemon";
+import { FilterBar } from "@/components/board/filter-bar";
+import { Lane } from "@/components/board/lane";
+import { TicketCardView } from "@/components/board/ticket-card";
+import { TicketDialog } from "@/components/board/ticket-dialog";
+import { boardStore, useBoard } from "@/components/board/use-board";
+import "@/components/board/board.css";
+import { TabPage } from "./tab-page";
+
+/** The lane a dnd-kit `over` id names: a lane drop zone, or the lane of the ticket under the pointer. */
+function laneOfOver(id: string | number | undefined): string | null {
+  if (id === undefined) return null;
+  const s = String(id);
+  if (s.startsWith("lane:")) return s.slice(5);
+  return boardStore().getState().tickets[s]?.status ?? null;
+}
+
+export function BoardTab() {
+  const tickets = useBoard((s) => s.tickets);
+  const loaded = useBoard((s) => s.loaded);
+  const filter = useBoard((s) => s.filter);
+  const refusal = useBoard((s) => s.refusal);
+  const link = useDaemon((s) => s.connection.state);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overLane, setOverLane] = useState<string | null>(null);
+  useEffect(() => {
+    if (link === "open") boardStore().getState().ensureLoaded();
+  }, [link]);
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const lanes = useMemo(
+    () => LANES.map((status) => ({ status, all: laneOf(tickets, status) })).map((l) => ({ ...l, shown: l.all.filter((t) => matchesFilter(t, filter)) })),
+    [tickets, filter],
+  );
+  const dragged = dragId ? tickets[dragId] : undefined;
+
+  const onStart = (e: DragStartEvent) => setDragId(String(e.active.id));
+  const onOver = (e: DragOverEvent) => setOverLane(laneOfOver(e.over?.id));
+  const onEnd = (e: DragEndEvent) => {
+    setDragId(null);
+    setOverLane(null);
+    const id = String(e.active.id);
+    const status = laneOfOver(e.over?.id);
+    const t = boardStore().getState().tickets[id];
+    if (!t || !status || !e.over) return;
+    const full = laneOf(boardStore().getState().tickets, status).map((x) => x.id);
+    const overIsLane = String(e.over.id).startsWith("lane:");
+    const to = overIsLane ? full.length : full.indexOf(String(e.over.id));
+    const board = boardStore().getState();
+    if (t.status === status) {
+      const from = full.indexOf(id);
+      if (from === to || (overIsLane && from === full.length - 1)) return;
+      board.reorder(status, arrayMove(full, from, overIsLane ? full.length - 1 : to));
+    } else board.move(id, status, to);
+  };
+
+  return (
+    <TabPage
+      title="Board"
+      description="ticket → dev → staging → main"
+      actions={
+        <Button size="sm" onClick={() => setCreating(true)}>
+          <Plus /> New ticket
+        </Button>
+      }
+    >
+      <FilterBar />
+      {refusal && (
+        <div role="alert" className="mb-3 flex items-start justify-between gap-2 rounded-lg border border-danger/60 bg-danger/10 p-2 text-xs text-danger">
+          <span>{refusal}</span>
+          <Button variant="ghost" size="icon" className="size-5" aria-label="Dismiss" onClick={() => boardStore().getState().clearRefusal()}>
+            <X className="size-3" />
+          </Button>
+        </div>
+      )}
+      {!loaded ? (
+        <EmptyState icon={<LayoutGrid className="size-6" />} title={link === "open" ? "Loading the board…" : "Waiting for the daemon…"} hint={link === "open" ? undefined : "The board appears when the connection opens."} />
+      ) : (
+        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onStart} onDragOver={onOver} onDragEnd={onEnd} onDragCancel={() => (setDragId(null), setOverLane(null))}>
+          <div className="grid auto-cols-[minmax(240px,1fr)] grid-flow-col gap-3 overflow-x-auto pb-2">
+            {lanes.map((l) => (
+              <Lane key={l.status} status={l.status} title={LANE_TITLES[l.status]} tickets={l.shown} total={l.all.length} over={overLane === l.status && !!dragId} onOpen={setOpenId} />
+            ))}
+          </div>
+          <DragOverlay dropAnimation={{ duration: 180 }}>{dragged ? <TicketCardView t={dragged} overlay /> : null}</DragOverlay>
+        </DndContext>
+      )}
+      <TicketDialog ticketId={openId} creating={creating} onClose={() => (setOpenId(null), setCreating(false))} />
+    </TabPage>
+  );
+}

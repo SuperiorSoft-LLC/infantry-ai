@@ -1,0 +1,26 @@
+[
+  {
+    "data": "provider=stub contract=1.155.0 instance=dad2af0a-fecb-4739-9fbc-593f80287277 since=0 build=dev",
+    "sequence": null,
+    "sessionId": null,
+    "type": "ready"
+  },
+  {
+    "data": "{\"preset\":\"production\",\"label\":\"Production\",\"pinned\":false,\"pinnedBy\":null,\"canSwitch\":false,\"presets\":[{\"id\":\"production\",\"label\":\"Production\",\"description\":\"Everything enabled.\"}],\"disable\":[],\"allow\":[],\"reason\":null,\"notice\":null,\"restricted\":false,\"notices\":[],\"ready\":{},\"seatingError\":null,\"refusal\":null,\"frames\":{}}",
+    "sequence": null,
+    "sessionId": null,
+    "type": "policy"
+  },
+  {
+    "data": "[]",
+    "sequence": null,
+    "sessionId": null,
+    "type": "sessions"
+  },
+  {
+    "data": "[]",
+    "sequence": null,
+    "sessionId": null,
+    "type": "worktrees"
+  }
+]

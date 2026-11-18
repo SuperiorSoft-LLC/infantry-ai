@@ -1,0 +1,146 @@
+[
+  {
+    "data": "provider=stub contract=1.155.0 instance=dad2af0a-fecb-4739-9fbc-593f80287277 since=0 build=dev",
+    "sequence": null,
+    "sessionId": null,
+    "type": "ready"
+  },
+  {
+    "data": "{\"preset\":\"production\",\"label\":\"Production\",\"pinned\":false,\"pinnedBy\":null,\"canSwitch\":false,\"presets\":[{\"id\":\"production\",\"label\":\"Production\",\"description\":\"Everything enabled.\"}],\"disable\":[],\"allow\":[],\"reason\":null,\"notice\":null,\"restricted\":false,\"notices\":[],\"ready\":{},\"seatingError\":null,\"refusal\":null,\"frames\":{}}",
+    "sequence": null,
+    "sessionId": null,
+    "type": "policy"
+  },
+  {
+    "data": "[]",
+    "sequence": null,
+    "sessionId": null,
+    "type": "sessions"
+  },
+  {
+    "data": "[]",
+    "sequence": null,
+    "sessionId": null,
+    "type": "worktrees"
+  },
+  {
+    "data": "{\"id\":\"fcbc4a50-dd78-4018-a4e9-788370ac53a8\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\7e6fe711e257d956\\\\07e6de2d-1c49-4496-a6a1-06bbfabe96da\\\\scratchpad\\\\kwork\",\"spawnedAt\":1794999566231,\"lastHeartbeat\":1794999566231,\"state\":\"BUSY\",\"providerSessionId\":null,\"childPid\":null,\"runCount\":0,\"resumeCount\":0,\"lastExitCode\":null,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":false,\"dormant\":false,\"lastAction\":\"state busy\",\"lastEventAt\":1794999566330,\"live\":true,\"turnActive\":true}",
+    "sequence": 1,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "session"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"runActivity\":{\"state\":\"thinking\",\"startedAt\":1794999566332,\"turnStartedAt\":1794999566332,\"lastEventAt\":1794999566332}}",
+    "sequence": 2,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "status"
+  },
+  {
+    "data": "conformance: spawn",
+    "sequence": 3,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "turn"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"runActivity\":{\"state\":\"thinking\",\"startedAt\":1794999566345,\"turnStartedAt\":1794999566345,\"lastEventAt\":1794999566345}}",
+    "sequence": 4,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "status"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"tool\":\"stub\",\"activity\":\"starting stub model default in C:\\\\Users\\\\antho\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\7e6fe711e257d956\\\\07e6de2d-1c49-4496-a6a1-06bbfabe96da\\\\scratchpad\\\\kwork\"}",
+    "sequence": 5,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "status"
+  },
+  {
+    "data": "[infantry] * session started (stub · default)",
+    "sequence": 6,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "stderr"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"tool\":\"stub\",\"activity\":\"process started (no OS process)\"}",
+    "sequence": 7,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "status"
+  },
+  {
+    "data": "{\"id\":\"fcbc4a50-dd78-4018-a4e9-788370ac53a8\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\7e6fe711e257d956\\\\07e6de2d-1c49-4496-a6a1-06bbfabe96da\\\\scratchpad\\\\kwork\",\"spawnedAt\":1794999566231,\"lastHeartbeat\":1794999566355,\"state\":\"BUSY\",\"providerSessionId\":\"stub-session-1\",\"childPid\":null,\"runCount\":1,\"resumeCount\":0,\"lastExitCode\":null,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":true,\"dormant\":false,\"lastAction\":\"state busy\",\"lastEventAt\":1794999566369,\"live\":true,\"turnActive\":true}",
+    "sequence": 8,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "session"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\"}",
+    "sequence": 9,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "status"
+  },
+  {
+    "data": "{\"type\":\"step_start\",\"sessionID\":\"stub-session-1\"}",
+    "sequence": 10,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "stdout"
+  },
+  {
+    "data": "{\"type\":\"text\",\"text\":\"[stub] daemon is running without a provider CLI.\"}",
+    "sequence": 11,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "stdout"
+  },
+  {
+    "data": "[stub] daemon is running without a provider CLI.",
+    "sequence": 12,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "text_delta"
+  },
+  {
+    "data": "{\"type\":\"text\",\"text\":\"Every frame on this socket is the real protocol; only the text is scripted.\"}",
+    "sequence": 13,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "stdout"
+  },
+  {
+    "data": "Every frame on this socket is the real protocol; only the text is scripted.",
+    "sequence": 14,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "text_delta"
+  },
+  {
+    "data": "{\"type\":\"step_finish\"}",
+    "sequence": 15,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "stdout"
+  },
+  {
+    "data": "[stub] no provider process was started",
+    "sequence": 16,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "stderr"
+  },
+  {
+    "data": "{\"id\":\"fcbc4a50-dd78-4018-a4e9-788370ac53a8\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\7e6fe711e257d956\\\\07e6de2d-1c49-4496-a6a1-06bbfabe96da\\\\scratchpad\\\\kwork\",\"spawnedAt\":1794999566231,\"lastHeartbeat\":1794999566477,\"state\":\"IDLE\",\"providerSessionId\":\"stub-session-1\",\"childPid\":null,\"runCount\":1,\"resumeCount\":0,\"lastExitCode\":0,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":false,\"dormant\":false,\"lastAction\":\"state idle\",\"lastOutputAt\":1794999566430,\"lastEventAt\":1794999566481,\"live\":false,\"turnActive\":false}",
+    "sequence": 17,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "session"
+  },
+  {
+    "data": "{\"state\":\"IDLE\",\"detail\":\"\",\"runActivity\":{\"state\":\"finished\",\"startedAt\":1794999566481,\"turnStartedAt\":1794999566345,\"lastEventAt\":1794999566481}}",
+    "sequence": 18,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "status"
+  },
+  {
+    "data": "{\"exitCode\":0,\"outcome\":\"SUCCEEDED\",\"detail\":\"\"}",
+    "sequence": 19,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "finished"
+  },
+  {
+    "data": "{\"state\":\"IDLE\",\"detail\":\"\",\"runActivity\":{\"state\":\"idle\",\"startedAt\":1794999566492,\"turnStartedAt\":1794999566345,\"lastEventAt\":1794999566492}}",
+    "sequence": 20,
+    "sessionId": "fcbc4a50-dd78-4018-a4e9-788370ac53a8",
+    "type": "status"
+  }
+]

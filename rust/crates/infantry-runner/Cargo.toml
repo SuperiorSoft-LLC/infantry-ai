@@ -1,0 +1,29 @@
+[package]
+name = "infantry-runner"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "Infantry AI process runner: harness sessions in a PTY (screen state, transcript tail, hook channel, Job Objects)"
+publish = false
+
+[dependencies]
+vt100 = "0.16"
+serde_json = { version = "1", features = ["preserve_order"] }
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Console",
+    "Win32_System_Pipes",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+] }
+
+[target.'cfg(unix)'.dependencies]
+portable-pty = "0.9"
+libc = "0.2"

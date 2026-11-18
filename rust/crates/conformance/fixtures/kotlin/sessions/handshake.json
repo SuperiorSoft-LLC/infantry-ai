@@ -1,0 +1,48 @@
+{
+  "frames": [
+    {
+      "data": "provider=stub contract=1.155.0 instance=<id> since=<ts> build=<build>",
+      "sessionId": null,
+      "type": "ready"
+    },
+    {
+      "data": {
+        "allow": [],
+        "canSwitch": false,
+        "disable": [],
+        "frames": {},
+        "label": "Production",
+        "notice": null,
+        "notices": [],
+        "pinned": false,
+        "pinnedBy": null,
+        "preset": "production",
+        "presets": [
+          {
+            "description": "Everything enabled.",
+            "id": "production",
+            "label": "Production"
+          }
+        ],
+        "ready": {},
+        "reason": null,
+        "refusal": null,
+        "restricted": false,
+        "seatingError": null
+      },
+      "sessionId": null,
+      "type": "policy"
+    },
+    {
+      "data": [],
+      "sessionId": null,
+      "type": "sessions"
+    },
+    {
+      "data": [],
+      "sessionId": null,
+      "type": "worktrees"
+    }
+  ],
+  "scenario": "handshake"
+}

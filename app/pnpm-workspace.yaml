@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
+# The Infantry AI app workspace (docs/rust-port/PLAN.md §1.4).
+packages:
+  - packages/*
+  - shell

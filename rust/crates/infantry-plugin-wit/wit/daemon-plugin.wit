@@ -1,0 +1,191 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
+//
+// The Infantry AI daemon plugin ABI (docs/rust-port/PLAN.md section 2.3).
+//
+// FROZEN DRAFT 0.1.0. Changes are ADDITIVE ONLY:
+//   - new imports (interfaces or functions) may be added: an old guest simply does not import them;
+//   - exports are fixed: a host always calls exactly these, so a new export would break every built guest;
+//   - records and variants are never changed in place; a new shape is a new type and a new function.
+//
+// Grants are linker entries. `log` and `config` are always linked. Every other interface is linked only when the
+// module.json `daemon.needs` or `daemon.wants` names it (and, for a community module, modules.json grants
+// `daemon.import.<name>`). An import the manifest does not request is not linked, so the component does not
+// instantiate. A `wants` entry the owner refused is linked to a stub whose every call fails with
+// "<interface> not granted".
+//
+// A native sidecar (`daemon.sidecar`) speaks the JSON-lines mapping of this same world over stdio
+// (infantry-plugin-wit `jsonl` module); callers cannot tell the two apart.
+package infantry:plugin@0.1.0;
+
+/// Shared shapes. JSON-carrying fields are strings holding JSON (the daemon's wire style).
+interface types {
+    /// One daemon frame (the wire Envelope's `type`, `data`, `sessionId`, `requestId`).
+    record frame {
+        %type: string,
+        data: string,
+        session-id: option<string>,
+        request-id: option<string>,
+    }
+
+    /// Who sent a frame or a tool call.
+    record caller {
+        /// The owner's token (not an agent, not a guest).
+        owner: bool,
+        /// An agent session's MCP bridge.
+        agent: bool,
+        active-session: option<string>,
+        project: option<string>,
+        remote-address: option<string>,
+    }
+
+    /// The context of one tool call (DaemonApi ToolCall minus `arguments`).
+    record call-context {
+        caller: caller,
+        client-session-id: option<string>,
+        client-role: option<string>,
+        client-project-id: option<string>,
+    }
+
+    /// A named event on the daemon's event bus.
+    record named-event {
+        name: string,
+        /// JSON object.
+        payload: string,
+        source: string,
+        id: string,
+        cause-id: string,
+        depth: u32,
+        /// Epoch milliseconds.
+        at: u64,
+    }
+
+    /// One SQL value, as SQLite stores it.
+    variant sql-value {
+        null,
+        integer(s64),
+        real(f64),
+        text(string),
+        blob(list<u8>),
+    }
+
+    record sql-rows {
+        columns: list<string>,
+        rows: list<list<sql-value>>,
+    }
+
+    record http-request {
+        method: string,
+        url: string,
+        headers: list<tuple<string, string>>,
+        body: option<list<u8>>,
+        /// None = the host's default (limits.http.*).
+        timeout-ms: option<u32>,
+    }
+
+    record http-response {
+        status: u16,
+        headers: list<tuple<string, string>>,
+        body: list<u8>,
+    }
+
+    /// A request to one of the plugin's declared routes (`daemon.routes` / `daemon.publicRoutes`).
+    record route-request {
+        method: string,
+        path: string,
+        query: string,
+        headers: list<tuple<string, string>>,
+        body: list<u8>,
+    }
+}
+
+/// The plugin's log lines go to the daemon log, prefixed with the module id.
+interface log {
+    enum level { debug, info, warn, error }
+    write: func(level: level, line: string);
+}
+
+/// Read-only facts about this module and the daemon (always linked).
+interface config {
+    module-id: func() -> string;
+    /// core | official | community, decided by the install folder and the signature.
+    tier: func() -> string;
+    /// The daemon plugin ABI version the host speaks (semver).
+    api-version: func() -> string;
+    /// The running build environment: prod | staging | dev.
+    environment: func() -> string;
+    /// A `daemon.config` value (scope "daemon"); none when unset or undeclared.
+    get: func(key: string) -> option<string>;
+    /// The running environment's address of a `daemon.endpoints` entry (prod when that environment has none).
+    endpoint: func(name: string) -> option<string>;
+}
+
+/// The plugin's own settings. Keys are bare (`x`); the host stores them as `<ModuleName>.x`.
+interface settings {
+    get: func(key: string) -> option<string>;
+    set: func(key: string, value: string) -> result<_, string>;
+    remove: func(key: string) -> result<_, string>;
+}
+
+/// The plugin's own storage in the daemon's SQLite: a key/value space plus SQL on tables the plugin owns.
+/// SQL may name only tables prefixed `<module_id_lowercase>_` (and `daemon.storage.adopt` tables for official modules).
+interface storage {
+    use types.{sql-value, sql-rows};
+    kv-get: func(key: string) -> result<option<string>, string>;
+    kv-set: func(key: string, value: string) -> result<_, string>;
+    kv-delete: func(key: string) -> result<bool, string>;
+    kv-keys: func(prefix: string) -> result<list<string>, string>;
+    /// A statement with no rows (DDL, insert, update, delete); the number of changed rows.
+    execute: func(sql: string, params: list<sql-value>) -> result<u64, string>;
+    query: func(sql: string, params: list<sql-value>) -> result<sql-rows, string>;
+}
+
+/// The daemon event bus. Subscribed events arrive through the `on-event` export.
+interface events {
+    use types.{named-event};
+    publish: func(name: string, payload: string, cause-id: option<string>) -> result<named-event, string>;
+    /// A glob pattern over event names (`ticket.*`); the id is handed back to `on-event`.
+    subscribe: func(pattern: string) -> result<u64, string>;
+    unsubscribe: func(id: u64);
+    /// A frame pushed to every connected client.
+    broadcast: func(%type: string, data: string);
+}
+
+/// Outbound HTTP, only to the addresses in the module's `daemon.endpoints` (any other origin is refused).
+interface http {
+    use types.{http-request, http-response};
+    send: func(request: http-request) -> result<http-response, string>;
+}
+
+/// Frames into the daemon itself (DaemonApi ToolCall.request): the reply frame, or why there is none.
+interface frames {
+    use types.{frame};
+    request: func(%type: string, data: string, session-id: option<string>, timeout-ms: u32) -> result<frame, string>;
+}
+
+world daemon-plugin {
+    use types.{frame, caller, call-context, named-event, route-request, http-response};
+
+    import log;
+    import config;
+    import settings;
+    import storage;
+    import events;
+    import http;
+    import frames;
+
+    /// Called once after instantiation; an error refuses the module ("failed: <error>").
+    export start: func() -> result<_, string>;
+    /// Called once before the instance is dropped (unload, hot swap, daemon stop).
+    export stop: func();
+    /// A declared `daemon.tools` entry. `args` is the JSON object of arguments; ok = the tool's text, err = an error result.
+    export call-tool: func(name: string, args: string, ctx: call-context) -> result<string, string>;
+    /// A declared `daemon.frames` entry. ok(none) = no reply frame; err = "<type> refused: <err>".
+    export handle-frame: func(frame: frame, caller: caller) -> result<option<frame>, string>;
+    /// A declared `daemon.routes` / `daemon.publicRoutes` entry.
+    export handle-route: func(request: route-request) -> result<http-response, string>;
+    /// A declared `daemon.hooks` kind (frameGate, mailGate, ...). `payload` and the ok value are JSON, per hook kind.
+    export on-hook: func(kind: string, payload: string) -> result<string, string>;
+    /// An event matching one of this plugin's `events.subscribe` patterns.
+    export on-event: func(subscription: u64, event: named-event);
+}
