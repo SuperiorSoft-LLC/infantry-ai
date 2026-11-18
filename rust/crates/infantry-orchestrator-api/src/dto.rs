@@ -211,28 +211,29 @@ impl TicketMcp {
 
     /// The stored text: defaults and nulls left out (Kotlin `encodeDefaults = false, explicitNulls = false`).
     pub fn to_stored(&self) -> String {
-        let items: Vec<serde_json::Value> = self
-            .require
-            .iter()
-            .map(|r| {
-                let mut m = serde_json::Map::new();
-                if let Some(s) = &r.server {
-                    m.insert("server".into(), s.clone().into());
-                }
-                if let Some(c) = &r.capability {
-                    m.insert("capability".into(), c.clone().into());
-                }
-                if !r.purpose.is_empty() {
-                    m.insert("purpose".into(), r.purpose.clone().into());
-                }
-                serde_json::Value::Object(m)
-            })
-            .collect();
-        let mut top = serde_json::Map::new();
-        if !items.is_empty() {
-            top.insert("require".into(), serde_json::Value::Array(items));
+        // Field order matters (byte-equal with Kotlin): a struct, not a (sorted) serde_json::Map.
+        #[derive(Serialize)]
+        struct Req<'a> {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            server: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            capability: Option<&'a str>,
+            #[serde(skip_serializing_if = "str::is_empty")]
+            purpose: &'a str,
         }
-        serde_json::Value::Object(top).to_string()
+        #[derive(Serialize)]
+        struct Top<'a> {
+            #[serde(skip_serializing_if = "Vec::is_empty")]
+            require: Vec<Req<'a>>,
+        }
+        let top = Top {
+            require: self
+                .require
+                .iter()
+                .map(|r| Req { server: r.server.as_deref(), capability: r.capability.as_deref(), purpose: &r.purpose })
+                .collect(),
+        };
+        serde_json::to_string(&top).expect("plain strings serialize")
     }
 
     /// A stored text as a declaration: None when blank, unreadable or empty (Kotlin `TicketMcp.stored`, lenient).

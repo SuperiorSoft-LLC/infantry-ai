@@ -26,10 +26,11 @@ pub fn kotlin_daemon_env() -> StaticEnv {
         default_provider: Some("claude".into()),
         providers: vec![ProviderFacts {
             id: "claude".into(),
-            context_limit_support: Some("supported".into()),
-            context_limit_how: None,
-            effort_support: Some("supported".into()),
-            effort_how: None,
+            // The installed 1.6.0 build's `claude` harness declares neither mapping.
+            context_limit_support: Some("unsupported".into()),
+            context_limit_how: Some("this harness declares no context limit mapping".into()),
+            effort_support: Some("unsupported".into()),
+            effort_how: Some("this harness declares no effort mapping".into()),
             ..Default::default()
         }],
         context: Some(ContextSettings::default()),
