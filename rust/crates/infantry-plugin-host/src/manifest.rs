@@ -111,6 +111,9 @@ pub struct ToolDecl {
     pub kind: String,
     #[serde(default)]
     pub description: String,
+    /// The tool's MCP input schema (JSON Schema object); None = any object. MCP clients show it as the tool's arguments.
+    #[serde(default)]
+    pub input_schema: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

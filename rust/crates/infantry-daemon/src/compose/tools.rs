@@ -21,11 +21,12 @@ pub struct Tools {
     plugins: OnceLock<Option<Arc<PluginHost>>>,
     knowledge: OnceLock<Arc<infantry_knowledge::Knowledge>>,
     runs: OnceLock<Arc<crate::run::RunManager>>,
+    agents: OnceLock<Arc<super::agent_tools::AgentTools>>,
 }
 
 impl Tools {
     pub fn new(daemon: Arc<Daemon>) -> Tools {
-        Tools { daemon, scripting: OnceLock::new(), plugins: OnceLock::new(), knowledge: OnceLock::new(), runs: OnceLock::new() }
+        Tools { daemon, scripting: OnceLock::new(), plugins: OnceLock::new(), knowledge: OnceLock::new(), runs: OnceLock::new(), agents: OnceLock::new() }
     }
 
     pub fn set_scripting(&self, t: ScriptingTools) {
@@ -38,6 +39,10 @@ impl Tools {
 
     pub fn set_runs(&self, r: Arc<crate::run::RunManager>) {
         let _ = self.runs.set(r);
+    }
+
+    pub fn set_agents(&self, a: Arc<super::agent_tools::AgentTools>) {
+        let _ = self.agents.set(a);
     }
 
     pub fn set_plugins(&self, h: Option<Arc<PluginHost>>) {
@@ -95,6 +100,13 @@ impl ScriptHost for Tools {
                 }
             }
         }
+        if self.agents.get().is_some() {
+            for t in super::agent_tools::board_catalog() {
+                if !out.iter().any(|o| o.name == t.name) {
+                    out.push(t);
+                }
+            }
+        }
         if let Some(h) = self.plugins() {
             for t in h.tools() {
                 if out.iter().any(|o| o.name == t.decl.name) {
@@ -102,10 +114,18 @@ impl ScriptHost for Tools {
                 }
                 out.push(ToolInfo {
                     description: if t.decl.description.is_empty() { t.decl.name.clone() } else { t.decl.description.clone() },
-                    input_schema: json!({"type": "object"}),
+                    input_schema: t.decl.input_schema.clone().unwrap_or_else(|| json!({"type": "object"})),
                     read_only: t.decl.kind == "read",
                     name: t.decl.name.clone(),
                 });
+            }
+        }
+        // Fallbacks: a plugin that declares the same tool serves it instead.
+        if self.agents.get().is_some() {
+            for t in super::agent_tools::agent_catalog() {
+                if !out.iter().any(|o| o.name == t.name) {
+                    out.push(t);
+                }
             }
         }
         out
@@ -129,6 +149,9 @@ impl ScriptHost for Tools {
         if let Some(r) = self.runs.get().and_then(|m| crate::run::tools::invoke(m, name, args, inv)) {
             return r;
         }
+        if let Some(r) = self.agents.get().and_then(|a| a.board_call(name, args, inv)) {
+            return r;
+        }
         if let Some(h) = self.plugins() {
             if h.tool_owner(name).is_some() {
                 let a = Value::Object(args.clone()).to_string();
@@ -137,6 +160,9 @@ impl ScriptHost for Tools {
                     Err(e) => ToolResult::err(e.message().to_string()),
                 };
             }
+        }
+        if let Some(r) = self.agents.get().and_then(|a| a.call(name, args, inv)) {
+            return r;
         }
         ToolResult::err(format!("{name} refused: no such tool on this daemon"))
     }

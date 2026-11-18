@@ -30,13 +30,76 @@
         "name": "infantry_settings_get",
         "action": "settings.read",
         "kind": "read",
-        "description": "Read a setting effective value and the scope it comes from (session > role > project > app > default)."
+        "description": "Read a setting effective value and the scope it comes from (session > role > project > app > default).",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "description": "The setting key, e.g. related.brief."
+            },
+            "project": {
+              "type": "string",
+              "description": "The project id (scope project, or the project of a role)."
+            },
+            "role": {
+              "type": "string",
+              "description": "The role id (scope role, with project)."
+            },
+            "session": {
+              "type": "string",
+              "description": "The session id (scope session)."
+            },
+            "explain": {
+              "type": "string",
+              "description": "true: also print which scope wins and every layer."
+            }
+          },
+          "required": [
+            "key"
+          ],
+          "additionalProperties": false
+        }
       },
       {
         "name": "infantry_settings_set",
         "action": "settings.save",
         "kind": "write",
-        "description": "Set a setting at a scope (app, project, role or session) with the target ids."
+        "description": "Set a setting at a scope (app, project, role or session) with the target ids.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "description": "The setting key."
+            },
+            "value": {
+              "type": "string",
+              "description": "The value as JSON text (true, 5, \"notify\", [..]); null clears it at a non-app scope."
+            },
+            "scope": {
+              "type": "string",
+              "description": "app (default) | project | role | session. Resolution: session > role > project > app > default."
+            },
+            "project": {
+              "type": "string",
+              "description": "The project id (scope project, or the project of a role)."
+            },
+            "role": {
+              "type": "string",
+              "description": "The role id (scope role, with project)."
+            },
+            "session": {
+              "type": "string",
+              "description": "The session id (scope session)."
+            }
+          },
+          "required": [
+            "key",
+            "value"
+          ],
+          "additionalProperties": false
+        }
       }
     ]
   }

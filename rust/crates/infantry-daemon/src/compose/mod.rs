@@ -12,6 +12,7 @@
 //! (`plugin_tools` / `plugin_tool_call`) over one tool catalog.
 
 mod adapters;
+mod agent_tools;
 pub mod host_frames;
 mod plugins;
 pub mod scope;
@@ -240,6 +241,16 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
     };
     runs.set_extras(crate::run::prep::Extras { vault: vault.clone(), projects: projects.clone() });
     tools.set_runs(runs.clone());
+    {
+        let p = projects.clone();
+        tools.set_agents(Arc::new(agent_tools::AgentTools {
+            daemon: daemon.clone(),
+            work: dispatcher.clone(),
+            bus: bus.clone(),
+            usage: usage.clone(),
+            project_dir: Arc::new(move |id: &str| project_dir(&p, id)),
+        }));
+    }
     tools.set_knowledge(knowledge.clone());
     let engines = ScriptEngines::standard();
     let exts = engines.extensions();
