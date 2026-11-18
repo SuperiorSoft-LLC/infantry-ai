@@ -17,7 +17,7 @@ export function StatusDot({ status, className, pulse }: { status: AgentStatus; c
     <span
       role="img"
       aria-label={status}
-      className={cn("inline-block size-2 shrink-0 rounded-full", colour[status], pulse && "animate-pulse", className)}
+      className={cn("inline-block size-2 shrink-0 rounded-full", colour[status], pulse && (status === "needs-input" ? "wait-pulse" : "busy-pulse"), className)}
     />
   );
 }
