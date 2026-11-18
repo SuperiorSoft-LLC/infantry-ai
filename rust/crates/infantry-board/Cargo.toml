@@ -9,6 +9,7 @@ description = "Infantry AI board (L4): tickets on the existing infantry.db schem
 publish = false
 
 [dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 infantry-core = { path = "../infantry-core" }
 infantry-protocol = { path = "../infantry-protocol" }
 infantry-orchestrator-api = { path = "../infantry-orchestrator-api" }

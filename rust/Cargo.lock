@@ -1142,6 +1142,7 @@ dependencies = [
 name = "infantry-board"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "infantry-core",
  "infantry-orchestrator-api",
  "infantry-protocol",

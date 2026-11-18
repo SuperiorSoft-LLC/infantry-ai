@@ -344,7 +344,7 @@ pub fn call(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> Opti
             let full = s(a, "detail").as_deref() == Some("full");
             let comments = if let Some(cid) = s(a, "commentId") {
                 let c = board.comment_store().map_err(err)?.get(&cid).map_err(err)?.ok_or_else(|| format!("no comment '{cid}'"))?;
-                return Ok(format!("{} {}/{} {} {}\n{}", c.id, c.kind, c.state, c.author.label(), c.created_at, c.body));
+                return Ok(format!("{} {}/{} by {} {}: {}", short(&c.id), c.kind, c.state, c.author.label(), display_stamp(c.created_at), c.body));
             } else {
                 let q = CommentQuery { ticket_id: s(a, "ticketId").ok_or("ticketId is required")?, which: s(a, "which"), kind: s(a, "kind"), limit: i(a, "limit").map(|x| x as i32) };
                 let all = q.which.as_deref() == Some("all");
@@ -358,7 +358,7 @@ pub fn call(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> Opti
                 .iter()
                 .map(|c| {
                     let body = if full || !all { c.body.clone() } else { c.body.lines().next().unwrap_or("").chars().take(160).collect() };
-                    format!("{} {}/{} {} {}: {}", short(&c.id), c.kind, c.state, c.author.label(), c.created_at, body)
+                    format!("{} {}/{} by {} {}: {}", short(&c.id), c.kind, c.state, c.author.label(), display_stamp(c.created_at), body)
                 })
                 .collect::<Vec<_>>()
                 .join("\n"))
@@ -422,5 +422,14 @@ mod tests {
             assert!(n.iter().any(|x| x == t), "{t}");
         }
         assert_eq!(short("0123456789abcdef"), "89abcdef");
+    }
+}
+
+/// `2026-11-03 20:41 -05:00`: local time with its offset (Kotlin `DisplayZone.stamp`), for agent-facing lines.
+pub fn display_stamp(epoch_ms: i64) -> String {
+    use chrono::TimeZone;
+    match chrono::Local.timestamp_millis_opt(epoch_ms).single() {
+        Some(t) => t.format("%Y-%m-%d %H:%M %:z").to_string(),
+        None => epoch_ms.to_string(),
     }
 }
