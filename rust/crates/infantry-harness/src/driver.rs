@@ -62,6 +62,7 @@ impl Lines {
 
 struct Live {
     id: ProcId,
+    pid: Option<u32>,
     pty: bool,
     started: Instant,
     events: UnboundedReceiver<ProcEvent>,
@@ -128,6 +129,35 @@ impl HarnessDriver {
         self.live.as_ref().map(|l| &l.id)
     }
 
+    /// The live process's OS pid on the runner's host, when the runner knows it.
+    pub fn pid(&self) -> Option<u32> {
+        self.live.as_ref().and_then(|l| l.pid)
+    }
+
+    /// Types [text] into the running turn of a persistent CLI ([`Translator::inject`]). False = no turn, or the CLI
+    /// cannot take it now (the host queues it as a turn instead).
+    pub async fn inject(&mut self, text: &str) -> bool {
+        let taken = self.turn_active && self.live.as_mut().is_some_and(|l| l.translator.inject(text));
+        self.deliver_outbound().await;
+        taken
+    }
+
+    /// Ends the session the CLI's own way ([`Translator::close`]) and waits up to [grace] for it to exit (its events
+    /// are returned), then closes as [`HarnessDriver::close`] does.
+    pub async fn shutdown(&mut self, grace: Duration, poll_step: Duration) -> Vec<HarnessEvent> {
+        let mut out = Vec::new();
+        let asked = self.live.as_mut().is_some_and(|l| l.translator.close());
+        if asked {
+            self.deliver_outbound().await;
+            let until = Instant::now() + grace;
+            while self.live.is_some() && Instant::now() < until {
+                out.extend(self.poll(poll_step).await);
+            }
+        }
+        self.close().await;
+        out
+    }
+
     /// Starts one turn; its events arrive through [`HarnessDriver::poll`].
     pub async fn start_turn(&mut self, prompt: &str) -> Result<(), DriverError> {
         if self.turn_active {
@@ -186,14 +216,16 @@ impl HarnessDriver {
             let _ = self.runner.close_input(&handle.id).await;
         }
         let mut tails = Vec::new();
-        for path in plan.tail {
-            match self.runner.tail(TailSpec { path: path.clone(), from: TailFrom::Start }).await {
+        for spec in plan.tail {
+            let path = spec.path.clone();
+            match self.runner.tail(spec).await {
                 Ok(rx) => tails.push((path, rx)),
                 Err(e) => self.pending.push_back(HarnessEvent::Warning(format!("tail {path}: {e}"))),
             }
         }
         self.live = Some(Live {
             id: handle.id,
+            pid: handle.pid,
             pty,
             started: Instant::now(),
             events,

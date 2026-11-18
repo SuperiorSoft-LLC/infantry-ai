@@ -4,10 +4,10 @@
 //! back neutral [`HarnessEvent`]s; it names no vendor. A harness says what host mechanisms it uses ([`Capabilities`]:
 //! `pty-screen`, `file-tail`, `hook-channel`) and whether it keeps one process across turns.
 //!
-//! Implementations: [`stub`] (scripted, no process; `INFANTRY_PROVIDER=stub`) and [`claude`] (through `infantry-runner`).
-//! Codex, opencode, pi, gemini plug in the same way.
+//! Implementations: [`stub`] (scripted, no process; `INFANTRY_PROVIDER=stub`) and [`driven`], which runs any
+//! `infantry-harness` crate (one agent CLI each) on the local runner. The registry is [`by_name`].
 
-pub mod claude;
+pub mod driven;
 pub mod stub;
 
 use std::path::PathBuf;
@@ -104,11 +104,16 @@ pub trait HarnessSession: Send {
     fn process_alive(&self) -> bool;
 }
 
+/// The provider a daemon runs when none is named.
+pub const DEFAULT_PROVIDER: &str = infantry_harness_claude::ID;
+
 /// The harness for a provider name, or None when this daemon has no such harness.
 pub fn by_name(name: &str) -> Option<Box<dyn Harness>> {
     match name {
         stub::NAME => Some(Box::new(stub::Stub::default())),
-        claude::NAME => Some(Box::new(claude::ClaudeHarness::default())),
+        infantry_harness_claude::ID => {
+            Some(Box::new(driven::Driven::new(std::sync::Arc::new(infantry_harness_claude::ClaudeHarness::default()))))
+        }
         _ => None,
     }
 }

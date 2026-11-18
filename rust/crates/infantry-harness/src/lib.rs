@@ -26,7 +26,7 @@ pub mod driver;
 pub use driver::{DriverError, HarnessDriver};
 /// The runner contract (RUST-RUN-1), re-exported so a harness crate needs only this one.
 pub use infantry_runner_api as runner;
-pub use infantry_runner_api::{ProcessSpec, Runner, Size};
+pub use infantry_runner_api::{ProcessSpec, Runner, Size, TailFrom, TailSpec};
 
 use std::path::{Path, PathBuf};
 
@@ -116,6 +116,8 @@ pub struct LaunchRequest {
     pub cwd: PathBuf,
     pub model: Option<String>,
     pub effort: Option<String>,
+    /// The context window (tokens) the CLI compacts at; None = its own default. A harness without one ignores it.
+    pub context_limit: Option<u64>,
     pub approval: ApprovalMode,
     /// A [`HarnessEvent::ProviderSession`] token to continue; None = a new conversation.
     pub resume: Option<String>,
@@ -145,6 +147,7 @@ impl LaunchRequest {
             cwd,
             model: None,
             effort: None,
+            context_limit: None,
             approval: ApprovalMode::Deny,
             resume: None,
             prompt: None,
@@ -172,8 +175,9 @@ pub struct LaunchPlan {
     /// None = stdin stays open for [`Outbound::Stdin`].
     pub stdin: Option<Vec<u8>>,
     pub translator: Box<dyn Translator>,
-    /// Files on the runner's host the driver tails for the translator ([`Capabilities::file_tail`]).
-    pub tail: Vec<String>,
+    /// Files on the runner's host the driver tails for the translator ([`Capabilities::file_tail`]); [`TailFrom::End`]
+    /// skips what a resumed file already holds.
+    pub tail: Vec<TailSpec>,
 }
 
 /// What a translator is fed.
@@ -265,6 +269,14 @@ pub trait Translator: Send {
     }
     /// The host's answer to [`HarnessEvent::ApprovalRequested`] [id] (typically queued as an [`Outbound::HookReply`]).
     fn answer(&mut self, _id: &str, _allow: bool) {}
+    /// Types [text] into the running turn (the CLI takes it at its next step without stopping). False = it cannot now.
+    fn inject(&mut self, _text: &str) -> bool {
+        false
+    }
+    /// Starts the CLI's own exit (keys, a command). False = it has none; the driver kills the process.
+    fn close(&mut self) -> bool {
+        false
+    }
     /// Drains the traffic to deliver.
     fn take_outbound(&mut self) -> Vec<Outbound> {
         Vec::new()
