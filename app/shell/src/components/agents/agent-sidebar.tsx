@@ -5,6 +5,7 @@ import { useCallback, useEffect } from "react";
 import { Search, UserPlus, SearchX, Unplug } from "lucide-react";
 import { useAgentList } from "@/daemon/agents";
 import { useDaemon } from "@/daemon/daemon";
+import { useRolesLoaded } from "@/components/knowledge/use-knowledge";
 import { useUi } from "@/state/ui-state";
 import { Input } from "@infantry/ui";
 import { Button } from "@infantry/ui";
@@ -17,6 +18,7 @@ import { AgentGroup } from "./agent-group";
 
 export function AgentSidebar() {
   const ui = useUi();
+  useRolesLoaded();
   const agents = useAgentList();
   const link = useDaemon((s) => s.connection.state);
   const select = useCallback((id: string) => ui.set("selectedAgentId", id), [ui.set]);
