@@ -1,5 +1,9 @@
 # Infantry_Sites changelog
 
+## 1.0.1 (SITES-KNOW-1)
+
+- Plugin knowledge: module.json `knowledge` entry `hosting` (all roles, the Assistant included) with `knowledge/hosting.md`: what Hosting is, the user's steps, the three agent tools, states and fixes, what agents never do. `files` lists the folder.
+
 ## Unreleased (SITES-SSH-1)
 
 - Agents SSH into the account's servers with no setup: `infantry_sites_ssh_exec {server?, command, timeoutSec?}` and
