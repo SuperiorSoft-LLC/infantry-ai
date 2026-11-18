@@ -71,12 +71,21 @@ export interface AttentionActions {
   ack(id: string): void;
   answer(questionId: string, answer: string | null, otherText?: string): boolean;
   dismiss(notificationId: string): void;
+  /** A notice from this app itself, not the daemon bus (RUST-UPD-1: "update available"); `source` becomes `app`. */
+  post(n: BusNotification): void;
   act(notificationId: string, actionId: string): void;
   clearRefusal(): void;
   dispose(): void;
 }
 
 export type AttentionStore = StoreApi<AttentionState & AttentionActions>;
+
+/** The `source` of a notice the app posted itself: kept across a daemon list refresh, dismissed without a frame. */
+export const APP_SOURCE = "app";
+
+export function appNotes(list: BusNotification[]): BusNotification[] {
+  return list.filter((n) => n.source === APP_SOURCE);
+}
 
 /** How many bus notifications the panel keeps. */
 export const NOTIFICATIONS_KEPT = 50;
@@ -128,7 +137,7 @@ export function createAttentionStore(link: AttentionLink): AttentionStore {
         }
         case "notifications": {
           const list = json<BusNotification[]>(env.data);
-          if (Array.isArray(list)) set({ notifications: list.slice(-NOTIFICATIONS_KEPT).reverse() });
+          if (Array.isArray(list)) set({ notifications: [...appNotes(get().notifications), ...list.slice(-NOTIFICATIONS_KEPT).reverse()].slice(0, NOTIFICATIONS_KEPT) });
           return;
         }
         case "notification_push": {
@@ -176,9 +185,11 @@ export function createAttentionStore(link: AttentionLink): AttentionStore {
         return ok;
       },
       dismiss: (id) => {
+        const local = get().notifications.some((n) => n.id === id && n.source === APP_SOURCE);
         set({ notifications: get().notifications.filter((n) => n.id !== id) });
-        frame("notification_dismiss", JSON.stringify({ id }));
+        if (!local) frame("notification_dismiss", JSON.stringify({ id }));
       },
+      post: (n) => putNote({ ...n, source: APP_SOURCE }),
       act: (notificationId, actionId) => {
         frame("notification_action", JSON.stringify({ notificationId, actionId, source: "in-app" }));
         set({ notifications: get().notifications.filter((n) => n.id !== notificationId) });
