@@ -88,14 +88,14 @@ object ClaudePermissionHook {
     }
 }
 
-/** The loopback endpoint of [ClaudePermissionHook]: started on first use, one thread per request, `POST /permission/<token>`. */
+/** The loopback endpoint of [ClaudePermissionHook] and [ClaudeQuestionHook]: started on first use, one thread per request, `POST /<hook>/<token>`. */
 class PermissionHookServer(private val bind: () -> ServerSocket = { ServerSocket(0, BACKLOG, InetAddress.getLoopbackAddress()) }) {
     private val handlers = ConcurrentHashMap<String, (String) -> String>()
     private val lock = Any()
     @Volatile private var socket: ServerSocket? = null
 
-    /** The hook URL for [token]; starts the endpoint if it is not running. */
-    fun url(token: String): String = "http://127.0.0.1:${port()}${ClaudePermissionHook.PATH}$token"
+    /** The hook URL for [token] under [path] ([ClaudePermissionHook.PATH], or ASK-STUCK-1's [ClaudeQuestionHook.PATH]); starts the endpoint if it is not running. */
+    fun url(token: String, path: String = ClaudePermissionHook.PATH): String = "http://127.0.0.1:${port()}$path$token"
 
     fun register(token: String, handler: (String) -> String) { handlers[token] = handler }
 
@@ -128,7 +128,8 @@ class PermissionHookServer(private val bind: () -> ServerSocket = { ServerSocket
         }
         val body = if (length in 1..MAX_BODY_BYTES) String(input.readNBytes(length), Charsets.UTF_8) else ""
         val path = requestLine.split(' ').getOrNull(1).orEmpty()
-        val token = path.substringAfter(ClaudePermissionHook.PATH, "").substringBefore('?')
+        // The token (unguessable, one per hook of a launch) picks the handler; the path segment before it only names the hook.
+        val token = path.substringBefore('?').substringAfterLast('/')
         val handler = handlers[token].takeIf { requestLine.startsWith("POST ") && token.isNotEmpty() }
         val answer = handler?.let { runCatching { it(body) }.getOrNull() } ?: ClaudePermissionHook.reply(false, "no infantry session answers this permission request")
         val bytes = answer.toByteArray(Charsets.UTF_8)

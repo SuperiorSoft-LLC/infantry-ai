@@ -13,6 +13,7 @@ import com.superiorsoftllc.infantry.harness.api.HarnessHost
 import com.superiorsoftllc.infantry.harness.api.HarnessMcp
 import com.superiorsoftllc.infantry.harness.api.HarnessModels
 import com.superiorsoftllc.infantry.harness.api.HarnessProcessListener
+import com.superiorsoftllc.infantry.harness.api.HarnessQuestion
 import com.superiorsoftllc.infantry.harness.api.HarnessPlugin
 import com.superiorsoftllc.infantry.harness.api.HarnessProcess
 import com.superiorsoftllc.infantry.harness.api.HarnessRegistrar
@@ -113,12 +114,17 @@ class ClaudeHarness internal constructor(
         // BROWSER-OWNER-1: a granted Claude in Chrome needs the owner's yes (his question, blocking) before `--chrome`; no yes = the launch throws.
         val chrome = ClaudeChrome.chromeFor(plan, env[ClaudeCommand.SESSION_ID_ENV], chromeConfirmed) { q ->
             val sid = env[ClaudeCommand.SESSION_ID_ENV] ?: return@chromeFor HarnessAnswer.NONE
-            val fut = java.util.concurrent.CompletableFuture<HarnessAnswer>() // no coroutines library on the harness path: bridge the suspend call
-            val call: suspend () -> HarnessAnswer = { host.ask(sid, q) }
-            call.startCoroutine(Continuation(EmptyCoroutineContext) { r -> r.fold(fut::complete, fut::completeExceptionally) })
-            fut.get()
+            askBlocking(sid, q)
         }
         return ClaudeMcpDelivery(listOfNotNull(file), ClaudeMcp.disallowed(plan), chrome)
+    }
+
+    /** The owner's answer to [q] for session [sid], blocking: no coroutines library on the harness path, so the suspend call is bridged. */
+    private fun askBlocking(sid: String, q: HarnessQuestion): HarnessAnswer {
+        val fut = java.util.concurrent.CompletableFuture<HarnessAnswer>()
+        val call: suspend () -> HarnessAnswer = { host.ask(sid, q) }
+        call.startCoroutine(Continuation(EmptyCoroutineContext) { r -> r.fold(fut::complete, fut::completeExceptionally) })
+        return runCatching { fut.get() }.getOrDefault(HarnessAnswer.NONE)
     }
 
     private fun runCli(argv: List<String>, dir: String?): Pair<Int, String> {
@@ -167,7 +173,7 @@ class ClaudeHarness internal constructor(
         interactive = ClaudeTtySession(executable, ::mcp, { env -> ClaudeCommand.watchSettings(env) }, stateDir = { host.stateDir }, idleMinutes = ::liveIdle,
             approvalHookSeconds = { ClaudePermissionHook.timeoutSec(host.setting(ClaudePermissionHook.TIMEOUT_SETTING)) },
             prepareSignIn = { env -> ClaudeSignIn.prepare(System.getenv() + env, home()) },
-            userMcp = { host.setting(ClaudeCommand.USER_MCP_SETTING) }, delivery = ::delivery,
+            userMcp = { host.setting(ClaudeCommand.USER_MCP_SETTING) }, delivery = ::delivery, ask = ::askBlocking,
             firstTurn = { ClaudeFirstTurn.of(host.setting(ClaudeFirstTurn.SUBMIT_SETTING), host.setting(ClaudeFirstTurn.REPLY_SETTING)) }),
         mode = { host.setting(ClaudeCommand.MODE_SETTING) },
     )
