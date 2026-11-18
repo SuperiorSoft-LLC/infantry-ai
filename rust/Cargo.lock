@@ -1167,6 +1167,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "chrono",
+ "infantry-vault",
  "native-tls",
  "serde",
  "serde_json",

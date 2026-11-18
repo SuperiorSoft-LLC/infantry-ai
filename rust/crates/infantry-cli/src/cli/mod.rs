@@ -12,6 +12,7 @@
 pub mod args;
 pub mod cmd_mail;
 pub mod cmd_sessions;
+pub mod cmd_runner;
 pub mod conn;
 pub mod registry;
 pub mod usage;

@@ -28,3 +28,5 @@ uuid = { version = "1", features = ["v4"] }
 
 serde = { version = "1", features = ["derive"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# RUST-CLI-1 runner: the local time of a stamp, and the runner-link keystore `runner list` / `detach` read.
+infantry-vault = { path = "../infantry-vault" }
