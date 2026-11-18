@@ -8,7 +8,7 @@
 //! background thread (which owns the connection), so a slow daemon never stalls the pipe. Only the parsed marker
 //! fields leave the machine; the output text is never sent. `INFANTRY_PROGRESS_DEBUG=1` says why a report was dropped.
 //!
-//! Not ported yet: the opt-in `--reader` parsers (junit, gate, tool-profile readers) and the countdown part of
+//! `--reader junit|gate` read a tool's own lines (tool-profile readers are not ported). Not ported yet: the countdown part of
 //! `progress show` (the line has state, number, label and age).
 
 use super::args::Parsed;
@@ -323,6 +323,7 @@ impl Reporter {
 struct Scanner<'a> {
     reporter: &'a Reporter,
     last_sent: Instant,
+    readers: Vec<Reader>,
 }
 
 impl Scanner<'_> {
@@ -332,6 +333,17 @@ impl Scanner<'_> {
         }
         if let Some(m) = parse_marker(text) {
             self.reporter.submit(m);
+            self.last_sent = Instant::now();
+            return;
+        }
+        let mut sent = false;
+        for r in self.readers.iter_mut() {
+            for rep in r.read(text) {
+                self.reporter.submit(rep);
+                sent = true;
+            }
+        }
+        if sent {
             self.last_sent = Instant::now();
         } else if self.last_sent.elapsed() >= Duration::from_millis(HEARTBEAT_MS) && self.reporter.running.load(Ordering::SeqCst) {
             self.reporter.submit(Report::op("output"));
@@ -403,7 +415,73 @@ fn pump(input: &mut dyn Read, output: &mut dyn Write, on_line: &mut dyn FnMut(&s
     lines.finish(on_line);
 }
 
+/// An opt-in reader of one tool's own output (`--reader <name>`); it never guesses for a tool it was not asked for.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Reader {
+    /// Test runs: each `Class > test PASSED|FAILED|SKIPPED` line counts one; `N tests completed` sets the count.
+    Junit { seen: i64 },
+    /// The gate script's `stage k of n [name]`: a plan of n checkpoints, k-1 of them complete.
+    Gate { planned: Option<i32>, done: i32 },
+}
+
+/// The built-in reader names (tool-profile readers are not in the native CLI).
+pub const READERS: [&str; 2] = ["junit", "gate"];
+
+impl Reader {
+    pub fn by_name(name: &str) -> Option<Reader> {
+        match name {
+            "junit" => Some(Reader::Junit { seen: 0 }),
+            "gate" => Some(Reader::Gate { planned: None, done: 0 }),
+            _ => None,
+        }
+    }
+
+    /// The reports `line` stands for.
+    pub fn read(&mut self, line: &str) -> Vec<Report> {
+        match self {
+            Reader::Junit { seen } => {
+                let words: Vec<&str> = line.split_whitespace().collect();
+                if let Some(i) = words.iter().position(|w| w.trim_end_matches(|c: char| !c.is_alphanumeric()) == "completed").filter(|i| *i >= 2 && matches!(words[i - 1], "test" | "tests")) {
+                    if let Ok(n) = words[i - 2].parse::<i64>() {
+                        *seen = n;
+                        return vec![Report { done: Some(n), label: Some("tests".into()), ..Report::op("count") }];
+                    }
+                }
+                let t = line.trim_end();
+                let event = !line.starts_with(char::is_whitespace) && t.contains(" > ") && ["PASSED", "FAILED", "SKIPPED"].iter().any(|v| t.ends_with(&format!(" {v}")));
+                if !event {
+                    return Vec::new();
+                }
+                *seen += 1;
+                vec![Report { done: Some(*seen), label: Some("tests".into()), ..Report::op("count") }]
+            }
+            Reader::Gate { planned, done } => {
+                let Some(i) = line.find("stage ") else { return Vec::new() };
+                let rest: Vec<&str> = line[i + 6..].splitn(4, ' ').collect();
+                let (Some(k), Some("of"), Some(n)) = (rest.first().and_then(|x| x.parse::<i32>().ok()), rest.get(1).copied(), rest.get(2).map(|x| x.trim_end_matches(':'))) else { return Vec::new() };
+                let Ok(n) = n.parse::<i32>() else { return Vec::new() };
+                if n <= 0 || k <= 0 {
+                    return Vec::new();
+                }
+                let mut out = Vec::new();
+                if *planned != Some(n) {
+                    let name = rest.get(3).map(|x| x.trim_start_matches([':', '-', ' ']).trim().to_string()).filter(|x| !x.is_empty());
+                    out.push(Report { count: Some(n), label: name, ..Report::op("plan") });
+                    *planned = Some(n);
+                    *done = 0;
+                }
+                while *done < k - 1 {
+                    out.push(Report::op("step"));
+                    *done += 1;
+                }
+                out
+            }
+        }
+    }
+}
+
 pub struct StreamOptions {
+    pub readers: Vec<Reader>,
     pub label: Option<String>,
     pub command: Vec<String>,
     pub bad: Option<String>,
@@ -417,11 +495,11 @@ pub fn parse_stream_options(args: &[String], allow_command: bool) -> StreamOptio
         Some(i) => (&args[..i], args[i + 1..].to_vec()),
         None => (args, Vec::new()),
     };
-    let bad = |m: String, command: Vec<String>| StreamOptions { label: None, command, bad: Some(m), estimate: false };
+    let bad = |m: String, command: Vec<String>| StreamOptions { readers: Vec::new(), label: None, command, bad: Some(m), estimate: false };
     if !allow_command && split.is_some() {
         return bad("takes no command (use infantry run -- <cmd>)".into(), Vec::new());
     }
-    let (mut label, mut estimate) = (None, false);
+    let (mut label, mut estimate, mut readers) = (None, false, Vec::new());
     let mut i = 0;
     while i < opts.len() {
         match opts[i].as_str() {
@@ -433,7 +511,13 @@ pub fn parse_stream_options(args: &[String], allow_command: bool) -> StreamOptio
                 }
             }
             "--estimate" => estimate = true,
-            "--reader" => return bad("--reader is not in the native infantry CLI yet (markers are read always)".into(), command),
+            "--reader" => {
+                i += 1;
+                match opts.get(i).and_then(|n| Reader::by_name(n)) {
+                    Some(r) => readers.push(r),
+                    None => return bad(format!("--reader expects one of {}", READERS.join(", ")), command),
+                }
+            }
             o => {
                 let short: String = o.chars().take(40).collect();
                 return bad(format!("unknown option '{short}'{}", if allow_command { " (put the command after --)" } else { "" }), command);
@@ -444,7 +528,7 @@ pub fn parse_stream_options(args: &[String], allow_command: bool) -> StreamOptio
     if estimate && !allow_command && label.is_none() {
         return bad("--estimate needs --label (past runs are remembered by it)".into(), command);
     }
-    StreamOptions { label, command, bad: None, estimate }
+    StreamOptions { readers, label, command, bad: None, estimate }
 }
 
 fn session(getenv: Getenv) -> Option<String> {
@@ -554,7 +638,7 @@ pub fn progress(args: &[String], io: &mut dyn Io, getenv: Getenv) -> i32 {
         if let Some(l) = opts.label {
             rep.submit(Report { label: Some(l), estimate: opts.estimate.then_some(true), ..Report::op("status") });
         }
-        let mut sc = Scanner { reporter: &rep, last_sent: Instant::now() };
+        let mut sc = Scanner { reporter: &rep, last_sent: Instant::now(), readers: opts.readers };
         pump(&mut stdin, &mut stdout, &mut |l| sc.line(l));
         rep.close(FLUSH_MS);
         return 0;
@@ -612,7 +696,7 @@ pub fn run(args: &[String], io: &mut dyn Io, getenv: Getenv) -> i32 {
     let rep = reporter(getenv);
     let label = opts.label.clone().unwrap_or_else(|| opts.command.join(" ").chars().take(MAX_LABEL).collect());
     rep.submit(Report { label: Some(label), estimate: opts.estimate.then_some(true), ..Report::op("status") });
-    let scanner = Mutex::new(Scanner { reporter: &rep, last_sent: Instant::now() });
+    let scanner = Mutex::new(Scanner { reporter: &rep, last_sent: Instant::now(), readers: opts.readers.clone() });
     let mut out = child.stdout.take().unwrap();
     let mut err = child.stderr.take().unwrap();
     std::thread::scope(|s| {
@@ -660,5 +744,26 @@ mod tests {
         assert_eq!(progress(&v(&["progress", "bogus"]), &mut io, &env), 0);
         assert!(io.out.is_empty());
         assert_eq!(run(&v(&["run", "--nope"]), &mut io, &env), 2);
+    }
+}
+
+#[cfg(test)]
+mod reader_tests {
+    use super::*;
+
+    #[test]
+    fn junit_counts_test_lines_and_gate_plans_then_steps() {
+        let mut j = Reader::by_name("junit").unwrap();
+        assert_eq!(j.read("com.x.FooTest > works PASSED")[0].done, Some(1));
+        assert!(j.read("  indented > x PASSED").is_empty());
+        assert_eq!(j.read("12 tests completed, 1 failed")[0].done, Some(12));
+        let mut g = Reader::by_name("gate").unwrap();
+        let first = g.read("== stage 1 of 4: compile");
+        assert_eq!((first.len(), first[0].op.as_str(), first[0].count, first[0].label.as_deref()), (1, "plan", Some(4), Some("compile")));
+        let third = g.read("stage 3 of 4 - tests");
+        assert_eq!(third.iter().map(|r| r.op.as_str()).collect::<Vec<_>>(), vec!["step", "step"]);
+        assert!(Reader::by_name("maven").is_none());
+        assert!(parse_stream_options(&["--reader".into(), "nope".into()], false).bad.unwrap().contains("junit, gate"));
+        assert_eq!(parse_stream_options(&["--reader".into(), "gate".into()], false).readers.len(), 1);
     }
 }
