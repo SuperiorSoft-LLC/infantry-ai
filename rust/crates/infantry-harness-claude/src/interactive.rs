@@ -584,6 +584,11 @@ impl Translator for Interactive {
             }
             TranslatorInput::Exited { code } => self.exited(code, &mut out),
             TranslatorInput::Stdout(l) | TranslatorInput::Stderr(l) => out.push(HarnessEvent::Stderr(l)),
+            // This harness sends no HTTP requests, so no HTTP input reaches it.
+            TranslatorInput::HttpResponse { .. }
+            | TranslatorInput::HttpOpened { .. }
+            | TranslatorInput::HttpLine { .. }
+            | TranslatorInput::HttpClosed { .. } => {}
         }
         out
     }

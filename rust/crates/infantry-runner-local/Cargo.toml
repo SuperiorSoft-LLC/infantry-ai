@@ -9,7 +9,7 @@ publish = false
 [dependencies]
 infantry-runner = { path = "../infantry-runner" }
 infantry-runner-api = { path = "../infantry-runner-api" }
-tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+tokio = { version = "1", features = ["rt", "sync", "time", "net", "io-util", "macros"] }
 vt100 = "0.16"
 uuid = { version = "1", features = ["v4"] }
 

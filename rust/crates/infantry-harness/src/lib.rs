@@ -22,11 +22,12 @@
 //! Nothing here knows orchestration (boards, tickets): an agent runs with no orchestrator.
 
 pub mod driver;
+pub mod shim;
 
 pub use driver::{DriverError, HarnessDriver};
 /// The runner contract (RUST-RUN-1), re-exported so a harness crate needs only this one.
 pub use infantry_runner_api as runner;
-pub use infantry_runner_api::{ProcessSpec, Runner, Size, TailFrom, TailSpec};
+pub use infantry_runner_api::{HttpRequest, ProcessSpec, Runner, Size, TailFrom, TailSpec};
 
 use std::path::{Path, PathBuf};
 
@@ -127,6 +128,9 @@ pub struct LaunchRequest {
     pub env: Vec<(String, String)>,
     /// Environment names or prefixes (ending in `*`) removed from the inherited environment.
     pub env_remove: Vec<String>,
+    /// The harness's [`Asset`]s the driver staged on the runner's host: (asset name, absolute path there). An asset that
+    /// could not be staged is missing; the harness decides whether it can launch without it.
+    pub staged: Vec<(String, String)>,
     /// The hook channel the driver opened on the runner ([`Capabilities::hook_channel`]); the harness wires its CLI's
     /// hooks to it.
     pub hooks: Option<HookTarget>,
@@ -153,9 +157,24 @@ impl LaunchRequest {
             prompt: None,
             env: Vec::new(),
             env_remove: Vec::new(),
+            staged: Vec::new(),
             hooks: None,
         }
     }
+
+    /// The runner-host path of staged asset [name].
+    pub fn staged_path(&self, name: &str) -> Option<&str> {
+        self.staged.iter().find(|(n, _)| n == name).map(|(_, p)| p.as_str())
+    }
+}
+
+/// A file a CLI loads by path (a plugin, an extension) that the harness ships; the driver stages it on the runner's host
+/// ([`Runner::stage_file`]) before each launch and passes its path in [`LaunchRequest::staged`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Asset {
+    /// A plain file name, unique per harness.
+    pub name: String,
+    pub contents: Vec<u8>,
 }
 
 /// Why a harness cannot launch.
@@ -199,6 +218,15 @@ pub enum TranslatorInput {
     Tail { path: String, line: String },
     /// The PTY screen's visible rows, [now] ms after spawn.
     Screen { rows: Vec<String>, now: u64 },
+    /// The whole answer to [`Outbound::Http`] [id] (`stream: false`). `status` None = the request failed; `body` is then why.
+    HttpResponse { id: u64, status: Option<u16>, body: String },
+    /// A streamed [`Outbound::Http`] [id] (`stream: true`) answered with this status; its body follows as
+    /// [`TranslatorInput::HttpLine`]s.
+    HttpOpened { id: u64, status: u16 },
+    /// One body line of streamed request [id] (line ending trimmed; a server-sent events stream gives `data: ...` lines).
+    HttpLine { id: u64, line: String },
+    /// Streamed request [id] ended (the server closed it: `error` None) or failed (it never opened, or broke).
+    HttpClosed { id: u64, error: Option<String> },
 }
 
 /// Traffic a translator asks the driver to deliver.
@@ -206,8 +234,10 @@ pub enum TranslatorInput {
 pub enum Outbound {
     /// Bytes to the process's stdin or PTY.
     Stdin(Vec<u8>),
-    /// A request to the harness's own server ([`Capabilities::http`]).
-    Http { method: String, path: String, body: String },
+    /// A request to the harness's own server ([`Capabilities::http`]), made by the runner on its host
+    /// ([`Runner::http`]). The answer comes back as [`TranslatorInput::HttpResponse`] [id], or, with [stream], as
+    /// [`TranslatorInput::HttpOpened`], `HttpLine`s and `HttpClosed`. [id] is the translator's own, unique per process.
+    Http { id: u64, request: HttpRequest, stream: bool },
     /// The response body (JSON) to the blocking hook call [id] ([`TranslatorInput::Hook`]).
     HookReply { id: u64, body: String },
 }
@@ -292,5 +322,9 @@ pub trait Harness: Send + Sync {
     fn models(&self, probe: &dyn Probe) -> Vec<ModelInfo>;
     /// Why the CLI cannot run there (not installed, not signed in); None = fine as far as files and env tell.
     fn sign_in_problem(&self, probe: &dyn Probe) -> Option<String>;
+    /// The files this launch needs on the runner's host (staged by the driver before [`Harness::launch`]).
+    fn assets(&self, _req: &LaunchRequest) -> Vec<Asset> {
+        Vec::new()
+    }
     fn launch(&self, req: &LaunchRequest) -> Result<LaunchPlan, LaunchError>;
 }

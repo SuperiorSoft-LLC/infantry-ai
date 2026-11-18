@@ -182,6 +182,8 @@ export const sessionTabs = [
   { id: "calendar", label: "Calendar", icon: "calendar" },
   { id: "epics", label: "Epics", icon: "layers" },
   { id: "notes", label: "Notes", icon: "file-text" },
+  { id: "skills", label: "Skills", icon: "sparkles" },
+  { id: "prompts", label: "Prompts", icon: "message-square" },
   { id: "run", label: "Run", icon: "play" },
   { id: "git", label: "Git", icon: "git-branch" },
   { id: "plugins", label: "Plugins", icon: "puzzle" },

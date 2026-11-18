@@ -64,6 +64,8 @@ pub const LAYERS: &[(&str, Layer, u8)] = &[
     ("infantry-plugin-sdk", Layer::Core, 1),
     ("infantry-mail", Layer::Core, 1),
     ("infantry-usage", Layer::Core, 1),
+    // the secrets vault: keystore, rendering, scrubber, reveal, backup, audit (RUST-VAULT-1).
+    ("infantry-vault", Layer::Core, 1),
     // projects, workspaces, project git, worktrees, ticket branches: platform level; the orchestrator calls into it.
     ("infantry-projects", Layer::Core, 1),
     ("infantry-runner-api", Layer::Runner, 0),
@@ -72,6 +74,8 @@ pub const LAYERS: &[(&str, Layer, u8)] = &[
     ("infantry-runner-link", Layer::Runner, 2),
     ("infantry-harness", Layer::Harness, 0),
     ("infantry-harness-codex", Layer::Harness, 1),
+    ("infantry-harness-opencode", Layer::Harness, 1),
+    ("infantry-harness-pi", Layer::Harness, 1),
     ("infantry-harness-claude", Layer::Harness, 1),
     ("infantry-orchestrator-api", Layer::Orchestration, 0),
     // The board (tickets on infantry.db, lane rules, ticket_* unit, LocalOrchestrator); a wasm plugin once the WIT storage SQL exists.

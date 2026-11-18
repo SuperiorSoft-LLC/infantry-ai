@@ -4,10 +4,11 @@
 //! tails), spawns the process through the runner, splits piped output into lines, feeds the translator, delivers its
 //! outbound traffic, keeps the resume token between turns and guarantees every started turn ends exactly once.
 //!
-//! [`Outbound::Http`] is not delivered yet (no runner-side HTTP client in the contract); a translator that sends one gets
-//! a [`HarnessEvent::Warning`] instead of silence.
+//! [`Outbound::Http`] goes through [`Runner::http`] (the runner makes the call on its host, where the harness's server
+//! listens); the answer is fed back as [`TranslatorInput::HttpResponse`] or, streamed, `HttpOpened` / `HttpLine` /
+//! `HttpClosed`. A harness's [`crate::Asset`]s are staged with [`Runner::stage_file`] before every launch.
 
-use crate::runner::{HookCall, HookEndpoint, KillScope, ProcEvent, ProcId, Runner, TailFrom, TailSpec};
+use crate::runner::{HookCall, HookEndpoint, HttpEvent, KillScope, ProcEvent, ProcId, Runner, TailFrom, TailSpec};
 use crate::{
     Harness, HarnessEvent, HookTarget, LaunchError, LaunchRequest, Outbound, Translator, TranslatorInput, TurnDelivery,
     TurnEnd,
@@ -15,7 +16,8 @@ use crate::{
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc::{error::TryRecvError, UnboundedReceiver};
+use tokio::sync::mpsc::{error::TryRecvError, unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::task::JoinHandle;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DriverError {
@@ -70,6 +72,70 @@ struct Live {
     stdout: Lines,
     stderr: Lines,
     tails: Vec<(String, UnboundedReceiver<String>)>,
+    /// Every in-flight [`Outbound::Http`] of this process: its events, tagged with the translator's id.
+    http_tx: UnboundedSender<(u64, HttpEvent)>,
+    http_rx: UnboundedReceiver<(u64, HttpEvent)>,
+    http: HashMap<u64, HttpState>,
+    http_tasks: Vec<JoinHandle<()>>,
+}
+
+/// One in-flight request: streamed (lines) or whole (buffered body).
+struct HttpState {
+    stream: bool,
+    status: Option<u16>,
+    body: Vec<u8>,
+    lines: Lines,
+}
+
+impl Drop for Live {
+    fn drop(&mut self) {
+        for t in &self.http_tasks {
+            t.abort();
+        }
+    }
+}
+
+impl Live {
+    /// Turns one response event of request [id] into translator input.
+    fn http_input(&mut self, id: u64, ev: HttpEvent, inputs: &mut Vec<TranslatorInput>) {
+        let Some(st) = self.http.get_mut(&id) else { return };
+        match ev {
+            HttpEvent::Head { status, .. } => {
+                st.status = Some(status);
+                if st.stream {
+                    inputs.push(TranslatorInput::HttpOpened { id, status });
+                }
+            }
+            HttpEvent::Body(b) => {
+                if st.stream {
+                    inputs.extend(st.lines.push(&b).into_iter().map(|line| TranslatorInput::HttpLine { id, line }));
+                } else {
+                    st.body.extend_from_slice(&b);
+                }
+            }
+            HttpEvent::End => {
+                if let Some(mut st) = self.http.remove(&id) {
+                    if st.stream {
+                        inputs.extend(st.lines.rest().map(|line| TranslatorInput::HttpLine { id, line }));
+                        inputs.push(TranslatorInput::HttpClosed { id, error: None });
+                    } else {
+                        let body = String::from_utf8_lossy(&st.body).into_owned();
+                        inputs.push(TranslatorInput::HttpResponse { id, status: st.status, body });
+                    }
+                }
+            }
+            HttpEvent::Failed(e) => {
+                if let Some(st) = self.http.remove(&id) {
+                    if st.stream {
+                        inputs.push(TranslatorInput::HttpClosed { id, error: Some(e) });
+                    } else {
+                        inputs.push(TranslatorInput::HttpResponse { id, status: None, body: e });
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 pub struct HarnessDriver {
@@ -204,6 +270,12 @@ impl HarnessDriver {
         req.resume = self.resume.clone();
         req.prompt = prompt;
         req.hooks = self.hooks.as_ref().map(|h| HookTarget { url: h.url.clone(), events_file: h.events_file.clone() });
+        for asset in self.harness.assets(&req) {
+            match self.runner.stage_file(&asset.name, &asset.contents).await {
+                Ok(path) => req.staged.push((asset.name, path)),
+                Err(e) => self.pending.push_back(HarnessEvent::Warning(format!("could not stage {}: {e}", asset.name))),
+            }
+        }
         let plan = self.harness.launch(&req).map_err(DriverError::Launch)?;
         let pty = plan.spec.pty.is_some();
         let program = plan.spec.program.clone();
@@ -215,6 +287,7 @@ impl HarnessDriver {
             }
             let _ = self.runner.close_input(&handle.id).await;
         }
+        let (http_tx, http_rx) = unbounded_channel();
         let mut tails = Vec::new();
         for spec in plan.tail {
             let path = spec.path.clone();
@@ -233,6 +306,10 @@ impl HarnessDriver {
             stdout: Lines::default(),
             stderr: Lines::default(),
             tails,
+            http_tx,
+            http_rx,
+            http: HashMap::new(),
+            http_tasks: Vec::new(),
         });
         Ok(())
     }
@@ -264,12 +341,27 @@ impl HarnessDriver {
                     }
                 }
             }
-            // Then process output: wait once (only if nothing else arrived), then drain what is already there.
-            let wait = if inputs.is_empty() { timeout } else { Duration::ZERO };
-            let first = match tokio::time::timeout(wait, live.events.recv()).await {
-                Ok(ev) => ev,
-                Err(_) => None,
-            };
+            while let Ok((id, ev)) = live.http_rx.try_recv() {
+                live.http_input(id, ev, &mut inputs);
+            }
+            // Then process output: wait once (only if nothing else arrived) for the process or an HTTP answer, then drain
+            // what is already there.
+            let mut first = None;
+            if inputs.is_empty() {
+                tokio::select! {
+                    ev = live.events.recv() => first = ev,
+                    Some((id, ev)) = live.http_rx.recv() => {
+                        live.http_input(id, ev, &mut inputs);
+                        while let Ok((id, ev)) = live.http_rx.try_recv() {
+                            live.http_input(id, ev, &mut inputs);
+                        }
+                    }
+                    _ = tokio::time::sleep(timeout) => {}
+                }
+            }
+            if first.is_none() {
+                first = live.events.try_recv().ok();
+            }
             let mut next = first;
             let deadline = Instant::now() + timeout;
             while let Some(ev) = next.take() {
@@ -345,9 +437,26 @@ impl HarnessDriver {
                     Some(call) => call.reply(body),
                     None => self.pending.push_back(HarnessEvent::Warning(format!("hook reply {id}: no such call"))),
                 },
-                Outbound::Http { method, path, .. } => self.pending.push_back(HarnessEvent::Warning(format!(
-                    "{method} {path}: HTTP delivery is not supported by this driver yet"
-                ))),
+                Outbound::Http { id, request, stream } => {
+                    live.http.insert(id, HttpState { stream, status: None, body: Vec::new(), lines: Lines::default() });
+                    let what = format!("{} {}", request.method, request.url);
+                    match self.runner.http(request).await {
+                        Ok(mut rx) => {
+                            let tx = live.http_tx.clone();
+                            live.http_tasks.retain(|t| !t.is_finished());
+                            live.http_tasks.push(tokio::spawn(async move {
+                                while let Some(ev) = rx.recv().await {
+                                    if tx.send((id, ev)).is_err() {
+                                        break;
+                                    }
+                                }
+                            }));
+                        }
+                        Err(e) => {
+                            let _ = live.http_tx.send((id, HttpEvent::Failed(format!("{what}: {e}"))));
+                        }
+                    }
+                }
             }
         }
     }
