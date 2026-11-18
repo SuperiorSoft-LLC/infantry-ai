@@ -1,0 +1,8 @@
+{"type":"user","uuid":"u-p","entrypoint":"cli","message":{"role":"user","content":"read a.txt"}}
+{"type":"assistant","uuid":"u-t","message":{"id":"m0","role":"assistant","model":"claude-haiku-5-5","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"a.txt"}}],"usage":{"input_tokens":2,"output_tokens":7,"cache_read_input_tokens":10,"cache_creation_input_tokens":0}}}
+{"type":"user","uuid":"u-r","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"hello"}]}}
+{"type":"file-history-snapshot","messageId":"x"}
+{"type":"assistant","isSidechain":true,"uuid":"u-side","message":{"id":"side","role":"assistant","model":"claude-haiku-5-5","content":[{"type":"text","text":"a subagent's words"}]}}
+{"type":"assistant","uuid":"u-m1a","message":{"id":"m1","role":"assistant","model":"claude-haiku-5-5","content":[{"type":"thinking","thinking":"the file says hello"}],"usage":{"input_tokens":3,"output_tokens":5,"cache_read_input_tokens":100,"cache_creation_input_tokens":50}}}
+{"type":"assistant","uuid":"u-m1b","message":{"id":"m1","role":"assistant","model":"claude-haiku-5-5","content":[{"type":"text","text":"It says hello."}],"usage":{"input_tokens":3,"output_tokens":9,"cache_read_input_tokens":100,"cache_creation_input_tokens":50}}}
+{"type":"system","subtype":"turn_duration","durationMs":1234}
