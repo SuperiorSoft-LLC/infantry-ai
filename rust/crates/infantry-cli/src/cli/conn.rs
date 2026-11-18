@@ -383,6 +383,12 @@ impl FrameStream {
         None
     }
 
+    /// The current link's whole `ready` data (not consumed), waiting as [ready_contract] does.
+    pub fn ready_data(&mut self) -> Option<String> {
+        self.ready_contract();
+        self.link.frames.iter().find(|f| f.kind == "ready").map(|r| r.data.clone())
+    }
+
     fn correlate(&mut self, env: &Envelope) -> Envelope {
         if !CORRELATED_REQUESTS.contains(&env.kind.as_str()) || env.request_id.is_some() {
             return env.clone();

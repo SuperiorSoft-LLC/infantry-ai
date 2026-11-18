@@ -8,6 +8,8 @@ use super::{cmd_board, cmd_ticket, Command, Needs, RawCommand};
 pub static RAW: &[RawCommand] = &[
     // -- raw commands --
     super::cmd_mail::WAITING_FLAG,
+    RawCommand { matches: super::progress::is_progress, run: super::progress::progress },
+    RawCommand { matches: super::progress::is_run, run: super::progress::run },
 ];
 
 pub static COMMANDS: &[&Command] = &[
@@ -26,6 +28,16 @@ pub static COMMANDS: &[&Command] = &[
     &super::cmd_sessions::SESSION,
     &super::cmd_sessions::KILL,
     // -- health / usage / settings / scripts / secrets / run / install --
+    &super::tools_cmds::SCRIPT,
+    &super::tools_cmds::SECRET,
+    &super::tools_cmds::RUN_CMD,
+    &super::usage_settings::USAGE,
+    &super::usage_settings::SETTINGS,
+    &super::health::HEALTH,
+    &super::local_cmds::INSTALL_CLI,
+    &super::local_cmds::UNINSTALL_CLI,
+    &super::local_cmds::REMOTE,
+    &super::issue::ISSUE,
     // -- runner --
     &super::cmd_runner::RUNNER,
 ];
