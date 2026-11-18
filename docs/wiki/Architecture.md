@@ -36,6 +36,21 @@ The direction is one way: a layer may use the one below it, never the reverse. T
 `docs/DAEMON-CORE.md` (dated; the code wins). Guards that enforce the line are listed in
 AGENTS.md section 6.
 
+## The framework stays generic
+
+Infantry AI is a framework. Core, the SDK and the framework tools (plugin mechanisms, run commands, testing tools such
+as the UI driver) are generic mechanisms that any app can use unchanged.
+
+- Vendor- or business-specific behaviour never goes into core or the SDK. That means a company's hosting, billing and
+  payments, accounts, endpoints, or its own workflow. It lives in plugins, scripts, role personas, config and data, or
+  in examples that use the generic tools. A hosting service plugin is the model: the plugin owns the service, core only
+  offers the seams it plugs into.
+- The test: could a stranger's app use this unchanged? If not, it does not belong in core or the SDK.
+- A new core or SDK seam is proposed and approved before it is built. If a feature seems to need core, the missing piece
+  is usually a generic seam: propose that seam, not the feature.
+
+The same rule is AGENTS.md rules 1 and 2; the layers above are how it is organised.
+
 ## 2. Processes and modules
 
 ```mermaid
