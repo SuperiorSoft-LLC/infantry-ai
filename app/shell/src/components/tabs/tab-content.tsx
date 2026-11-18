@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // Picks the mock view for the active centre tab.
-import { Box, FileText, IdCard, Layers, Play, Server, Zap } from "lucide-react";
-import { epics, notes, pods, profiles, runCommands, services, triggers } from "@/mock/data";
+import { Box, IdCard, Layers, Play, Server, Zap } from "lucide-react";
+import { epics, pods, profiles, runCommands, services, triggers } from "@/mock/data";
 import type { CentreView } from "@/state/ui-state";
 import { BoardTab } from "./board-tab";
 import { PluginsTab } from "./plugins-tab";
-import { RolesTab } from "./roles-tab";
+import { RolesTab } from "../roles/roles-tab";
+import { NotesTab } from "../knowledge/notes-tab";
+import { SkillsTab } from "../library/skills-tab";
+import { PromptsTab } from "../library/prompts-tab";
 import { CalendarTab } from "./calendar-tab";
 import { StatsTab } from "./stats-tab";
 import { PaceTab } from "./pace-tab";
@@ -31,7 +34,11 @@ export function TabContent({ tab }: { tab: CentreView }) {
     case "epics":
       return <ListTab title="Epics" description="Groups of tickets" rows={epics} icon={<Layers className="size-4" />} actionLabel="New epic" />;
     case "notes":
-      return <ListTab title="Notes" description="Project memory" rows={notes} icon={<FileText className="size-4" />} actionLabel="New note" />;
+      return <NotesTab />;
+    case "skills":
+      return <SkillsTab />;
+    case "prompts":
+      return <PromptsTab />;
     case "run":
       return <ListTab title="Run" description="Saved run commands" rows={runCommands} icon={<Play className="size-4" />} actionLabel="New command" />;
     case "git":

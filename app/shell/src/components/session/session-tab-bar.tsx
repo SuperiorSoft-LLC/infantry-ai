@@ -10,9 +10,11 @@ import {
   IdCard,
   Layers,
   Mail,
+  MessageSquare,
   Play,
   Puzzle,
   Server,
+  Sparkles,
   SquareTerminal,
   TrendingUp,
   User,
@@ -38,6 +40,8 @@ const icons: Record<string, LucideIcon> = {
   "bar-chart": BarChart3,
   "trending-up": TrendingUp,
   server: Server,
+  sparkles: Sparkles,
+  "message-square": MessageSquare,
   mail: Mail,
 };
 
