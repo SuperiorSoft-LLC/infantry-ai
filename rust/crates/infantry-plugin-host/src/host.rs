@@ -39,6 +39,8 @@ pub struct LoadedPlugin {
     pub tier: Tier,
     pub dir: PathBuf,
     pub decl: DaemonDecl,
+    /// The whole manifest (capabilities, for [`PluginHost::call_capability`]).
+    pub manifest: ModuleManifest,
     runtime: Box<dyn Plugin>,
     pub guard: Guard,
     imports: Arc<PluginImports>,
@@ -236,7 +238,7 @@ impl PluginHost {
             move |line| services.log(&log_id, LogLevel::Warn, line),
             |_| {},
         );
-        let plugin = Arc::new(LoadedPlugin { id: id.clone(), version: manifest.version.clone(), tier, dir: dir.to_path_buf(), decl, runtime, guard, imports, limits: self.limits.clone() });
+        let plugin = Arc::new(LoadedPlugin { id: id.clone(), version: manifest.version.clone(), tier, dir: dir.to_path_buf(), decl, manifest: manifest.clone(), runtime, guard, imports, limits: self.limits.clone() });
         let started = plugin.guard.run("start", &|| Ok(()), || plugin.runtime.start(plugin.start_budget()));
         if let Err(e) = started {
             plugin.runtime.cancel();
@@ -302,6 +304,18 @@ impl PluginHost {
             Some(p) => p.call_tool(name, args, ctx),
             None => Err(CallError::Refused(format!("{name} refused: no loaded plugin declares this tool"))),
         }
+    }
+
+    /// Calls capability `id` (`runs: "daemon"`) on the plugin that declares it, through the daemon tool it maps to
+    /// ([`ModuleManifest::capability_tool`]: same `action`, else the id with `.` -> `_`).
+    pub fn call_capability(&self, id: &str, args: &str, ctx: &CallContext) -> Result<String, CallError> {
+        for p in self.loaded() {
+            if let Some(t) = p.manifest.capability_tool(id) {
+                let name = t.name.clone();
+                return p.call_tool(&name, args, ctx);
+            }
+        }
+        Err(CallError::Refused(format!("{id} refused: no loaded plugin answers this capability")))
     }
 
     /// Hands a bus event to every plugin subscribed to it.
