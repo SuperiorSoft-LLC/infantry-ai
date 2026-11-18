@@ -316,6 +316,11 @@ impl HarnessDriver {
 
     /// Waits up to [timeout] for activity and returns the events it produced (possibly none).
     pub async fn poll(&mut self, timeout: Duration) -> Vec<HarnessEvent> {
+        if let Some(live) = self.live.as_mut() {
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+            live.translator.on_timer(now);
+        }
+        self.deliver_outbound().await;
         let mut out: Vec<HarnessEvent> = self.pending.drain(..).collect();
         let mut exited = false;
         if let Some(live) = self.live.as_mut() {
@@ -475,6 +480,14 @@ impl HarnessDriver {
             live.translator.answer_questions(id, answers);
         }
         self.deliver_outbound().await;
+    }
+
+    /// Reconnects the session's own MCP server inside the CLI ([`Translator::reconnect_mcp`]). False = no process, or the
+    /// CLI cannot.
+    pub async fn reconnect_mcp(&mut self) -> bool {
+        let done = self.live.as_mut().is_some_and(|l| l.translator.reconnect_mcp());
+        self.deliver_outbound().await;
+        done
     }
 
     /// Stops the running turn: the CLI's own interrupt when it has one, else the process tree is killed. False = no turn.

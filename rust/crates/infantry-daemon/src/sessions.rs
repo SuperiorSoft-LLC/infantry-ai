@@ -45,6 +45,7 @@ pub fn owns(ty: &str) -> bool {
             | pf::SESSION_RESTART
             | pf::SESSION_SWAP
             | pf::SESSION_STATS_GET
+            | pf::SESSION_MCP_RECONNECT
     )
 }
 
@@ -657,6 +658,14 @@ impl Daemon {
                     Err(m) => vec![encode_req(wire::ERROR, format!("session_swap refused: {m}"), sid.as_deref(), None, req.as_deref())],
                 };
             }
+            pf::SESSION_MCP_RECONNECT => {
+                let v: serde_json::Value = serde_json::from_str(&env.data).unwrap_or(serde_json::Value::Null);
+                let s = v["sessionId"].as_str().map(String::from).or(sid.clone()).unwrap_or_default();
+                return match self.mcp_reconnect(s.trim()) {
+                    Ok(body) => vec![encode_req(pf::SESSION_MCP_RECONNECT, body, Some(s.trim()), None, req.as_deref())],
+                    Err(m) => vec![encode_req(wire::ERROR, m, sid.as_deref(), None, req.as_deref())],
+                };
+            }
             pf::SESSION_STATS_GET => {
                 let v: serde_json::Value = serde_json::from_str(&env.data).unwrap_or(serde_json::Value::Null);
                 let s = v["sessionId"].as_str().map(String::from).or(sid.clone()).unwrap_or_default();
@@ -825,14 +834,47 @@ impl Daemon {
         let mut e = entry.lock().unwrap();
         let i = e.rec.queued.iter().position(|q| q.id == id).ok_or_else(|| format!("queue_force refused: no queued message {id} on {sid}"))?;
         if e.turn_active {
-            return Err(format!(
-                "queue_force refused: the {} harness cannot take a message mid-turn; it stays queued for the next turn",
-                e.rec.provider
-            ));
+            drop(e);
+            return self.force_into_turn(sid, id);
         }
         let item = e.rec.queued.remove(i);
         self.turn_into(&mut e, item.text);
         Ok(())
+    }
+
+    /// `queue_force` mid-turn: the message goes into the running turn when the CLI takes input mid-turn (the lock is let
+    /// go while it answers); else it goes back where it was and the refusal says why.
+    fn force_into_turn(self: &Arc<Self>, sid: &str, id: &str) -> Result<(), String> {
+        let entry = self.find(sid).ok_or_else(|| format!("queue_force refused: unknown session {sid}"))?;
+        let mut e = entry.lock().unwrap();
+        let i = e.rec.queued.iter().position(|q| q.id == id).ok_or_else(|| format!("queue_force refused: no queued message {id} on {sid}"))?;
+        let Some(inject) = e.hs.as_ref().and_then(|h| h.injector()) else {
+            return Err(format!("queue_force refused: the {} harness cannot take a message mid-turn; it stays queued for the next turn", e.rec.provider));
+        };
+        let item = e.rec.queued.remove(i);
+        self.push(&mut e);
+        drop(e);
+        if inject(item.text.clone()) {
+            return Ok(());
+        }
+        let mut e = entry.lock().unwrap();
+        let at = i.min(e.rec.queued.len());
+        let provider = e.rec.provider.clone();
+        e.rec.queued.insert(at, item);
+        self.push(&mut e);
+        Err(format!("queue_force refused: the {provider} harness could not take the message mid-turn; it stays queued for the next turn"))
+    }
+
+    /// `session_mcp_reconnect` `{sessionId}`: asks the CLI to reconnect the session's own MCP server.
+    fn mcp_reconnect(&self, sid: &str) -> Result<String, String> {
+        let entry = self.find(sid).ok_or_else(|| format!("session_mcp_reconnect refused: unknown session {sid}"))?;
+        let mut e = entry.lock().unwrap();
+        let provider = e.rec.provider.clone();
+        match e.hs.as_mut().map(|h| h.reconnect_mcp()) {
+            Some(true) => Ok(serde_json::json!({ "sessionId": sid, "reconnecting": true }).to_string()),
+            Some(false) => Err(format!("session_mcp_reconnect refused: the {provider} harness cannot reconnect its MCP server")),
+            None => Err(format!("session_mcp_reconnect refused: session {sid} has no running process")),
+        }
     }
 
     /// When the session is at rest, sends its oldest held message as the next turn (one per turn end), after the current frames.
@@ -1008,6 +1050,12 @@ impl Daemon {
             HarnessEvent::Usage(u) => {
                 e.rec.last_output_at = Some(now_ms());
                 e.stats.usage(u);
+            }
+            HarnessEvent::McpState { state, servers } => {
+                e.rec.mcp = Some(state);
+                e.rec.mcp_changed_at = Some(now_ms());
+                e.rec.mcp_servers = servers.into_iter().map(|(name, state)| infantry_protocol::session::McpServerStatusView { name, state, detail: None, tool_count: None }).collect();
+                self.push(&mut e);
             }
             HarnessEvent::TurnEnded { end, exit_code, reason, process_alive } if e.turn_active => {
                 self.end_turn(&mut e, end, exit_code, reason, process_alive)

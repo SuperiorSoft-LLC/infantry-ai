@@ -443,12 +443,21 @@ impl UsageMeter {
     }
 
     fn requests(&self) -> Result<Vec<RequestRow>, String> {
+        self.request_rows(0, REQUESTS_IN_REPORT as i64)
+    }
+
+    /// The recorded requests at or after `since` (ms), oldest first, at most `limit` (the newest kept).
+    pub fn requests_since(&self, since: i64, limit: i64) -> Result<Vec<RequestRow>, String> {
+        self.request_rows(since, limit)
+    }
+
+    fn request_rows(&self, since: i64, limit: i64) -> Result<Vec<RequestRow>, String> {
         let conn = self.conn();
         let mut st = conn
-            .prepare("SELECT ts, session_id, ticket_id, role, harness, model, source, input, output, cache_read, cache_write, context, cost FROM meter_request ORDER BY id DESC LIMIT ?1")
+            .prepare("SELECT ts, session_id, ticket_id, role, harness, model, source, input, output, cache_read, cache_write, context, cost FROM meter_request WHERE ts >= ?1 ORDER BY id DESC LIMIT ?2")
             .map_err(sql)?;
         let mut out: Vec<RequestRow> = st
-            .query_map(params![REQUESTS_IN_REPORT], |r| {
+            .query_map(params![since, limit], |r| {
                 Ok(RequestRow {
                     ts: r.get(0)?,
                     session_id: r.get(1)?,

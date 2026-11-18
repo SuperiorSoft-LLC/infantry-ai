@@ -126,3 +126,44 @@ fn kotlin_runner_answers_round_trip() {
     let (_, health) = fixture("runner_link_health");
     same_bytes::<HealthAnswer>(&health);
 }
+
+/// HARN-2 / opencode on a linked runner: `stage_file` and loopback `http` cross the link (a one-shot HTTP server on port 0).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn remote_runner_stages_files_and_carries_loopback_http() {
+    let (serving, code) = runner(Box::new(ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default()))));
+    let url = format!("ws://127.0.0.1:{}", serving.port);
+    let client = LinkClient::new(&url, "inf-orch", None);
+    let client = tokio::task::spawn_blocking(move || {
+        client.pair(&code, "t").unwrap();
+        client
+    })
+    .await
+    .unwrap();
+    let remote = RemoteRunner::new("test-box", client);
+
+    let path = remote.stage_file("link-stage-test.txt", b"staged over the link").await.unwrap();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "staged over the link");
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        let (mut s, _) = listener.accept().unwrap();
+        let mut buf = [0u8; 2048];
+        let _ = s.read(&mut buf);
+        let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 9\r\nConnection: close\r\n\r\nlink-http");
+    });
+    let req = infantry_runner_api::HttpRequest { method: "GET".into(), url: format!("http://127.0.0.1:{port}/x"), headers: vec![], body: vec![], timeout_ms: Some(10_000) };
+    let mut rx = remote.http(req).await.unwrap();
+    let (mut status, mut body) = (0u16, Vec::new());
+    while let Some(e) = tokio::time::timeout(Duration::from_secs(15), rx.recv()).await.unwrap() {
+        match e {
+            infantry_runner_api::HttpEvent::Head { status: s, .. } => status = s,
+            infantry_runner_api::HttpEvent::Body(b) => body.extend(b),
+            infantry_runner_api::HttpEvent::End => break,
+            infantry_runner_api::HttpEvent::Failed(why) => panic!("http failed: {why}"),
+            _ => {}
+        }
+    }
+    assert_eq!((status, String::from_utf8_lossy(&body).as_ref()), (200, "link-http"));
+}

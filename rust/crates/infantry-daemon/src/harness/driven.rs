@@ -82,6 +82,9 @@ enum Cmd {
     Approve { id: String, allow: bool },
     /// The owner's answers to a CLI's questions.
     Answer { id: String, answers: Vec<HarnessAnswer> },
+    /// A message for the running turn; the answer says whether the CLI took it.
+    Inject(String, std_mpsc::Sender<bool>),
+    ReconnectMcp,
 }
 
 struct DrivenSession {
@@ -108,6 +111,21 @@ impl HarnessSession for DrivenSession {
 
     fn process_alive(&self) -> bool {
         self.state.alive.load(Ordering::SeqCst)
+    }
+
+    fn injector(&self) -> Option<super::Injector> {
+        if !self.state.turn.load(Ordering::SeqCst) {
+            return None;
+        }
+        let tx = self.tx.clone();
+        Some(Box::new(move |text: String| {
+            let (reply, answer) = std_mpsc::channel();
+            tx.send(Cmd::Inject(text, reply)).is_ok() && answer.recv_timeout(Duration::from_millis(super::INJECT_WAIT_MS)).unwrap_or(false)
+        }))
+    }
+
+    fn reconnect_mcp(&mut self) -> bool {
+        self.state.alive.load(Ordering::SeqCst) && self.tx.send(Cmd::ReconnectMcp).is_ok()
     }
 }
 
@@ -171,6 +189,20 @@ impl Worker {
                     Some(Cmd::Answer { id, answers }) => {
                         if let Some(d) = driver.as_mut() {
                             d.answer_questions(&id, answers).await;
+                        }
+                    }
+                    Some(Cmd::Inject(text, reply)) => {
+                        let taken = match driver.as_mut() {
+                            Some(d) => d.inject(&text).await,
+                            None => false,
+                        };
+                        let _ = reply.send(taken);
+                    }
+                    Some(Cmd::ReconnectMcp) => {
+                        if let Some(d) = driver.as_mut() {
+                            if !d.reconnect_mcp().await {
+                                self.sink.emit(HarnessEvent::Stderr(format!("[harness] {} cannot reconnect its MCP server", self.harness.id())));
+                            }
                         }
                     }
                     Some(Cmd::Close { force }) => {
@@ -297,6 +329,7 @@ impl Worker {
                     output: u.output_tokens,
                     reasoning: u.reasoning_tokens,
                 })),
+                Ev::McpState { state, servers } => self.sink.emit(HarnessEvent::McpState { state, servers }),
                 Ev::TurnStarted | Ev::Reasoning(_) | Ev::ToolFinished { .. } => {}
             }
         }

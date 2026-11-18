@@ -16,8 +16,11 @@ use crate::service::UsageService;
 
 pub const PACE_GET: &str = "pace_get";
 pub const PACE_REPORT: &str = "pace_report";
+/// USAGE-FIT: `usage_fit_get` `{provider?}` (default claude) answers `usage_fit` (the Kotlin Pace `GET usagefit` body).
+pub const USAGE_FIT_GET: &str = "usage_fit_get";
+pub const USAGE_FIT: &str = "usage_fit";
 
-pub const FRAMES: &[&str] = &[frames::USAGE_GET, frames::USAGE_SET, frames::LIMITS, frames::PROVIDER_STATES, frames::USAGE_METER_GET, PACE_GET, USAGE_WORKERS_GET];
+pub const FRAMES: &[&str] = &[frames::USAGE_GET, frames::USAGE_SET, frames::LIMITS, frames::PROVIDER_STATES, frames::USAGE_METER_GET, PACE_GET, USAGE_WORKERS_GET, USAGE_FIT_GET];
 
 pub struct UsageUnit {
     svc: Arc<UsageService>,
@@ -73,6 +76,7 @@ impl FrameUnit for UsageUnit {
             frames::USAGE_METER_GET => reply(env, frames::USAGE_METER, self.svc.meter_report().map_err(|e| Refusal::new(t, e))?),
             PACE_GET => reply(env, PACE_REPORT, self.svc.pace_report(&env.data)),
             USAGE_WORKERS_GET => reply(env, USAGE_WORKERS, self.svc.workers()),
+            USAGE_FIT_GET => reply(env, USAGE_FIT, self.svc.usage_fit(&env.data)),
             other => Err(Refusal::new(other, "not a usage frame")),
         }
     }

@@ -115,3 +115,33 @@ fn launch_plan_carries_password_config_and_watch_plugin() {
     assert_eq!(cfg["plugin"][0], "file:///C:/stage/infantry-watch.js");
     assert_eq!(cfg["permission"]["bash"]["infantry *"], "allow");
 }
+
+/// HARNESS-GAP G12: `/mcp` is polled while the server is up; a change is reported once; reconnect = disconnect, connect.
+#[test]
+fn mcp_state_is_polled_reported_on_change_and_reconnected() {
+    let mut t = ServeTranslator::new("pw", ApprovalMode::AllowAll, "opencode/free".into(), None, 2);
+    t.on_timer(10_000);
+    assert!(t.take_outbound().is_empty(), "not up yet: nothing asked");
+    boot(&mut t);
+    t.take_outbound();
+    t.on_timer(10_000);
+    let out = http(&t.take_outbound());
+    assert_eq!((out.len(), out[0].1.as_str()), (1, "GET"));
+    assert!(out[0].2.ends_with("/mcp"));
+    t.on_timer(10_001);
+    assert!(t.take_outbound().is_empty(), "one ask at a time, throttled");
+    let body = r#"{"infantry":{"status":"failed"},"github":{"status":"connected"}}"#;
+    let evs = t.feed(TranslatorInput::HttpResponse { id: out[0].0, status: Some(200), body: body.into() });
+    assert!(evs.contains(&HarnessEvent::McpState { state: "failed".into(), servers: vec![("github".into(), "connected".into()), ("infantry".into(), "failed".into())] }));
+    t.on_timer(10_000 + infantry_harness_opencode::serve::MCP_POLL_MS);
+    let again = http(&t.take_outbound());
+    let evs = t.feed(TranslatorInput::HttpResponse { id: again[0].0, status: Some(200), body: body.into() });
+    assert!(!evs.iter().any(|e| matches!(e, HarnessEvent::McpState { .. })), "unchanged: not reported again");
+
+    assert!(t.reconnect_mcp());
+    let d = http(&t.take_outbound());
+    assert!(d[0].2.ends_with("/mcp/infantry/disconnect"));
+    t.feed(TranslatorInput::HttpResponse { id: d[0].0, status: Some(400), body: "not connected".into() });
+    let c = http(&t.take_outbound());
+    assert!(c[0].2.ends_with("/mcp/infantry/connect"));
+}

@@ -192,6 +192,12 @@ pub fn prompt_line(id: &str, prompt: &str) -> String {
     json!({"id": id, "type": "prompt", "message": prompt}).to_string()
 }
 
+/// HARNESS-GAP G10: a steering message for the running agent (pi rpc `steer`): delivered after the current tool calls,
+/// the turn goes on.
+pub fn steer_line(id: &str, message: &str) -> String {
+    json!({"id": id, "type": "steer", "message": message}).to_string()
+}
+
 pub fn command_line(id: &str, kind: &str) -> String {
     json!({"id": id, "type": kind}).to_string()
 }
@@ -437,6 +443,16 @@ impl Translator for RpcTranslator {
         self.turn = Some(Turn { prompt_id: pid, stream: EventStream::default(), abort_requested: false });
     }
 
+    /// `steer` into the running agent; false (the host keeps it queued) when no turn is live or it is being stopped.
+    fn inject(&mut self, text: &str) -> bool {
+        if text.trim().is_empty() || self.held.is_some() || !self.turn.as_ref().is_some_and(|t| !t.abort_requested) {
+            return false;
+        }
+        let id = self.next_id("steer");
+        self.write(steer_line(&id, text));
+        true
+    }
+
     fn interrupt(&mut self) -> bool {
         if let Some((turn, _)) = self.held.as_mut() {
             turn.abort_requested = true; // ends Interrupted on the pending answer
@@ -457,5 +473,23 @@ impl Translator for RpcTranslator {
 
     fn take_outbound(&mut self) -> Vec<Outbound> {
         std::mem::take(&mut self.outbound)
+    }
+}
+
+#[cfg(test)]
+mod steer_tests {
+    use super::*;
+
+    #[test]
+    fn inject_steers_a_running_turn_and_is_refused_when_idle() {
+        let mut t = RpcTranslator::new();
+        assert!(!t.inject("now"), "no turn: the host queues it");
+        t.send_turn("work");
+        t.take_outbound();
+        assert!(t.inject("now"));
+        let out = t.take_outbound();
+        let Outbound::Stdin(b) = &out[0] else { panic!("{out:?}") };
+        let v: Value = serde_json::from_slice(b.trim_ascii_end()).unwrap();
+        assert_eq!((v["type"].as_str(), v["message"].as_str()), (Some("steer"), Some("now")));
     }
 }

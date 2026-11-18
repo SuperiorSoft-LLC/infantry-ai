@@ -54,6 +54,10 @@ pub struct UsageService {
     clock: Clock,
     log: LogFn,
     tickers: Mutex<Vec<Ticker>>,
+    /// TOKEN-9: the newest request time already carried by a kept pace sample.
+    pace_cursor: Mutex<i64>,
+    /// USAGE-FIT: the last answer, keyed by (provider, sample count, 30 s slot).
+    fit_cache: Mutex<Option<((String, usize, i64), Value)>>,
     /// The bus `start_background` was given, shared with the tracker's sink (built before the bus is known).
     bus: Arc<Mutex<Option<EventBus>>>,
 }
@@ -110,6 +114,7 @@ impl UsageService {
                 None
             }
         };
+        let now0 = (clock)();
         let svc = Arc::new(UsageService {
             budget: OperatorBudget::from_env(&crate::credentials::process_env, clock.clone()),
             pace: PaceStore::open(file_in(&deps.state_dir.join("pace"), "samples.jsonl")),
@@ -121,6 +126,8 @@ impl UsageService {
             clock,
             log: deps.log,
             tickers: Mutex::new(Vec::new()),
+            pace_cursor: Mutex::new(now0),
+            fit_cache: Mutex::new(None),
             bus,
         });
         svc
@@ -170,6 +177,52 @@ impl UsageService {
     pub fn pace_settings(&self) -> PaceSettings {
         let c = self.config.clone();
         PaceSettings::from(move |k| c.text(k))
+    }
+
+    /// One pace pass: every window becomes a sample (unless a repeat), carrying the tokens per session spent since the
+    /// last KEPT sample (TOKEN-9); the cursor moves only when a sample was kept.
+    pub fn sample_pace(&self) -> usize {
+        let cursor = *self.pace_cursor.lock().unwrap_or_else(|p| p.into_inner());
+        let reqs = self.meter.as_ref().and_then(|m| m.requests_since(cursor + 1, crate::fit::MAX_REQUESTS).ok()).unwrap_or_default();
+        let tokens = (!reqs.is_empty()).then(|| pace::session_tokens(&reqs));
+        let kept = self.pace.record_report_with(&self.report(), tokens.as_ref());
+        if kept > 0 {
+            if let Some(ts) = reqs.iter().map(|r| r.ts).max() {
+                let mut c = self.pace_cursor.lock().unwrap_or_else(|p| p.into_inner());
+                *c = (*c).max(ts);
+            }
+        }
+        kept
+    }
+
+    /// USAGE-FIT: the tokens-per-point analysis of `provider`'s windows (the `usage_fit` body); kept 30 s and dropped when
+    /// a new pace sample arrives.
+    pub fn usage_fit(&self, body: &str) -> Value {
+        let provider = serde_json::from_str::<Value>(body).ok().and_then(|v| v.get("provider").and_then(Value::as_str).map(String::from))
+            .or_else(|| Some(body.trim().to_string()).filter(|b| !b.is_empty() && !b.starts_with('{')))
+            .unwrap_or_else(|| "claude".into());
+        let now = self.now();
+        let stamp = (provider.clone(), self.pace.count(), now / crate::fit::TTL_MS);
+        let mut cache = self.fit_cache.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some((k, v)) = cache.as_ref() {
+            if *k == stamp {
+                return v.clone();
+            }
+        }
+        let since = now - crate::fit::LOOKBACK_DAYS * 86_400_000;
+        let requests: Vec<crate::fit::FitRequest> = self
+            .meter
+            .as_ref()
+            .and_then(|m| m.requests_since(since, crate::fit::MAX_REQUESTS).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|r| crate::pacing::meter_for(&r.harness, r.model.as_deref()) == provider)
+            .map(crate::fit::FitRequest::from)
+            .collect();
+        let min_steps = self.config.text("pace.fitMinSteps").and_then(|v| v.trim().parse::<usize>().ok()).map(|v| v.clamp(2, 200)).unwrap_or(crate::fit::DEFAULT_MIN_STEPS);
+        let out = crate::fit::report(&provider, &self.pace, &requests, min_steps, now);
+        *cache = Some((stamp, out.clone()));
+        out
     }
 
     pub fn pace_report(&self, body: &str) -> Value {
@@ -298,7 +351,7 @@ impl UsageService {
         let me = Arc::downgrade(self);
         tickers.push(Ticker::spawn("infantry-pace-sample", pace::SAMPLE_EVERY_MS, move || {
             if let Some(s) = me.upgrade() {
-                s.pace.record_report(&s.report());
+                s.sample_pace();
             }
             pace::SAMPLE_EVERY_MS
         }));

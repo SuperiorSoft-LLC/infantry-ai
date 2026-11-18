@@ -68,6 +68,8 @@ pub const LAYERS: &[(&str, Layer, u8)] = &[
     ("infantry-vault", Layer::Core, 1),
     // projects, workspaces, project git, worktrees, ticket branches: platform level; the orchestrator calls into it.
     ("infantry-projects", Layer::Core, 1),
+    // roles, traits, skills, prompts, avatars, briefs: the agent registry (KNOW-1); agents never depend on orchestration.
+    ("infantry-knowledge", Layer::Core, 1),
     ("infantry-runner-api", Layer::Runner, 0),
     ("infantry-runner", Layer::Runner, 1),
     ("infantry-runner-local", Layer::Runner, 2),

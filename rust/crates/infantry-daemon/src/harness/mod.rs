@@ -103,7 +103,14 @@ pub enum HarnessEvent {
     Tool(String),
     /// Token usage of one model request, as the CLI reported it: the session's stats.
     Usage(TokenUsage),
+    /// The CLI's view of the session's own MCP server and of every server it reports (G12).
+    McpState { state: String, servers: Vec<(String, String)> },
 }
+
+/// Hands one message to the running turn; true = the CLI took it. Called with no session lock held (it waits briefly).
+pub type Injector = Box<dyn FnOnce(String) -> bool + Send>;
+/// How long an inject waits for the CLI's answer.
+pub const INJECT_WAIT_MS: u64 = 3_000;
 
 /// One model request's token counts as the harness reported them (never estimated).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -141,6 +148,14 @@ pub trait HarnessSession: Send {
     fn close(&mut self, force: bool);
     /// The session's process is alive.
     fn process_alive(&self) -> bool;
+    /// Mid-turn input (a queued message forced into the running turn); None = this session cannot take it.
+    fn injector(&self) -> Option<Injector> {
+        None
+    }
+    /// Reconnects the session's own MCP server inside the CLI; false = it cannot (no process, or no such command).
+    fn reconnect_mcp(&mut self) -> bool {
+        false
+    }
 }
 
 /// The provider a daemon runs when none is named.

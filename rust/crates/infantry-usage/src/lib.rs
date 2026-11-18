@@ -18,6 +18,7 @@
 //! put in a reason (a reason is a fixed code).
 pub mod config;
 pub mod credentials;
+pub mod fit;
 pub mod governor;
 pub mod limits;
 pub mod meter;

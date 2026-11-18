@@ -25,6 +25,8 @@ use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 pub const DEFAULT_MAX_RETRIES: u32 = 2;
+/// HARNESS-GAP G12: how often `GET /mcp` is asked while the server is up.
+pub const MCP_POLL_MS: u64 = 5_000;
 
 pub const RECOVERY_NOTE: &str = "[infantry] Your earlier conversation was lost: the provider refused its history, so this is a fresh session. \
 Your first message (above) is repeated so you keep your instructions; it was already handled. Answer this message:";
@@ -40,6 +42,21 @@ enum Call {
     Reply,
     RecoverMessages,
     RecoverCreate { persona: Option<String> },
+    McpStatus,
+    McpDisconnect,
+    McpConnect,
+}
+
+/// `GET /mcp` answers `{name: {status: connected|failed|disabled|needs_auth|...}}`: one (name, status) per server, by name.
+pub fn mcp_statuses(body: &str) -> Option<Vec<(String, String)>> {
+    let v: Value = serde_json::from_str(body).ok()?;
+    let mut out: Vec<(String, String)> = v
+        .as_object()?
+        .iter()
+        .map(|(k, x)| (k.clone(), x.get("status").and_then(Value::as_str).unwrap_or("unknown").to_string()))
+        .collect();
+    out.sort();
+    Some(out)
 }
 
 #[derive(Debug, Default)]
@@ -75,6 +92,10 @@ pub struct ServeTranslator {
     stderr: VecDeque<String>,
     /// Permission ids put to the host, with the tool asked about.
     asked: HashMap<String, String>,
+    /// G12: when `/mcp` was last asked, whether an ask is out, and the last state reported.
+    mcp_polled_at: u64,
+    mcp_asking: bool,
+    mcp_last: Option<(String, Vec<(String, String)>)>,
 }
 
 fn s<'a>(v: &'a Value, key: &str) -> Option<&'a str> {
@@ -215,6 +236,9 @@ impl ServeTranslator {
             events: Vec::new(),
             stderr: VecDeque::new(),
             asked: HashMap::new(),
+            mcp_polled_at: 0,
+            mcp_asking: false,
+            mcp_last: None,
         }
     }
 
@@ -339,6 +363,24 @@ impl ServeTranslator {
                 }
             }
             Call::Events => {}
+            Call::McpStatus => {
+                self.mcp_asking = false;
+                if let Some(all) = mcp_statuses(&body).filter(|_| ok) {
+                    let state = all.iter().find(|(n, _)| n == crate::config::MCP_SERVER).map(|(_, st)| st.clone()).unwrap_or_else(|| "missing".into());
+                    let now = (state, all);
+                    if self.mcp_last.as_ref() != Some(&now) {
+                        self.events.push(HarnessEvent::McpState { state: now.0.clone(), servers: now.1.clone() });
+                        self.mcp_last = Some(now);
+                    }
+                }
+            }
+            Call::McpDisconnect => self.post(&format!("/mcp/{}/connect", crate::config::MCP_SERVER), "{}".into(), Call::McpConnect),
+            Call::McpConnect => {
+                if !ok {
+                    self.events.push(HarnessEvent::Warning(format!("opencode could not reconnect its MCP server: {}", why())));
+                }
+                self.mcp_polled_at = 0; // ask again at once
+            }
         }
     }
 
@@ -635,5 +677,22 @@ impl Translator for ServeTranslator {
 
     fn take_outbound(&mut self) -> Vec<Outbound> {
         std::mem::take(&mut self.outbound)
+    }
+
+    fn on_timer(&mut self, now_ms: u64) {
+        if self.ready && !self.mcp_asking && now_ms.saturating_sub(self.mcp_polled_at) >= MCP_POLL_MS {
+            self.mcp_polled_at = now_ms;
+            self.mcp_asking = true;
+            self.request("GET", "/mcp", None, Call::McpStatus, false);
+        }
+    }
+
+    fn reconnect_mcp(&mut self) -> bool {
+        if !self.ready {
+            return false;
+        }
+        // A disconnect that fails (it was not connected) still goes on to the connect.
+        self.post(&format!("/mcp/{}/disconnect", crate::config::MCP_SERVER), "{}".into(), Call::McpDisconnect);
+        true
     }
 }

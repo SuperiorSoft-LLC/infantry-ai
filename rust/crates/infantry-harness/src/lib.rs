@@ -396,6 +396,9 @@ pub enum HarnessEvent {
     TurnEnded { end: TurnEnd, reason: Option<String> },
     /// The process ended.
     Exited { code: Option<i32> },
+    /// The state of the session's own MCP server in the CLI (`connected`, `failed`, `needs_auth`, `disabled`, ...) and
+    /// of every server it reports, sent when it changes (Kotlin `SessionOutput.mcpState` / `mcpServers`).
+    McpState { state: String, servers: Vec<(String, String)> },
 }
 
 /// Reads one launched process.
@@ -413,6 +416,13 @@ pub trait Translator: Send {
     fn answer_questions(&mut self, _id: &str, _answers: Vec<HarnessAnswer>) {}
     /// Types [text] into the running turn (the CLI takes it at its next step without stopping). False = it cannot now.
     fn inject(&mut self, _text: &str) -> bool {
+        false
+    }
+    /// Called on every driver poll with the time (ms since the epoch): a translator that watches something by asking
+    /// (a status endpoint) queues its request here, throttled by itself.
+    fn on_timer(&mut self, _now_ms: u64) {}
+    /// Reconnects the session's own MCP server inside the CLI. False = the CLI cannot.
+    fn reconnect_mcp(&mut self) -> bool {
         false
     }
     /// Starts the CLI's own exit (keys, a command). False = it has none; the driver kills the process.

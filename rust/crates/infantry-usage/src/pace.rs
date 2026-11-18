@@ -284,6 +284,34 @@ pub fn thin(points: &[PaceSample], max: usize) -> Vec<PaceSample> {
     idx.into_iter().map(|i| points[i].clone()).collect()
 }
 
+/// TOKEN-9: the tokens of `reqs` per session (`k` of a sample): `{s, r, i?, o?, cr?, cw?}`, a sum left out when every
+/// request had it unknown.
+pub fn session_tokens(reqs: &[crate::meter::RequestRow]) -> Value {
+    let mut by: BTreeMap<&str, Vec<&crate::meter::RequestRow>> = BTreeMap::new();
+    for r in reqs {
+        by.entry(r.session_id.as_str()).or_default().push(r);
+    }
+    let sum = |l: &[&crate::meter::RequestRow], f: fn(&crate::meter::RequestRow) -> Option<i64>| -> Option<i64> {
+        let v: Vec<i64> = l.iter().filter_map(|r| f(r)).collect();
+        (!v.is_empty()).then(|| v.iter().sum())
+    };
+    Value::Array(
+        by.into_iter()
+            .map(|(sid, l)| {
+                let mut o = Map::new();
+                o.insert("s".into(), json!(sid));
+                o.insert("r".into(), json!(l[0].role));
+                for (k, f) in [("i", (|r: &crate::meter::RequestRow| r.input) as fn(&crate::meter::RequestRow) -> Option<i64>), ("o", |r| r.output), ("cr", |r| r.cache_read), ("cw", |r| r.cache_write)] {
+                    if let Some(v) = sum(&l, f) {
+                        o.insert(k.into(), json!(v));
+                    }
+                }
+                Value::Object(o)
+            })
+            .collect(),
+    )
+}
+
 /// The history file, held in memory per (provider, window) after load. Thread-safe.
 pub struct PaceStore {
     file: PathBuf,
@@ -357,6 +385,12 @@ impl PaceStore {
     /// older than it. Returns whether it was kept.
     #[allow(clippy::too_many_arguments)]
     pub fn record(&self, provider: &str, window: &str, observed_at: i64, percent: Option<f64>, pace_delta: Option<f64>, projected: Option<f64>, resets_at: Option<i64>, window_minutes: i32) -> bool {
+        self.record_with(provider, window, observed_at, percent, pace_delta, projected, resets_at, window_minutes, None)
+    }
+
+    /// [`record`](Self::record) with the per-session tokens spent since the last kept sample (`k`, TOKEN-9).
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_with(&self, provider: &str, window: &str, observed_at: i64, percent: Option<f64>, pace_delta: Option<f64>, projected: Option<f64>, resets_at: Option<i64>, window_minutes: i32, tokens: Option<Value>) -> bool {
         let Some(percent) = percent else { return false };
         let mut series = self.lock();
         let list = series.entry((provider.into(), window.into())).or_default();
@@ -377,7 +411,7 @@ impl PaceStore {
             window_minutes,
             prev_percent: last.map(|l| l.percent),
             delta_percent: last.map(|l| percent - l.percent),
-            tokens: None,
+            tokens: tokens.filter(|k| k.as_array().is_some_and(|a| !a.is_empty())),
         };
         let line = encode(&s);
         list.push(s);
@@ -392,11 +426,16 @@ impl PaceStore {
 
     /// Samples every meter window of a report (the governing projection rides on the governing window only).
     pub fn record_report(&self, report: &UsageReport) -> usize {
+        self.record_report_with(report, None)
+    }
+
+    /// [`record_report`](Self::record_report) with the per-session tokens (`k`) every kept sample carries.
+    pub fn record_report_with(&self, report: &UsageReport, tokens: Option<&Value>) -> usize {
         let mut kept = 0;
         for m in &report.meters {
             for w in &m.windows {
                 let projected = if m.window.as_deref() == Some(w.label.as_str()) { m.projected_percent } else { None };
-                if self.record(&m.meter, &w.label, w.observed_at, w.percent, w.pace_delta, projected, w.resets_at, w.window_minutes) {
+                if self.record_with(&m.meter, &w.label, w.observed_at, w.percent, w.pace_delta, projected, w.resets_at, w.window_minutes, tokens.cloned()) {
                     kept += 1;
                 }
             }
