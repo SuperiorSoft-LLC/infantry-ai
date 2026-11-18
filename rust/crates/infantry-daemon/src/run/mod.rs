@@ -6,6 +6,7 @@
 //! Frames and limits are the Kotlin `Infantry_Run` plugin's (contract 1.33 / 1.108 / 1.134): `command_list|save|delete`,
 //! `run_start|stop|list|attach|resize|input`, `run`, `run_bytes`, `run_finished`, `processes`, `processes_reap`.
 
+pub mod mem;
 pub mod prep;
 pub mod tools;
 
@@ -39,6 +40,8 @@ pub struct RunLimits {
     pub grace_ms: u64,
     /// Exit polling interval.
     pub poll_ms: u64,
+    /// Free RAM below this marks the report under pressure (`processes.floorMb`).
+    pub floor_mb: u64,
 }
 
 impl Default for RunLimits {
@@ -52,6 +55,7 @@ impl Default for RunLimits {
             max_rows: 1000,
             grace_ms: 5_000,
             poll_ms: 100,
+            floor_mb: 4096,
         }
     }
 }
@@ -313,6 +317,12 @@ fn command_for(argv: &[String], cwd: PathBuf, env: Vec<(String, String)>) -> pty
     {
         pty::Command { program: argv[0].clone(), args: argv[1..].to_vec(), cwd, env, env_remove: vec![] }
     }
+}
+
+/// Why a session's live process is rogue: its session ended and the process stayed. A live session's own harness
+/// process is never rogue by idleness (Kotlin `ProcessWatch.rogueReason`).
+fn rogue_reason(s: &infantry_protocol::session::SessionRecord) -> Option<String> {
+    (s.is_process_alive && s.state == infantry_protocol::session::SessionState::Exited).then(|| "session ended (EXITED)".to_string())
 }
 
 /// Splits a shell line into argv (quotes and backslash-escaped quotes respected), for the tools' `command`.
@@ -675,20 +685,44 @@ impl RunManager {
             .filter(|r| !r.finished())
             .filter_map(|r| {
                 let cmd: String = format!("run {}: {}", r.name, self.commands.get(&r.command_id).map(|c| c.argv.join(" ")).unwrap_or_default()).chars().take(80).collect();
-                r.pid.map(|pid| json!({"pid": pid, "command": cmd, "sessionId": null, "startedAt": r.started_at, "memoryMb": null, "rogue": false, "reason": null, "inferred": false, "cpuPercent": null, "stuck": null}))
+                r.pid.map(|pid| json!({"pid": pid, "command": cmd, "sessionId": null, "startedAt": r.started_at, "memoryMb": mem::process_mb(pid), "rogue": false, "reason": null, "inferred": false, "cpuPercent": null, "stuck": null}))
             })
             .collect();
         for s in self.daemon.records() {
             if let (Some(pid), true) = (s.child_pid, s.is_process_alive) {
                 let cmd: String = format!("{} session {}", s.provider, s.role.as_deref().unwrap_or("")).trim().chars().take(80).collect();
-                out.push(json!({"pid": pid, "command": cmd, "sessionId": s.id, "startedAt": s.last_turn_at, "memoryMb": null, "rogue": false, "reason": null, "inferred": false, "cpuPercent": null, "stuck": null}));
+                let reason = rogue_reason(&s);
+                out.push(json!({
+                    "pid": pid, "command": cmd, "sessionId": s.id, "startedAt": s.last_turn_at, "memoryMb": u32::try_from(pid).ok().and_then(mem::process_mb),
+                    "rogue": reason.is_some(), "reason": reason, "inferred": false, "cpuPercent": null, "stuck": null,
+                }));
             }
         }
         out
     }
 
     pub fn report(&self) -> Value {
-        json!({"freeMb": null, "totalMb": null, "floorMb": 0, "underPressure": false, "autoReap": false, "tracked": self.processes(), "unattributed": []})
+        let (free, total) = mem::machine_mb();
+        json!({
+            "freeMb": free, "totalMb": total, "floorMb": self.limits.floor_mb, "underPressure": free.is_some_and(|f| f < self.limits.floor_mb),
+            "autoReap": false, "tracked": self.processes(), "unattributed": [],
+        })
+    }
+
+    /// `processes_reap {op: reap_rogue}`: every rogue process (a session's process alive after its session ended).
+    pub fn reap_rogue(self: &Arc<Self>) -> (Vec<i64>, Option<String>) {
+        let (mut reaped, mut refused) = (Vec::new(), Vec::new());
+        for s in self.daemon.records() {
+            let (Some(pid), true) = (s.child_pid, s.is_process_alive) else { continue };
+            if rogue_reason(&s).is_none() {
+                continue;
+            }
+            match self.reap(pid) {
+                Ok(p) => reaped.extend(p),
+                Err(e) => refused.push(format!("pid {pid}: {e}")),
+            }
+        }
+        (reaped, (!refused.is_empty()).then(|| refused.join("; ")))
     }
 
     /// `processes_reap` `{op: reap, pid}`: only a process this daemon tracks; a run is force-stopped, a session's process killed.
@@ -808,8 +842,7 @@ impl FrameUnit for RunUnit {
                         },
                         None => return Err(rf("reap needs a pid".into())),
                     },
-                    // Nothing here marks a process rogue yet (no memory sampling): nothing to reap.
-                    "reap_rogue" => (Vec::new(), None),
+                    "reap_rogue" => m.reap_rogue(),
                     other => return Err(rf(format!("unknown op '{other}' (list, reap, reap_rogue)"))),
                 };
                 Ok(vec![reply(env, f::PROCESSES, json!({"report": m.report(), "reaped": reaped, "refused": refused}).to_string())])
