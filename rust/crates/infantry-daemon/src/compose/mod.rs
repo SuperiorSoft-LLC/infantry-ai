@@ -15,6 +15,7 @@ mod adapters;
 mod agent_tools;
 pub mod host_frames;
 pub mod project_files;
+pub mod timeline;
 pub mod plugins;
 mod prompter;
 mod settings;
@@ -361,12 +362,15 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         let p = projects.clone();
         Arc::new(ExecTools::new(Arc::new(|_: &str| None), Arc::new(move |id: &str| project_dir(&p, id)), Some(bus.clone()), Arc::new(log_line)))
     };
+    timeline::wire(&run_log, &bus);
+    daemon.observe(Arc::new(timeline::WakeObserver { run_log: run_log.clone() }));
+    let timeline_unit = timeline::TimelineUnit { run_log: run_log.clone() };
     tools.set_scripting(ScriptingTools {
         engines,
         store: scripts,
         hooks: hook_store,
         dispatcher: script_dispatcher,
-        run_log,
+        run_log: run_log.clone(),
         exec: exec.clone(),
         limits: Arc::new(ScriptLimits::default),
         config: Arc::new(|_: &str| None),
@@ -418,6 +422,7 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         Arc::new(crate::mcp::McpUnit { registry: mcp.clone() }),
         Arc::new(crate::pods::PodsUnit { pods: pods.clone() }),
         Arc::new(crate::account::AccountUnit { account }),
+        Arc::new(timeline_unit),
     ];
     units.extend(knowledge.units());
     if let Some(p) = &plugin_set {
