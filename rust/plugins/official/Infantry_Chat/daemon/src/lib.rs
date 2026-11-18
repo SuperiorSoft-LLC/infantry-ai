@@ -5,10 +5,11 @@
 //! `mail_send`, `sessions`, `project_list`) on the caller's connection, so the daemon stays the single owner of the
 //! mailbox and every policy gate still applies. WHO I AM is `client_session_id`, else the human handle `user`.
 //!
-//! HOST NEED (not done here): the `image_upload` / `image_fetch` frames, the chat image retention sweep and
-//! `infantry_chat_image` need project-file access (read/write under `<project>/.infantry/`), which the WIT does not
-//! offer. Wiring must either add a files import or keep those in the host.
-use infantry_plugin_sdk::types::{CallContext, Frame};
+//! The `image_upload` / `image_fetch` frames ([`images`]) go through the host's `project_files` frame. Still left: the
+//! chat image retention sweep and `infantry_chat_image`.
+pub mod images;
+
+use infantry_plugin_sdk::types::{CallContext, Caller, Frame};
 use infantry_plugin_sdk::{export_plugin, host, Plugin};
 use serde_json::{json, Map, Value};
 
@@ -20,7 +21,7 @@ const SUBJECT: usize = 80;
 
 pub struct Chat;
 
-type Ask<'a> = &'a dyn Fn(&str, &str, Option<&str>) -> Result<Frame, String>;
+pub type Ask<'a> = &'a dyn Fn(&str, &str, Option<&str>) -> Result<Frame, String>;
 
 fn text<'a>(o: &'a Value, k: &str) -> &'a str {
     o.get(k).and_then(|v| v.as_str()).unwrap_or("")
@@ -258,6 +259,19 @@ impl Plugin for Chat {
             "infantry_announce" => announce(&a, session, ctx.client_project_id.as_deref(), host::settings::get("announce.allowedRoles"), &ask),
             other => Err(format!("unknown tool {other}")),
         }
+    }
+
+    fn handle_frame(frame: Frame, _caller: Caller) -> Result<Option<Frame>, String> {
+        let ask = |ty: &str, data: &str, sess: Option<&str>| host::frames::request(ty, data, sess, TIMEOUT_MS);
+        let (ok, r) = match frame.type_.as_str() {
+            "image_upload" => ("image", images::upload(&frame.data, &ask)),
+            "image_fetch" => ("image_bytes", images::fetch(&frame.data, &ask)),
+            other => return Err(format!("this plugin does not answer {other}")),
+        };
+        Ok(Some(match r {
+            Ok(v) => Frame { type_: ok.into(), data: v.to_string(), session_id: None, request_id: frame.request_id },
+            Err(why) => Frame { type_: "error".into(), data: format!("{} refused: {why}", frame.type_), session_id: None, request_id: frame.request_id },
+        }))
     }
 }
 

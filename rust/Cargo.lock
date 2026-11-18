@@ -1165,10 +1165,12 @@ dependencies = [
 name = "infantry-chat-daemon"
 version = "1.0.0"
 dependencies = [
+ "base64",
  "infantry-plugin-host",
  "infantry-plugin-sdk",
  "infantry-plugin-wit",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

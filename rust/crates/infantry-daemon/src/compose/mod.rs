@@ -14,6 +14,7 @@
 mod adapters;
 mod agent_tools;
 pub mod host_frames;
+pub mod project_files;
 pub mod plugins;
 mod prompter;
 mod settings;
@@ -411,6 +412,7 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         roles: knowledge.roles.clone(),
         questions,
         state_dir: state_dir.to_path_buf(),
+        projects: projects.store.clone(),
     }));
     for u in units {
         let name = u.name();

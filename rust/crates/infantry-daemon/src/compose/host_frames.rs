@@ -30,7 +30,7 @@ pub const SESSION_JOB_LOG: &str = "session_job_log";
 pub const MODULE_CARDS: &str = "module_cards";
 pub const AGENT_REGISTRY: &str = "agent_registry";
 pub const PLUGINS_OP: &str = "plugins_op";
-const FRAMES: &[&str] = &[SESSION_GET, SESSION_JOBS, SESSION_JOB_LOG, MODULE_CARDS, AGENT_REGISTRY, PLUGINS_OP];
+const FRAMES: &[&str] = &[SESSION_GET, SESSION_JOBS, SESSION_JOB_LOG, MODULE_CARDS, AGENT_REGISTRY, PLUGINS_OP, super::project_files::PROJECT_FILES];
 
 /// Transcript frames `session_get` returns when the caller names no `lines`.
 pub const TRANSCRIPT_LINES: usize = 40;
@@ -53,6 +53,8 @@ pub struct HostFrames {
     pub roles: Arc<RoleService>,
     pub questions: Arc<OwnerQuestions>,
     pub state_dir: PathBuf,
+    /// For `project_files` (a plugin's files under `<project>/.infantry/`).
+    pub projects: Arc<infantry_projects::store::ProjectStore>,
 }
 
 /// One module.json found in the plugins folder.
@@ -395,6 +397,11 @@ impl FrameUnit for HostFrames {
             MODULE_CARDS => Ok(self.module_cards(env)),
             AGENT_REGISTRY => self.agent_registry(env, &d, ctx),
             PLUGINS_OP => self.plugins_op(env, &d, ctx),
+            // In-process callers only (a plugin guest, conn 0): a client or agent connection never writes these files.
+            super::project_files::PROJECT_FILES if ctx.conn_id != 0 => Err(Refusal::new(super::project_files::PROJECT_FILES, "only a plugin may ask")),
+            super::project_files::PROJECT_FILES => super::project_files::answer(&self.projects, &env.data)
+                .map(|v| reply(super::project_files::PROJECT_FILES, env, v.to_string()))
+                .map_err(|e| Refusal::new(super::project_files::PROJECT_FILES, e)),
             other => Err(Refusal::new(other, "not a host frame")),
         }
     }

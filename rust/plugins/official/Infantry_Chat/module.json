@@ -4,7 +4,7 @@
   "apiVersion": 2,
   "author": "Infantry AI",
   "license": "Apache-2.0",
-  "description": "COMMS mail tools: inbox, read, message, announce and the project directory. Daemon half only (image upload frames await a host files import).",
+  "description": "COMMS mail tools: inbox, read, message, announce and the project directory. Daemon half only: mail tools and the image upload frames.",
   "tier": "official",
   "sequence": [],
   "daemon": {
@@ -12,6 +12,10 @@
     "apiAtLeast": "0.1.0",
     "needs": [
       "frames"
+    ],
+    "frames": [
+      { "type": "image_upload", "action": "images.upload", "kind": "write" },
+      { "type": "image_fetch", "action": "images.read", "kind": "read" }
     ],
     "tools": [
       {
