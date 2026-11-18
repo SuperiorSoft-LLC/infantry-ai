@@ -137,7 +137,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Collapse a lane | yes | done | *(RUST-UI-8)* The lane header folds it to title and count, remembered per lane; a folded lane still takes drops. |
 | "All projects" toggle | yes | missing | UI only. |
 | Start next | yes | done | *(RUST-UI-8)* Button in the filter bar sends `ticket_start_next` for the current project; a refusal toasts *(RUST-UI-9)*. |
-| Card buttons: Start, Done, Back, Reopen, Park, Archive | yes | partial | Drag does the moves. No buttons: UI only (`ticket_move`). |
+| Card buttons: Start, Done, Back, Reopen, Park, Archive | yes | partial | *(RUST-UI-9)* Per lane: Start (`ticket_start`; a refusal toasts), To review, Done, Back, Reopen, To do. No Park or Archive yet. |
 | Assign / switch / queue / unassign from a card | yes | missing | UI only (`ticket_assign`, `agent_switch`, `agent_queue`, `ticket_unassign`). |
 | Multi-select and move to epic | yes | missing | UI only (`ticket_save`). |
 | Card badges: epic, runner, waiting, has work, queued | yes | partial | Role, assignee and branch only. UI only. |
