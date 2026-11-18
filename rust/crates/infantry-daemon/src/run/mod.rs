@@ -757,7 +757,9 @@ pub struct RunUnit {
     pub runs: Arc<RunManager>,
 }
 
-const FRAMES: &[&str] = &[
+/// PREVIEW-BRANCH-1: `run_branches {"project"?}` -> `run_branches {"project", "branches": [{"name", "worktree"?}]}`.
+pub const RUN_BRANCHES: &str = "run_branches";
+const FRAMES: &[&str] = &[RUN_BRANCHES, 
     f::COMMAND_LIST,
     f::COMMAND_SAVE,
     f::COMMAND_DELETE,
@@ -797,6 +799,14 @@ impl FrameUnit for RunUnit {
         let m = &self.runs;
         match ty {
             f::COMMAND_LIST => Ok(vec![reply(env, f::COMMANDS, m.commands_json(v["project"].as_str()))]),
+            RUN_BRANCHES => {
+                let project = v["project"].as_str().map(str::trim).filter(|p| !p.is_empty()).map(String::from);
+                let p = project.clone().ok_or_else(|| rf("expects a project".into()))?;
+                let ext = m.extras().ok_or_else(|| rf("branches are not available on this daemon".into()))?;
+                let rows = prep::branches(&ext.projects, &p).map_err(rf)?;
+                let branches: Vec<Value> = rows.iter().map(|b| serde_json::json!({"name": b.name, "worktree": b.worktree})).collect();
+                Ok(vec![reply(env, RUN_BRANCHES, serde_json::json!({"project": project, "branches": branches}).to_string())])
+            }
             f::COMMAND_SAVE => {
                 let req: CommandSave = serde_json::from_str(&env.data).map_err(|e| rf(format!("bad request ({e})")))?;
                 m.save(req).map_err(rf)?;
