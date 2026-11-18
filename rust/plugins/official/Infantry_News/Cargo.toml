@@ -1,0 +1,13 @@
+[package]
+name = "infantry-news"
+version = "1.0.1"
+edition = "2021"
+license = "Apache-2.0"
+description = "Infantry_News daemon plugin (news.headlines), a WASM component"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+quick-xml = "0.42"
+serde_json = { version = "1", features = ["preserve_order"] }
