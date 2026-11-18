@@ -8,7 +8,9 @@
 //!   the [`ProcEvent`] stream ([`Runner::events`]);
 //! - `pty-screen`: what a terminal program shows now ([`Runner::screen`], [`Runner::screen_text_since`]);
 //! - `file-tail`: the lines appended to a file on the runner's host ([`Runner::tail`]);
-//! - `hook-channel`: how a CLI's hooks reach the harness ([`Runner::hook_channel`]).
+//! - `hook-channel`: how a CLI's hooks reach the harness ([`Runner::hook_channel`]);
+//! - `loopback-http`: requests to a server process the harness started there ([`Runner::http`], e.g. `opencode serve`);
+//! - `staged-files`: files a CLI loads by path (a plugin, an extension) put on the runner's host ([`Runner::stage_file`]).
 //!
 //! Every path in this API is a path on the RUNNER's host. The trait is object-safe (`Arc<dyn Runner>`): methods return
 //! boxed futures, so no `async-trait` macro is needed.
@@ -17,10 +19,12 @@
 //! new fields with `#[serde(default)]`, new variants of the `#[non_exhaustive]` enums).
 
 pub mod hooks;
+pub mod http;
 #[cfg(feature = "test-support")]
 pub mod suite;
 
 pub use hooks::{HookCall, HookEndpoint};
+pub use http::{HttpEvent, HttpRequest};
 
 use serde::{Deserialize, Serialize};
 use std::future::Future;
@@ -268,4 +272,20 @@ pub trait Runner: Send + Sync {
 
     /// Forgets an exited process (its screen and buffered state). A running one is killed (tree) first.
     fn release<'a>(&'a self, id: &'a ProcId) -> RunnerFuture<'a, ()>;
+
+    /// `loopback-http`: one request to a server on the runner host's loopback (a process the harness started there), made
+    /// by the runner on its host. The response streams as [`HttpEvent`]s (a server-sent events stream stays open until the
+    /// server closes it or the receiver is dropped). Non-loopback URLs are refused. Default: unsupported.
+    fn http(&self, req: HttpRequest) -> RunnerFuture<'_, mpsc::UnboundedReceiver<HttpEvent>> {
+        let _ = req;
+        Box::pin(async { Err(RunnerError::Unsupported("loopback-http".into())) })
+    }
+
+    /// `staged-files`: puts [contents] in a file called [name] (a plain file name, no folders) in the runner's own staging
+    /// folder on its host, rewritten only when it differs, and returns its absolute path there. For files a CLI loads by
+    /// path (a plugin, an extension). Default: unsupported.
+    fn stage_file<'a>(&'a self, name: &'a str, contents: &'a [u8]) -> RunnerFuture<'a, String> {
+        let _ = (name, contents);
+        Box::pin(async { Err(RunnerError::Unsupported("staged-files".into())) })
+    }
 }

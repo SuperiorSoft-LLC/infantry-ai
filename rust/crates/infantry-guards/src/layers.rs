@@ -67,6 +67,8 @@ pub const LAYERS: &[(&str, Layer, u8)] = &[
     ("infantry-runner-link", Layer::Runner, 2),
     ("infantry-harness", Layer::Harness, 0),
     ("infantry-harness-codex", Layer::Harness, 1),
+    ("infantry-harness-opencode", Layer::Harness, 1),
+    ("infantry-harness-pi", Layer::Harness, 1),
     ("infantry-orchestrator-api", Layer::Orchestration, 0),
     ("infantry-board-daemon", Layer::Plugin, 0),
     ("infantry-news-daemon", Layer::Plugin, 0),

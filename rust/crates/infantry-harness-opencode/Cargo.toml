@@ -1,0 +1,17 @@
+[package]
+name = "infantry-harness-opencode"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Infantry AI harness for the opencode CLI (one persistent opencode serve per session, HTTP + server-sent events through the runner)"
+publish = false
+
+[dependencies]
+infantry-harness = { path = "../infantry-harness" }
+serde_json = { version = "1", features = ["preserve_order"] }
+base64 = "0.22"
+getrandom = "0.2"
+
+[dev-dependencies]
+infantry-runner-local = { path = "../infantry-runner-local" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }

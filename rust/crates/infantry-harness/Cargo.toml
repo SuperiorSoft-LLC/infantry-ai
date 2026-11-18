@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 infantry-runner-api = { path = "../infantry-runner-api" }
-tokio = { version = "1", features = ["sync", "time"] }
+tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
