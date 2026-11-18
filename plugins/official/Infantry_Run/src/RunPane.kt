@@ -48,7 +48,7 @@ import com.superiorsoftllc.infantry.ui.model.projectCommands
 import com.superiorsoftllc.infantry.ui.model.RunState
 import com.superiorsoftllc.infantry.ui.model.RunsState
 import com.superiorsoftllc.infantry.ui.net.CommandResult
-import com.superiorsoftllc.infantry.ui.model.runPills
+import com.superiorsoftllc.infantry.ui.model.commandPills
 import com.superiorsoftllc.infantry.ui.shell.LinkContext
 import com.superiorsoftllc.infantry.ui.shell.RunContext
 import kotlinx.coroutines.CoroutineScope
@@ -587,7 +587,7 @@ fun RunPillsSection(run: RunPaneHost, modifier: Modifier = Modifier) {
         now = Clock.System.now().toEpochMilliseconds()
         while (inFlight) { delay(1000); now = Clock.System.now().toEpochMilliseconds() }
     }
-    val pills = runPills(run.runs, now)
+    val pills = commandPills(run.runs, now, run.commands.map { it.id }.toSet().takeIf { run.project != null })
     if (pills.isEmpty()) return
     FlowRow(
         modifier.padding(top = 6.dp).testTag(RUN_PILLS_TAG),
