@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-plugin-host"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Infantry AI daemon plugin host: wasmtime components and native sidecars behind one Plugin trait, grants as linker entries, PluginGuard breaker"
+publish = false
+
+[dependencies]
+infantry-core = { path = "../infantry-core" }
+infantry-plugin-wit = { path = "../infantry-plugin-wit" }
+wasmtime = { version = "50", default-features = false, features = ["runtime", "cranelift", "component-model", "std", "parallel-compilation", "cache"] }
+wasmtime-wasi = { version = "50", default-features = false, features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled", "hooks"] }
+anyhow = "1"
