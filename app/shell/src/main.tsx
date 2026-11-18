@@ -6,10 +6,13 @@ import App from "./App";
 import { initDaemon, perfScenario } from "./daemon/daemon";
 import { runPerfScenario } from "./daemon/perf-scenario";
 import { PerfOverlay, perfOn } from "./components/layout/perf-overlay";
+import { promptsStore } from "./components/session/use-prompts";
 import "@infantry/ui/styles.css";
 
 // The daemon store exists before the first render, so every component can read it synchronously.
 void initDaemon().then(() => {
+  // The prompt store listens from the start: the connection burst carries the open prompt cards.
+  promptsStore();
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
       <App />

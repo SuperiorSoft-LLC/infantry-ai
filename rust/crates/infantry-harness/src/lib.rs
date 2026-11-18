@@ -344,6 +344,27 @@ pub enum TurnEnd {
     Failed,
 }
 
+/// One question a CLI puts to the owner (a choice menu).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct HarnessQuestion {
+    pub text: String,
+    /// (label, description).
+    pub options: Vec<(String, String)>,
+    pub multi_select: bool,
+    /// The owner may type an answer of their own.
+    pub allow_other: bool,
+    /// The label the CLI marked as its recommendation.
+    pub recommended: Option<String>,
+}
+
+/// The owner's answer to one [`HarnessQuestion`]; `answered = false` = no answer (timeout, session end).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct HarnessAnswer {
+    pub answered: bool,
+    pub answers: Vec<String>,
+    pub other_text: Option<String>,
+}
+
 /// What a harness reports, in neutral terms.
 #[derive(Debug, Clone, PartialEq)]
 pub enum HarnessEvent {
@@ -360,6 +381,9 @@ pub enum HarnessEvent {
     ToolFinished { id: String, output: String, exit_code: Option<i32>, ok: bool },
     /// The CLI wants permission; the host answers with [`HarnessDriver::answer`] (same [id]).
     ApprovalRequested { id: String, tool: String, input: String },
+    /// The CLI asks the owner one or more questions (a choice menu); the host answers every one, in order, with
+    /// [`HarnessDriver::answer_questions`] (same [id]).
+    QuestionAsked { id: String, questions: Vec<HarnessQuestion> },
     Usage(Usage),
     /// A non-fatal problem the CLI reported.
     Warning(String),
@@ -385,6 +409,8 @@ pub trait Translator: Send {
     }
     /// The host's answer to [`HarnessEvent::ApprovalRequested`] [id] (typically queued as an [`Outbound::HookReply`]).
     fn answer(&mut self, _id: &str, _allow: bool) {}
+    /// The host's answers to [`HarnessEvent::QuestionAsked`] [id], one per question in order.
+    fn answer_questions(&mut self, _id: &str, _answers: Vec<HarnessAnswer>) {}
     /// Types [text] into the running turn (the CLI takes it at its next step without stopping). False = it cannot now.
     fn inject(&mut self, _text: &str) -> bool {
         false

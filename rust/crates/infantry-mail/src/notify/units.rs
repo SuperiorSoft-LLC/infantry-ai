@@ -6,14 +6,14 @@ use std::sync::Arc;
 
 use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Refusal};
 use infantry_protocol::frames as f;
-use infantry_protocol::prompts::{ApprovalRuleDelete, ApprovalRulesList, ApprovalRulesQuery, PromptResponse, QuestionAnswer, QuestionAsk, QuestionAsked, QuestionCancel};
+use infantry_protocol::prompts::{ApprovalRuleDelete, ApprovalRulesList, ApprovalRulesQuery, PromptAnswer, PromptAsk, PromptResponse, QuestionAnswer, QuestionAsk, QuestionAsked, QuestionCancel};
 use serde::Deserialize;
 use serde_json::json;
 
 use super::approvals::ApprovalRules;
 use super::attention::AttentionStore;
 use super::hub::{NotificationActionEvent, NotificationHub, NOTIFICATIONS, NOTIFICATION_ACTION, NOTIFICATION_DISMISS, NOTIFICATION_LIST};
-use super::prompts::PendingPrompts;
+use super::prompts::{PendingPrompts, QuestionSpec};
 use super::push::{NotifyRequest, NotifyService, NOTIFY_ACK, NOTIFY_PENDING, NOTIFY_PENDING_LIST, NOTIFY_SOUND, NOTIFY_SOUNDS, NOTIFY_SOUNDS_LIST, NOTIFY_SOUND_GET};
 use super::questions::{Asker, OwnerQuestions};
 use crate::mail::unit::{json as to_json, reply};
@@ -126,7 +126,7 @@ impl FrameUnit for PromptsUnit {
         "prompts"
     }
     fn frames(&self) -> &'static [&'static str] {
-        &[f::PROMPT_RESPONSE, f::APPROVAL_RULES, f::APPROVAL_RULE_DELETE]
+        &[f::PROMPT_RESPONSE, f::PROMPT_ASK, f::APPROVAL_RULES, f::APPROVAL_RULE_DELETE]
     }
     fn handle(&self, env: &Envelope, ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
         let t = env.r#type.as_str();
@@ -136,6 +136,23 @@ impl FrameUnit for PromptsUnit {
                 let who = if ctx.owner { "owner".to_string() } else { format!("client:{}", ctx.conn_id) };
                 // The resolution is broadcast as `prompt_resolved` by the prompts sink.
                 self.prompts.respond(&r, &who).map_err(|e| Refusal::new(t, e))?;
+                Ok(vec![])
+            }
+            // A session's blocking question (Kotlin `prompt_ask`): a card now, its `prompt_answer` (to the asking
+            // session) once the owner answers, the timer fires or the session ends.
+            f::PROMPT_ASK => {
+                let asker = env.session_id.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+                let asker = asker.ok_or_else(|| Refusal::new(t, "no session: the envelope's sessionId names the asking session"))?;
+                let ask: PromptAsk = parse(env)?;
+                let spec = QuestionSpec::of(&ask).map_err(|e| Refusal::new(t, e))?;
+                let rt = tokio::runtime::Handle::try_current().map_err(|_| Refusal::new(t, "no runtime to wait for the answer"))?;
+                let (prompts, bus) = (self.prompts.clone(), ctx.bus.clone());
+                rt.spawn(async move {
+                    let a = prompts.ask_question(&asker, &spec).await;
+                    let mut e = Envelope::new(f::PROMPT_ANSWER, to_json(&PromptAnswer { answered: a.answered, answers: a.answers, other_text: a.other_text }));
+                    e.session_id = Some(asker);
+                    bus.publish(e);
+                });
                 Ok(vec![])
             }
             f::APPROVAL_RULES => {
