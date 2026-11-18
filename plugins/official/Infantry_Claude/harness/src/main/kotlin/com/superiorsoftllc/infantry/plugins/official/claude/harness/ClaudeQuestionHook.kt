@@ -59,8 +59,9 @@ object ClaudeQuestionHook {
     }
 
     /**
-     * The card for [q]: the header and each option's description go into the question text (the card shows labels only); a multi-select
-     * question says the owner may pick several by typing them. The one label marked "(Recommended)" is the timer's pick.
+     * The card for [q]: the header and each option's description go into the question text (the card shows labels only). ASK-OTHER-1:
+     * the card always has an "Other" field and is multi-select when the tool's question is. The one label marked "(Recommended)" is the
+     * timer's pick.
      */
     fun harnessQuestion(q: Question, timeoutMillis: Long? = null): HarnessQuestion {
         val text = buildString {
@@ -71,10 +72,9 @@ object ClaudeQuestionHook {
                 append("\n")
                 for ((label, desc) in described) append("\n- ").append(label).append(": ").append(desc)
             }
-            if (q.multiSelect) append("\n\n(Several allowed: type them, comma separated, as your own answer.)")
         }
         val recommended = q.options.map { it.first }.filter { RECOMMENDED.containsMatchIn(it) }.singleOrNull()
-        return HarnessQuestion(text, q.options.map { it.first }, recommended, timeoutMillis)
+        return HarnessQuestion(text, q.options.map { it.first }, recommended, timeoutMillis, allowOther = true, multiSelect = q.multiSelect)
     }
 
     /** The answer as AskUserQuestion takes it (labels comma separated, then the owner's own text); null = not answered. */

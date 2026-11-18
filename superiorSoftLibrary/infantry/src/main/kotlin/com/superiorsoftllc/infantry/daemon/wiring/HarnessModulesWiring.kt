@@ -39,7 +39,8 @@ object HarnessModulesWiring {
             queryDb = { file, sql, params -> com.superiorsoftllc.infantry.stats.ReadOnlyDb.query(file, sql, params) },
             ask = { sessionId, q ->
                 val answer = pendingPrompts.askQuestion(sessionId, QuestionSpec(
-                    q.question, q.options.map { PromptOption(it) }, timeoutMillis = q.timeoutMillis, recommended = q.recommended,
+                    q.question, q.options.map { PromptOption(it) }, multiSelect = q.multiSelect, allowOther = q.allowOther,
+                    timeoutMillis = q.timeoutMillis, recommended = q.recommended,
                 ))
                 HarnessAnswer(answer.answers, answer.otherText, answer.answered)
             },
