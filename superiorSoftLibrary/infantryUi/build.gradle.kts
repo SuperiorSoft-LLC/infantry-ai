@@ -230,6 +230,26 @@ tasks.register<JavaExec>("runTabShots") {
     if (project.hasProperty("tabShotsDemoLock")) args("demo-lock")
 }
 
+// UI-DRIVER-1: a TEST instance a worker drives through an API (semantics query/click/type/scroll/wait/shot), never
+// through OS input: the real App offscreen (test source set, never packaged), headless AWT, an in-process daemon in a
+// temp state dir, the API on 127.0.0.1 in 18900-18999 with a per-run token. Explicit opt-in: -PuiDriver=1 (or the
+// INFANTRY_UI_DRIVER=1 environment). Wrapper: scripts/ui-driver.sh; docs/wiki/UI-driver.md.
+//   -PuiDriverPort=<18900-18999>  the API port (default 18950)   -PuiDriverSize=<w>x<h>  (default 1400x860)
+tasks.register<JavaExec>("runUiDriver") {
+    group = "verification"
+    description = "UI-DRIVER-1: the app offscreen on a test daemon, driven over a local API (no window, no OS input)."
+    mainClass.set("com.superiorsoftllc.infantry.ui.uidriver.UiDriverMainKt")
+    classpath = sourceSets["test"].runtimeClasspath
+    jvmArgs(infantryJvmCaps) // PERF-2
+    systemProperty("java.awt.headless", "true")
+    systemProperty("infantry.ui.blur", "off")
+    environment("INFANTRY_LIMITS_LIVE", "false")
+    environment("INFANTRY_UI_DRIVER", project.findProperty("uiDriver")?.toString() ?: System.getenv("INFANTRY_UI_DRIVER").orEmpty())
+    args(project.findProperty("uiDriverPort")?.toString() ?: "18950", project.findProperty("uiDriverSize")?.toString() ?: "1400x860")
+    project.findProperty("uiDriverOut")?.let { args(rootProject.file(it.toString()).path) }
+    outputs.upToDateWhen { false }
+}
+
 // TAB-SHOTS-DIFF: enforces "nothing in the existing UI changes". diffTabShots renders the tab shots (the runTabShots
 // renderer, same window and seed data) into a clean folder and compares each PNG pixel by pixel with the committed
 // baseline (tab-shots-baseline/); it prints "name: N of M pixels differ", writes <name>.diff.png for each differing shot
@@ -295,7 +315,7 @@ val communityModuleJars = rootProject.subprojects.filter { it.path.startsWith(":
 @Suppress("UNCHECKED_CAST")
 val standaloneIds = ((groovy.json.JsonSlurper().parse(rootProject.file("plugins/build-presets.json")) as Map<String, Any?>)["classes"] as Map<String, String>).filterValues { it == "standalone" }.keys
 val officialModuleJars = rootProject.subprojects.filter { it.path.startsWith(":plugins:official:") && it.name !in standaloneIds }.map { "${it.path}:jvmJar" }
-tasks.matching { it.name in setOf("run", "runRealDaemon", "runTabShots", "renderTabShotsForDiff") }.configureEach {
+tasks.matching { it.name in setOf("run", "runRealDaemon", "runTabShots", "renderTabShotsForDiff", "runUiDriver") }.configureEach {
     (this as? JavaExec)?.systemProperty("infantry.plugins.root", repoPluginsRoot.absolutePath)
     (this as? JavaExec)?.systemProperty("infantry.plugins.devTrust", "true")
     dependsOn(communityModuleJars)
