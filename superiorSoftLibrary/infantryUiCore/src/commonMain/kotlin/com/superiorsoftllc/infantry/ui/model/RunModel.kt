@@ -244,3 +244,15 @@ fun runPill(run: RunState, commands: List<CommandSpecView>, nowMs: Long): RunPil
 /** Every run this window knows, newest first (by start time; a run with no start time last). */
 fun runPills(s: RunsState, nowMs: Long): List<RunPill> =
     s.runs.values.sortedByDescending { it.startedAt ?: Long.MIN_VALUE }.map { runPill(it, s.commands, nowMs) }
+
+/**
+ * RUN-TAB-1: the pills of one project's Run tab: ONE pill per saved command (its newest run, so starting a command
+ * again reuses its card), and only runs of [shownCommandIds] (the shown project's commands). A run with no command id
+ * keeps its own pill. Older runs of a command stay in the daemon's history; they just have no card.
+ */
+fun commandPills(s: RunsState, nowMs: Long, shownCommandIds: Set<String>?): List<RunPill> =
+    s.runs.values
+        .filter { r -> shownCommandIds == null || r.commandId == null || r.commandId in shownCommandIds }
+        .sortedByDescending { it.startedAt ?: Long.MIN_VALUE }
+        .distinctBy { it.commandId ?: it.runId }
+        .map { runPill(it, s.commands, nowMs) }
