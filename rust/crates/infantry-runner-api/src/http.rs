@@ -66,7 +66,9 @@ pub fn is_loopback_url(url: &str) -> bool {
     } else {
         authority.rsplit_once(':').map(|(h, _)| h).unwrap_or(authority)
     };
-    host.eq_ignore_ascii_case("localhost") || host == "::1" || host.starts_with("127.")
+    host.eq_ignore_ascii_case("localhost")
+        || host == "::1"
+        || host.parse::<std::net::Ipv4Addr>().is_ok_and(|ip| ip.is_loopback())
 }
 
 #[cfg(test)]

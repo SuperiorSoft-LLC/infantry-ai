@@ -1141,6 +1141,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-harness-opencode"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "getrandom 0.2.17",
+ "infantry-harness",
+ "infantry-runner-local",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "infantry-harness-pi"
+version = "0.1.0"
+dependencies = [
+ "infantry-harness",
+ "infantry-runner-local",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "infantry-health-daemon"
 version = "1.0.0"
 dependencies = [
