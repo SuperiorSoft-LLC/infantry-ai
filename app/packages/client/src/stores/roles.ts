@@ -16,6 +16,7 @@ export interface RoleAvatar {
   mediaType?: string | null;
   color: string;
   initials: string;
+  version?: string | null;
 }
 
 export interface Role {
