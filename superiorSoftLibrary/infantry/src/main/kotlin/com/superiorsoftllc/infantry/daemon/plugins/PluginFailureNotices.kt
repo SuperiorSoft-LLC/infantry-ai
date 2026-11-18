@@ -29,7 +29,7 @@ class PluginFailureNotices(private val hub: NotificationHub) {
         hub.post(
             Notification(
                 title = "$plugin couldn't ${verb(kind)}",
-                body = human(full).take(SHORT_MAX),
+                body = human(full).take(com.superiorsoftllc.infantry.settings.LimitRegistry.PLUGIN_FAILURE_NOTICE_CHARS.default.toInt()),
                 level = NotificationLevel.ERROR,
                 id = key,
                 actions = listOf(NotificationAction(ACTION_DETAILS, "Details")),
@@ -65,6 +65,5 @@ class PluginFailureNotices(private val hub: NotificationHub) {
     companion object {
         const val SOURCE = "daemon"
         const val ACTION_DETAILS = "details"
-        private const val SHORT_MAX = 300
     }
 }

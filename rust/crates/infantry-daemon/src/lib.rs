@@ -4,7 +4,9 @@
 //! Kotlin's `AccessPolicy`, the session store in the state dir, and providers behind the [`harness::Harness`] seam.
 pub mod auth;
 pub mod gateway;
+pub mod board;
 pub mod harness;
+pub mod held;
 pub mod server;
 pub mod sessions;
 pub mod store;

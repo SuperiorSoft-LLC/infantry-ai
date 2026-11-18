@@ -282,6 +282,26 @@ class AgentTicketStartE2eTest {
     }
 
     @Test
+    fun `START-HANG-1 - a third ticket start while two workers run answers queued at once`() {
+        val rig = rig()
+        val call = mcp(rig)
+        // Filed by profile id: a role-only ticket is refused in this rig (docs/KNOWN-FAILURES.md, the MCP test above).
+        val ids = listOf("backend-1", "fullstack-1", "backend-1").mapIndexed { n, agent ->
+            rig.fixture.client.saveTicket("""{"title":"Lane $n","description":"b","agentId":"$agent","provider":"claude","model":"haiku"}""").id
+        }
+        val answers = ids.map { id ->
+            val t0 = System.nanoTime()
+            call(TICKET_START, args("ticketId" to id.takeLast(8))) to (System.nanoTime() - t0) / 1_000_000
+        }
+        assertFalse(answers[0].first.isError(), answers[0].first.text())
+        assertFalse(answers[1].first.isError(), answers[1].first.text())
+        val (third, ms) = answers[2]
+        assertFalse(third.isError(), third.text())
+        assertEquals("queued", third.payload().field("outcome"), third.text())
+        assertTrue(ms < 10_000, "the third start must answer at once, took $ms ms")
+    }
+
+    @Test
     fun `CLI - an agent pins role, provider and model on a ticket, then ticket start runs the worker exactly so`() {
         val rig = rig()
         val title = "Wire the refunds API"

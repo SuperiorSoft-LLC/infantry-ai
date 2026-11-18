@@ -212,10 +212,20 @@ pub async fn serve_with(
     let d = app.daemon.clone();
     let flusher = tokio::spawn(async move {
         let mut t = tokio::time::interval(Duration::from_millis(FLUSH_MS));
+        let every = (crate::held::REFRESH_MS / FLUSH_MS).max(1);
+        let mut n = 0u64;
         loop {
             t.tick().await;
+            n += 1;
             let d = d.clone();
-            let _ = tokio::task::spawn_blocking(move || d.flush()).await;
+            let refresh = n % every == 0;
+            let _ = tokio::task::spawn_blocking(move || {
+                if refresh {
+                    d.refresh_held();
+                }
+                d.flush()
+            })
+            .await;
         }
     });
     let daemon = app.daemon.clone();
