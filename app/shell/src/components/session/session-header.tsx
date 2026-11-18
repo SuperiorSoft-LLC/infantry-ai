@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// Session header: avatar, name, session id, role/status chips, provider/model chips, runs, tokens, and the session
+// Session header: avatar, name, session id, role/status chips, provider / model / effort / context-limit chips, runs,
+// tokens, and the session
 // controls (interrupt, restart, switch provider/model, stats).
 import type { Agent } from "@/mock/types";
 import { AgentAvatar } from "@/components/agents/agent-avatar";
 import { Chip } from "@infantry/ui";
+import { useDaemon } from "@/daemon/daemon";
 import { SessionActionButtons } from "./session-actions";
 
+const tokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+
 export function SessionHeader({ agent }: { agent: Agent }) {
+  const effort = useDaemon((s) => s.sessions[agent.id]?.record.effort);
+  const limit = useDaemon((s) => s.sessions[agent.id]?.record.contextLimit);
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-3 pb-2">
       <AgentAvatar agent={agent} size="md" />
@@ -21,12 +27,10 @@ export function SessionHeader({ agent }: { agent: Agent }) {
         <div className="truncate font-mono text-xs text-muted-foreground">{agent.statusLine}</div>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
-        <Chip>{agent.provider}</Chip>
         <Chip tone="red">{agent.provider}</Chip>
         <Chip tone="green">{agent.model}</Chip>
-        <Chip tone="blue">
-          {agent.provider} · {agent.model}
-        </Chip>
+        {effort && <Chip>effort {effort}</Chip>}
+        {!!limit && <Chip>context {tokens(limit)}</Chip>}
         <Chip>runs {agent.runs}</Chip>
         <Chip tone="blue">
           {agent.tokensIn} / {agent.tokensOut}

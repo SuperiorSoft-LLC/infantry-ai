@@ -62,7 +62,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Feature | Kotlin | Rust | Notes |
 |---|---|---|---|
 | Header: role, id, harness/provider/model chips | yes | done | |
-| Context-limit and effort chips | yes | missing | UI only. Data is on the session record. |
+| Context-limit and effort chips | yes | done | *(RUST-UI-8)* From the session record. The duplicated provider chips were removed. |
 | Switch agent (provider/model) | yes | done | |
 | Interrupt, restart (with force) | yes | done | |
 | Session stats | yes | done | |
@@ -87,7 +87,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | To-do box ("To do 3/7") | yes | missing | UI only, if the harness sends todo events. |
 | Images in the transcript, full-size viewer | yes | missing | UI only (`image`). |
 | Chat cards (`card:<type>` fences, plugin renderers, folded updates) | yes | partial | *(RUST-UI-8)* Card fences parse like Kotlin (`id`, `op=set/append/replace`), draw through a renderer registry (`registerChatCard`) or a generic card (title, text, link, fields, lists, JSON toggle), and later fences of one id fold into the first. Folding works within one message only (Kotlin: the whole chat). No plugin ships a renderer yet. Card images need daemon `card_image`. |
-| Background-jobs row | yes | missing | UI only (`bg_job`). |
+| Background-jobs row | yes | done | *(RUST-UI-8)* Label, pid and age from the record's `bgJobs`, above the composer. Stopping them is in the Run tab. |
 | Pending send: sending / sent / retry | yes | done | No "Discard this message": UI only. |
 | Jump to latest, stick to bottom | yes | done | |
 | Load older pages on scroll up | yes | partial | History loads on open. No paging: UI only. |
@@ -108,7 +108,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Slash commands with autocomplete | yes | missing | Daemon: a `command_catalog` handler (frame name only, no handler). |
 | Notice strip for command results | yes | missing | Daemon: `command_result` (frame name only). |
 | Stop background processes (Ctrl+Shift+K) | yes | missing | UI only (`processes_reap`). |
-| End session (Ctrl+Alt+K) | yes | missing | UI only (`kill`). |
+| End session (Ctrl+Alt+K) | yes | done | *(RUST-UI-8)* Graceful `kill`, so the session can be resumed. |
 | Minimize / expand composer | yes | missing | UI only. |
 | Composer action slot (voice etc.) | yes | missing | *(fixed today)* The dead mic button was removed. Needs a plugin slot: UI only. |
 | Disconnected: "commands are disabled" | yes | done | *(fixed today)* Now on the status line above the box. |
@@ -184,7 +184,8 @@ All *(fixed today)*: before this sweep no window-wide key worked, and the hints 
 | Ctrl+, settings | yes | done | |
 | Ctrl+/ focus the composer | yes | done | |
 | Ctrl+0..9 tabs, Ctrl+8 board | yes | done | ^3 Changes and ^4 Review hints added. |
-| Ctrl+Shift+N switch agent, Ctrl+Shift+K stop bg, Ctrl+Alt+K end session | yes | missing | UI only. |
+| Ctrl+Shift+N switch agent, Ctrl+Alt+K end session | yes | done | *(RUST-UI-8)* |
+| Ctrl+Shift+K stop background processes | yes | missing | UI only (`processes_reap`, per session). |
 | Ctrl+L connect dialog | yes | missing | UI only. |
 | Ctrl+F chat search | yes | missing | See transcript. |
 

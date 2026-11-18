@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // Centre column: header, tab bar, then either the live CLI transcript + composer or the selected tab's mock.
+import { BgJobsRow } from "./bg-jobs-row";
 import { useEffect } from "react";
 import { Unplug } from "lucide-react";
 import { useUi } from "@/state/ui-state";
@@ -57,6 +58,7 @@ export function SessionView() {
             )}
           </div>
           {agent && <PromptCards sessionId={agent.id} />}
+          {agent && <BgJobsRow sessionId={agent.id} />}
           <div className="px-4 pt-2 pb-1.5 font-mono text-[11px] text-muted-foreground">
             {agentCount} agent{agentCount === 1 ? "" : "s"} · {link !== "open" ? "not connected: commands are disabled" : agent ? (busy ? "working" : "idle") : "no session"}
           </div>

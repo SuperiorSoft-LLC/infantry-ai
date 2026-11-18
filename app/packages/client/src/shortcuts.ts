@@ -11,6 +11,8 @@ export type Shortcut =
   | { kind: "composer" } // Ctrl+/
   | { kind: "nextNeedsInput" } // Ctrl+J
   | { kind: "agent"; step: 1 | -1 } // Alt+Down / Alt+Up
+  | { kind: "switchAgent" } // Ctrl+Shift+N: switch the selected session's provider / model
+  | { kind: "endSession" } // Ctrl+Alt+K: end the selected session (graceful kill; it can be resumed)
   | { kind: "tab"; digit: string }; // Ctrl+0..9: the tab whose hint is ^<digit> (^8 = the Board)
 
 export interface KeyPress {
@@ -24,8 +26,10 @@ export interface KeyPress {
 export function shortcutOf(e: KeyPress): Shortcut | null {
   const mod = e.ctrlKey || e.metaKey;
   if (e.altKey && !mod && !e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) return { kind: "agent", step: e.key === "ArrowDown" ? 1 : -1 };
-  if (!mod || e.altKey || e.shiftKey) return null;
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (mod && e.shiftKey && !e.altKey && k === "n") return { kind: "switchAgent" };
+  if (mod && e.altKey && !e.shiftKey && k === "k") return { kind: "endSession" };
+  if (!mod || e.altKey || e.shiftKey) return null;
   if (/^[0-9]$/.test(k)) return { kind: "tab", digit: k };
   switch (k) {
     case "k":

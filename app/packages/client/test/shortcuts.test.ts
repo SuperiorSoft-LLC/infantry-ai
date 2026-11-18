@@ -35,4 +35,11 @@ describe("host label", () => {
     expect(hostLabel("ws://127.0.0.1:8797/ws")).toBe("This computer");
     expect(hostLabel("ws://100.67.51.8:18990/ws")).toBe("100.67.51.8");
   });
+  it("reads Ctrl+Shift+N and Ctrl+Alt+K", () => {
+    const k = (key: string, o: Partial<{ ctrlKey: boolean; altKey: boolean; shiftKey: boolean }>) =>
+      shortcutOf({ key, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...o });
+    expect(k("N", { ctrlKey: true, shiftKey: true })).toEqual({ kind: "switchAgent" });
+    expect(k("k", { ctrlKey: true, altKey: true })).toEqual({ kind: "endSession" });
+    expect(k("k", { altKey: true })).toBeNull();
+  });
 });
