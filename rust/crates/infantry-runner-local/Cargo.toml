@@ -1,0 +1,31 @@
+[package]
+name = "infantry-runner-local"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "Infantry AI local runner: the Runner trait on this machine (pseudo-terminals, Job Objects, screen, tail, hooks)"
+publish = false
+
+[dependencies]
+infantry-runner = { path = "../infantry-runner" }
+infantry-runner-api = { path = "../infantry-runner-api" }
+tokio = { version = "1", features = ["rt", "sync", "time"] }
+vt100 = "0.16"
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Console",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }
+
+[target.'cfg(unix)'.dependencies]
+portable-pty = "0.9"
+libc = "0.2"
+
+[dev-dependencies]
+infantry-runner-api = { path = "../infantry-runner-api", features = ["test-support"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
