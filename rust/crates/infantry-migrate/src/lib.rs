@@ -5,6 +5,7 @@
 //! kept, the previous copy kept as `.prev`), `verify` checks it and `status` says when it was taken.
 //! The process is in docs/rust-port/MIGRATION.md.
 pub mod acl;
+pub mod cutover;
 pub mod manifest;
 pub mod snapshot;
 pub mod sqlite;

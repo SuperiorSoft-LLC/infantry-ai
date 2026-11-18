@@ -9,9 +9,26 @@
   "daemon": {
     "component": "daemon/Infantry_Health.wasm",
     "apiAtLeast": "0.1.0",
-    "needs": ["frames"],
+    "needs": [
+      "frames"
+    ],
     "tools": [
-      { "name": "infantry_health", "action": "host.health.read", "kind": "read", "description": "Daemon health and environment: up/down, pid, port, uptime, last restart and why, plugin faults, MCP bridges, OS, shells, paths, the owner's off-limits ports. Use it instead of probing." }
+      {
+        "name": "infantry_health",
+        "action": "host.health.read",
+        "kind": "read",
+        "description": "Daemon health and environment: up/down, pid, port, uptime, last restart and why, plugin faults, MCP bridges, OS, shells, paths, the owner's off-limits ports. Use it instead of probing.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "json": {
+              "type": "boolean",
+              "description": "Return the report as JSON instead of text."
+            }
+          },
+          "additionalProperties": false
+        }
+      }
     ]
   }
 }

@@ -1,0 +1,192 @@
+[
+ {
+  "name": "infantry_list_sessions",
+  "readOnly": true,
+  "description": "List the SESSIONS (running or past agent runs, not saved profiles) the Infantry AI daemon knows: id, agentId, role, provider, model, projectId, status.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "limit": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "At most this many sessions (live ones first, then the most recent). Default: setting limits.tools.listLimit."
+    },
+    "projectId": {
+     "type": "string",
+     "description": "Only this project's sessions. Omitted: a session caller's own project (everyone else: all). \"all\" lists every project (pm / owner callers only)."
+    }
+   },
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_get_session",
+  "readOnly": true,
+  "description": "One session's status and the last lines of its transcript (from the daemon's replay buffer, bounded).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "sessionId": {
+     "type": "string",
+     "description": "Session id, or a unique prefix of one."
+    },
+    "lines": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 200,
+     "default": 5,
+     "description": "How many trailing transcript lines to return (default: setting limits.tools.sessionTailLines, 5)."
+    },
+    "brief": {
+     "type": "boolean",
+     "description": "Omit the transcript: return only state, live state, last action and last output/event times."
+    }
+   },
+   "required": [
+    "sessionId"
+   ],
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_spawn",
+  "readOnly": false,
+  "description": "Spawn an Infantry AI session for a role and/or an agent profile, optionally sending it a first task, OUTSIDE the board: it runs in the project folder and leaves every ticket untouched. Never use it for ticket work: start ticket work with infantry_ticket_start (or pass ticketId here, which does the same).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "role": {
+     "type": "string",
+     "description": "Role to spawn (role-first, like the `new` frame)."
+    },
+    "agentId": {
+     "type": "string",
+     "description": "Agent profile id; with role, it must be that profile's role."
+    },
+    "projectId": {
+     "type": "string",
+     "description": "Project the session belongs to (default: the caller's project)."
+    },
+    "provider": {
+     "type": "string",
+     "description": "Harness (provider id) the session runs: see infantry_list_harnesses. Omitted = the daemon's default."
+    },
+    "model": {
+     "type": "string",
+     "description": "Model id of that harness (infantry_list_harnesses lists them)."
+    },
+    "effort": {
+     "type": "string",
+     "description": "Reasoning effort for the session: low, medium, high, xhigh or max (off = the harness default)."
+    },
+    "task": {
+     "type": "string",
+     "description": "Optional first prompt for the new session."
+    },
+    "ticketId": {
+     "type": "string",
+     "description": "Start this board ticket instead (full id or its 8-char suffix), exactly as infantry_ticket_start."
+    }
+   },
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_prompt",
+  "readOnly": false,
+  "description": "Send a prompt to an existing session (id or unique prefix). Slash commands are refused.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "sessionId": {
+     "type": "string",
+     "description": "Session id, or a unique prefix of one."
+    },
+    "prompt": {
+     "type": "string",
+     "description": "The words to send to the agent."
+    }
+   },
+   "required": [
+    "sessionId",
+    "prompt"
+   ],
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_kill",
+  "readOnly": false,
+  "description": "Kill a session (id or unique prefix). A pm (or the owner) may kill any session in its own project; other roles only sessions they spawned.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "sessionId": {
+     "type": "string",
+     "description": "Session id, or a unique prefix of one."
+    },
+    "force": {
+     "type": "boolean",
+     "default": false,
+     "description": "Kill the process tree at once instead of after the grace period."
+    }
+   },
+   "required": [
+    "sessionId"
+   ],
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_list_harnesses",
+  "readOnly": true,
+  "description": "List the harnesses a ticket can run on: each harness id (the value of a ticket's provider) with its models (the values of its model), which one is the default, and whether its CLI is available. Pin them with infantry_ticket_create / infantry_ticket_update, then start the ticket with infantry_ticket_start.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_usage",
+  "readOnly": true,
+  "description": "Read plan usage per meter: percent of the plan window used (the highest window), when it resets, points ahead/under an even burn, and how many ticket workers the pacing rule allows versus how many run. Text summary; pass json=true to append the full JSON report.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "json": {
+     "type": "boolean",
+     "description": "Append the full JSON report after the text summary (default false)."
+    }
+   },
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_pace",
+  "readOnly": true,
+  "description": "Read the pacing history the daemon recorded from the plan meters: per provider window the percent used, the pace delta, the projected landing at reset, the momentum and the forecast to reset.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "provider": {
+     "type": "string",
+     "description": "Only this meter (claude, codex, opencode-go, ...)"
+    },
+    "window": {
+     "type": "string",
+     "description": "Only this window label (e.g. '5h limit')"
+    },
+    "sinceHours": {
+     "type": "number",
+     "description": "Only points from the last N hours (default: all)"
+    },
+    "samples": {
+     "type": "string",
+     "description": "\"true\" adds the newest raw samples per series; default off"
+    }
+   },
+   "additionalProperties": false
+  }
+ }
+]

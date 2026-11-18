@@ -125,24 +125,25 @@ pub trait HarnessSession: Send {
 /// The provider a daemon runs when none is named.
 pub const DEFAULT_PROVIDER: &str = infantry_harness_claude::ID;
 
-/// The harness for a provider name, or None when this daemon has no such harness.
-pub fn by_name(name: &str) -> Option<Box<dyn Harness>> {
-    match name {
-        stub::NAME => Some(Box::new(stub::Stub::default())),
-        infantry_harness_claude::ID => {
-            Some(Box::new(driven::Driven::new(std::sync::Arc::new(infantry_harness_claude::ClaudeHarness::default()))))
-        }
-        infantry_harness_codex::ID => {
-            Some(Box::new(driven::Driven::new(std::sync::Arc::new(infantry_harness_codex::CodexHarness::default()))))
-        }
-        infantry_harness_opencode::ID => {
-            Some(Box::new(driven::Driven::new(std::sync::Arc::new(infantry_harness_opencode::OpenCodeHarness::default()))))
-        }
-        infantry_harness_pi::ID => Some(Box::new(driven::Driven::new(std::sync::Arc::new(infantry_harness_pi::PiHarness::default())))),
+/// The agent-CLI harness (the neutral `infantry-harness` trait: models, sign-in, launch) for a provider id.
+pub fn neutral(name: &str) -> Option<std::sync::Arc<dyn infantry_harness::Harness>> {
+    Some(match name {
+        infantry_harness_claude::ID => std::sync::Arc::new(infantry_harness_claude::ClaudeHarness::default()),
+        infantry_harness_codex::ID => std::sync::Arc::new(infantry_harness_codex::CodexHarness::default()),
+        infantry_harness_opencode::ID => std::sync::Arc::new(infantry_harness_opencode::OpenCodeHarness::default()),
+        infantry_harness_pi::ID => std::sync::Arc::new(infantry_harness_pi::PiHarness::default()),
         // HARNESS REGISTRATION SPOT: a new provider crate adds one arm here and its id to
         // [`REGISTERED`]; nothing else in the daemon names a provider.
-        _ => None,
+        _ => return None,
+    })
+}
+
+/// The harness for a provider name, or None when this daemon has no such harness.
+pub fn by_name(name: &str) -> Option<Box<dyn Harness>> {
+    if name == stub::NAME {
+        return Some(Box::new(stub::Stub::default()));
     }
+    neutral(name).map(|h| Box::new(driven::Driven::new(h)) as Box<dyn Harness>)
 }
 
 /// Every provider this build can run, in the order the harness list shows them (the stub is a test harness, not listed).

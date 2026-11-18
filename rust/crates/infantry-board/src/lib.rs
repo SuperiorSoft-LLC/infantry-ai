@@ -22,6 +22,7 @@ pub mod local;
 pub mod rules;
 pub mod schema;
 pub mod store;
+pub mod tools;
 pub mod unit;
 pub mod views;
 

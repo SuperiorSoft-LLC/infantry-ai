@@ -4,19 +4,23 @@
 //! infantry-migrate snapshot [--from DIR] [--to DIR] [--label TEXT] [--force]
 //! infantry-migrate verify   [--to DIR] [--from DIR]
 //! infantry-migrate status   [--to DIR]
+//! infantry-migrate cutover  [--from DIR] [--to DIR] [--apply (--all | --sessions ID,ID) [--message TEXT]] [--rollback]
 //! ```
 //! `--from` defaults to `%LOCALAPPDATA%\SuperiorSoft\InfantryAI` (the Kotlin app's state dir; only ever read),
 //! `--to` to `%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust`. See docs/rust-port/MIGRATION.md.
-use infantry_migrate::{default_dirs, manifest, snapshot, status, verify};
+use infantry_migrate::{cutover, default_dirs, manifest, snapshot, status, verify};
 use std::path::PathBuf;
 
 const USAGE: &str = "infantry-migrate snapshot [--from DIR] [--to DIR] [--label TEXT] [--force]
 infantry-migrate verify   [--to DIR] [--from DIR]
 infantry-migrate status   [--to DIR]
+infantry-migrate cutover  [--from DIR] [--to DIR] [--force] [--apply (--all | --sessions ID,ID) [--message TEXT] [--infantry PATH]] [--rollback]
 
 snapshot  copy the state dir (read-only on the source) into --to; the previous copy is kept as <to>.prev
 verify    check the copy: integrity, every table and session readable, access lists, drift since the snapshot
-status    when the snapshot was taken and what it holds";
+status    when the snapshot was taken and what it holds
+cutover   fresh snapshot + plan of the resumable sessions (cutover-plan.json); --apply resumes the chosen ones in the
+          Rust daemon serving --to (Kotlin daemon must be stopped); --rollback stops them again";
 
 fn opt(v: Option<i64>) -> String {
     v.map(|v| v.to_string()).unwrap_or_else(|| "-".into())
@@ -87,6 +91,35 @@ fn main() {
                 1
             }
         },
+        Some("cutover") => {
+            let o = cutover::Options {
+                from: arg("--from").map(PathBuf::from).unwrap_or(def_from),
+                to: to.clone(),
+                label: arg("--label").unwrap_or_else(|| manifest::DEFAULT_SOURCE_LABEL.into()),
+                force: a.iter().any(|x| x == "--force"),
+                sessions: arg("--sessions").map(|s| s.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()).unwrap_or_default(),
+                all: a.iter().any(|x| x == "--all"),
+                message: arg("--message").unwrap_or_else(|| cutover::DEFAULT_MESSAGE.into()),
+                infantry: arg("--infantry").map(PathBuf::from),
+            };
+            let r = if a.iter().any(|x| x == "--rollback") {
+                cutover::rollback(&o)
+            } else if a.iter().any(|x| x == "--apply") {
+                cutover::apply(&o)
+            } else {
+                cutover::plan(&o, &mut |s| eprintln!("[migrate] {s}"))
+            };
+            match r {
+                Ok(lines) => {
+                    lines.iter().for_each(|l| println!("{l}"));
+                    0
+                }
+                Err(e) => {
+                    eprintln!("cutover failed: {e}");
+                    1
+                }
+            }
+        }
         Some("--help") | Some("-h") | None => {
             println!("{USAGE}");
             0
