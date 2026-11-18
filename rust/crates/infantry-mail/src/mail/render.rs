@@ -39,7 +39,7 @@ pub fn origin_of(m: &Message, sender_is_session: bool) -> MessageOrigin {
     } else if m.from.eq_ignore_ascii_case("system") {
         MessageOrigin::System { kind: "mail".into() }
     } else {
-        MessageOrigin::External { sender_label: m.from.clone(), channel: "mail".into() }
+        MessageOrigin::External { sender_label: m.from.clone(), channel: Some("mail".into()) }
     }
 }
 
