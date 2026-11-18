@@ -11,6 +11,7 @@ import { CalendarTab } from "./calendar-tab";
 import { StatsTab } from "./stats-tab";
 import { PaceTab } from "./pace-tab";
 import { ListTab } from "./list-tab";
+import { MailTab } from "../mail/mail-tab";
 
 export function TabContent({ tab }: { tab: CentreView }) {
   switch (tab) {
@@ -42,6 +43,8 @@ export function TabContent({ tab }: { tab: CentreView }) {
       return <PaceTab />;
     case "services":
       return <ListTab title="Services" description="Runner, orchestrator and web hosting" rows={services} icon={<Server className="size-4" />} />;
+    case "mail":
+      return <MailTab />;
     case "cli":
       return null;
   }

@@ -174,6 +174,7 @@ export const counters = { needsInput: 0, toReview: 0, working: 4, boardBadge: 3,
 
 export const sessionTabs = [
   { id: "cli", label: "CLI", icon: "terminal", hint: "^1" },
+  { id: "mail", label: "Mail", icon: "mail" },
   { id: "pods", label: "Pods", icon: "box", hint: "^2" },
   { id: "roles", label: "Roles", icon: "user", hint: "^5" },
   { id: "profiles", label: "Profiles", icon: "id-card", hint: "^9" },
