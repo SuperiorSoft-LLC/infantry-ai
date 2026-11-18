@@ -90,19 +90,27 @@ What you get:
 To pick up what happened in the Kotlin app since, stop the Rust app, run `snapshot` again, then `verify`. The copy
 you had becomes `<copy>.prev`. Anything the Rust app changed in it stays there and is not merged.
 
-## 4. Later: the cut-over
+## 4. The cut-over (`infantry-migrate cutover`)
 
-When the Rust app is ready to own the state:
+The owner runs these steps; an agent never applies them to the real state dir.
 
-1. Quit the Kotlin app and its daemon, and wait until nothing answers on its port.
-2. Take a last snapshot as a backup: `infantry-migrate snapshot --to %LOCALAPPDATA%\SuperiorSoft\InfantryAI-backup`.
-3. Point the Rust app at the live dir: `daemonStateDir` = `%LOCALAPPDATA%\SuperiorSoft\InfantryAI`. A copy pointed
-   back at its own source holds nothing, so no session is blocked.
-4. **Rollback** = stop the Rust app and start the Kotlin app again. The state dir keeps the Kotlin layout, so the
-   Kotlin app reads it as before. If a Rust write must be undone, copy the backup back in first (with both apps
-   stopped).
+1. **Plan** (changes nothing in the source): `infantry-migrate cutover`. It takes a fresh snapshot into `--to`
+   (default `%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust`; the previous copy becomes `.prev`), lists every session
+   that can be resumed (a provider conversation id is recorded and the session has not ended) and writes them to
+   `<to>/cutover-plan.json`. Run it with the Kotlin app still open to preview; take the final one after quitting it.
+2. **Quit the Kotlin app** and its daemon. Then run `infantry-migrate cutover` once more, so the copy is current.
+3. **Start the Rust app** (or `infantry-daemon --state-dir <copy>`) on the copy.
+4. **Apply**: `infantry-migrate cutover --apply --all`, or `--sessions ID,ID` (8-character prefixes work). It refuses
+   while the Kotlin daemon answers, or while no Rust daemon serves the copy. Each chosen session gets one message
+   (`--message TEXT`, or a short default) through the Rust daemon's MCP bridge (`infantry mcp serve`, found beside
+   `infantry-migrate` or given with `--infantry PATH`). The daemon resumes the SAME conversation:
+   `claude --resume <providerSessionId>` in the session's folder, with its role and model, and its MCP config pointing
+   at the Rust bridge, so its `infantry_*` tools talk to the Rust daemon. The result is written to `<copy>/cutover.json`.
+5. **Rollback**: `infantry-migrate cutover --rollback` stops the applied sessions in the Rust daemon and marks
+   `cutover.json` rolled back. Then stop the Rust app and start the Kotlin app: its state dir was never written, so
+   it carries on from where it was (work done in the Rust app stays in the copy and is not merged back).
 
-Never run both daemons on the same state dir.
+Never run both daemons on the same state dir, and never resume one conversation in both apps at once.
 
 ## Commands
 
@@ -110,6 +118,7 @@ Never run both daemons on the same state dir.
 infantry-migrate snapshot [--from DIR] [--to DIR] [--label TEXT] [--force]
 infantry-migrate verify   [--to DIR] [--from DIR]
 infantry-migrate status   [--to DIR]
+infantry-migrate cutover  [--from DIR] [--to DIR] [--force] [--apply (--all | --sessions ID,ID) [--message TEXT] [--infantry PATH]] [--rollback]
 ```
 
 - `--from` defaults to `%LOCALAPPDATA%\SuperiorSoft\InfantryAI`, and `--to` to `...\InfantryAI-Rust`.

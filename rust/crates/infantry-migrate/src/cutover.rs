@@ -167,10 +167,11 @@ fn chosen(o: &Options, planned: &[Value]) -> Result<Vec<Value>, String> {
 pub fn apply(o: &Options) -> Result<Vec<String>, String> {
     manifest::read(&o.to)?;
     let src = manifest::read(&o.to).map(|m| PathBuf::from(m.source)).unwrap_or_else(|_| o.from.clone());
-    if let Some(p) = snapshot::daemon_running(&src) {
+    let port = snapshot::daemon_running(&o.to).ok_or_else(|| format!("no Rust daemon serves {}; start it on the copy first", o.to.display()))?;
+    // A stale source port file can name the port the Rust daemon now holds; that answer is not the Kotlin daemon.
+    if let Some(p) = snapshot::daemon_running(&src).filter(|p| *p != port) {
         return Err(format!("the Kotlin daemon still answers on port {p} ({}); quit the Kotlin app first", src.display()));
     }
-    let port = snapshot::daemon_running(&o.to).ok_or_else(|| format!("no Rust daemon serves {}; start it on the copy first", o.to.display()))?;
     let plan = read_json(&o.to.join(PLAN_FILE))?;
     let picked = chosen(o, plan["sessions"].as_array().map(Vec::as_slice).unwrap_or(&[]))?;
     let calls: Vec<(String, Value)> = picked.iter().map(|e| ("infantry_prompt".to_string(), json!({"sessionId": e["id"], "prompt": o.message}))).collect();
