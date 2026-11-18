@@ -134,9 +134,9 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | New / edit ticket: title, description, type | yes | done | |
 | Ticket form: epic, assignee, executor, effort, context limit, runner, images | yes | missing | UI only for the fields (`ticket_save` carries `epicId`). Images need the daemon `image_upload` handler. |
 | Delete ticket | yes | done | |
-| Collapse a lane | yes | missing | UI only. |
+| Collapse a lane | yes | done | *(RUST-UI-8)* The lane header folds it to title and count, remembered per lane; a folded lane still takes drops. |
 | "All projects" toggle | yes | missing | UI only. |
-| Start next | yes | missing | UI only (`ticket_start_next`). |
+| Start next | yes | partial | *(RUST-UI-8)* Button in the filter bar sends `ticket_start_next` for the current project. A refusal is not shown yet (no toast host). |
 | Card buttons: Start, Done, Back, Reopen, Park, Archive | yes | partial | Drag does the moves. No buttons: UI only (`ticket_move`). |
 | Assign / switch / queue / unassign from a card | yes | missing | UI only (`ticket_assign`, `agent_switch`, `agent_queue`, `ticket_unassign`). |
 | Multi-select and move to epic | yes | missing | UI only (`ticket_save`). |
