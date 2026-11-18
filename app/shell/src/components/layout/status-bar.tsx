@@ -1,10 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // Bottom status bar: connection, resources, update, keyboard hints, build.
-import { AlertTriangle, Bug } from "lucide-react";
+import { AlertTriangle, Bug, Cpu } from "lucide-react";
 import { statusBar } from "@/mock/data";
 import { KeyHint } from "@infantry/ui";
 import { ConnectionBadge } from "./connection-badge";
+import { useUi } from "@/state/ui-state";
+import { useRegistry } from "@/plugins/use-plugins";
+import { useRuns } from "@/components/run/use-runs";
+
+/** The `infantry.shell.footer.processesBadge` slot: shown while a plugin fills it (or before the plugin list is in). */
+function ProcessesBadge() {
+  const reg = useRegistry();
+  const ui = useUi();
+  const report = useRuns((s) => s.processes?.report);
+  if (reg && !reg.fills["infantry.shell.footer.processesBadge"]) return null;
+  const n = report ? report.tracked.length + report.unattributed.length : null;
+  const rogue = report ? [...report.tracked, ...report.unattributed].some((p) => p.rogue) : false;
+  return (
+    <button type="button" className={`flex items-center gap-1 hover:underline ${rogue || report?.underPressure ? "text-danger" : "text-muted-foreground"}`} onClick={() => ui.set("sessionTab", "processes")}>
+      <Cpu className="size-3" /> {n == null ? "processes" : `${n} process${n === 1 ? "" : "es"}`}
+    </button>
+  );
+}
 
 export function StatusBar() {
   return (
@@ -14,6 +32,7 @@ export function StatusBar() {
       <span className="flex items-center gap-1 text-warn">
         <AlertTriangle className="size-3" /> {statusBar.ramFree} · {statusBar.agentsCpu}
       </span>
+      <ProcessesBadge />
       <button type="button" className="hidden truncate text-ok hover:underline md:inline">
         {statusBar.update}
       </button>

@@ -9,6 +9,7 @@ import { EmptyState, IconButton } from "@infantry/ui";
 import { useAgent } from "@/daemon/agents";
 import { useDaemon } from "@/daemon/daemon";
 import { TabContent } from "@/components/tabs/tab-content";
+import { useTabs } from "@/plugins/catalog";
 import { SessionHeader } from "./session-header";
 import { SessionTabBar } from "./session-tab-bar";
 import { Transcript } from "./transcript";
@@ -23,6 +24,13 @@ export function SessionView() {
   const link = useDaemon((s) => s.connection.state);
   const requestHistory = useDaemon((s) => s.requestHistory);
   const busy = agent?.status === "working";
+  const tabs = useTabs("center");
+  const { sessionTab, set } = ui;
+
+  // A tab whose plugin was disabled goes away: fall back to the CLI view (the Board is not in the bar).
+  useEffect(() => {
+    if (sessionTab !== "board" && !tabs.some((t) => t.id === sessionTab)) set("sessionTab", "cli");
+  }, [sessionTab, tabs, set]);
 
   // A session opened in the view brings its history, if the burst did not already ask for it.
   useEffect(() => {
@@ -32,7 +40,7 @@ export function SessionView() {
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-background">
       {agent && <SessionHeader agent={agent} />}
-      <SessionTabBar value={ui.sessionTab} onChange={(id) => ui.set("sessionTab", id)} />
+      <SessionTabBar tabs={tabs} value={ui.sessionTab} onChange={(id) => ui.set("sessionTab", id)} />
 
       {ui.sessionTab === "cli" ? (
         <>

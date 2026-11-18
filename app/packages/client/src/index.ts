@@ -20,3 +20,6 @@ export * from "./stores/secrets";
 export * from "./stores/launcher";
 export * from "./stores/runs";
 export * from "./stores/session-actions";
+export * from "./stores/plugins";
+export * from "./stores/health";
+export * from "./stores/triggers";
