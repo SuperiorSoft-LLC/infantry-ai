@@ -1,0 +1,16 @@
+{
+  "name": "Infantry_Git",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "description": "Git daemon half: registers nothing today (the pipeline tools live with the board plugin).",
+  "tier": "official",
+  "sequence": [],
+  "daemon": {
+    "component": "daemon.component",
+    "apiAtLeast": "0.1.0",
+    "needs": [],
+    "tools": []
+  }
+}

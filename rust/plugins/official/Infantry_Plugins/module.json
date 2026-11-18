@@ -1,0 +1,80 @@
+{
+  "name": "Infantry_Plugins",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "description": "Agent tools over the plugin manager: list, search, show, status, list import and an owner-approved install request. Daemon half only.",
+  "tier": "official",
+  "sequence": [],
+  "daemon": {
+    "component": "daemon.component",
+    "apiAtLeast": "0.1.0",
+    "needs": [
+      "frames"
+    ],
+    "tools": [
+      {
+        "name": "infantry_plugin_list",
+        "action": "plugins.read",
+        "kind": "read",
+        "description": "Every plugin on this host: version, class, tier, enabled, grants, licence, update offer."
+      },
+      {
+        "name": "infantry_plugin_search",
+        "action": "plugins.read",
+        "kind": "read",
+        "description": "Search the plugin catalogs by text (id, description or tag) and optional tag."
+      },
+      {
+        "name": "infantry_plugin_show",
+        "action": "plugins.read",
+        "kind": "read",
+        "description": "Check a plugin reference and show its class, signer, licence and requested grants. Installs nothing."
+      },
+      {
+        "name": "infantry_plugin_status",
+        "action": "plugins.read",
+        "kind": "read",
+        "description": "One installed plugin state (version, enabled, grants, update offer)."
+      },
+      {
+        "name": "infantry_plugin_list_import",
+        "action": "plugins.request",
+        "kind": "write",
+        "description": "Import a plugin list (file path or URL) as a community catalog source. Installs nothing."
+      },
+      {
+        "name": "infantry_plugin_request",
+        "action": "plugins.request",
+        "kind": "write",
+        "description": "Ask the owner to install a plugin with exactly the grants it requests. Nothing is installed until the owner answers yes."
+      },
+      {
+        "name": "plugins_status",
+        "action": "plugins.status",
+        "kind": "read",
+        "description": "One plugin state, or installed:false (capability plugins.status)."
+      }
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "plugins.status",
+      "description": "One plugin state by id, {installed:false} when not on this host.",
+      "runs": "daemon",
+      "kind": "read",
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    }
+  ]
+}

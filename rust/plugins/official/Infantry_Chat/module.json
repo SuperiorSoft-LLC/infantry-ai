@@ -1,0 +1,52 @@
+{
+  "name": "Infantry_Chat",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "description": "COMMS mail tools: inbox, read, message, announce and the project directory. Daemon half only (image upload frames await a host files import).",
+  "tier": "official",
+  "sequence": [],
+  "daemon": {
+    "component": "daemon.component",
+    "apiAtLeast": "0.1.0",
+    "needs": [
+      "frames"
+    ],
+    "tools": [
+      {
+        "name": "infantry_announce",
+        "action": "mail.send",
+        "kind": "write",
+        "description": "Announce one message to every live agent of your project (one COMMS mail each). Only the roles in setting announce.allowedRoles (default owner, pm) may announce."
+      },
+      {
+        "name": "infantry_inbox",
+        "action": "mail.read",
+        "kind": "read",
+        "description": "Your COMMS inbox: counts and one line per item, newest unread first. Params: limit, offset, unreadOnly, previews."
+      },
+      {
+        "name": "infantry_read",
+        "action": "mail.read",
+        "kind": "read",
+        "description": "Read one message of your inbox in full and mark it read."
+      },
+      {
+        "name": "infantry_message",
+        "action": "mail.send",
+        "kind": "write",
+        "description": "Send COMMS mail to an agent id, a role, a session id, or role@project (needs allowCrossProject)."
+      },
+      {
+        "name": "infantry_projects",
+        "action": "mail.read",
+        "kind": "read",
+        "description": "Look up projects: id, name, description and the roles with a live session."
+      }
+    ],
+    "wants": [
+      "settings"
+    ]
+  }
+}

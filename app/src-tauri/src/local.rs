@@ -1,33 +1,39 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-//! RUST-PERF-1: agents in the app. The Tauri backend embeds `infantry-runner` and serves its sessions to the WebView over
-//! Tauri IPC with the SAME envelope frames the daemon speaks (`ready`, `sessions`, `session`, `turn`, `text_delta`,
-//! `reasoning`, `status`, `finished`, `usage`, `replay_request`...). The React store, the transcript reducer and every
-//! component are unchanged: only the transport differs (`local-transport.ts`).
+//! RUST-PERF-1: agents in the app. The Tauri backend runs claude through `infantry-harness-claude` on the local runner
+//! (`infantry-runner-local`), the same driver the daemon uses (RUST-HARN-CLAUDE-1), and serves its sessions to the
+//! WebView over Tauri IPC with the SAME envelope frames the daemon speaks (`ready`, `sessions`, `session`, `turn`,
+//! `text_delta`, `reasoning`, `status`, `finished`, `usage`, `replay_request`...). The React store, the transcript
+//! reducer and every component are unchanged: only the transport differs (`local-transport.ts`).
 //!
 //! This is the spike shape, not the plan's end state (PLAN.md 1.1 keeps the daemon a separate process): there is no
 //! board, mail, MCP bridge, plugin or database here. Sessions live as long as the app; closing the window kills every
-//! session's process tree through its Job Object.
+//! session's process tree.
 
-use infantry_runner::claude::{transcript, Claude};
-use infantry_runner::harness::{Answer, Event, Host, LaunchRequest, Owner, Question, ToolApproval, TurnEnd};
-use infantry_runner::hooks::HookServer;
-use infantry_runner::session::Session;
-use infantry_runner::stream::StreamEvent;
+use infantry_harness::{ApprovalMode, HarnessDriver, HarnessEvent as Ev, LaunchRequest, Runner, TurnEnd, Usage};
+use infantry_harness_claude::{model_arg, transcript, ClaudeHarness};
+use infantry_runner_local::{LocalConfig, LocalRunner};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc as std_mpsc, Arc, Mutex, OnceLock};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::ipc::Channel;
+use tokio::sync::mpsc;
 
-/// Inherited variables a child must not see: this app's own identity and the nested-session guard of a claude that
-/// launched the app (with `CLAUDE_CODE_*` inherited, interactive claude writes no transcript and `--resume` fails).
-const ENV_REMOVE: [&str; 4] = ["CLAUDECODE", "CLAUDE_CODE_*", "INFANTRY_*", "AGENTHQ_*"];
+/// Inherited variables a child must not see: this app's own identity (the harness itself removes claude's
+/// nested-session guard, `CLAUDECODE` / `CLAUDE_CODE_*`).
+const ENV_REMOVE: [&str; 2] = ["INFANTRY_*", "AGENTHQ_*"];
 /// Recent project folders kept for the picker.
 const MAX_PROJECTS: usize = 12;
 /// Transcript files listed for resume, newest first.
 const MAX_RESUMABLE: usize = 100;
+/// How often a live session's driver is stepped when no command arrives (screen reads, transcript tail, timers).
+const POLL_STEP: Duration = Duration::from_millis(100);
+/// How long an interrupt or a close waits for the session's worker to answer.
+const CMD_WAIT: Duration = Duration::from_secs(5);
 
 fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
@@ -73,9 +79,20 @@ struct Stream {
     last_text: bool,
 }
 
+/// What the WebView asks of a session's worker.
+enum Cmd {
+    Turn(String),
+    Interrupt(std_mpsc::Sender<bool>),
+    Close(std_mpsc::Sender<()>),
+}
+
 struct Agent {
     id: String,
-    session: Mutex<Option<Session>>,
+    /// The running worker's command channel (None = the process ended; a resume starts a new worker).
+    tx: Mutex<Option<mpsc::UnboundedSender<Cmd>>>,
+    alive: AtomicBool,
+    /// A turn is running or queued.
+    busy: AtomicBool,
     st: Mutex<Stream>,
     sink: Sink,
 }
@@ -108,19 +125,20 @@ impl Agent {
         });
     }
 
-    fn busy(&self) -> bool {
-        self.session.lock().unwrap().as_ref().is_some_and(Session::busy)
-    }
-
     fn alive(&self) -> bool {
-        self.session.lock().unwrap().as_ref().is_some_and(|s| s.exited().is_none())
+        self.alive.load(Ordering::SeqCst)
     }
 
+    fn command(&self, c: Cmd) -> bool {
+        self.tx.lock().unwrap().as_ref().is_some_and(|tx| tx.send(c).is_ok())
+    }
+
+    /// Hands [text] to the worker: it starts now, or once the running turn has ended (the queue).
     fn send_turn(&self, text: &str) -> bool {
-        let g = self.session.lock().unwrap();
-        let Some(s) = g.as_ref().filter(|s| s.exited().is_none()) else { return false };
-        s.send_turn(text);
-        drop(g);
+        if !self.alive() || !self.command(Cmd::Turn(text.to_string())) {
+            return false;
+        }
+        self.busy.store(true, Ordering::SeqCst);
         self.st.lock().unwrap().last_text = false;
         self.emit("turn", text.to_string());
         self.record(|r| {
@@ -132,74 +150,59 @@ impl Agent {
         true
     }
 
-    fn on_event(&self, e: Event) -> bool {
-        match e {
-            Event::ProviderSession(id) => self.record(|r| {
-                r.insert("providerSessionId".into(), json!(id));
-            }),
-            Event::FirstOutput { .. } => {
-                if !self.busy() {
-                    self.set_state("IDLE", false);
-                }
-            }
-            Event::Output { records, .. } => {
-                for r in records {
-                    self.on_record(r);
-                }
-            }
-            Event::TurnStarted { .. } => self.set_state("BUSY", true),
-            Event::TurnEnded { end, reason } => {
-                let outcome = match end {
-                    TurnEnd::Completed => "SUCCEEDED",
-                    TurnEnd::Interrupted => "INTERRUPTED",
-                    TurnEnd::Failed => "FAILED",
-                };
-                if end != TurnEnd::Completed {
-                    if let Some(r) = reason.filter(|r| !r.trim().is_empty()) {
-                        self.emit("stderr", r);
-                    }
-                }
-                self.st.lock().unwrap().last_text = false;
-                self.emit("finished", json!({"exitCode": Value::Null, "outcome": outcome}).to_string());
-                if self.busy() {
-                    self.set_state("BUSY", true);
-                } else {
-                    self.set_state("IDLE", false);
-                }
-            }
-            Event::Detail(d) => self.emit("stderr", format!("[runner] {d}")),
-            Event::Exited { code } => {
-                self.record(|r| {
-                    r.insert("state".into(), json!("EXITED"));
-                    r.insert("turnActive".into(), json!(false));
-                    r.insert("lastExitCode".into(), json!(code));
-                });
-                return false;
-            }
-        }
-        true
+    /// Stops the running turn (and drops the queued ones). False = nothing was running.
+    fn interrupt(&self) -> bool {
+        let (reply, answer) = std_mpsc::channel();
+        self.command(Cmd::Interrupt(reply)) && answer.recv_timeout(CMD_WAIT).unwrap_or(false)
     }
 
-    fn on_record(&self, r: StreamEvent) {
-        match r {
-            StreamEvent::AssistantText { text, model, .. } => {
+    /// Kills the process tree; waits up to [CMD_WAIT] for it.
+    fn close(&self) {
+        let (reply, done) = std_mpsc::channel();
+        if self.command(Cmd::Close(reply)) {
+            let _ = done.recv_timeout(CMD_WAIT);
+        }
+    }
+
+    fn on_exit(&self, code: Option<i32>) {
+        if !self.alive.swap(false, Ordering::SeqCst) {
+            return;
+        }
+        self.busy.store(false, Ordering::SeqCst);
+        *self.tx.lock().unwrap() = None;
+        self.record(|r| {
+            r.insert("state".into(), json!("EXITED"));
+            r.insert("turnActive".into(), json!(false));
+            r.insert("lastExitCode".into(), json!(code));
+        });
+    }
+
+    fn on_event(&self, e: Ev) {
+        match e {
+            Ev::ProviderSession(id) => self.record(|r| {
+                r.insert("providerSessionId".into(), json!(id));
+            }),
+            Ev::TurnStarted => self.set_state("BUSY", true),
+            Ev::Text(text) => {
                 let joined = {
                     let mut st = self.st.lock().unwrap();
                     let j = if st.last_text { format!("\n\n{text}") } else { text };
                     st.last_text = true;
-                    if let Some(m) = model {
-                        st.record.insert("model".into(), json!(m));
-                    }
                     j
                 };
                 self.emit("text_delta", joined);
             }
-            StreamEvent::Thinking { text } => {
+            Ev::TextDelta(text) => {
+                self.st.lock().unwrap().last_text = true;
+                self.emit("text_delta", text);
+            }
+            Ev::Reasoning(text) => {
                 self.st.lock().unwrap().last_text = false;
                 self.emit("reasoning", text);
             }
-            StreamEvent::ToolCall { name, input, .. } => {
+            Ev::ToolStarted { name, input, .. } => {
                 self.st.lock().unwrap().last_text = false;
+                let input: Value = serde_json::from_str(&input).unwrap_or(Value::String(input));
                 let s = |k: &str| input.get(k).and_then(Value::as_str).unwrap_or("").to_string();
                 let write = match name.as_str() {
                     "Edit" => Some(json!({"path": s("file_path"), "edits": [{"oldText": s("old_string"), "newText": s("new_string")}]})),
@@ -212,38 +215,136 @@ impl Agent {
                     self.emit("status", json!({"state": "BUSY", "write": w}).to_string());
                 }
             }
-            StreamEvent::ToolResult { .. } | StreamEvent::Init { .. } => {}
-            StreamEvent::Result { is_error, text, usage, cost_usd } => {
-                if is_error && !text.trim().is_empty() {
-                    self.emit("error", text);
-                }
-                if let Some(u) = usage {
-                    let n = |k: &str| u.get(k).and_then(Value::as_u64).unwrap_or(0);
-                    let (model, run) = {
-                        let st = self.st.lock().unwrap();
-                        (st.record.get("model").cloned().unwrap_or(json!("default")), st.seq)
-                    };
-                    self.emit(
-                        "usage",
-                        json!({
-                            "runId": format!("{}-{run}", self.id), "provider": "claude", "model": model,
-                            "input": n("input_tokens"), "output": n("output_tokens"),
-                            "cacheRead": n("cache_read_input_tokens"), "cacheWrite": n("cache_creation_input_tokens"),
-                            "costUsd": cost_usd,
-                        })
-                        .to_string(),
-                    );
+            Ev::Usage(u) => self.usage(&u),
+            Ev::Warning(w) => self.emit("stderr", format!("[runner] {w}")),
+            Ev::Error(err) => {
+                if !err.trim().is_empty() {
+                    self.emit("error", err);
                 }
             }
-            StreamEvent::Compact { trigger, .. } => {
-                self.emit("stderr", format!("[runner] context compacted ({})", trigger.unwrap_or_else(|| "auto".into())));
+            Ev::Stderr(l) => self.emit("stderr", l),
+            Ev::TurnEnded { end, reason } => {
+                let outcome = match end {
+                    TurnEnd::Completed => "SUCCEEDED",
+                    TurnEnd::Interrupted => "INTERRUPTED",
+                    TurnEnd::Failed => "FAILED",
+                };
+                if end != TurnEnd::Completed {
+                    if let Some(r) = reason.filter(|r| !r.trim().is_empty()) {
+                        self.emit("stderr", r);
+                    }
+                }
+                self.st.lock().unwrap().last_text = false;
+                self.emit("finished", json!({"exitCode": Value::Null, "outcome": outcome}).to_string());
+                if self.busy.load(Ordering::SeqCst) {
+                    self.set_state("BUSY", true);
+                } else {
+                    self.set_state("IDLE", false);
+                }
             }
+            Ev::Exited { code } => self.on_exit(code),
+            // Approvals are answered by the worker; a PTY's raw stdout is screen bytes; tool ends draw nothing yet.
+            Ev::ApprovalRequested { .. } | Ev::ToolFinished { .. } | Ev::Stdout(_) => {}
         }
     }
+
+    /// A `usage` frame. Neutral `input_tokens` counts every prompt token; the wire counts the cache reads apart.
+    fn usage(&self, u: &Usage) {
+        let (model, run) = {
+            let st = self.st.lock().unwrap();
+            (st.record.get("model").cloned().unwrap_or(json!(infantry_harness_claude::DEFAULT_MODEL)), st.seq)
+        };
+        self.emit("usage", usage_frame(&format!("{}-{run}", self.id), model, u).to_string());
+    }
+}
+
+fn usage_frame(run_id: &str, model: Value, u: &Usage) -> Value {
+    json!({
+        "runId": run_id, "provider": infantry_harness_claude::ID, "model": model,
+        "input": u.input_tokens.saturating_sub(u.cached_input_tokens), "output": u.output_tokens,
+        "cacheRead": u.cached_input_tokens, "cacheWrite": 0, "costUsd": Value::Null,
+    })
+}
+
+/// One session's driver on its own thread and runtime: commands from the WebView in, frames out. Questions are not
+/// routed to the UI yet (a known gap); sessions run with approval = allow all, so an approval asked anyway is allowed.
+fn work(agent: Arc<Agent>, mut driver: HarnessDriver, mut rx: mpsc::UnboundedReceiver<Cmd>) {
+    let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+        Ok(rt) => rt,
+        Err(e) => {
+            agent.emit("stderr", format!("[runner] no runtime: {e}"));
+            agent.on_exit(None);
+            return;
+        }
+    };
+    rt.block_on(async move {
+        let mut queue: VecDeque<String> = VecDeque::new();
+        let mut spawned = false;
+        loop {
+            // The next queued turn starts once the running one has ended.
+            if !driver.busy() {
+                if let Some(p) = queue.pop_front() {
+                    if let Err(e) = driver.start_turn(&p).await {
+                        agent.emit("error", format!("could not start claude: {e}"));
+                        if driver.proc_id().is_none() {
+                            break;
+                        }
+                    }
+                    spawned = true;
+                }
+                agent.busy.store(driver.busy() || !queue.is_empty(), Ordering::SeqCst);
+            }
+            let cmd = if driver.proc_id().is_some() {
+                match rx.try_recv() {
+                    Ok(c) => Some(c),
+                    Err(mpsc::error::TryRecvError::Empty) => None,
+                    Err(mpsc::error::TryRecvError::Disconnected) => break,
+                }
+            } else if spawned {
+                // The process ended; its Exited event was forwarded by the last poll.
+                break;
+            } else {
+                // Not started yet: claude is launched by the first turn.
+                match rx.recv().await {
+                    Some(c) => Some(c),
+                    None => break,
+                }
+            };
+            match cmd {
+                Some(Cmd::Turn(p)) => queue.push_back(p),
+                Some(Cmd::Interrupt(reply)) => {
+                    queue.clear();
+                    let _ = reply.send(driver.interrupt().await);
+                }
+                Some(Cmd::Close(done)) => {
+                    driver.close().await;
+                    agent.on_exit(None);
+                    let _ = done.send(());
+                    break;
+                }
+                None => {
+                    for e in driver.poll(POLL_STEP).await {
+                        if let Ev::ApprovalRequested { id, .. } = &e {
+                            driver.answer(id, true).await;
+                        }
+                        if matches!(e, Ev::TurnEnded { .. }) {
+                            agent.busy.store(!queue.is_empty(), Ordering::SeqCst);
+                        }
+                        agent.on_event(e);
+                    }
+                }
+            }
+        }
+        driver.close().await;
+        agent.on_exit(None);
+    });
 }
 
 /// One short line for a tool call: its command, path, pattern or url.
 fn tool_activity(input: &Value) -> String {
+    if let Some(s) = input.as_str().filter(|s| !s.trim().is_empty()) {
+        return s.lines().next().unwrap_or("").trim().chars().take(120).collect();
+    }
     for k in ["command", "file_path", "path", "pattern", "url", "description", "prompt"] {
         if let Some(v) = input.get(k).and_then(Value::as_str).filter(|v| !v.trim().is_empty()) {
             let line = v.lines().next().unwrap_or("").trim();
@@ -251,19 +352,6 @@ fn tool_activity(input: &Value) -> String {
         }
     }
     "running".into()
-}
-
-/// Questions are not routed to the UI yet (a known gap): they go unanswered. Sessions run with approval = allow all,
-/// so approvals are never asked.
-struct AutoOwner;
-
-impl Owner for AutoOwner {
-    fn ask(&self, _: &str, _: &Question) -> Answer {
-        Answer::default()
-    }
-    fn approve(&self, _: &str, _: &str, _: &str) -> bool {
-        true
-    }
 }
 
 /// A transcript file under a project's claude folder that `claude --resume` can continue.
@@ -290,7 +378,8 @@ pub struct Local {
     agents: Mutex<Vec<Arc<Agent>>>,
     pending_new: Mutex<Option<SpawnOpts>>,
     projects: Mutex<Vec<PathBuf>>,
-    host: Mutex<Option<Host>>,
+    harness: Arc<ClaudeHarness>,
+    runner: OnceLock<Arc<LocalRunner>>,
     state_dir: PathBuf,
     instance: String,
 }
@@ -302,7 +391,8 @@ impl Local {
             agents: Mutex::default(),
             pending_new: Mutex::default(),
             projects: Mutex::default(),
-            host: Mutex::default(),
+            harness: Arc::new(ClaudeHarness::default()),
+            runner: OnceLock::new(),
             instance: format!("local-{}", now_ms()),
             state_dir,
         }
@@ -315,15 +405,10 @@ impl Local {
         p
     }
 
-    fn host(&self) -> Result<Host, String> {
-        let mut g = self.host.lock().unwrap();
-        if let Some(h) = g.as_ref() {
-            return Ok(h.clone());
-        }
-        let hooks = HookServer::start().map_err(|e| format!("hook server: {e}"))?;
-        let h = Host { state_dir: self.state_dir.join("runner"), hooks, owner: Arc::new(AutoOwner) };
-        *g = Some(h.clone());
-        Ok(h)
+    fn runner(&self) -> Arc<LocalRunner> {
+        self.runner
+            .get_or_init(|| Arc::new(LocalRunner::new(LocalConfig { scratch_dir: Some(self.state_dir.join("runner")), ..Default::default() })))
+            .clone()
     }
 
     fn send(&self, kind: &str, data: String, request: Option<&str>) {
@@ -332,7 +417,11 @@ impl Local {
 
     pub fn connect(&self, ch: Channel<String>) {
         *self.sink.lock().unwrap() = Some(ch);
-        self.send("ready", format!("provider=claude contract=local instance={} since=0 build=embedded-runner", self.instance), None);
+        self.send(
+            "ready",
+            format!("provider={} contract=local instance={} since=0 build=embedded-runner", infantry_harness_claude::ID, self.instance),
+            None,
+        );
         let records: Vec<Value> = self.agents.lock().unwrap().iter().map(|a| Value::Object(a.st.lock().unwrap().record.clone())).collect();
         self.send("sessions", Value::Array(records).to_string(), None);
     }
@@ -388,17 +477,14 @@ impl Local {
             }
             "interrupt" => {
                 if let Some(a) = self.agent(sid.or(Some(data.as_str()))) {
-                    let sent = a.session.lock().unwrap().as_ref().is_some_and(Session::interrupt);
-                    if !sent {
+                    if !a.interrupt() {
                         a.emit("stderr", "[runner] nothing to interrupt".into());
                     }
                 }
             }
             "kill" => {
                 if let Some(a) = self.agent(sid.or(Some(data.as_str()))) {
-                    if let Some(s) = a.session.lock().unwrap().as_ref() {
-                        s.close();
-                    }
+                    a.close();
                 }
             }
             "replay_request" => {
@@ -442,6 +528,9 @@ impl Local {
         self.projects.lock().unwrap().first().cloned()
     }
 
+    /// Starts (or resumes) a session. claude itself is launched by the session's first turn; the id is known now:
+    /// a new session gets a fresh id, passed as the resume token (the harness starts a new conversation under an id
+    /// that has no transcript yet).
     pub fn spawn(&self, o: SpawnOpts) -> Result<String, String> {
         let cwd = match o.cwd.as_deref().filter(|c| !c.trim().is_empty()) {
             Some(c) => PathBuf::from(c),
@@ -455,24 +544,25 @@ impl Local {
         if existing.as_ref().is_some_and(|a| a.alive()) {
             return Err("that session is already running in this app".into());
         }
-        let host = self.host()?;
+        let id = resume.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let model = model_arg(o.model.as_deref());
         let mut req = LaunchRequest::new(cwd.clone());
-        req.model = o.model.clone().filter(|m| !m.trim().is_empty() && m != "default");
-        req.approval = ToolApproval::AllowAll;
-        req.resume = resume.clone();
+        req.model = model.clone();
+        req.approval = ApprovalMode::AllowAll;
+        req.resume = Some(id.clone());
         req.env_remove = ENV_REMOVE.map(String::from).to_vec();
-        let mut session = Session::spawn(&Claude::default(), &req, &host).map_err(|e| format!("could not start claude: {e}"))?;
-        let (_keep, dummy) = std::sync::mpsc::channel();
-        let rx = std::mem::replace(&mut session.events, dummy);
-        let id = session.session_id().to_string();
+        let runner: Arc<dyn Runner> = self.runner();
+        let driver = HarnessDriver::new(self.harness.clone(), runner, req);
+        let (tx, rx) = mpsc::unbounded_channel();
         let name = o.name.clone().filter(|n| !n.trim().is_empty());
         let now = now_ms();
 
         let agent = match existing {
             Some(a) => {
-                *a.session.lock().unwrap() = Some(session);
+                *a.tx.lock().unwrap() = Some(tx);
+                a.alive.store(true, Ordering::SeqCst);
                 a.record(|r| {
-                    r.insert("state".into(), json!("STARTING"));
+                    r.insert("state".into(), json!("IDLE"));
                     r.insert("turnActive".into(), json!(false));
                     let n = r.get("resumeCount").and_then(Value::as_u64).unwrap_or(0) + 1;
                     r.insert("resumeCount".into(), json!(n));
@@ -482,13 +572,13 @@ impl Local {
             None => {
                 let mut record = Map::new();
                 record.insert("id".into(), json!(id));
-                record.insert("provider".into(), json!("claude"));
+                record.insert("provider".into(), json!(infantry_harness_claude::ID));
                 record.insert("workingDir".into(), json!(cwd.to_string_lossy()));
                 record.insert("spawnedAt".into(), json!(now));
                 record.insert("lastHeartbeat".into(), json!(now));
-                record.insert("state".into(), json!("STARTING"));
+                record.insert("state".into(), json!("IDLE"));
                 record.insert("providerSessionId".into(), json!(id));
-                record.insert("model".into(), json!(req.model.clone().unwrap_or_else(|| "default".into())));
+                record.insert("model".into(), json!(model.clone().unwrap_or_else(|| infantry_harness_claude::DEFAULT_MODEL.into())));
                 record.insert("role".into(), json!(name.as_deref().map(str::to_lowercase).unwrap_or_else(|| "agent".into())));
                 record.insert("runCount".into(), json!(0));
                 record.insert("resumeCount".into(), json!(if resume.is_some() { 1 } else { 0 }));
@@ -496,7 +586,9 @@ impl Local {
                 record.insert("runner".into(), json!("embedded"));
                 let a = Arc::new(Agent {
                     id: id.clone(),
-                    session: Mutex::new(Some(session)),
+                    tx: Mutex::new(Some(tx)),
+                    alive: AtomicBool::new(true),
+                    busy: AtomicBool::new(false),
                     st: Mutex::new(Stream { record: record.clone(), seq: 0, history: Vec::new(), last_text: false }),
                     sink: self.sink.clone(),
                 });
@@ -508,26 +600,21 @@ impl Local {
         if resume.is_some() {
             agent.emit("stderr", format!("[runner] claude --resume {id}"));
         }
-        let pump = agent.clone();
-        std::thread::Builder::new()
-            .name("infantry-agent-pump".into())
-            .spawn(move || {
-                for e in rx.iter() {
-                    if !pump.on_event(e) {
-                        break;
-                    }
-                }
-            })
-            .map_err(|e| e.to_string())?;
+        let worker = agent.clone();
+        std::thread::Builder::new().name("infantry-agent".into()).spawn(move || work(worker, driver, rx)).map_err(|e| {
+            agent.on_exit(None);
+            e.to_string()
+        })?;
         if let Some(p) = o.prompt.filter(|p| !p.trim().is_empty()) {
             agent.send_turn(&p);
         }
         Ok(id)
     }
 
-    /// The transcripts claude keeps for [folder] (`~/.claude/projects/<slug>/*.jsonl`), newest first.
+    /// The transcripts claude keeps for [folder] (`<claude config>/projects/<slug>/*.jsonl`), newest first.
     pub fn resumable(&self, folder: &str) -> Vec<Resumable> {
-        let dir = transcript::config_dir().join("projects").join(transcript::slug(folder));
+        let Some(config) = self.harness.config_dir.as_ref() else { return Vec::new() };
+        let dir = config.join("projects").join(transcript::slug(folder));
         let Ok(rd) = std::fs::read_dir(&dir) else { return Vec::new() };
         let mut out: Vec<Resumable> = rd
             .flatten()
@@ -554,7 +641,7 @@ impl Local {
     pub fn shutdown(&self) {
         let agents: Vec<Arc<Agent>> = self.agents.lock().unwrap().drain(..).collect();
         for a in agents {
-            drop(a.session.lock().unwrap().take());
+            a.close();
         }
     }
 }
@@ -606,7 +693,18 @@ mod tests {
     #[test]
     fn tool_activity_is_one_short_line() {
         assert_eq!(tool_activity(&json!({"command": "ls -la\necho x"})), "ls -la");
+        assert_eq!(tool_activity(&json!("git status\nmore")), "git status");
         assert_eq!(tool_activity(&json!({})), "running");
+    }
+
+    #[test]
+    fn usage_counts_cache_reads_apart() {
+        let u = Usage { input_tokens: 1000, cached_input_tokens: 800, output_tokens: 50, reasoning_tokens: 0 };
+        let v = usage_frame("s-1", json!("default"), &u);
+        assert_eq!(v["input"], 200);
+        assert_eq!(v["cacheRead"], 800);
+        assert_eq!(v["output"], 50);
+        assert_eq!(v["provider"], "claude");
     }
 
     #[test]

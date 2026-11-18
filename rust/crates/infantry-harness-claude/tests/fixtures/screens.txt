@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: Apache-2.0
+# Screens of the interactive claude as the runner's grid shows them (visible rows, trailing blanks trimmed).
+# Each screen starts with a `== name` line; the rows follow until the next one.
+== trust_on_no
+╭──────────────────────────────────────────────────────────────╮
+│ Do you trust the files in this folder?                       │
+│                                                              │
+│ C:\work tree                                                 │
+│                                                              │
+│ ❯ 1. No, exit                                                │
+│   2. Yes, I trust this folder                                │
+╰──────────────────────────────────────────────────────────────╯
+== trust_on_yes
+╭──────────────────────────────────────────────────────────────╮
+│ Do you trust the files in this folder?                       │
+│                                                              │
+│ C:\work tree                                                 │
+│                                                              │
+│   1. No, exit                                                │
+│ ❯ 2. Yes, I trust this folder                                │
+╰──────────────────────────────────────────────────────────────╯
+== trust_no_pointer
+  1. No, exit
+  2. Yes, I trust this folder
+== welcome
+╭─── Claude Code v2.1.327 ─────────────────────────────────────╮
+│                Welcome back!                                 │
+╰──────────────────────────────────────────────────────────────╯
+>
+== prompt_in_box
+╭──────────────────────────────────────────────────────────────╮
+│ > read a.txt and tell me what it says                        │
+╰──────────────────────────────────────────────────────────────╯
+== permission_dialog
+ Bash command
+   echo hi
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No, and tell Claude what to do differently (esc)
+== ask_menu
+ Which colour?
+ ❯ 1. Red
+   2. Blue
+ Enter to select · ↑/↓ to navigate · Esc to cancel
+== setup_theme
+ Let's get started.
+ Choose the text style that looks best with your terminal
+ ❯ 1. Dark mode
+   2. Light mode

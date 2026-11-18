@@ -58,15 +58,21 @@ impl Layer {
 pub const LAYERS: &[(&str, Layer, u8)] = &[
     ("infantry-protocol", Layer::Wire, 0),
     ("infantry-core", Layer::Core, 0),
+    ("infantry-scripting", Layer::Core, 1),
     ("infantry-plugin-wit", Layer::Core, 0),
     ("infantry-plugin-host", Layer::Core, 1),
     ("infantry-plugin-sdk", Layer::Core, 1),
+    ("infantry-mail", Layer::Core, 1),
+    ("infantry-usage", Layer::Core, 1),
+    // projects, workspaces, project git, worktrees, ticket branches: platform level; the orchestrator calls into it.
+    ("infantry-projects", Layer::Core, 1),
     ("infantry-runner-api", Layer::Runner, 0),
     ("infantry-runner", Layer::Runner, 1),
     ("infantry-runner-local", Layer::Runner, 2),
     ("infantry-runner-link", Layer::Runner, 2),
     ("infantry-harness", Layer::Harness, 0),
     ("infantry-harness-codex", Layer::Harness, 1),
+    ("infantry-harness-claude", Layer::Harness, 1),
     ("infantry-orchestrator-api", Layer::Orchestration, 0),
     // The board (tickets on infantry.db, lane rules, ticket_* unit, LocalOrchestrator); a wasm plugin once the WIT storage SQL exists.
     ("infantry-board", Layer::Orchestration, 1),
@@ -97,9 +103,7 @@ pub const HARNESS_MODULE_NAMES: &[&str] = &["claude", "codex", "opencode", "gemi
 
 /// Known violations, each with the reason it is tolerated: `(crate, path inside the crate, reason)`.
 pub const ALLOWLIST: &[(&str, &str, &str)] = &[
-    // The Claude driver is harness code (L3) living in the runner (L2). It predates the layer
-    // map; a follow-up moves it into infantry-harness (or its own infantry-harness-claude).
-    ("infantry-runner", "src/claude", "Claude driver is harness code in the runner layer; a follow-up moves it to L3"),
+    // Empty: the old Claude driver in infantry-runner was removed by RUST-HARN-CLAUDE-1.
 ];
 
 /// The layer and tier of a crate, by name, then by location (`plugins/official/*` = plugin).
