@@ -43,7 +43,7 @@ export function AgentAvatar({
       {showStatus && (
         <StatusDot
           status={agent.status}
-          pulse={agent.status === "working"}
+          pulse={agent.status === "working" || agent.status === "needs-input"}
           className="absolute -right-0.5 -bottom-0.5 size-2.5 ring-2 ring-card"
         />
       )}
