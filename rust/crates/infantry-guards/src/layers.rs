@@ -64,6 +64,8 @@ pub const LAYERS: &[(&str, Layer, u8)] = &[
     ("infantry-plugin-sdk", Layer::Core, 1),
     ("infantry-mail", Layer::Core, 1),
     ("infantry-usage", Layer::Core, 1),
+    // the secrets vault: keystore, rendering, scrubber, reveal, backup, audit (RUST-VAULT-1).
+    ("infantry-vault", Layer::Core, 1),
     // projects, workspaces, project git, worktrees, ticket branches: platform level; the orchestrator calls into it.
     ("infantry-projects", Layer::Core, 1),
     ("infantry-runner-api", Layer::Runner, 0),

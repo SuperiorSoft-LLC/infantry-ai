@@ -13,3 +13,4 @@ export * from "./stores/mail";
 export * from "./stores/attention";
 export * from "./stores/usage";
 export * from "./stores/projects";
+export * from "./stores/secrets";
