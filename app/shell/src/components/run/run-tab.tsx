@@ -289,7 +289,7 @@ function ProcessRow({ p }: { p: TrackedProcess }) {
   );
 }
 
-function ProcessesPanel() {
+export function ProcessesPanel() {
   const answer = useRuns((s) => s.processes);
   useEffect(() => runsStore().getState().listProcesses(), []);
   const r = answer?.report;

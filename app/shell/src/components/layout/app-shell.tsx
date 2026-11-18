@@ -10,6 +10,7 @@ import { RightPanel } from "@/components/usage/right-panel";
 import { DialogHost } from "@/components/dialogs/dialog-host";
 import { TitleBar } from "./title-bar";
 import { StatusBar } from "./status-bar";
+import { usePluginsLoaded } from "@/plugins/use-plugins";
 
 function Drawer({ side, onClose, children }: { side: "left" | "right"; onClose: () => void; children: ReactNode }) {
   return (
@@ -25,6 +26,7 @@ export function AppShell() {
   const narrowLeft = useNarrow(900);
   const narrowRight = useNarrow(1280);
   const { set } = ui;
+  usePluginsLoaded();
 
   // Crossing into a narrow width collapses that panel; the title-bar toggles reopen it as a drawer.
   useEffect(() => {

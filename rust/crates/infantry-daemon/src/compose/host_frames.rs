@@ -71,6 +71,19 @@ fn strings(v: Option<&Value>) -> Vec<String> {
     v.and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default()
 }
 
+/// What a module declares for the client shell (RUST-UI-5): its tabs, panels, fills and slots exactly as module.json
+/// holds them, plus its display name, description and whether it declares settings. The shell renders from this.
+pub fn ui_of(manifest: &Value) -> Value {
+    let arr = |k: &str| manifest.get(k).filter(|v| v.is_array()).cloned().unwrap_or_else(|| Value::Array(vec![]));
+    json!({
+        "displayName": s(manifest, "displayName"), "description": s(manifest, "description"),
+        "tabs": arr("tabs"), "panels": arr("panels"), "fills": arr("fills"), "slots": arr("slots"),
+        "config": manifest.get("config").is_some_and(|c| !c.is_null()),
+        // The settings nodes this module declares, so a client can show one plugin's cards.
+        "configNodes": manifest.get("config").and_then(Value::as_array).map(|a| a.iter().filter_map(|g| g.get("node").and_then(Value::as_str)).map(Value::from).collect::<Vec<_>>()).unwrap_or_default(),
+    })
+}
+
 fn reply(ty: &str, env: &Envelope, data: String) -> Vec<Envelope> {
     let mut e = Envelope::new(ty, data);
     e.session_id = env.session_id.clone();
@@ -231,6 +244,7 @@ impl HostFrames {
             "grants": strings(daemon.and_then(|d| d.get("needs"))), "requested": strings(daemon.and_then(|d| d.get("wants"))),
             "license": s(&m.manifest, "license"), "source": "bundled", "yanked": false, "updateTo": Value::Null,
             "status": status.unwrap_or_else(|| if has_daemon { "not loaded".into() } else { "ui only".into() }),
+            "ui": ui_of(&m.manifest),
         })
     }
 
@@ -389,6 +403,22 @@ impl FrameUnit for HostFrames {
 #[cfg(test)]
 mod tests {
     use super::read_chunk;
+
+    #[test]
+    fn ui_of_carries_the_shell_declarations_and_config_nodes() {
+        let m = serde_json::json!({
+            "name": "X", "displayName": "Ex", "tabs": [{"id": "x.tab", "container": "center"}], "fills": ["infantry.shell.footer.badge"],
+            "config": [{"node": "x.node", "group": "G"}, {"group": "no node"}],
+        });
+        let u = super::ui_of(&m);
+        assert_eq!(u["displayName"], "Ex");
+        assert_eq!(u["tabs"][0]["id"], "x.tab");
+        assert_eq!(u["fills"][0], "infantry.shell.footer.badge");
+        assert_eq!(u["panels"], serde_json::json!([]));
+        assert_eq!(u["config"], true);
+        assert_eq!(u["configNodes"], serde_json::json!(["x.node"]));
+        assert_eq!(super::ui_of(&serde_json::json!({}))["config"], false);
+    }
 
     #[test]
     fn job_log_reads_from_the_offset_and_resets_past_the_end() {

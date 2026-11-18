@@ -2,13 +2,13 @@
 // Copyright (c) SuperiorSoft LLC
 // The ONE owner of view state. Components read it through useUi(); nothing duplicates it.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { SessionTabId } from "@/mock/data";
 
-export type RightTab = "attention" | "usage" | "prompts" | "skills";
+/** A right-panel view id; which ones exist comes from the plugin registry (plugins/catalog.tsx). */
+export type RightTab = string;
 export type DialogId = null | "settings" | "new-agent" | "new-ticket" | "resume";
 export type Theme = "dark" | "light";
-/** What the centre column shows: a session tab, or the Board (opened from the sidebar). */
-export type CentreView = SessionTabId | "board";
+/** What the centre column shows: a tab id from the plugin registry (plugins/catalog.tsx), or `board`. */
+export type CentreView = string;
 
 interface UiState {
   selectedAgentId: string;
