@@ -1810,6 +1810,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-harness"
+version = "0.1.0"
+dependencies = [
+ "infantry-runner-api",
+ "tokio",
+]
+
+[[package]]
+name = "infantry-harness-claude"
+version = "0.1.0"
+dependencies = [
+ "infantry-harness",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "infantry-runner"
 version = "0.1.0"
 dependencies = [
@@ -1822,10 +1839,34 @@ dependencies = [
 ]
 
 [[package]]
-name = "infantry-tauri"
+name = "infantry-runner-api"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tokio",
+]
+
+[[package]]
+name = "infantry-runner-local"
 version = "0.1.0"
 dependencies = [
  "infantry-runner",
+ "infantry-runner-api",
+ "libc",
+ "portable-pty",
+ "tokio",
+ "uuid",
+ "vt100",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "infantry-tauri"
+version = "0.1.0"
+dependencies = [
+ "infantry-harness",
+ "infantry-harness-claude",
+ "infantry-runner-local",
  "serde",
  "serde_json",
  "tauri",
@@ -1833,6 +1874,8 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tauri-plugin-websocket",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

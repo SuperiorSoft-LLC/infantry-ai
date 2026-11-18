@@ -96,10 +96,7 @@ pub const HARNESS_MODULE_NAMES: &[&str] = &["claude", "codex", "opencode", "gemi
 
 /// Known violations, each with the reason it is tolerated: `(crate, path inside the crate, reason)`.
 pub const ALLOWLIST: &[(&str, &str, &str)] = &[
-    // The old Claude driver (L3 code in L2). The daemon runs infantry-harness-claude (RUST-HARN-CLAUDE-1); only the Tauri
-    // app's local mode still uses this copy (it answers AskUserQuestion menus, which the harness contract has no event
-    // for yet). Removed when the app moves to infantry-harness-claude.
-    ("infantry-runner", "src/claude", "only the Tauri app's local mode still uses it; it moves to infantry-harness-claude"),
+    // Empty: the old Claude driver in infantry-runner was removed by RUST-HARN-CLAUDE-1.
 ];
 
 /// The layer and tier of a crate, by name, then by location (`plugins/official/*` = plugin).

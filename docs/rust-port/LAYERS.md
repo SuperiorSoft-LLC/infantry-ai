@@ -36,7 +36,7 @@ its tests).
 
 | Crate | Path | Why tolerated | Removed by |
 |---|---|---|---|
-| infantry-runner | `src/claude` | The old Claude driver (L3 code in L2). The daemon runs infantry-harness-claude (RUST-HARN-CLAUDE-1); only the Tauri app's local mode still uses this copy (it answers AskUserQuestion menus, which the harness contract has no event for yet). | Moving the app's local mode to infantry-harness-claude, then deleting `src/claude`. |
+| (none) | | The last entry, infantry-runner `src/claude`, was removed by RUST-HARN-CLAUDE-1: the daemon and the Tauri app both run infantry-harness-claude. | |
 
 Adding to the allowlist needs a reason and the follow-up that removes it.
 
