@@ -97,7 +97,7 @@ macro_rules! export_plugin {
                     <$t as $crate::Plugin>::on_event(subscription, event)
                 }
             }
-            $crate::__export_daemon_plugin!(__InfantryGuest with_types_in $crate::bindings);
+            $crate::bindings::__export_daemon_plugin!(__InfantryGuest with_types_in $crate::bindings);
         };
 
         /// Serves this plugin as a native sidecar over stdio (returns when the host closes stdin or calls stop).

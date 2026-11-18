@@ -9,6 +9,8 @@ publish = false
 [dependencies]
 vt100 = "0.16"
 serde_json = { version = "1", features = ["preserve_order"] }
+
+[dev-dependencies]
 uuid = { version = "1", features = ["v4"] }
 
 [target.'cfg(windows)'.dependencies]
