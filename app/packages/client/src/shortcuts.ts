@@ -76,3 +76,22 @@ export function hostLabel(url: string): string {
 
 /** The window event Ctrl+F raises; the open transcript shows its search bar. */
 export const CHAT_SEARCH_EVENT = "infantry:chat-search";
+
+/** What a key does on a focused prompt card of [count] choices with [at] highlighted. */
+export type PromptKey = { kind: "move"; at: number } | { kind: "pick"; at: number } | { kind: "toggle"; at: number } | { kind: "cancel" } | { kind: "submit" };
+
+/**
+ * Prompt card keys (after the Kotlin approval / question cards): arrows move the highlight (wrapping), a digit 1..9
+ * picks that choice, Enter picks the highlighted one (in a multi-select it sends), Space toggles it (multi-select
+ * only), Esc cancels (an approval denies).
+ */
+export function promptKey(key: string, count: number, at: number, multi = false): PromptKey | null {
+  if (count <= 0) return key === "Escape" ? { kind: "cancel" } : null;
+  if (key === "ArrowRight" || key === "ArrowDown") return { kind: "move", at: (at + 1) % count };
+  if (key === "ArrowLeft" || key === "ArrowUp") return { kind: "move", at: (at - 1 + count) % count };
+  if (key === "Escape") return { kind: "cancel" };
+  if (/^[1-9]$/.test(key) && Number(key) <= count) return multi ? { kind: "toggle", at: Number(key) - 1 } : { kind: "pick", at: Number(key) - 1 };
+  if (key === " " && multi) return { kind: "toggle", at };
+  if (key === "Enter") return multi ? { kind: "submit" } : { kind: "pick", at };
+  return null;
+}

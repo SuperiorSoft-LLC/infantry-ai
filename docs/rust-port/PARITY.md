@@ -118,9 +118,9 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Feature | Kotlin | Rust | Notes |
 |---|---|---|---|
 | Tool approval card (allow once / session / always / deny, expiry) | yes | done | |
-| Approval card keys (arrows, Enter, Esc) | yes | missing | UI only. |
+| Approval card keys (arrows, Enter, Esc) | yes | done | *(RUST-UI-9)* A focused card: arrows move, 1-4 or Enter decide, Esc denies. |
 | Question card: options, Recommended, multi-select, Other | yes | done | |
-| Question keys (digits, arrows, Space) and auto-select timer line | yes | missing | UI only. |
+| Question keys (digits, arrows, Space) and auto-select timer line | yes | partial | *(RUST-UI-9)* Keys done (digits, arrows, Enter; Space toggles a multi-select). The timer shows as the "answers itself in ~N min" chip, not a live countdown line. |
 | Questions pill for questions in other sessions | yes | missing | UI only. The Attention tab lists them. |
 | Cancel question / Later | yes | missing | UI only (`question_cancel`). |
 
