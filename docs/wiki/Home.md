@@ -10,7 +10,7 @@
 These pages are written from the code on the dev head. Where an older document disagrees with the code, the code
 wins, and the page says so.
 
-- [Architecture](Architecture.md): the three layers, the daemon, the protocol, a request from click to daemon and back, slots, scripting.
+- [Architecture](Architecture.md): the three layers, why the framework stays generic, the daemon, the protocol, a request from click to daemon and back, slots, scripting.
 - [Command line](CommandLine.md): `infantry` from any terminal after an install (`install-cli` / `uninstall-cli`, what each OS writes).
 - [Recipes](recipes/README.md): worked how-to-add-X guides (UI plugin, child plugin, daemon tool, setting, Lua hook, harness, provider).
 - [Add your service to the Services hub](recipes/add-a-service.md): how a third party plugs its own service (sign-in, account, resources, agent tools, billing) into the Services tab.
