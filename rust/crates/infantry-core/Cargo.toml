@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-core"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "Infantry AI platform core (L1): FrameUnit registry, event bus, db handle, settings. Names no plugin id."
+publish = false
+
+[dependencies]
+infantry-protocol = { path = "../infantry-protocol" }
+rusqlite = { version = "0.32", features = ["bundled"] }
+tokio = { version = "1", features = ["sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+# backup: the refusal test works on a copy made with the sqlite backup API.
+rusqlite = { version = "0.32", features = ["bundled", "backup"] }
