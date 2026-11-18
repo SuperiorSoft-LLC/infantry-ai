@@ -35,6 +35,9 @@ infantry-harness-claude = { path = "../../rust/crates/infantry-harness-claude" }
 infantry-runner-local = { path = "../../rust/crates/infantry-runner-local" }
 tokio = { version = "1", features = ["rt", "sync", "time"] }
 uuid = { version = "1", features = ["v4"] }
+# RUST-UPD-1: self-update from a signed feed, and the machine's addresses for phone pairing.
+tauri-plugin-updater = "2"
+if-addrs = "0.13"
 
 # Pairing by QR code (RUST-MOBILE-1).
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]

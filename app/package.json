@@ -10,7 +10,8 @@
     "build": "pnpm --filter @infantry/shell build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "installer": "bash src-tauri/scripts/stage-bundle.sh && tauri build --debug --config src-tauri/bundle-stage/tauri.bundle.conf.json"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

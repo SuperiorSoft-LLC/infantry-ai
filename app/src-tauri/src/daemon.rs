@@ -94,8 +94,91 @@ pub fn binary() -> Result<PathBuf, String> {
     })
 }
 
+/// How the sidecar listens (RUST-UPD-1). Loopback with no token by default; `remote` (Settings > Daemon > Allow phone
+/// connections) binds every interface and requires the bearer token in `token_file`, as the daemon insists.
+#[derive(Clone, Default)]
+pub struct Launch {
+    pub remote: bool,
+    pub token_file: Option<PathBuf>,
+}
+
+impl Launch {
+    fn host(&self) -> &'static str {
+        if self.remote { "0.0.0.0" } else { "127.0.0.1" }
+    }
+}
+
+/// The phone-access token file in `state`, created (64 hex characters from the OS RNG) when missing. Never printed.
+pub fn remote_token_file(state: &Path) -> Result<PathBuf, String> {
+    let f = state.join("remote-access.token");
+    let ok = std::fs::read_to_string(&f).map(|t| t.trim().len() >= 32).unwrap_or(false);
+    if !ok {
+        std::fs::create_dir_all(state).map_err(|e| e.to_string())?;
+        let t = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
+        std::fs::write(&f, t).map_err(|e| format!("token file {}: {e}", f.display()))?;
+    }
+    Ok(f)
+}
+
+/// The pid of the daemon serving `state`: its health record (`health/status.json`), only while that record names the
+/// port in `daemon.port` and the port answers `/health` (a stale record never names a reused pid).
+pub fn running_pid(state: &Path) -> Option<u32> {
+    let port = read_port(state)?;
+    let st: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(state.join("health").join("status.json")).ok()?).ok()?;
+    pid_for(&st, port).filter(|_| healthy(port))
+}
+
+fn pid_for(status: &serde_json::Value, port: u16) -> Option<u32> {
+    let running = status["running"].as_bool().unwrap_or(true);
+    if !running || status["port"].as_u64() != Some(u64::from(port)) {
+        return None;
+    }
+    status["pid"].as_u64().and_then(|p| u32::try_from(p).ok())
+}
+
+/// How long a stopped daemon may take to stop answering.
+pub const STOP_TIMEOUT_MS: u64 = 10_000;
+
+/// Stops the daemon serving `state` by its PID (never by image name) and waits until its port is quiet. Answers the
+/// pid it stopped (None = none was running).
+pub fn stop(state: &Path) -> Result<Option<u32>, String> {
+    let Some(port) = read_port(state) else { return Ok(None) };
+    let Some(pid) = running_pid(state) else { return Ok(None) };
+    if pid == std::process::id() {
+        return Err("refusing to stop this app's own process".into());
+    }
+    kill_pid(pid)?;
+    let start = Instant::now();
+    while healthy(port) {
+        if start.elapsed() > Duration::from_millis(STOP_TIMEOUT_MS) {
+            return Err(format!("daemon pid {pid} still answers on port {port} after {STOP_TIMEOUT_MS} ms"));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let _ = std::fs::remove_file(port_file(state));
+    Ok(Some(pid))
+}
+
+#[cfg(windows)]
+fn kill_pid(pid: u32) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let out = Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|e| format!("taskkill: {e}"))?;
+    if out.status.success() { Ok(()) } else { Err(format!("taskkill /PID {pid} failed: {}", String::from_utf8_lossy(&out.stderr).trim())) }
+}
+
+#[cfg(not(windows))]
+fn kill_pid(pid: u32) -> Result<(), String> {
+    let st = Command::new("kill").arg(pid.to_string()).status().map_err(|e| format!("kill: {e}"))?;
+    if st.success() { Ok(()) } else { Err(format!("kill {pid} failed")) }
+}
+
 /// The daemon for `state`: the one already running there, else a new sidecar on `port` (0 = any free port).
-pub fn ensure(state: &Path, port: u16, cwd: &Path) -> Result<Sidecar, String> {
+pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch) -> Result<Sidecar, String> {
     if FOREIGN_PORTS.contains(&port) {
         return Err(format!("port {port} belongs to the Kotlin app's daemon; this app never uses it"));
     }
@@ -107,7 +190,7 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path) -> Result<Sidecar, String> {
     let bin = binary()?;
     let log = std::fs::File::create(state.join("daemon.log")).map_err(|e| format!("daemon log: {e}"))?;
     let mut cmd = Command::new(&bin);
-    cmd.args(["--host", "127.0.0.1", "--port", &port.to_string(), "--state-dir"])
+    cmd.args(["--host", launch.host(), "--port", &port.to_string(), "--state-dir"])
         .arg(state)
         .current_dir(cwd)
         .stdin(Stdio::null())
@@ -118,6 +201,10 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path) -> Result<Sidecar, String> {
         if ENV_DROP.contains(&k.as_str()) || ENV_DROP_PREFIX.iter().any(|p| k.starts_with(p)) {
             cmd.env_remove(&k);
         }
+    }
+    if launch.remote {
+        let f = launch.token_file.as_ref().ok_or("phone access needs a token file")?;
+        cmd.env("INFANTRY_TOKEN_FILE", f);
     }
     #[cfg(windows)]
     {
@@ -145,6 +232,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_health_record_names_a_pid_only_for_the_live_port() {
+        let st = serde_json::json!({"pid": 4242, "port": 18990, "running": true});
+        assert_eq!(super::pid_for(&st, 18990), Some(4242));
+        assert_eq!(super::pid_for(&st, 18991), None);
+        assert_eq!(super::pid_for(&serde_json::json!({"pid": 4242, "port": 18990, "running": false}), 18990), None);
+    }
+
+    #[test]
+    fn the_phone_token_is_long_and_kept() {
+        let dir = std::env::temp_dir().join(format!("infantry-upd-{}", uuid::Uuid::new_v4().simple()));
+        let f = super::remote_token_file(&dir).unwrap();
+        let t = std::fs::read_to_string(&f).unwrap();
+        assert!(t.len() >= 64 && t.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(std::fs::read_to_string(super::remote_token_file(&dir).unwrap()).unwrap(), t);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn a_dead_port_is_not_healthy() {
         // Bind and drop: the port is free (nothing answers there).
         let p = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
@@ -156,6 +261,6 @@ mod tests {
         assert!(foreign("ws://127.0.0.1:8797/ws"));
         assert!(foreign("http://localhost:8787"));
         assert!(!foreign("ws://127.0.0.1:18990/ws"));
-        assert!(ensure(Path::new("."), 8797, Path::new(".")).is_err());
+        assert!(ensure(Path::new("."), 8797, Path::new("."), &super::Launch::default()).is_err());
     }
 }

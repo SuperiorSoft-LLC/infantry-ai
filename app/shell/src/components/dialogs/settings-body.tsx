@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { isTauri } from "@/daemon/daemon";
 import { RemoteRow } from "@/components/connect/connect-screen";
+import { CliPathRow, PairingRows, UpdaterRows } from "@/components/settings/desktop-install";
 import { cn } from "@infantry/ui";
 import { useUi } from "@/state/ui-state";
 import { Switch } from "@infantry/ui";
@@ -91,7 +92,9 @@ export function SettingsBody() {
         {!searching && section === "Daemon" && (
           <>
             <RemoteRow />
+            <PairingRows />
             <RunnerRow />
+            <CliPathRow />
             <PickerField id="set-daemon" label="Daemon" options={["This computer", "vps-runner-01"]} inheritLabel="This computer" />
             <SettingRow id="set-auto" title="Start daemon with the app" hint="Runs in the background">
               <Switch id="set-auto" defaultChecked />
@@ -115,6 +118,7 @@ export function SettingsBody() {
             <p className="font-mono text-xs text-muted-foreground">build 1.6.0+20261117.2317.6afaed5e8 · Tauri v2 template</p>
           </div>
         )}
+        {!searching && section === "About" && <UpdaterRows />}
       </div>
     </div>
   );

@@ -27,3 +27,4 @@ export * from "./stores/query";
 export * from "./stores/panels";
 export * from "./layout";
 export * from "./pairing";
+export * from "./update";

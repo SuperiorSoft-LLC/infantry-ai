@@ -8,6 +8,7 @@ import { ConnectScreen } from "./components/connect/connect-screen";
 import { runPerfScenario } from "./daemon/perf-scenario";
 import { PerfOverlay, perfOn } from "./components/layout/perf-overlay";
 import { promptsStore } from "./components/session/use-prompts";
+import { startUpdateCheck } from "./components/settings/desktop-install";
 import "@infantry/ui/styles.css";
 
 // The daemon store exists before the first render, so every component can read it synchronously.
@@ -26,4 +27,6 @@ void initDaemon().then(() => {
     </React.StrictMode>,
   );
   if (perfScenario) requestAnimationFrame(() => void runPerfScenario(perfScenario as string));
+  // RUST-UPD-1: an installed desktop checks its feed once at start and posts a notice; it never installs by itself.
+  else startUpdateCheck();
 });

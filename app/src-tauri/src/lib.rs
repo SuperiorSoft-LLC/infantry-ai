@@ -13,6 +13,10 @@ mod daemon;
 mod desktop;
 #[cfg(desktop)]
 mod local;
+#[cfg(desktop)]
+mod pairing;
+#[cfg(desktop)]
+mod update;
 #[cfg(mobile)]
 mod mobile;
 
