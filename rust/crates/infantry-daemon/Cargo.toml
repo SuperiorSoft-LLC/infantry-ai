@@ -18,7 +18,9 @@ path = "src/main.rs"
 
 [dependencies]
 infantry-protocol = { path = "../infantry-protocol" }
-infantry-runner = { path = "../infantry-runner" }
+infantry-harness = { path = "../infantry-harness" }
+infantry-harness-claude = { path = "../infantry-harness-claude" }
+infantry-runner-local = { path = "../infantry-runner-local" }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }
 serde = { version = "1", features = ["derive"] }

@@ -67,6 +67,7 @@ pub const LAYERS: &[(&str, Layer, u8)] = &[
     ("infantry-runner-link", Layer::Runner, 2),
     ("infantry-harness", Layer::Harness, 0),
     ("infantry-harness-codex", Layer::Harness, 1),
+    ("infantry-harness-claude", Layer::Harness, 1),
     ("infantry-orchestrator-api", Layer::Orchestration, 0),
     ("infantry-board-daemon", Layer::Plugin, 0),
     ("infantry-news-daemon", Layer::Plugin, 0),
@@ -95,9 +96,10 @@ pub const HARNESS_MODULE_NAMES: &[&str] = &["claude", "codex", "opencode", "gemi
 
 /// Known violations, each with the reason it is tolerated: `(crate, path inside the crate, reason)`.
 pub const ALLOWLIST: &[(&str, &str, &str)] = &[
-    // The Claude driver is harness code (L3) living in the runner (L2). It predates the layer
-    // map; a follow-up moves it into infantry-harness (or its own infantry-harness-claude).
-    ("infantry-runner", "src/claude", "Claude driver is harness code in the runner layer; a follow-up moves it to L3"),
+    // The old Claude driver (L3 code in L2). The daemon runs infantry-harness-claude (RUST-HARN-CLAUDE-1); only the Tauri
+    // app's local mode still uses this copy (it answers AskUserQuestion menus, which the harness contract has no event
+    // for yet). Removed when the app moves to infantry-harness-claude.
+    ("infantry-runner", "src/claude", "only the Tauri app's local mode still uses it; it moves to infantry-harness-claude"),
 ];
 
 /// The layer and tier of a crate, by name, then by location (`plugins/official/*` = plugin).

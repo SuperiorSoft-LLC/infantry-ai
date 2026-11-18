@@ -38,7 +38,7 @@ fn main() {
     if let Err(e) = std::fs::create_dir_all(&state_dir) {
         fail(format!("state dir {}: {e}", state_dir.display()));
     }
-    let provider = arg("--provider").or_else(|| auth::env("INFANTRY_PROVIDER")).unwrap_or_else(|| harness::claude::NAME.into());
+    let provider = arg("--provider").or_else(|| auth::env("INFANTRY_PROVIDER")).unwrap_or_else(|| harness::DEFAULT_PROVIDER.into());
     let harness: Arc<dyn harness::Harness> = match harness::by_name(provider.trim()) {
         Some(h) => Arc::from(h),
         None => fail(format!("no harness named `{provider}`")),
