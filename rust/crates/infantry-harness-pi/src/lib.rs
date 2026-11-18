@@ -61,6 +61,22 @@ impl Default for PiHarness {
     }
 }
 
+/// [`MCP_ENV`] for the plan's delivered stdio servers (`{"servers":[{"name","prefix","command","env"}]}`); None = none.
+pub fn plan_env(req: &LaunchRequest) -> Option<String> {
+    let servers: Vec<serde_json::Value> = req
+        .mcp
+        .delivered()
+        .filter_map(|s| match &s.transport {
+            infantry_harness::McpTransport::Stdio { command, env, .. } if !command.is_empty() => Some(serde_json::json!({
+                "name": s.name, "prefix": true, "command": command,
+                "env": env.iter().map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone()))).collect::<serde_json::Map<_, _>>(),
+            })),
+            _ => None,
+        })
+        .collect();
+    (!servers.is_empty()).then(|| serde_json::json!({ "servers": servers }).to_string())
+}
+
 fn has_env(req: &LaunchRequest, name: &str) -> bool {
     req.env.iter().any(|(k, v)| k == name && !v.is_empty()) || std::env::var(name).is_ok_and(|v| !v.is_empty())
 }
@@ -97,7 +113,9 @@ impl PiHarness {
         if let Some(r) = req.resume.as_deref().filter(|r| !r.trim().is_empty()) {
             a.extend(["--session".into(), r.into()]);
         }
-        let mut deny: Vec<String> = self.deny_mcp.iter().filter(|s| *s != "infantry").map(|s| format!("mcp__{s}__*")).collect();
+        let mut deny: Vec<String> =
+            self.deny_mcp.iter().chain(req.mcp.deny.iter()).filter(|s| *s != "infantry").map(|s| format!("mcp__{s}__*")).collect();
+        deny.dedup();
         deny.sort();
         if !deny.is_empty() {
             a.extend(["--exclude-tools".into(), deny.join(",")]);
@@ -236,7 +254,7 @@ impl Harness for PiHarness {
         if req.approval == ApprovalMode::AllowAll {
             names.push(WATCH);
         }
-        if has_env(req, MCP_ENV) {
+        if has_env(req, MCP_ENV) || plan_env(req).is_some() {
             names.push(MCP);
         }
         names.into_iter().map(|n| Asset { name: n.into(), contents: source(n).as_bytes().to_vec() }).collect()
@@ -256,6 +274,11 @@ impl Harness for PiHarness {
         spec.env = req.env.clone();
         spec.env.retain(|(k, _)| k != APPROVAL_ENV);
         spec.env.push((APPROVAL_ENV.into(), approval_value(req.approval).into()));
+        if !has_env(req, MCP_ENV) {
+            if let Some(v) = plan_env(req) {
+                spec.env.push((MCP_ENV.into(), v));
+            }
+        }
         spec.env_remove = req.env_remove.clone();
         Ok(LaunchPlan {
             spec,

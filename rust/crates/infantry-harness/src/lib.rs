@@ -134,6 +134,90 @@ pub struct LaunchRequest {
     /// The hook channel the driver opened on the runner ([`Capabilities::hook_channel`]); the harness wires its CLI's
     /// hooks to it.
     pub hooks: Option<HookTarget>,
+    /// The MCP servers the session gets (Kotlin `HarnessHost.mcpServers`): the harness delivers [`McpPlan::delivered`]
+    /// through its CLI's own config and turns [`McpPlan::deny`] off where the CLI loads the user's servers itself.
+    pub mcp: McpPlan,
+    /// The watched-runner launcher a harness hook rewrites shell commands to (Kotlin `HarnessHost.watchLauncher`);
+    /// None = the watch is off for this session.
+    pub watch_launcher: Option<String>,
+}
+
+/// The name of the daemon's own MCP server (`infantry mcp`), the infantry entry of every [`McpPlan`].
+pub const INFANTRY_MCP_SERVER: &str = "infantry";
+
+/// How an MCP server is reached. Secret values ([`McpTransport::Stdio::env`], [`McpTransport::Http::headers`]) are
+/// never logged: `Debug` prints their keys only.
+#[derive(Clone, PartialEq, Eq)]
+pub enum McpTransport {
+    /// A child process speaking MCP on stdin/stdout.
+    Stdio { command: Vec<String>, env: Vec<(String, String)>, working_dir: Option<String> },
+    /// A remote server over streamable HTTP.
+    Http { url: String, headers: Vec<(String, String)> },
+}
+
+impl std::fmt::Debug for McpTransport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let keys = |kv: &[(String, String)]| kv.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>();
+        match self {
+            McpTransport::Stdio { command, env, working_dir } => {
+                f.debug_struct("Stdio").field("command", command).field("env", &keys(env)).field("working_dir", working_dir).finish()
+            }
+            McpTransport::Http { url, headers } => f.debug_struct("Http").field("url", url).field("headers", &keys(headers)).finish(),
+        }
+    }
+}
+
+/// One MCP server, harness-neutral (Kotlin `McpServerSpec`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct McpServerSpec {
+    /// The key the agent sees: `mcp__<name>__*` / `<name>_*`.
+    pub name: String,
+    pub transport: McpTransport,
+    /// Where it came from (shown to the owner): `infantry`, a plugin id, `user`.
+    pub source: String,
+    /// The command or paths exist only on this machine: never sent to a remote runner.
+    pub local_only: bool,
+}
+
+/// The MCP servers one session gets: [`McpPlan::add`] the host delivers, [`McpPlan::deny`] the names turned off. A name
+/// in both is denied.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct McpPlan {
+    pub add: Vec<McpServerSpec>,
+    pub deny: Vec<String>,
+}
+
+impl McpPlan {
+    /// [`McpPlan::add`] without the denied names.
+    pub fn delivered(&self) -> impl Iterator<Item = &McpServerSpec> {
+        self.add.iter().filter(|s| !self.deny.contains(&s.name))
+    }
+
+    /// The delivered infantry entry, when it is a stdio server: (command, env).
+    pub fn infantry_stdio(&self) -> Option<(&[String], &[(String, String)])> {
+        self.delivered().find(|s| s.name == INFANTRY_MCP_SERVER).and_then(|s| match &s.transport {
+            McpTransport::Stdio { command, env, .. } if !command.is_empty() => Some((command.as_slice(), env.as_slice())),
+            _ => None,
+        })
+    }
+
+    /// The delivered servers in the common `mcpServers` JSON shape (claude `--mcp-config`):
+    /// `{"mcpServers": {name: {"command","args","env"} | {"type":"http","url","headers"}}}`.
+    pub fn mcp_servers_json(&self) -> serde_json::Value {
+        let mut servers = serde_json::Map::new();
+        for s in self.delivered() {
+            let obj = |kv: &[(String, String)]| kv.iter().map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone()))).collect::<serde_json::Map<_, _>>();
+            let v = match &s.transport {
+                McpTransport::Stdio { command, env, .. } if !command.is_empty() => {
+                    serde_json::json!({ "command": command[0], "args": &command[1..], "env": obj(env) })
+                }
+                McpTransport::Stdio { .. } => continue,
+                McpTransport::Http { url, headers } => serde_json::json!({ "type": "http", "url": url, "headers": obj(headers) }),
+            };
+            servers.insert(s.name.clone(), v);
+        }
+        serde_json::json!({ "mcpServers": servers })
+    }
 }
 
 /// Where a CLI's hooks report, on the runner's host.
@@ -159,6 +243,8 @@ impl LaunchRequest {
             env_remove: Vec::new(),
             staged: Vec::new(),
             hooks: None,
+            mcp: McpPlan::default(),
+            watch_launcher: None,
         }
     }
 

@@ -192,6 +192,8 @@ impl Worker {
         base.approval = ApprovalMode::AllowAll;
         base.resume = resume;
         base.env_remove = ENV_REMOVE.map(String::from).to_vec();
+        base.env = self.req.env.clone();
+        base.mcp = self.req.mcp.clone();
         let runner: Arc<dyn Runner> = self.runner.clone();
         HarnessDriver::new(self.harness.clone(), runner, base)
     }

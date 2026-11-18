@@ -211,6 +211,86 @@ impl Runner for RemoteRunner {
         Box::pin(async { Self::unsupported("hook_channel") })
     }
 
+    fn http(&self, req: HttpRequest) -> RunnerFuture<'_, mpsc::UnboundedReceiver<HttpEvent>> {
+        Box::pin(async move {
+            let h = self.hello().await?;
+            if !h.offers.iter().any(|o| o == OFFER_LOOPBACK_HTTP) {
+                return Self::unsupported("loopback-http");
+            }
+            let open = HttpOpenRequest { method: req.method, url: req.url, headers: req.headers, body: B64.encode(&req.body), timeout_ms: req.timeout_ms };
+            let a: HttpOpenAnswer = self.blocking(move |c| c.typed(wire::HTTP_OPEN, &open)).await?;
+            let sid = match (a.stream_id, a.refusal) {
+                (Some(id), None) => id,
+                (_, why) => {
+                    let why = why.unwrap_or_else(|| "the runner opened no stream".into());
+                    return Err(if a.error_type == "unsupported" { RunnerError::Unsupported(why) } else { RunnerError::Io(why) });
+                }
+            };
+            let (tx, rx) = mpsc::unbounded_channel();
+            let client = self.client.clone();
+            let wait = self.pull_wait;
+            std::thread::Builder::new()
+                .name("remote-runner-http".into())
+                .spawn(move || {
+                    let mut after = 0i64;
+                    'pull: loop {
+                        let req = FramesPullRequest { resume_from: BTreeMap::from([(sid.clone(), after)]), wait_ms: wait.as_millis() as i64, max: 0 };
+                        let batch = match client.typed_with::<_, FramesPullAnswer>(wire::FRAMES_PULL, &req, wait + Duration::from_secs(15)) {
+                            Ok(a) => a.frames,
+                            Err(e) => {
+                                let _ = tx.send(HttpEvent::Failed(format!("the runner link dropped: {e}")));
+                                break;
+                            }
+                        };
+                        for f in batch {
+                            after = after.max(f.sequence.unwrap_or(0));
+                            let ev = match f.r#type.as_str() {
+                                wire::HTTP_HEAD => serde_json::from_str::<HttpHeadWire>(&f.data).ok().map(|h| HttpEvent::Head { status: h.status, headers: h.headers }),
+                                wire::HTTP_BODY => B64.decode(f.data.as_bytes()).ok().map(HttpEvent::Body),
+                                wire::HTTP_END => Some(HttpEvent::End),
+                                wire::HTTP_FAILED => Some(HttpEvent::Failed(f.data)),
+                                _ => None,
+                            };
+                            let last = matches!(ev, Some(HttpEvent::End | HttpEvent::Failed(_)));
+                            if let Some(ev) = ev {
+                                if tx.send(ev).is_err() {
+                                    break 'pull;
+                                }
+                            }
+                            if last {
+                                break 'pull;
+                            }
+                        }
+                        if tx.is_closed() {
+                            break;
+                        }
+                    }
+                    let rm = RemoveRequest { session_id: sid };
+                    let _ = client.typed::<_, RemoveAnswer>(wire::REMOVE, &rm);
+                })
+                .map_err(disconnected)?;
+            Ok(rx)
+        })
+    }
+
+    fn stage_file<'a>(&'a self, name: &'a str, contents: &'a [u8]) -> RunnerFuture<'a, String> {
+        Box::pin(async move {
+            let h = self.hello().await?;
+            if !h.offers.iter().any(|o| o == OFFER_STAGED_FILES) {
+                return Self::unsupported("staged-files");
+            }
+            let req = StageFileRequest { name: name.to_string(), contents: B64.encode(contents) };
+            let a: StageFileAnswer = self.blocking(move |c| c.typed(wire::STAGE_FILE, &req)).await?;
+            match (a.path, a.refusal) {
+                (Some(p), None) => Ok(p),
+                (_, why) => {
+                    let why = why.unwrap_or_else(|| "the runner staged nothing".into());
+                    Err(if a.error_type == "unsupported" { RunnerError::Unsupported(why) } else { RunnerError::Io(why) })
+                }
+            }
+        })
+    }
+
     fn release<'a>(&'a self, id: &'a ProcId) -> RunnerFuture<'a, ()> {
         Box::pin(async move {
             let req = RemoveRequest { session_id: id.0.clone() };

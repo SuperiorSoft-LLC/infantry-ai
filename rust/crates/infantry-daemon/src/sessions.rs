@@ -189,6 +189,8 @@ pub struct Daemon {
     units: std::sync::OnceLock<Arc<dyn FrameUnits>>,
     /// The restart journal, the MCP bridges and the bound port (the `health` frame).
     pub health: Arc<crate::health::Health>,
+    /// What every agent process is told about this daemon (set once the port is bound).
+    launch: Mutex<crate::harness::launch::LaunchBase>,
 }
 
 fn encode(ty: &str, data: String, session: Option<&str>, seq: Option<i64>) -> String {
@@ -262,6 +264,7 @@ impl Daemon {
             observers: Mutex::new(Vec::new()),
             units: std::sync::OnceLock::new(),
             health: Arc::new(crate::health::Health::new(&cfg_dir)),
+            launch: Mutex::new(Default::default()),
         });
         d.refresh_held();
         Ok(d)
@@ -824,14 +827,22 @@ impl Daemon {
         }
     }
 
+    /// Sets what every agent process started from now on is told about this daemon.
+    pub fn set_launch(&self, base: crate::harness::launch::LaunchBase) {
+        *self.launch.lock().unwrap() = base;
+    }
+
     fn open(self: &Arc<Self>, e: &Entry) -> Result<Box<dyn HarnessSession>, String> {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let (env, mcp) = self.launch.lock().unwrap().session(&e.rec.id, e.rec.project_id.as_deref(), e.rec.role.as_deref());
         let req = OpenRequest {
             session_id: e.rec.id.clone(),
             cwd: PathBuf::from(&e.rec.working_dir),
             model: e.rec.model.clone(),
             effort: e.rec.effort.clone(),
             state_dir: self.cfg.state_dir.clone(),
+            env,
+            mcp,
         };
         let harness = self.harness_for(Some(&e.rec.provider)).ok_or_else(|| format!("no harness named `{}` on this daemon", e.rec.provider))?;
         let hs = harness.open(req, EventSink(tx))?;

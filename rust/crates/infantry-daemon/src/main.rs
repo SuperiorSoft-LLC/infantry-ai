@@ -97,6 +97,7 @@ fn main() {
         let bound = listener.local_addr().map(|a| a.port()).unwrap_or(port);
         let _ = std::fs::write(state_dir.join("daemon.port"), bound.to_string());
         daemon.health.started(bound, server::BUILD);
+        daemon.set_launch(infantry_daemon::harness::launch::LaunchBase::for_daemon(bound, &state_dir, token.as_deref(), &auth::env));
         println!("[infantry] listening on ws://{host}:{bound}/ws (health: http://{host}:{bound}/health)");
         println!(
             "{}",

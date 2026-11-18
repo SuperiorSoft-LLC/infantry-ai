@@ -66,6 +66,14 @@ pub trait Backend: Send + Sync + 'static {
     fn frames_pull(&self, _r: &FramesPullRequest, _wait: Duration, _max: usize) -> Option<FramesPullAnswer> {
         None
     }
+    /// `staged-files` on the runner's host.
+    fn stage_file(&self, _r: &StageFileRequest) -> StageFileAnswer {
+        StageFileAnswer { refusal: Some("this runner stages no files".into()), error_type: "unsupported".into(), ..Default::default() }
+    }
+    /// `loopback-http` on the runner's host: the stream id whose frames carry the response.
+    fn http_open(&self, _r: &HttpOpenRequest) -> HttpOpenAnswer {
+        HttpOpenAnswer { refusal: Some("this runner makes no loopback http requests".into()), error_type: "unsupported".into(), ..Default::default() }
+    }
 }
 
 /// A backend that only answers hello and health (the ping/pong runner).
@@ -273,6 +281,20 @@ impl LinkServer {
                     None => self.refuse(&seat, t, from, format!("{t} refused: {NOT_OFFERED} this runner offers (contract {CONTRACT})")),
                 }
             }
+            wire::STAGE_FILE => match decode::<StageFileRequest>(data) {
+                Some(r) => {
+                    let a = self.backend.stage_file(&r);
+                    self.ok(&seat, t, from, &a)
+                }
+                None => malformed(),
+            },
+            wire::HTTP_OPEN => match decode::<HttpOpenRequest>(data) {
+                Some(r) => {
+                    let a = self.backend.http_open(&r);
+                    self.ok(&seat, t, from, &a)
+                }
+                None => malformed(),
+            },
             _ => self.refuse(&seat, t, from, format!("{} refused: {NOT_OFFERED} this runner offers (contract {CONTRACT})", shown(t))),
         }
     }

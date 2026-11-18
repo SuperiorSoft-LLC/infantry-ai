@@ -86,6 +86,8 @@ impl OpenCodeHarness {
         let mut c = config::serve_config(req.approval, inherited.as_deref());
         if let Some((cmd, env)) = &self.mcp {
             c = config::merge_mcp(&c, cmd, env);
+        } else if let Some((cmd, env)) = req.mcp.infantry_stdio() {
+            c = config::merge_mcp(&c, cmd, env);
         }
         // STALL-2: the watch plugin under allow-all only (a rewrite must never widen what the session may run).
         if req.approval == ApprovalMode::AllowAll {

@@ -8,6 +8,7 @@
 //! `infantry-harness` crate (one agent CLI each) on the local runner. The registry is [`by_name`].
 
 pub mod driven;
+pub mod launch;
 pub mod stub;
 
 use std::path::PathBuf;
@@ -33,6 +34,10 @@ pub struct OpenRequest {
     pub effort: Option<String>,
     /// The daemon's state dir (per-session files go under it).
     pub state_dir: PathBuf,
+    /// The session env the agent process gets ([`launch::LaunchBase::session`]).
+    pub env: Vec<(String, String)>,
+    /// The MCP servers the agent gets (the infantry entry when the CLI is found).
+    pub mcp: infantry_harness::McpPlan,
 }
 
 /// One turn.

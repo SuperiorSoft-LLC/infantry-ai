@@ -157,6 +157,9 @@ impl ClaudeHarness {
             watch_url: hooks::watch_url(&req.env),
         });
         a.extend(["--settings".into(), hooks::settings(wiring.as_ref(), req.approval == ApprovalMode::AllowAll)]);
+        if req.mcp.delivered().next().is_some() {
+            a.extend(["--mcp-config".into(), req.mcp.mcp_servers_json().to_string()]);
+        }
         if self.strict_mcp {
             a.push("--strict-mcp-config".into());
         }

@@ -417,6 +417,72 @@ pub const CMD_STATUS: &str = "proc_status";
 /// The [`HelloAnswer::offers`] word of a runner that runs [`StartRequest::process`] starts.
 pub const OFFER_PROCESS: &str = "process";
 
+/// `staged-files` over the link: the runner writes a file in its own staging folder and answers its path.
+pub const STAGE_FILE: &str = "runner_link_stage_file";
+/// `loopback-http` over the link: the runner makes one request on its host's loopback; the response streams back as
+/// [`HTTP_HEAD`] / [`HTTP_BODY`] / [`HTTP_END`] / [`HTTP_FAILED`] frames on [`FRAMES_PULL`] under the answered stream id,
+/// which the caller then removes ([`REMOVE`]).
+pub const HTTP_OPEN: &str = "runner_link_http_open";
+pub const HTTP_HEAD: &str = "runner_http_head";
+pub const HTTP_BODY: &str = "runner_http_body";
+pub const HTTP_END: &str = "runner_http_end";
+pub const HTTP_FAILED: &str = "runner_http_failed";
+/// The offers words of a runner that answers [`STAGE_FILE`] and [`HTTP_OPEN`] (the Runner capability names).
+pub const OFFER_STAGED_FILES: &str = "staged-files";
+pub const OFFER_LOOPBACK_HTTP: &str = "loopback-http";
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StageFileRequest {
+    pub name: String,
+    /// Base64 contents.
+    pub contents: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StageFileAnswer {
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub refusal: Option<String>,
+    #[serde(default)]
+    pub error_type: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HttpOpenRequest {
+    pub method: String,
+    pub url: String,
+    #[serde(default)]
+    pub headers: Vec<(String, String)>,
+    /// Base64 body.
+    #[serde(default)]
+    pub body: String,
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HttpOpenAnswer {
+    #[serde(default)]
+    pub stream_id: Option<String>,
+    #[serde(default)]
+    pub refusal: Option<String>,
+    #[serde(default)]
+    pub error_type: String,
+}
+
+/// The [`HTTP_HEAD`] frame's data.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HttpHeadWire {
+    pub status: u16,
+    #[serde(default)]
+    pub headers: Vec<(String, String)>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

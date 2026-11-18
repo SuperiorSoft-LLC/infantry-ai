@@ -14,7 +14,7 @@ use crate::server::{Backend, RunnerInfo};
 use crate::wire::{self, *};
 use base64::Engine;
 use infantry_protocol::Envelope;
-use infantry_runner_api::{KillScope, ProcEvent, ProcId, Runner};
+use infantry_runner_api::{HttpEvent, HttpRequest, KillScope, ProcEvent, ProcId, Runner};
 use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -39,6 +39,8 @@ pub struct ProcessBackend {
 }
 
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
+/// The id prefix of a link http stream (never a runner process id).
+const HTTP_STREAM_PREFIX: &str = "http-";
 
 impl ProcessBackend {
     pub fn new(runner: Arc<dyn Runner>) -> Self {
@@ -60,7 +62,11 @@ impl ProcessBackend {
 
 impl Backend for ProcessBackend {
     fn info(&self) -> RunnerInfo {
-        RunnerInfo { os: std::env::consts::OS.into(), offers: vec![OFFER_PROCESS.into()], ..Default::default() }
+        RunnerInfo {
+            os: std::env::consts::OS.into(),
+            offers: vec![OFFER_PROCESS.into(), OFFER_STAGED_FILES.into(), OFFER_LOOPBACK_HTTP.into()],
+            ..Default::default()
+        }
     }
 
     fn health(&self) -> Option<HealthAnswer> {
@@ -123,7 +129,8 @@ impl Backend for ProcessBackend {
 
     fn remove(&self, session_id: &str) -> bool {
         let id = ProcId(session_id.to_string());
-        let ok = self.rt.block_on(self.runner.release(&id)).is_ok();
+        // An http stream is the link's own, not a runner process: forgetting its frames is the whole release.
+        let ok = session_id.starts_with(HTTP_STREAM_PREFIX) || self.rt.block_on(self.runner.release(&id)).is_ok();
         let mut s = self.shared.0.lock().unwrap();
         s.sessions.remove(session_id);
         s.events.retain(|e| e.session_id != session_id);
@@ -156,6 +163,63 @@ impl Backend for ProcessBackend {
         } else {
             s.events.iter().filter(|e| e.seq > r.since_seq).cloned().collect()
         }
+    }
+
+    fn stage_file(&self, r: &StageFileRequest) -> StageFileAnswer {
+        let Ok(bytes) = B64.decode(r.contents.as_bytes()) else {
+            return StageFileAnswer { refusal: Some("contents is not base64".into()), error_type: "io".into(), ..Default::default() };
+        };
+        match self.rt.block_on(self.runner.stage_file(&r.name, &bytes)) {
+            Ok(path) => StageFileAnswer { path: Some(path), ..Default::default() },
+            Err(e) => StageFileAnswer { refusal: Some(e.to_string()), error_type: error_type(&e).into(), path: None },
+        }
+    }
+
+    fn http_open(&self, r: &HttpOpenRequest) -> HttpOpenAnswer {
+        let Ok(body) = B64.decode(r.body.as_bytes()) else {
+            return HttpOpenAnswer { refusal: Some("body is not base64".into()), error_type: "io".into(), ..Default::default() };
+        };
+        let mut req = HttpRequest::new(r.method.clone(), r.url.clone());
+        req.headers = r.headers.clone();
+        req.body = body;
+        req.timeout_ms = r.timeout_ms;
+        let mut rx = match self.rt.block_on(self.runner.http(req)) {
+            Ok(rx) => rx,
+            Err(e) => return HttpOpenAnswer { refusal: Some(e.to_string()), error_type: error_type(&e).into(), stream_id: None },
+        };
+        let sid = format!("{HTTP_STREAM_PREFIX}{}", uuid::Uuid::new_v4());
+        self.shared.0.lock().unwrap().sessions.insert(sid.clone(), Session::default());
+        let (shared, id) = (self.shared.clone(), sid.clone());
+        self.rt.spawn(async move {
+            let mut ended = false;
+            while let Some(ev) = rx.recv().await {
+                match ev {
+                    HttpEvent::Head { status, headers } => {
+                        Self::push(&shared, &id, wire::HTTP_HEAD, serde_json::to_string(&HttpHeadWire { status, headers }).unwrap_or_default())
+                    }
+                    HttpEvent::Body(b) => Self::push(&shared, &id, wire::HTTP_BODY, B64.encode(b)),
+                    HttpEvent::End => {
+                        Self::push(&shared, &id, wire::HTTP_END, String::new());
+                        ended = true;
+                    }
+                    HttpEvent::Failed(why) => {
+                        Self::push(&shared, &id, wire::HTTP_FAILED, why);
+                        ended = true;
+                    }
+                    _ => {}
+                }
+                if ended {
+                    break;
+                }
+            }
+            if !ended {
+                Self::push(&shared, &id, wire::HTTP_FAILED, "the runner's http stream closed without an end".into());
+            }
+            if let Some(x) = shared.0.lock().unwrap().sessions.get_mut(&id) {
+                x.exited = Some(0);
+            }
+        });
+        HttpOpenAnswer { stream_id: Some(sid), ..Default::default() }
     }
 
     fn frames_pull(&self, r: &FramesPullRequest, wait: Duration, max: usize) -> Option<FramesPullAnswer> {
