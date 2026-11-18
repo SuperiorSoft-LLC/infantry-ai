@@ -8,19 +8,32 @@ use infantry_core::bus::EventBus;
 use infantry_orchestrator_api::{
     BoardAnswer, BoxFuture, Comment, CommentAdd, CommentAuthor, CommentQuery, DoneReport, Epic, EpicBaseRequest, EpicSave, Limit,
     NotifyEdit, OrchError, OrchResult, Orchestrator, Ticket, TicketAnswer, TicketAssign, TicketLinkRequest, TicketListQuery,
-    TicketMove, TicketReorder, TicketSave, TicketUnassign,
+    TicketMove, TicketReorder, TicketSave, TicketUnassign, AgentQueueRequest, AgentQueueState, DoneAnswer, StartNextRequest,
+    StartOrigin, TicketDone, TicketStartRequest,
 };
 
 use crate::board::Board;
+use crate::dispatch::Dispatcher;
 
 pub struct LocalOrchestrator {
     board: Arc<Board>,
     bus: EventBus,
+    work: Option<Arc<Dispatcher>>,
 }
 
 impl LocalOrchestrator {
+    /// The board half only: the work half answers Unsupported.
     pub fn new(board: Arc<Board>, bus: EventBus) -> LocalOrchestrator {
-        LocalOrchestrator { board, bus }
+        LocalOrchestrator { board, bus, work: None }
+    }
+
+    /// Both halves: starts, queues and the done protocol run through `work`.
+    pub fn with_dispatcher(work: Arc<Dispatcher>, bus: EventBus) -> LocalOrchestrator {
+        LocalOrchestrator { board: work.board().clone(), bus, work: Some(work) }
+    }
+
+    fn work(&self, what: &str) -> OrchResult<&Arc<Dispatcher>> {
+        self.work.as_ref().ok_or_else(|| OrchError::Unsupported(format!("{what} needs the work half (no session launcher here)")))
     }
 
     fn publish(&self) -> impl Fn(infantry_protocol::Envelope) + '_ {
@@ -39,11 +52,6 @@ pub fn emit_commented(bus: &EventBus, c: &Comment) {
     );
 }
 
-fn not_yet<T: Send + 'static>(what: &str) -> BoxFuture<'static, OrchResult<T>> {
-    let m = format!("{what} is not built in the Rust board yet");
-    Box::pin(async move { Err(OrchError::Unsupported(m)) })
-}
-
 impl Orchestrator for LocalOrchestrator {
     fn tickets(&self, filter: TicketListQuery) -> BoxFuture<'_, OrchResult<Vec<Ticket>>> {
         Box::pin(async move { self.board.list(filter.project_id.as_deref(), filter.epic_id.as_deref()) })
@@ -58,7 +66,12 @@ impl Orchestrator for LocalOrchestrator {
     }
 
     fn move_lane(&self, request: TicketMove) -> BoxFuture<'_, OrchResult<TicketAnswer>> {
-        Box::pin(async move { self.board.move_lane(request, &self.publish()) })
+        Box::pin(async move {
+            match &self.work {
+                Some(w) => w.move_lane(request, None),
+                None => self.board.move_lane(request, &self.publish()),
+            }
+        })
     }
 
     fn delete(&self, id: String) -> BoxFuture<'_, OrchResult<BoardAnswer>> {
@@ -113,19 +126,35 @@ impl Orchestrator for LocalOrchestrator {
         Box::pin(async move { self.board.notify_edit(request) })
     }
 
-    fn assign(&self, _request: TicketAssign) -> BoxFuture<'_, OrchResult<TicketAnswer>> {
-        not_yet("ticket_assign (it starts or queues a worker)")
+    fn assign(&self, request: TicketAssign) -> BoxFuture<'_, OrchResult<TicketAnswer>> {
+        Box::pin(async move { self.work("ticket_assign")?.assign(&request) })
     }
 
-    fn unassign(&self, _request: TicketUnassign) -> BoxFuture<'_, OrchResult<TicketAnswer>> {
-        not_yet("ticket_unassign (it ends a worker)")
+    fn unassign(&self, request: TicketUnassign) -> BoxFuture<'_, OrchResult<TicketAnswer>> {
+        Box::pin(async move { self.work("ticket_unassign")?.unassign(&request) })
     }
 
-    fn spawn_limit(&self, _project_id: Option<String>) -> BoxFuture<'_, OrchResult<Limit>> {
-        not_yet("spawn_limit (lane caps)")
+    fn spawn_limit(&self, project_id: Option<String>) -> BoxFuture<'_, OrchResult<Limit>> {
+        Box::pin(async move { self.work("spawn_limit")?.spawn_limit(project_id.as_deref()) })
     }
 
-    fn on_done(&self, _report: DoneReport) -> BoxFuture<'_, OrchResult<()>> {
-        not_yet("on_done (the done protocol)")
+    fn on_done(&self, report: DoneReport) -> BoxFuture<'_, OrchResult<()>> {
+        Box::pin(async move { self.work("on_done")?.on_done(&report) })
+    }
+
+    fn start(&self, request: TicketStartRequest) -> BoxFuture<'_, OrchResult<TicketAnswer>> {
+        Box::pin(async move { self.work("ticket_start")?.start(&request.id, StartOrigin::Move, request.started_by.as_deref()) })
+    }
+
+    fn start_next(&self, request: StartNextRequest) -> BoxFuture<'_, OrchResult<TicketAnswer>> {
+        Box::pin(async move { self.work("ticket_start_next")?.start_next(&request) })
+    }
+
+    fn agent_queue(&self, request: AgentQueueRequest) -> BoxFuture<'_, OrchResult<AgentQueueState>> {
+        Box::pin(async move { self.work("agent_queue")?.agent_queue(&request) })
+    }
+
+    fn done(&self, request: TicketDone) -> BoxFuture<'_, OrchResult<DoneAnswer>> {
+        Box::pin(async move { self.work("ticket_done")?.done(&request) })
     }
 }

@@ -198,6 +198,61 @@ impl Board {
         TicketAnswer { ticket, pushed: o.changed.iter().any(|i| i == primary) }
     }
 
+    /// The work half's one write path: under the board lock, `op` in one transaction (it may write run rows on the
+    /// connection), then the pushes, the `primary` ticket first and carrying `start`.
+    pub(crate) fn apply(
+        &self,
+        primary: &str,
+        start: Option<infantry_orchestrator_api::dto::TicketStart>,
+        op: impl FnOnce(&mut Snapshot, &Connection) -> rules::Rule<()>,
+        publish: &dyn Fn(Envelope),
+    ) -> Result<TicketAnswer, OrchError> {
+        let _g = self.guard();
+        let mut o = self.commit(op)?;
+        if let Some(t) = o.board.iter_mut().find(|t| t.id == primary) {
+            t.start = start.clone();
+        }
+        if start.is_some() && !o.changed.iter().any(|c| c == primary) {
+            // A start answer always goes to every client: the card shows why it did (not) start.
+            o.changed.insert(0, primary.to_string());
+        }
+        Ok(self.answer(primary, o, publish))
+    }
+
+    /// Every row, link and run, read in one transaction (no board lock: a plan re-checks at commit).
+    pub(crate) fn rows(&self) -> Result<(HashMap<String, TicketRow>, Vec<store::LinkRow>, Vec<store::RunRow>), OrchError> {
+        let (rows, links, runs) = self
+            .db
+            .read(|c| {
+                let tx = c.unchecked_transaction()?;
+                let out = (store::all_tickets(&tx)?, store::all_links(&tx)?, store::all_runs(&tx)?);
+                tx.finish()?;
+                Ok(out)
+            })
+            .map_err(DbErrorWrap)?;
+        Ok((rows.into_iter().map(|r| (r.id.clone(), r)).collect(), links, runs))
+    }
+
+    /// One ticket's view with `start` set (a refusal answer: nothing changed, nothing pushed).
+    pub(crate) fn view_with_start(&self, id: &str, start: infantry_orchestrator_api::dto::TicketStart) -> Result<Ticket, OrchError> {
+        let mut t = self.get(id)?;
+        t.start = Some(start);
+        Ok(t)
+    }
+
+    /// Ends a run outside any board operation (a worker's exit report).
+    pub(crate) fn finish_run(&self, ticket_id: &str, session_id: &str, outcome: &str, detail: &str) -> Result<bool, OrchError> {
+        let now = self.env.now_ms();
+        let _g = self.guard();
+        self.db
+            .write(|c| store::finish_run(c, ticket_id, session_id, now, outcome, detail))
+            .map_err(|e| failed(e))
+    }
+
+    pub(crate) fn env(&self) -> &Arc<dyn BoardEnv> {
+        &self.env
+    }
+
     fn board_answer(&self, o: Outcome, publish: &dyn Fn(Envelope)) -> BoardAnswer {
         if o.changed.is_empty() && o.deleted.is_empty() {
             return BoardAnswer { tickets: o.board, pushed: false };

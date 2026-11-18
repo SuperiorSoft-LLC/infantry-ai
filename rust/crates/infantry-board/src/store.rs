@@ -345,3 +345,40 @@ pub fn unknown_skills(c: &Connection, ids: &[String]) -> rusqlite::Result<Vec<St
 pub fn setting(c: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
     c.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)).optional()
 }
+
+/// Records a run's start (idempotent per ticket and session).
+pub fn insert_run(c: &Connection, ticket_id: &str, session_id: &str, started_at: i64) -> rusqlite::Result<()> {
+    c.prepare_cached("INSERT OR IGNORE INTO ticket_runs(ticket_id, session_id, started_at) VALUES (?1, ?2, ?3)")?
+        .execute(params![ticket_id, session_id, started_at])?;
+    Ok(())
+}
+
+/// Ends a run that has not ended yet; false when there is no such open run.
+pub fn finish_run(c: &Connection, ticket_id: &str, session_id: &str, ended_at: i64, outcome: &str, detail: &str) -> rusqlite::Result<bool> {
+    let n = c
+        .prepare_cached(
+            "UPDATE ticket_runs SET ended_at = ?3, outcome = ?4, detail = ?5 WHERE ticket_id = ?1 AND session_id = ?2 AND ended_at IS NULL",
+        )?
+        .execute(params![ticket_id, session_id, ended_at, outcome, detail])?;
+    Ok(n > 0)
+}
+
+/// One ticket's runs, oldest first.
+pub fn runs_of(c: &Connection, ticket_id: &str) -> rusqlite::Result<Vec<RunRow>> {
+    let mut st = c.prepare_cached(
+        "SELECT ticket_id, session_id, started_at, ended_at, outcome, detail FROM ticket_runs WHERE ticket_id = ?1 ORDER BY started_at ASC, session_id ASC",
+    )?;
+    let rows = st
+        .query_map([ticket_id], |r| {
+            Ok(RunRow {
+                ticket_id: r.get(0)?,
+                session_id: r.get(1)?,
+                started_at: r.get(2)?,
+                ended_at: r.get(3)?,
+                outcome: r.get(4)?,
+                detail: r.get(5)?,
+            })
+        })?
+        .collect();
+    rows
+}

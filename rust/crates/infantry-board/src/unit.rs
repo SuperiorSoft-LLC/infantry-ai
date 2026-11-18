@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-//! The board's [`FrameUnit`]: `ticket_list`, `ticket_get`, `ticket_save`, `ticket_move`, `ticket_delete`.
+//! The board's [`FrameUnit`]: `ticket_list`, `ticket_get`, `ticket_save`, `ticket_move`, `ticket_delete`, and (with a
+//! [`Dispatcher`]) the work frames `ticket_start`, `ticket_start_next`, `ticket_assign`, `ticket_unassign`, `agent_queue`,
+//! `ticket_done`; a `ticket_move` into in_progress is then a start.
 //!
 //! Wire rules (Kotlin `BoardFrames.kt`): a change is pushed to every client on the bus (`ticket` per
 //! changed ticket, the requested one first; `tickets` after a delete). The requester gets a direct
@@ -12,10 +14,13 @@ use infantry_core::frames::{FrameCtx, FrameUnit, Refusal};
 use infantry_orchestrator_api::dto::{
     decode_strict, Epic, EpicBaseRequest, EpicSave, TicketLinkRequest, TicketListQuery, TicketMove, TicketReorder, TicketSave,
 };
-use infantry_orchestrator_api::OrchError;
+use infantry_orchestrator_api::{
+    AgentQueueRequest, OrchError, StartNextRequest, StartOrigin, TicketAssign, TicketDone, TicketStartRequest, TicketUnassign,
+};
 use infantry_protocol::Envelope;
 
 use crate::board::{ticket_envelope, tickets_envelope, Board};
+use crate::dispatch::Dispatcher;
 
 pub const FRAMES: &[&str] = &[
     "ticket_list",
@@ -31,13 +36,39 @@ pub const FRAMES: &[&str] = &[
     "epic_base",
 ];
 
+/// Every frame of a unit with the work half ([`FRAMES`] plus the work frames).
+pub const ALL_FRAMES: &[&str] = &[
+    "ticket_list",
+    "ticket_get",
+    "ticket_save",
+    "ticket_move",
+    "ticket_delete",
+    "ticket_link",
+    "ticket_unlink",
+    "ticket_reorder",
+    "epic_save",
+    "epic_list",
+    "epic_base",
+    "ticket_start",
+    "ticket_start_next",
+    "ticket_assign",
+    "ticket_unassign",
+    "agent_queue",
+    "ticket_done",
+];
+
 pub struct BoardUnit {
     board: Arc<Board>,
+    work: Option<Arc<Dispatcher>>,
 }
 
 impl BoardUnit {
     pub fn new(board: Arc<Board>) -> BoardUnit {
-        BoardUnit { board }
+        BoardUnit { board, work: None }
+    }
+
+    pub fn with_dispatcher(work: Arc<Dispatcher>) -> BoardUnit {
+        BoardUnit { board: work.board().clone(), work: Some(work) }
     }
 }
 
@@ -60,7 +91,11 @@ impl FrameUnit for BoardUnit {
     }
 
     fn frames(&self) -> &'static [&'static str] {
-        FRAMES
+        if self.work.is_some() {
+            ALL_FRAMES
+        } else {
+            FRAMES
+        }
     }
 
     fn handle(&self, env: &Envelope, ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
@@ -95,7 +130,34 @@ impl FrameUnit for BoardUnit {
             }
             "ticket_move" => {
                 let req: TicketMove = decode_strict(&env.data, "ticket_move payload").map_err(|m| r(OrchError::Refused(m)))?;
-                let a = self.board.move_lane(req, &publish).map_err(r)?;
+                let a = match &self.work {
+                    Some(w) => w.move_lane(req, None),
+                    None => self.board.move_lane(req, &publish),
+                }
+                .map_err(r)?;
+                Ok(answer(a.pushed, ticket_envelope(&a.ticket)))
+            }
+            "ticket_start" | "ticket_start_next" | "ticket_assign" | "ticket_unassign" | "agent_queue" | "ticket_done" => {
+                let Some(w) = &self.work else { return Err(r(OrchError::Unsupported(format!("{frame} needs the work half")))) };
+                let bad = |m: String| r(OrchError::Refused(m));
+                let what = format!("{frame} payload");
+                let a = match frame {
+                    "ticket_start" => {
+                        let q: TicketStartRequest = decode_strict(&env.data, &what).map_err(bad)?;
+                        w.start(&q.id, StartOrigin::Move, q.started_by.as_deref()).map_err(r)?
+                    }
+                    "ticket_start_next" => w.start_next(&decode_strict::<StartNextRequest>(&env.data, &what).map_err(bad)?).map_err(r)?,
+                    "ticket_assign" => w.assign(&decode_strict::<TicketAssign>(&env.data, &what).map_err(bad)?).map_err(r)?,
+                    "ticket_unassign" => w.unassign(&decode_strict::<TicketUnassign>(&env.data, &what).map_err(bad)?).map_err(r)?,
+                    "agent_queue" => {
+                        let s = w.agent_queue(&decode_strict::<AgentQueueRequest>(&env.data, &what).map_err(bad)?).map_err(r)?;
+                        return Ok(answer(false, Envelope::new("agent_queue_state", serde_json::to_string(&s).expect("queue json"))));
+                    }
+                    _ => {
+                        let d = w.done(&decode_strict::<TicketDone>(&env.data, &what).map_err(bad)?).map_err(r)?;
+                        return Ok(answer(true, ticket_envelope(&d.ticket)));
+                    }
+                };
                 Ok(answer(a.pushed, ticket_envelope(&a.ticket)))
             }
             "ticket_delete" => {
