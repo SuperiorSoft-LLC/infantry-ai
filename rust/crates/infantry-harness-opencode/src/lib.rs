@@ -106,6 +106,14 @@ impl OpenCodeHarness {
 }
 
 impl Harness for OpenCodeHarness {
+    fn commands(&self) -> Vec<infantry_harness::HarnessCommand> {
+        use infantry_harness::{CommandAction as A, HarnessCommand as C};
+        vec![
+            C::new("model", "Switch the model for the next turn", A::SetModel).argument("<provider/model>"),
+            C::new("compact", "Compact the conversation (opencode's own /compact)", A::Native).native("/compact"),
+        ]
+    }
+
     fn id(&self) -> &str {
         ID
     }

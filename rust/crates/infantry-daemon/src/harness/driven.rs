@@ -40,6 +40,10 @@ impl Harness for Driven {
         self.harness.id()
     }
 
+    fn commands(&self) -> Vec<infantry_harness::HarnessCommand> {
+        self.harness.commands()
+    }
+
     fn capabilities(&self) -> Capabilities {
         let c = self.harness.capabilities();
         Capabilities {

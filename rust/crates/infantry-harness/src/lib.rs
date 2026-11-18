@@ -449,4 +449,102 @@ pub trait Harness: Send + Sync {
         Vec::new()
     }
     fn launch(&self, req: &LaunchRequest) -> Result<LaunchPlan, LaunchError>;
+    /// The `/` commands a client offers while the user types (CP-4); none by default.
+    fn commands(&self) -> Vec<HarnessCommand> {
+        Vec::new()
+    }
+}
+
+/// What a `/` command does: the daemon knows these three, never a vendor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandAction {
+    SetModel,
+    SetEffort,
+    Native,
+}
+
+impl CommandAction {
+    pub fn wire(self) -> &'static str {
+        match self {
+            CommandAction::SetModel => "SET_MODEL",
+            CommandAction::SetEffort => "SET_EFFORT",
+            CommandAction::Native => "NATIVE",
+        }
+    }
+}
+
+/// One `/` command: `name` a bare word, `argument` a hint, `values` the accepted (effort) or suggested (model) values,
+/// `native` the text the harness gets for [`CommandAction::Native`] only.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HarnessCommand {
+    pub name: String,
+    pub description: String,
+    pub action: CommandAction,
+    pub argument: Option<String>,
+    pub values: Vec<String>,
+    pub native: Option<String>,
+}
+
+impl HarnessCommand {
+    pub fn new(name: &str, description: &str, action: CommandAction) -> Self {
+        HarnessCommand { name: name.into(), description: description.into(), action, argument: None, values: Vec::new(), native: None }
+    }
+    pub fn argument(mut self, a: &str) -> Self {
+        self.argument = Some(a.into());
+        self
+    }
+    pub fn values(mut self, v: &[&str]) -> Self {
+        self.values = v.iter().map(|s| s.to_string()).collect();
+        self
+    }
+    pub fn native(mut self, n: &str) -> Self {
+        self.native = Some(n.into());
+        self
+    }
+    /// The wire shape (Kotlin `HarnessCommand`).
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "name": self.name, "description": self.description, "action": self.action.wire(),
+            "argument": self.argument, "values": self.values, "native": self.native,
+        })
+    }
+}
+
+/// More values than this are never sent in one answer: a picker narrows them with the typed prefix.
+pub const MAX_COMMAND_VALUES: usize = 50;
+
+/// The catalog entries matching `typed` (the text after the slash; a leading `/` is tolerated). Without a space it is a
+/// name prefix and the matches carry no values; with one it names ONE command and the rest narrows its values (a model
+/// by any part of its id, others by prefix). Case is ignored.
+pub fn complete_commands(catalog: &[HarnessCommand], typed: &str) -> Vec<HarnessCommand> {
+    let body = typed.trim_start();
+    let body = body.strip_prefix('/').unwrap_or(body);
+    let Some(i) = body.find(char::is_whitespace) else {
+        let p = body.to_lowercase();
+        return catalog.iter().filter(|c| c.name.to_lowercase().starts_with(&p)).map(|c| HarnessCommand { values: Vec::new(), ..c.clone() }).collect();
+    };
+    let (name, args) = (&body[..i], body[i..].trim().to_lowercase());
+    let Some(c) = catalog.iter().find(|c| c.name.eq_ignore_ascii_case(name)) else { return Vec::new() };
+    let model = c.action == CommandAction::SetModel;
+    let values = c.values.iter().filter(|v| if model { v.to_lowercase().contains(&args) } else { v.to_lowercase().starts_with(&args) }).take(MAX_COMMAND_VALUES).cloned().collect();
+    vec![HarnessCommand { values, ..c.clone() }]
+}
+
+#[cfg(test)]
+mod command_tests {
+    use super::*;
+
+    #[test]
+    fn names_complete_without_values_and_a_named_command_narrows_its_values() {
+        let cat = vec![
+            HarnessCommand::new("model", "m", CommandAction::SetModel).values(&["claude-opus-5-5", "claude-sonnet-5-5"]),
+            HarnessCommand::new("effort", "e", CommandAction::SetEffort).values(&["low", "medium", "max"]),
+        ];
+        let names = complete_commands(&cat, "/M");
+        assert_eq!((names.len(), names[0].values.len()), (1, 0));
+        assert_eq!(complete_commands(&cat, "model son")[0].values, vec!["claude-sonnet-5-5"]);
+        assert_eq!(complete_commands(&cat, "effort m")[0].values, vec!["medium", "max"]);
+        assert!(complete_commands(&cat, "nope x").is_empty());
+        assert_eq!(cat[1].to_json()["action"], "SET_EFFORT");
+    }
 }

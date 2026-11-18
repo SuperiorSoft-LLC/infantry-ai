@@ -46,6 +46,7 @@ pub fn owns(ty: &str) -> bool {
             | pf::SESSION_SWAP
             | pf::SESSION_STATS_GET
             | pf::SESSION_MCP_RECONNECT
+            | pf::COMMAND_CATALOG
     )
 }
 
@@ -658,6 +659,12 @@ impl Daemon {
                     Err(m) => vec![encode_req(wire::ERROR, format!("session_swap refused: {m}"), sid.as_deref(), None, req.as_deref())],
                 };
             }
+            pf::COMMAND_CATALOG => {
+                return vec![match self.command_catalog(&env.data, sid.as_deref()) {
+                    Ok(body) => encode_req(pf::COMMAND_CATALOG, body, sid.as_deref(), None, req.as_deref()),
+                    Err(m) => encode_req(wire::ERROR, format!("command_catalog refused: {m}"), sid.as_deref(), None, req.as_deref()),
+                }];
+            }
             pf::SESSION_MCP_RECONNECT => {
                 let v: serde_json::Value = serde_json::from_str(&env.data).unwrap_or(serde_json::Value::Null);
                 let s = v["sessionId"].as_str().map(String::from).or(sid.clone()).unwrap_or_default();
@@ -863,6 +870,24 @@ impl Daemon {
         e.rec.queued.insert(at, item);
         self.push(&mut e);
         Err(format!("queue_force refused: the {provider} harness could not take the message mid-turn; it stays queued for the next turn"))
+    }
+
+    /// CP-4 `command_catalog` `{provider?, prefix?}` (on a session or not): the provider's `/` commands matching the prefix.
+    fn command_catalog(&self, data: &str, sid: Option<&str>) -> Result<String, String> {
+        let d: serde_json::Value = if data.trim().is_empty() { serde_json::json!({}) } else { serde_json::from_str(data).map_err(|_| "payload must be a JSON object".to_string())? };
+        let o = d.as_object().ok_or("payload must be a JSON object")?;
+        if let Some(k) = o.keys().find(|k| *k != "provider" && *k != "prefix") {
+            return Err(format!("unknown field '{}'", k.chars().take(40).collect::<String>()));
+        }
+        let session_provider = match sid {
+            Some(id) => Some(self.find(id).ok_or_else(|| format!("unknown session '{id}'"))?.lock().unwrap().rec.provider.clone()),
+            None => None,
+        };
+        let provider = o.get("provider").and_then(|v| v.as_str()).map(str::trim).filter(|p| !p.is_empty()).map(String::from).or(session_provider).unwrap_or_else(|| self.harness.name().to_string());
+        let h = self.harness_for(Some(&provider)).ok_or_else(|| format!("unknown provider '{provider}'"))?;
+        let prefix = o.get("prefix").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let commands: Vec<serde_json::Value> = infantry_harness::complete_commands(&h.commands(), &prefix).iter().map(|c| c.to_json()).collect();
+        Ok(serde_json::json!({ "provider": provider, "prefix": prefix, "commands": commands }).to_string())
     }
 
     /// `session_mcp_reconnect` `{sessionId}`: asks the CLI to reconnect the session's own MCP server.

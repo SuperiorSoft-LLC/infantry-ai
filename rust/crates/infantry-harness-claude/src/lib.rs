@@ -189,6 +189,15 @@ pub fn config_dir(probe: &dyn Probe) -> Option<PathBuf> {
 }
 
 impl Harness for ClaudeHarness {
+    fn commands(&self) -> Vec<infantry_harness::HarnessCommand> {
+        use infantry_harness::{CommandAction as A, HarnessCommand as C};
+        vec![
+            C::new("model", "Switch the model for the next turn", A::SetModel).argument("<model>"),
+            C::new("effort", "Set the reasoning effort for the next turn", A::SetEffort).argument("<level>").values(&["low", "medium", "high", "xhigh", "max"]),
+            C::new("compact", "Compact the conversation (the harness's own compaction)", A::Native).native("/compact"),
+        ]
+    }
+
     fn id(&self) -> &str {
         ID
     }

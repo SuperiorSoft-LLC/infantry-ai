@@ -136,6 +136,10 @@ pub trait Harness: Send + Sync {
     fn name(&self) -> &str;
     fn capabilities(&self) -> Capabilities;
     fn open(&self, req: OpenRequest, sink: EventSink) -> Result<Box<dyn HarnessSession>, String>;
+    /// The provider's `/` commands (`command_catalog`).
+    fn commands(&self) -> Vec<infantry_harness::HarnessCommand> {
+        Vec::new()
+    }
 }
 
 /// One daemon session's harness side. Methods never block for long; output arrives through the [`EventSink`].
