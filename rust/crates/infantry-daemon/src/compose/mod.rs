@@ -226,11 +226,30 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         settings: settings::SettingsUnit { db: db.clone() },
         handle: handle.clone(),
     }));
-    let notify = Arc::new(NotifyService::new(state_dir.to_path_buf(), Arc::new(NotifySettings::default), clock(), Arc::new(adapters::minute_of_day)));
+    // The `notify.*` settings (Infantry_Notify module.json), read on every request so a change applies at once.
+    let notify_settings = {
+        let s = settings::SettingsUnit { db: db.clone() };
+        move || {
+            let d = NotifySettings::default();
+            let txt = |k: &str| s.app(k).map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string()));
+            let num = |k: &str| s.app(k).and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|x| x.trim().parse().ok())));
+            NotifySettings {
+                enabled: s.app("notify.enabled").map(|v| v != serde_json::json!(false) && v != serde_json::json!("false")).unwrap_or(d.enabled),
+                quiet_hours: txt("notify.quietHours").unwrap_or(d.quiet_hours),
+                default_sound: txt("notify.defaultSound").unwrap_or(d.default_sound),
+                milestone_sound: txt("notify.milestoneSound").unwrap_or(d.milestone_sound),
+                queue_max_age_minutes: num("notify.queueMaxAgeMinutes").filter(|n| *n >= 0).unwrap_or(d.queue_max_age_minutes),
+                queue_max: num("notify.queueMax").filter(|n| *n >= 0).map(|n| n as usize).unwrap_or(d.queue_max),
+                max_sound_bytes: num("notify.maxSoundBytes").filter(|n| *n >= 0).map(|n| n as usize).unwrap_or(d.max_sound_bytes),
+            }
+        }
+    };
+    let notify = Arc::new(NotifyService::new(state_dir.to_path_buf(), Arc::new(notify_settings), clock(), Arc::new(adapters::minute_of_day)));
     {
         let b = bus.clone();
+        // Kotlin NOTIFY-1: devices listen for `notify_push` (the request frame `notify` only answers its sender).
         notify.set_push(move |m| {
-            b.publish(Envelope::new(infantry_protocol::frames::NOTIFY, serde_json::to_string(m).unwrap_or_default()));
+            b.publish(Envelope::new(infantry_mail::notify::push::NOTIFY_PUSH, serde_json::to_string(m).unwrap_or_default()));
         });
     }
     let hub = Arc::new(NotificationHub::new(Arc::new(NotificationSettings::default)));

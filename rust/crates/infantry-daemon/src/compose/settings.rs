@@ -51,6 +51,11 @@ impl SettingsUnit {
         ]
     }
 
+    /// The app-scope value of `key` (null and absent are None).
+    pub fn app(&self, key: &str) -> Option<Value> {
+        self.stored(key)
+    }
+
     pub fn resolve(&self, key: &str, d: &Value) -> Value {
         let mut layers = Vec::new();
         for (scope, target) in Self::targets(d) {
