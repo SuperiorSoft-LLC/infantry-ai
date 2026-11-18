@@ -520,6 +520,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-harness"
+version = "0.1.0"
+dependencies = [
+ "infantry-runner-api",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "infantry-harness-codex"
+version = "0.1.0"
+dependencies = [
+ "infantry-harness",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "infantry-protocol"
 version = "0.1.0"
 dependencies = [
