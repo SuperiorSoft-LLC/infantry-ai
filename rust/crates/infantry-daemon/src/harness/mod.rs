@@ -117,14 +117,18 @@ pub fn by_name(name: &str) -> Option<Box<dyn Harness>> {
         infantry_harness_codex::ID => {
             Some(Box::new(driven::Driven::new(std::sync::Arc::new(infantry_harness_codex::CodexHarness::default()))))
         }
-        // HARNESS REGISTRATION SPOT: a new provider crate (opencode, pi, ...) adds one arm here and its id to
+        infantry_harness_opencode::ID => {
+            Some(Box::new(driven::Driven::new(std::sync::Arc::new(infantry_harness_opencode::OpenCodeHarness::default()))))
+        }
+        infantry_harness_pi::ID => Some(Box::new(driven::Driven::new(std::sync::Arc::new(infantry_harness_pi::PiHarness::default())))),
+        // HARNESS REGISTRATION SPOT: a new provider crate adds one arm here and its id to
         // [`REGISTERED`]; nothing else in the daemon names a provider.
         _ => None,
     }
 }
 
 /// Every provider this build can run, in the order the harness list shows them (the stub is a test harness, not listed).
-pub const REGISTERED: &[&str] = &[infantry_harness_claude::ID, infantry_harness_codex::ID];
+pub const REGISTERED: &[&str] = &[infantry_harness_claude::ID, infantry_harness_codex::ID, infantry_harness_opencode::ID, infantry_harness_pi::ID];
 
 /// Every registered harness except `skip` (the daemon's default, already built).
 pub fn all_except(skip: &str) -> Vec<std::sync::Arc<dyn Harness>> {

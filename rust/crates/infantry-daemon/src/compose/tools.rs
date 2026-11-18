@@ -19,15 +19,20 @@ pub struct Tools {
     daemon: Arc<Daemon>,
     scripting: OnceLock<ScriptingTools>,
     plugins: OnceLock<Option<Arc<PluginHost>>>,
+    knowledge: OnceLock<Arc<infantry_knowledge::Knowledge>>,
 }
 
 impl Tools {
     pub fn new(daemon: Arc<Daemon>) -> Tools {
-        Tools { daemon, scripting: OnceLock::new(), plugins: OnceLock::new() }
+        Tools { daemon, scripting: OnceLock::new(), plugins: OnceLock::new(), knowledge: OnceLock::new() }
     }
 
     pub fn set_scripting(&self, t: ScriptingTools) {
         let _ = self.scripting.set(t);
+    }
+
+    pub fn set_knowledge(&self, k: Arc<infantry_knowledge::Knowledge>) {
+        let _ = self.knowledge.set(k);
     }
 
     pub fn set_plugins(&self, h: Option<Arc<PluginHost>>) {
@@ -64,6 +69,20 @@ fn plugin_context(inv: &ToolInvoker) -> CallContext {
 impl ScriptHost for Tools {
     fn catalog(&self) -> Vec<ToolInfo> {
         let mut out = self.scripting.get().map(|s| s.catalog()).unwrap_or_default();
+        if self.knowledge.get().is_some() {
+            for d in infantry_knowledge::tools::descriptors() {
+                let name = d["name"].as_str().unwrap_or_default().to_string();
+                if name.is_empty() || out.iter().any(|o| o.name == name) {
+                    continue;
+                }
+                out.push(ToolInfo {
+                    description: d["description"].as_str().unwrap_or_default().to_string(),
+                    input_schema: d.get("inputSchema").cloned().unwrap_or_else(|| json!({"type": "object"})),
+                    read_only: d["annotations"]["readOnlyHint"].as_bool().unwrap_or(false),
+                    name,
+                });
+            }
+        }
         if let Some(h) = self.plugins() {
             for t in h.tools() {
                 if out.iter().any(|o| o.name == t.decl.name) {
@@ -84,6 +103,15 @@ impl ScriptHost for Tools {
         if let Some(s) = self.scripting.get() {
             if let Some(r) = s.handle(name, args, inv) {
                 return r;
+            }
+        }
+        if let Some(k) = self.knowledge.get() {
+            let caller = infantry_knowledge::tools::Caller { agent: inv.agent, project_id: inv.project_id.clone(), role: inv.role.clone() };
+            if let Some(r) = infantry_knowledge::tools::call(k, name, &Value::Object(args.clone()), &caller) {
+                return match r {
+                    Ok(text) => ToolResult::ok(text),
+                    Err(e) => ToolResult::err(e),
+                };
             }
         }
         if let Some(h) = self.plugins() {

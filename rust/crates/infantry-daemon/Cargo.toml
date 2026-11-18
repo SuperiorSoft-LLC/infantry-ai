@@ -32,6 +32,10 @@ infantry-scripting = { path = "../infantry-scripting" }
 infantry-plugin-host = { path = "../infantry-plugin-host" }
 infantry-plugin-wit = { path = "../infantry-plugin-wit" }
 infantry-harness-codex = { path = "../infantry-harness-codex" }
+infantry-harness-opencode = { path = "../infantry-harness-opencode" }
+infantry-harness-pi = { path = "../infantry-harness-pi" }
+infantry-knowledge = { path = "../infantry-knowledge" }
+infantry-vault = { path = "../infantry-vault" }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }
 serde = { version = "1", features = ["derive"] }

@@ -80,6 +80,7 @@ pub struct Composed {
     pub mail: Arc<MailRouter>,
     pub hooks: Arc<ScriptHooks>,
     pub tools: Arc<Tools>,
+    pub knowledge: Arc<infantry_knowledge::Knowledge>,
     pub plugins: Option<Arc<infantry_plugin_host::PluginHost>>,
     next_conn: AtomicU64,
 }
@@ -215,8 +216,19 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         });
     }
 
+    // ---- knowledge (roles, traits, skills, prompts, avatars) and the secrets vault ------------------------
+    let knowledge = Arc::new(infantry_knowledge::Knowledge::open(db.clone(), state_dir, Arc::new(adapters::KnowledgePorts { daemon: daemon.clone() })));
+    let vault_projects = projects.clone();
+    let vault = infantry_vault::unit::VaultUnit::open(
+        state_dir,
+        Default::default(),
+        Default::default(),
+        Arc::new(move |p: Option<&str>| p.and_then(|p| project_dir(&vault_projects, p))),
+    );
+
     // ---- the tool catalog + scripting ---------------------------------------------------------------------
     let tools = Arc::new(Tools::new(daemon.clone()));
+    tools.set_knowledge(knowledge.clone());
     let engines = ScriptEngines::standard();
     let exts = engines.extensions();
     let global_dir = state_dir.join("global-scripts");
@@ -313,7 +325,9 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         Arc::new(PromptsUnit::new(prompts, Some(rules))),
         Arc::new(QuestionsUnit::new(questions, asker_of)),
         Arc::new(tools::ToolsUnit { tools: tools.clone() }),
+        Arc::new(vault),
     ];
+    units.extend(knowledge.units());
     if let Some(p) = &plugin_set {
         units.extend(plugins::frame_units(p));
     }
@@ -338,6 +352,7 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         mail: mail.clone(),
         hooks: hooks.clone(),
         tools,
+        knowledge: knowledge.clone(),
         plugins: plugin_host.clone(),
         next_conn: AtomicU64::new(1),
     });
@@ -429,6 +444,6 @@ impl FrameUnits for Composed {
     }
 
     fn http(&self) -> Option<axum::Router> {
-        Some(infantry_mail::mail::http::routes(self.mail.clone()))
+        Some(infantry_mail::mail::http::routes(self.mail.clone()).merge(infantry_knowledge::avatars::router(self.knowledge.avatars.clone())))
     }
 }

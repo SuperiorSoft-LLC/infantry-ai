@@ -366,3 +366,19 @@ impl SessionObserver for WorkObserver {
         });
     }
 }
+
+// ---- knowledge -----------------------------------------------------------------------------------------------
+
+/// What the roles and library units ask of the daemon: the providers it runs and the roles live sessions hold.
+pub struct KnowledgePorts {
+    pub daemon: Arc<Daemon>,
+}
+
+impl infantry_knowledge::DaemonPorts for KnowledgePorts {
+    fn provider_ids(&self) -> std::collections::HashSet<String> {
+        self.daemon.providers().into_iter().collect()
+    }
+    fn live_role_ids(&self) -> std::collections::HashSet<String> {
+        self.daemon.records().into_iter().filter(|r| !ended(r)).filter_map(|r| r.role).map(|r| r.trim().to_ascii_lowercase()).collect()
+    }
+}
