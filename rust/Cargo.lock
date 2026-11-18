@@ -1138,6 +1138,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-cards-daemon"
+version = "1.0.0"
+dependencies = [
+ "infantry-plugin-host",
+ "infantry-plugin-sdk",
+ "infantry-plugin-wit",
+ "serde_json",
+]
+
+[[package]]
 name = "infantry-chat-daemon"
 version = "1.0.0"
 dependencies = [
@@ -1203,6 +1213,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-docs-daemon"
+version = "1.0.0"
+dependencies = [
+ "infantry-plugin-host",
+ "infantry-plugin-sdk",
+ "infantry-plugin-wit",
+ "serde_json",
+]
+
+[[package]]
+name = "infantry-git-daemon"
+version = "1.0.0"
+dependencies = [
+ "infantry-plugin-host",
+ "infantry-plugin-sdk",
+ "infantry-plugin-wit",
+ "serde_json",
+]
+
+[[package]]
 name = "infantry-guards"
 version = "0.1.0"
 dependencies = [
@@ -1244,6 +1274,16 @@ name = "infantry-health-daemon"
 version = "1.0.0"
 dependencies = [
  "infantry-plugin-sdk",
+ "serde_json",
+]
+
+[[package]]
+name = "infantry-jobfeed-daemon"
+version = "1.0.0"
+dependencies = [
+ "infantry-plugin-host",
+ "infantry-plugin-sdk",
+ "infantry-plugin-wit",
  "serde_json",
 ]
 
