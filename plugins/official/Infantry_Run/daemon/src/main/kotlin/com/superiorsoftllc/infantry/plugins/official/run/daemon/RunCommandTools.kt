@@ -37,6 +37,8 @@ class RunCommandTools(
     private val rootOf: (String?) -> java.io.File? = { null },
     /** SECRETS-UX-1: a secret's field NAMES (never values) in a project's scope, or null. */
     private val fieldNames: (String, String?) -> Set<String>? = { _, _ -> null },
+    /** PREVIEW-BRANCH-1: a project's local branches for a branch command, each with its worktree. */
+    private val branches: (String?) -> Result<List<BranchInfo>> = { Result.failure(IllegalStateException("branch runs are not available")) },
 ) {
     fun all(): List<DaemonTool> = listOf(
         tool("infantry_run_commands", "List a project's saved Run-tab commands (id, name, cwd, argv, project) and the unassigned ones; default: your project.",
@@ -48,7 +50,10 @@ class RunCommandTools(
                 "detached" to "boolean: launch an app that stays open after the command (no pipes, not tracked, not killed with the daemon); default false",
                 "renders" to "array of template=out secret-template renders (relative to the command folder) done before each run; outputs are deleted when it ends"), listOf("id"), false) { save(it) },
         tool("infantry_run_command_delete", "Delete a saved command by id.", listOf("id" to "command id", "project" to "project id", "allowCrossProject" to "boolean"), listOf("id"), false) { delete(it) },
-        tool("infantry_run_start", "Start a saved command; returns the run id.", listOf("id" to "command id", "project" to "project id", "allowCrossProject" to "boolean"), listOf("id"), false) { start(it) },
+        tool("infantry_run_start", "Start a saved command; returns the run id. A branch command (its cwd or argv names {worktree} or {branch}) needs `branch`: it runs in that branch's worktree (a ticket's own, else a temporary preview worktree removed when the run ends).",
+            listOf("id" to "command id", "branch" to "local branch, for a branch command (infantry_run_branches lists them)", "project" to "project id", "allowCrossProject" to "boolean"), listOf("id"), false) { start(it) },
+        tool("infantry_run_branches", "List a project's local branches for a branch command (one whose cwd or argv names {worktree} or {branch}), each with the worktree it is checked out in, if any.",
+            listOf("project" to "project id (default: yours)", "allowCrossProject" to "boolean"), listOf(), true) { branchList(it) },
         tool("infantry_run_secrets", "List the secrets a project's saved commands can use, the scope each resolves to (project first, then app) and each field with its exact placeholder: {{secret:NAME}} or {{secret:NAME#FIELD}}. Names only, never a value; secrets are created in Configuration by the owner.",
             listOf("project" to "project id (default: yours)", "scope" to "project | app | all (default: all)", "allowCrossProject" to "boolean"), listOf(), true) { secretList(it) },
         tool("infantry_secret_find", "Find a secret by name or field name; returns placeholders, never values.",
@@ -145,6 +150,7 @@ class RunCommandTools(
         val started = manager.start(Json.encodeToString(JsonObject.serializer(), buildJsonObject {
             put("commandId", id)
             target(c)?.let { put("project", it) }
+            str(c.arguments, "branch")?.let { put("branch", it) }
         }))
         if (started.reply.type == Envelope.ERROR) return err(started.reply.data)
         emit(started.reply)
@@ -152,6 +158,14 @@ class RunCommandTools(
         val runId = (runCatching { Json.parseToJsonElement(started.reply.data) }.getOrNull() as? JsonObject)?.get("runId")
             ?.let { (it as? JsonPrimitive)?.contentOrNull }
         return ToolResult("started run ${runId ?: "?"}")
+    }
+
+    /** PREVIEW-BRANCH-1: one line per branch, `name` or `name  (worktree <folder>)`. */
+    private fun branchList(c: ToolCall): ToolResult {
+        crossProjectRefusal(c)?.let { return err(it) }
+        val rows = branches(target(c)).getOrElse { return err("infantry_run_branches refused: ${it.message}") }
+        if (rows.isEmpty()) return ToolResult("no local branches")
+        return ToolResult(rows.joinToString("\n") { b -> b.name + (b.worktree?.let { "  (worktree $it)" } ?: "") })
     }
 
     private fun stop(c: ToolCall): ToolResult {

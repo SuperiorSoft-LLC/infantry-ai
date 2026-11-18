@@ -67,7 +67,7 @@ fun ApplicationScope.InfantryWindow(onCloseRequest: () -> Unit, onFocusGained: (
     val icon = remember { AppIcon.painter() }
     // PLUGIN-CRASH-CONTAIN-1: Compose's default handler shows a native "Error" dialog; ours logs and contains it.
     CompositionLocalProvider(LocalWindowExceptionHandlerFactory provides NoDialogExceptionHandler) {
-    Window(onCloseRequest = onCloseRequest, icon = icon, state = state, title = ShellApp.current?.manifest?.windowTitle ?: "Infantry AI", undecorated = true, resizable = true) {
+    Window(onCloseRequest = onCloseRequest, icon = icon, state = state, title = previewLabel(ShellApp.current?.manifest?.windowTitle ?: "Infantry AI"), undecorated = true, resizable = true) {
         val frame = window
         LaunchedEffect(frame) { frame.minimumSize = MIN_SIZE }
         LaunchedEffect(frame, state.placement) { WindowCorners.apply(frame, round = state.placement == WindowPlacement.Floating) }
@@ -258,3 +258,13 @@ private fun Modifier.resizeHandle(frame: Frame, edge: ResizeEdge): Modifier =
             }
         }
     }
+
+/**
+ * PREVIEW-BRANCH-1: [title] prefixed with the `infantry.window.label` system property ("PREVIEW <branch>"), which the branch
+ * preview's init script (scripts/preview-app.init.gradle.kts) sets; unchanged without it.
+ */
+internal fun previewLabel(title: String, label: String? = System.getProperty(PREVIEW_LABEL_PROPERTY)): String =
+    label?.trim()?.takeIf { it.isNotEmpty() }?.let { "$it - $title" } ?: title
+
+/** PREVIEW-BRANCH-1: the system property that labels a branch preview's window. */
+internal const val PREVIEW_LABEL_PROPERTY = "infantry.window.label"

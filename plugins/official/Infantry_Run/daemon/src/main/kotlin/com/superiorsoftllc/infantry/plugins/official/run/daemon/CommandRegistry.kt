@@ -34,6 +34,8 @@ data class CommandSpec(
     val renders: List<String> = emptyList(),
     /** RUN-TAB-1: launch the command detached (an app that outlives it); false = tracked, piped, killed with the daemon. */
     val detached: Boolean = false,
+    /** PREVIEW-BRANCH-1: the command names {worktree} or {branch}; each start names a branch (the Run tab asks for one). */
+    val branch: Boolean = false,
 ) {
     override fun toString(): String = "CommandSpec(id=$id)"
 }
@@ -72,8 +74,10 @@ class SavedCommand internal constructor(
 ) {
     val workingDir: File get() = dir ?: throw IllegalStateException("command '$id' has no folder to run in")
     val rooted: Boolean get() = dir != null
+    /** PREVIEW-BRANCH-1: runs in a branch's checkout ([BranchVars]); [workingDir] is then the project folder and [cwd] a template. */
+    val branch: Boolean get() = BranchVars.isBranchCommand(argv, cwd)
 
-    fun toSpec(): CommandSpec = CommandSpec(id, name, cwd, argv, graceMillis, secrets, projectId, rooted, renders, detached)
+    fun toSpec(): CommandSpec = CommandSpec(id, name, cwd, argv, graceMillis, secrets, projectId, rooted, renders, detached, branch)
 
     /** The same command under [project] with [cwd], re-rooted at [dir] (the migration's assignment). */
     internal fun movedTo(project: String, cwd: String?, dir: File): SavedCommand = SavedCommand(id, name, argv, cwd, dir, graceMillis, secrets, project, renders, detached)
@@ -201,6 +205,14 @@ class CommandRegistry private constructor(
             if (e.secrets.any { !CommandRegistry.isSecretName(it) }) return no("$where ('${e.id}') names an invalid secret")
             if (e.renders.size > maxRunSecrets) return no("$where ('${e.id}') names more than $maxRunSecrets renders")
             if (e.renders.any { splitRender(it) == null }) return no("$where ('${e.id}') has a render that is not 'template=out'")
+            // PREVIEW-BRANCH-1: a templated cwd names a checkout that exists only at run time; its shape is checked here, the
+            // folder when the run starts. Renders run before the checkout exists, so a branch command takes none.
+            if (BranchVars.uses(e.cwd)) {
+                BranchVars.cwdRefusal(e.cwd!!)?.let { return no("$where ('${e.id}'): $it") }
+                if (e.renders.isNotEmpty()) return no("$where ('${e.id}') runs on a branch and cannot render secret templates")
+                return Result.success(SavedCommand(e.id, e.name?.takeIf { it.isNotBlank() } ?: e.id, e.argv.toList(), e.cwd!!.trim().replace('\\', '/'), root, e.graceMillis, e.secrets.distinct(), e.project?.takeIf { it.isNotBlank() }, emptyList(), e.detached))
+            }
+            if (BranchVars.isBranchCommand(e.argv, null) && e.renders.isNotEmpty()) return no("$where ('${e.id}') runs on a branch and cannot render secret templates")
             val written = normalCwd(root, e.cwd) ?: return no("$where ('${e.id}') has a cwd outside the project folder")
             val cwd = written.takeIf { it != "." }
             val dir = resolveCwd(root, cwd) ?: return no("$where ('${e.id}') has a cwd outside the project folder")

@@ -1,6 +1,6 @@
 {
   "name": "Infantry_Run",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "apiVersion": 2,
   "author": "Infantry AI",
   "description": "Saved commands and their runs.",
@@ -18,6 +18,7 @@
       { "name": "infantry_run_command_save", "action": "commands.save", "kind": "write", "description": "Add or edit a saved command." },
       { "name": "infantry_run_command_delete", "action": "commands.save", "kind": "write", "description": "Delete a saved command." },
       { "name": "infantry_run_start", "action": "runs.start", "kind": "spawn", "description": "Start a saved command; returns the run id." },
+      { "name": "infantry_run_branches", "action": "commands.read", "kind": "read", "description": "List a project's local branches for a branch command, with their worktrees." },
       { "name": "infantry_run_secrets", "action": "commands.read", "kind": "read", "description": "List the secret names a project's commands can use, with their scope." },
       { "name": "infantry_secret_find", "action": "commands.read", "kind": "read", "description": "Find a secret by name or field name; returns placeholders, never values." },
       { "name": "infantry_secret_render", "action": "commands.save", "kind": "write", "description": "Render a text file replacing {{secret:NAME}} placeholders with saved secret values; returns names only." },
@@ -28,6 +29,7 @@
       { "type": "command_save", "action": "commands.save", "kind": "write" },
       { "type": "command_delete", "action": "commands.save", "kind": "write" },
       { "type": "run_list", "action": "runs.read", "kind": "read" },
+      { "type": "run_branches", "action": "commands.read", "kind": "read" },
       { "type": "run_start", "action": "runs.start", "kind": "spawn" },
       { "type": "run_attach", "action": "runs.start", "kind": "spawn" },
       { "type": "run_resize", "action": "runs.start", "kind": "spawn" },
