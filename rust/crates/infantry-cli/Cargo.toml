@@ -26,3 +26,7 @@ native-tls = "0.2"
 base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
 
+# RUST-CLI-1 ops: the usage DTOs and the one usage text renderer the daemon uses; timestamps as Kotlin prints them.
+infantry-protocol = { path = "../infantry-protocol" }
+infantry-usage = { path = "../infantry-usage" }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
