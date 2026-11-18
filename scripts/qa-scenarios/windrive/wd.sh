@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # wd.sh <pid> <cmd> [arg] [index]  -> the driver's answer (windrive11: windrive10 + drag, scrollto, typein).
 # Uses the Attach class of windrive10 (C:/t83/wd) and the windrive11.jar that build.sh makes next to this file.
 D="$(cd "$(dirname "$0")" && pwd -W 2>/dev/null || pwd)"

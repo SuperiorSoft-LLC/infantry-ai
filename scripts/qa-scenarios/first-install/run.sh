@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # Re-runnable: builds the image, starts the daemon in a fresh container, walks the first-run steps, logs to scratch/first-install/.
 set -u
 cd "$(dirname "$0")"; OUT=../../../scratch/first-install; mkdir -p $OUT

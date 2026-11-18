@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # launch.sh [logname]: Gradle runRealDaemon window from THIS worktree, isolated state dir + ports, env scrubbed.
 # Needs the in-window driver (C:/t83/wd, ticket 691a3a9e). Kill the window by PID only (never by image name).
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

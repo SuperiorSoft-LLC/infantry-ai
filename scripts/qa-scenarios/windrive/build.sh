@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # Builds windrive11.jar (windrive10 + drag/scrollto/typein). Needs the windrive10 jar (default C:/t83/wd/windrive10.jar).
 set -e
 D="$(cd "$(dirname "$0")" && pwd)"; BASE="${WD10:-C:/t83/wd/windrive10.jar}"

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # Re-runnable: PID=$(bash pid.sh) bash <this file>   (window from launch.sh must be up; Infantry_Mascot's jar must be built:
 # ./gradlew :plugins:official:Infantry_Mascot:jvmJar, else the desktop refuses it at load and Appearance offers only Portrait)
 cd "$(dirname "$0")"; PID="${PID:-$(bash pid.sh)}"; source lib.sh; reset

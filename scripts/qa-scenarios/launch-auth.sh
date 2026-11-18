@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # launch-auth.sh: like launch.sh, plus a throwaway CLAUDE_CONFIG_DIR (never the owner's login) and THIS worktree's plugins.
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 QA="${QA_DIR:-C:/t83}"

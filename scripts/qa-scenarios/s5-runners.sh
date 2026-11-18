@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
 # Re-runnable: PID=$(bash pid.sh) bash <this file>   (window from launch.sh must be up; `installDist` built for ik.sh)
 # Starts a second daemon in runner mode (own state dir C:/t83b/runner-state, port 18851, link port 18843), adds it through the card,
 # and checks the row, the Use runners toggle, `runner check` and `runner test`.
