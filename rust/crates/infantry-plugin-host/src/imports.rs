@@ -273,11 +273,13 @@ impl PluginImports {
         fn p<T: serde::de::DeserializeOwned>(v: Value) -> Result<T, String> {
             serde_json::from_value(v).map_err(|e| format!("bad params: {e}"))
         }
+        fn to<T: serde::Serialize>(v: T) -> Result<Value, String> {
+            serde_json::to_value(v).map_err(|e| e.to_string())
+        }
         let iface = name.split('.').next().unwrap_or_default();
         if !self.linked(iface) {
             return Err(format!("{iface} is not linked for {} (module.json daemon.needs/wants does not request it)", self.module_id));
         }
-        let to = |v: impl serde::Serialize| serde_json::to_value(v).map_err(|e| e.to_string());
         match name {
             "log.write" => {
                 let w: jsonl::LogWrite = p(params)?;
