@@ -894,6 +894,12 @@ class SecretActions(
     val checkAuth: ((secretName: String) -> Unit)? = null,
     /** SECRET-RENDER-1: (template, out, project) renders a text file with the saved secrets and returns names and the path only; null hides the card. */
     val render: (suspend (template: String, out: String, project: String?) -> String)? = null,
+    /** VAULT-REVEAL-1: (name, field, project, purpose reveal|copy) reads a value back after the OS user check; null hides Reveal / Copy. */
+    val reveal: (suspend (name: String, field: String, project: String?, purpose: String) -> Result<RevealedValue>)? = null,
+    /** VAULT-REVEAL-1: (path, passphrase) writes an encrypted backup of every secret after the OS user check; null hides the backup card. */
+    val backupExport: (suspend (path: String, passphrase: String) -> Result<String>)? = null,
+    /** VAULT-REVEAL-1: (path, passphrase, answers per conflict) merges a backup in. */
+    val backupImport: (suspend (path: String, passphrase: String, resolutions: Map<String, String>) -> Result<BackupImportOutcome>)? = null,
 )
 
 const val SECRET_AUTH_MODE_TAG = "secret-auth-mode"
@@ -912,6 +918,8 @@ class SecretScopeActions(
     val delete: ((name: String) -> Unit)? = null,
     val move: ((name: String) -> Unit)? = null,
     val moveLabel: String = "",
+    /** VAULT-REVEAL-1: (name, field, purpose reveal|copy) reads a value of this scope back after the OS user check; null hides Reveal / Copy. */
+    val reveal: (suspend (name: String, field: String, purpose: String) -> Result<RevealedValue>)? = null,
 )
 
 /** SECRETS-2: what the add forms accept, the daemon's own rules, so a bad name is caught before it is sent. */
@@ -944,7 +952,7 @@ fun secretStatusText(row: SecretRow): String = when {
 }
 
 /** SECRETS-2b: the card frame every secret sits in: raised, a border you can see, the popup/card corner token. */
-private fun Modifier.secretCard(): Modifier = this.fillMaxWidth()
+internal fun Modifier.secretCard(): Modifier = this.fillMaxWidth()
     .background(Palette.Raised, Palette.PopupShape)
     .border(1.dp, Palette.Muted.copy(alpha = 0.45f), Palette.PopupShape)
     .padding(12.dp)
@@ -973,6 +981,7 @@ private fun SecretsSection(state: SecretState, actions: SecretActions) {
                     setField = setField, deleteField = actions.deleteField, delete = actions.delete,
                     move = if (move != null && project != null) { name -> move(name, null, project.id) } else null,
                     moveLabel = project?.let { "Move to ${it.name}" }.orEmpty(),
+                    reveal = actions.reveal?.let { reveal -> { n, f, purpose -> reveal(n, f, null, purpose) } },
                 ),
                 note = { name -> if (name in ownInProject) "Overridden in ${project?.name} by its own secret" else null },
             )
@@ -980,6 +989,9 @@ private fun SecretsSection(state: SecretState, actions: SecretActions) {
             if (elsewhere > 0) Text(SecretForm.projectsNote(elsewhere), color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(SECRET_PROJECTS_NOTE_TAG))
         }
         actions.render?.let { render -> if (!state.locked) RenderFileCard(render, actions.currentProject?.id) }
+        val export = actions.backupExport
+        val import = actions.backupImport
+        if (export != null && import != null && !state.locked) VaultBackupCard(export, import)
         Text("Protected by: ${protectionText(state.protection)}", color = Palette.Muted, fontSize = 11.sp)
     }
 }
@@ -1010,7 +1022,7 @@ private fun RenderFileCard(render: suspend (String, String, String?) -> String, 
 }
 
 @Composable
-private fun SecretsHeading(title: String, hint: String) {
+internal fun SecretsHeading(title: String, hint: String) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text)
         Text(hint, color = Palette.Muted, fontSize = 11.sp)
@@ -1123,7 +1135,8 @@ private fun SecretEntryCard(entry: SecretEntryRow, editable: Boolean, actions: S
                     .padding(horizontal = 10.dp, vertical = 2.dp).testTag("$SECRET_FIELD_TAG-${entry.name}-${field.name}"),
             ) {
                 Text(field.name, fontFamily = Mono, fontSize = 12.sp, color = Palette.Text, modifier = Modifier.weight(1f))
-                Text(field.tail.ifEmpty { "set" }, fontFamily = Mono, color = Palette.Muted, fontSize = 12.sp)
+                // VAULT-REVEAL-1: the masked tail, or the value for a while after Reveal; Reveal and Copy ask the OS first.
+                SecretFieldValue(entry.name, field.name, field.tail, actions.reveal)
                 // SECRETS-UX-1: this field's own placeholder, one Copy per field.
                 CopyValueButton(secretFieldPlaceholder(entry.name, field.name), Modifier.testTag("$SECRET_FIELD_COPY_TAG-${entry.name}-${field.name}"))
                 if (editable) {
@@ -1220,7 +1233,7 @@ private fun secretFieldColors() = androidx.compose.material3.OutlinedTextFieldDe
 )
 
 @Composable
-private fun SecretTextField(value: String, onChange: (String) -> Unit, label: String, isError: Boolean, modifier: Modifier) {
+internal fun SecretTextField(value: String, onChange: (String) -> Unit, label: String, isError: Boolean, modifier: Modifier) {
     OutlinedTextField(
         value = value, onValueChange = onChange, singleLine = true, label = { Text(label) }, isError = isError,
         shape = Palette.PopupShape, colors = secretFieldColors(), modifier = modifier,
@@ -1229,7 +1242,7 @@ private fun SecretTextField(value: String, onChange: (String) -> Unit, label: St
 
 /** A value input that never shows what is typed (no reveal: the owner's rule). */
 @Composable
-private fun MaskedInput(value: String, onChange: (String) -> Unit, label: String, modifier: Modifier) {
+internal fun MaskedInput(value: String, onChange: (String) -> Unit, label: String, modifier: Modifier) {
     OutlinedTextField(
         value = value, onValueChange = onChange, singleLine = true, label = { Text(label) },
         visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
@@ -1243,7 +1256,7 @@ private fun MaskedInput(value: String, onChange: (String) -> Unit, label: String
 
 /** An outlined action whose outline shows; dim (not hidden) until it can act. */
 @Composable
-private fun SecretButton(label: String, enabled: Boolean, tag: String, danger: Boolean = false, onClick: () -> Unit) {
+internal fun SecretButton(label: String, enabled: Boolean, tag: String, danger: Boolean = false, onClick: () -> Unit) {
     val tone = if (danger) Palette.Danger else Palette.Text
     OutlinedButton(
         onClick = onClick, enabled = enabled, shape = Palette.PopupShape,

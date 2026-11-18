@@ -754,6 +754,16 @@ data class Envelope(
         // ({module, field, value}; value null = not set). The value is never logged, stored or handed to the plugin.
         const val PLUGIN_SECRET_GET = "plugin_secret_get"
         const val PLUGIN_SECRET = "plugin_secret"
+        // VAULT-REVEAL-1 (contract 1.157.0): the owner's window reads a value back or backs the vault up, after the person at the
+        // daemon's computer passes the OS user check (Windows Hello, else the Windows password prompt). Owner connection only,
+        // refused under a restricted policy, answered directly with the request's own type (never pushed); no CLI, MCP tool or
+        // script sends them. `secret_reveal` ({name, field?, project?, purpose: reveal|copy}) -> {name, field, project, value,
+        // method, showSeconds, clearSeconds}. `secret_backup_export` ({path, passphrase}) -> {path, secrets, method}: a new file,
+        // PBKDF2 + AES-GCM. `secret_backup_import` ({path, passphrase, resolutions: {id: keep|replace}}) -> {applied, added,
+        // replaced, kept, same, conflicts}; with an unanswered conflict nothing is written. Each is logged (never a value).
+        const val SECRET_REVEAL = "secret_reveal"
+        const val SECRET_BACKUP_EXPORT = "secret_backup_export"
+        const val SECRET_BACKUP_IMPORT = "secret_backup_import"
         // P10-K6 (contract 1.54.0): the project's append-only issues log. `issue_open`
         // ({projectId, sessionId?, summary, location, ticketId?}), `issue_attempt` ({projectId, sessionId?, summary,
         // outcome?, location?, issue?}) and `issue_fix` ({projectId, sessionId?, summary, issue?}) are answered by an

@@ -51,6 +51,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 - [Browser for agents](Browser.md): the `Infantry_Browser` plugin, a walled Playwright MCP server (isolated profile, headed) given by grant with a purpose.
 - [Memory](Memory.md): project knowledge notes, the project / global / role / session scopes, the `infantry_memory` MCP actions (read and write), who may write global notes.
 - [Secrets](Secrets.md): `infantry secret render`, the `{{secret:NAME}}` placeholder, `infantry_secret_render`; fill any text file from saved secrets.
+- [Vault](Vault.md): the OS master key, Reveal / Copy after Windows Hello (owner only), the passphrase-encrypted backup.
 - [Settings](Settings.md): scopes (app, project, role, session) and the cost-saving defaults.
 - [Kotlin notes](kotlin-notes.md): toolchain versions, UI core source sets and expect/actual, Compose MP pitfalls, build flags.
 - [Updates](Updates.md): the one update engine for the app and every plugin; per-plugin sources, private and paid ones.

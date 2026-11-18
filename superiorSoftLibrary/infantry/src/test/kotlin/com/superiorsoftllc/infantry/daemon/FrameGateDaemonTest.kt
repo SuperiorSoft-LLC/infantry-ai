@@ -65,9 +65,13 @@ class FrameGateDaemonTest {
         assertEquals(
             setOf("command_save", "command_delete", "run_start", "run_stop", "run_attach", "run_resize", "run_input",
                 "secret_set", "secret_clear", "secret_import", "secret_field_set", "secret_field_delete", "secret_delete",
-                "plugin_secret_get",
+                "secret_move", "secret_login", "plugin_secret_get",
+                // VAULT-REVEAL-1: reveal / copy / backup after the OS user check.
+                "secret_reveal", "secret_backup_export", "secret_backup_import",
                 // RUNNER-POOL-6a: `infantry runner pair|add|rotate|detach <name>` through the daemon.
-                "runner_admin"),
+                "runner_admin",
+                // PLUGIN-CLI-HOT-1: `infantry plugin ...` on the daemon's own plugin manager.
+                "plugin_admin"),
             FrameGate.OWNER_ONLY,
         )
     }

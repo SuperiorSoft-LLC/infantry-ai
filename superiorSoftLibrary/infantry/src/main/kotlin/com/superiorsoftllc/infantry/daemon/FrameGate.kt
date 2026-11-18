@@ -26,6 +26,8 @@ object FrameGate {
         Envelope.SECRET_LOGIN,
         // PLUGIN-ENDPOINTS-2 (1.138.0): the one frame that hands a stored value back.
         Envelope.PLUGIN_SECRET_GET,
+        // VAULT-REVEAL-1 (1.157.0): read a value back / back the vault up, after the OS user check.
+        Envelope.SECRET_REVEAL, Envelope.SECRET_BACKUP_EXPORT, Envelope.SECRET_BACKUP_IMPORT,
         // RUNNER-POOL-6a: `infantry runner pair|add|rotate|detach <name>` through the daemon (pairing, credentials).
         com.superiorsoftllc.infantry.runners.RunnerLinkService.ADMIN,
         // PLUGIN-CLI-HOT-1: `infantry plugin install|update|...` through the daemon (installs code, grants permissions).

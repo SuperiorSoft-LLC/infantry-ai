@@ -1343,6 +1343,15 @@ class InfantryDaemon(
                 },
                 restricted = locked,
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
+                // VAULT-REVEAL-1: reveal / copy / backup behind the OS user check; answered off the request loop (vaultWorker).
+                vault = com.superiorsoftllc.infantry.keystore.SecretVault(
+                    keystore = keystore,
+                    verifier = com.superiorsoftllc.infantry.keystore.OsUserVerifiers.detect(timeoutMs = { settings.limit(LimitRegistry.SECRET_VERIFY_TIMEOUT_SECONDS) * 1000L }),
+                    auditFile = java.io.File(daemonStateDir, com.superiorsoftllc.infantry.keystore.SecretVault.AUDIT_FILE_NAME),
+                    restricted = locked,
+                    limit = { settings.limit(it) },
+                    onImported = { keystoreFramesRef.get()?.pushState() },
+                ),
             ).also { keystoreFramesRef.set(it) }
             // P10-K9: the knowledge section's counts, read for a project whenever a first turn renders.
             // BUG-G2e: and the digest itself (what `infantry knowledge` prints), built in-process from the same stores.
@@ -3330,6 +3339,16 @@ private suspend fun handleConnection(
         }
     }
 
+    // VAULT-REVEAL-1: a reveal waits for the person at the OS prompt (up to limits.secrets.verifyTimeoutSeconds), and an
+    // export / import runs a slow KDF. One worker per connection answers them off the loop, in arrival order, echoing the id.
+    val vaultRequests = Channel<Envelope>(Channel.UNLIMITED)
+    val vaultWorker = session.launch(kotlinx.coroutines.Dispatchers.IO) {
+        for (request in vaultRequests) {
+            val answer = keystoreFrames.vault?.answer(request) ?: Envelope(Envelope.ERROR, "${request.type} refused: this daemon has no vault")
+            outgoing.trySend(if (request.requestId != null && answer.requestId == null) answer.copy(requestId = request.requestId) else answer)
+        }
+    }
+
     // BUG-CHANGES-BRANCH-2: a `project_git_*` read shells out to git, ~12 s under load. Answered inline it held every
     // later frame on this connection, chat included (the BUG-ModelsHeadOfLine class). One worker per connection
     // answers them off the loop, on IO, in arrival order: git replies stay ordered among themselves (a checkout
@@ -4731,6 +4750,11 @@ private suspend fun handleConnection(
                 Envelope.SECRET_SET, Envelope.SECRET_CLEAR, Envelope.SECRET_IMPORT, Envelope.SECRET_STATUS,
                 Envelope.SECRET_FIELD_SET, Envelope.SECRET_FIELD_DELETE, Envelope.SECRET_DELETE, Envelope.SECRET_MOVE,
                 Envelope.SECRET_LOGIN, Envelope.PLUGIN_SECRET_GET -> keystoreFrames.answer(envelope)
+                // VAULT-REVEAL-1 (contract 1.157.0): owner-only (FrameGate); answered by [vaultWorker], off this loop.
+                Envelope.SECRET_REVEAL, Envelope.SECRET_BACKUP_EXPORT, Envelope.SECRET_BACKUP_IMPORT -> {
+                    vaultRequests.trySend(envelope)
+                    null
+                }
 
                 // POLICY-1 (docs/POLICY.md): read the active policy; the owner switches it (refused while an env pins it).
                 // A switch tells every connection (each its own `policy` frame), this one included, so no direct answer.
@@ -4834,6 +4858,8 @@ private suspend fun handleConnection(
         processesWorker.cancel()
         projectGitRequests.close()
         projectGitWorker.cancel()
+        vaultRequests.close()
+        vaultWorker.cancel()
         readyBurstRequests.close()
         readyBurstWorker.cancel()
         outgoing.close()

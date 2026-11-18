@@ -27,6 +27,21 @@ A daemon plugin tool runs in the daemon, which cannot open the agent's files. `i
 A client below 1.147.0 sends plain strings and no `client.projectId`: such a tool sees no local files (a path it cannot read is refused as
 "does not exist") and no default project. A daemon below 1.147.0 never lists `localFiles`, and ignores `client.projectId`.
 
+### VAULT-REVEAL-1 (contract 1.157.0, additive): `secret_reveal`, `secret_backup_export`, `secret_backup_import`
+
+Owner-only (`FrameGate.OWNER_ONLY`), refused under a restricted policy, answered directly with the request's own type (never pushed),
+off the request loop. Policy actions `secrets.reveal` (reveal, export) and `secrets.save` (import).
+
+- `secret_reveal` `{"name", "field"?: "value", "project"?, "purpose": "reveal"|"copy"}` -> `{"name", "field", "project", "value", "method",
+  "showSeconds", "clearSeconds"}` after the OS user check on the daemon's computer (Windows Hello, else the Windows password prompt).
+- `secret_backup_export` `{"path", "passphrase"}` -> `{"path", "secrets", "method"}`: a NEW file, PBKDF2-HMAC-SHA256 + AES-256-GCM; needs the
+  OS user check.
+- `secret_backup_import` `{"path", "passphrase", "resolutions"?: {"<name>|<project>/<name>": "keep"|"replace"}}` -> `{"applied", "added",
+  "replaced", "kept", "same", "conflicts"}`. With an unanswered conflict `applied` is false and nothing is written.
+
+Each is appended to `vault-audit.jsonl` in the state folder (never a value). A daemon below 1.157.0 answers an error; the window hides
+Reveal, Copy and the backup card below 1.157.0. See [docs/wiki/Vault.md](../../docs/wiki/Vault.md).
+
 ### PLUGIN-CLI-HOT-1 (contract 1.156.0, additive): `plugin_admin`
 
 `{"args": ["install", "<ref>", ...]}` (the `infantry plugin` arguments) -> `plugin_admin` `{"code": n, "out": "...", "err": "..."}`. Owner-only

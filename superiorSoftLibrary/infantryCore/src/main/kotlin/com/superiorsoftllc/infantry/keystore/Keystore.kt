@@ -55,6 +55,11 @@ private class Sealed(val nonce: String, val ct: String)
 /** What a client may learn about one secret: whether it is set and a masked tail. Never the value. */
 data class SecretInfo(val name: String, val set: Boolean, val tail: String)
 
+/** VAULT-REVEAL-1: one whole secret with its values, for the encrypted backup only. Its [toString] names no value. */
+class StoredSecret(val name: String, val project: String?, val fields: Map<String, String>) {
+    override fun toString(): String = "StoredSecret(name=$name, project=$project, fields=${fields.keys})"
+}
+
 /** SECRETS-2: one field of a secret as a client may see it: its name and a masked tail. Never the value. */
 data class FieldInfo(val name: String, val tail: String)
 
@@ -181,6 +186,41 @@ class Keystore(
         }
         val resealed = fields.mapValues { (f, v) -> seal(dst, f, v) }
         write(current, current.secrets - src + (dst to resealed), current.entries - src)
+    }
+
+    /**
+     * VAULT-REVEAL-1: every secret that opens, each scope's (built-ins included), for an encrypted backup only. Daemon side
+     * only; the caller seals it before it leaves memory.
+     */
+    @Synchronized
+    fun snapshot(): List<StoredSecret> = opened(read()).toSortedMap().map { (key, fields) ->
+        if (key.startsWith(PROJECT_MARK)) {
+            val rest = key.removePrefix(PROJECT_MARK)
+            StoredSecret(rest.substringAfter('/'), rest.substringBefore('/'), fields.toSortedMap())
+        } else StoredSecret(key, null, fields.toSortedMap())
+    }
+
+    /**
+     * VAULT-REVEAL-1: secret [name] in [project] (null = app scope) becomes exactly [fields], in one write (an import's
+     * add or replace). Every name and field is checked as [setField] checks it; the store's limits hold.
+     */
+    @Synchronized
+    fun replaceSecret(name: String, project: String?, fields: Map<String, String>) {
+        val key = key(name, project)
+        require(fields.isNotEmpty()) { "a secret holds at least one field" }
+        require(fields.size <= maxFields) { "a secret holds at most $maxFields fields" }
+        val sealed = fields.entries.associate { (f, v) ->
+            checkField(f)
+            val clean = v.trim()
+            require(clean.isNotEmpty()) { "the secret is empty" }
+            require(clean.length <= MAX_LENGTH) { "the secret is longer than $MAX_LENGTH characters" }
+            f to seal(key, f, clean)
+        }
+        val current = read()
+        require(key in current.secrets || key in current.entries || current.secrets.size < maxSecrets) {
+            "the keystore holds at most $maxSecrets secrets"
+        }
+        write(current, current.secrets + (key to sealed), current.entries - key)
     }
 
     /** The names of the stored secrets of [project] (null = the app scope), sorted. */
