@@ -109,7 +109,7 @@ internal fun PacingSection(state: AppState, now: Long, controller: UsageContext?
 private fun MeterCard(m: MeterUsage, rule: PacingRule, now: Long, onManual: (() -> Unit)?, onOverride: (() -> Unit)?) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp).testTag("pacing-meter-${m.meter}"),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(LimitsView.providerName(m.meter), color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.weight(1f))
@@ -127,7 +127,7 @@ private fun MeterCard(m: MeterUsage, rule: PacingRule, now: Long, onManual: (() 
             listOfNotNull(m.window, PacingView.sourceText(m), LimitsView.paceText(m.paceDelta), LimitsView.resetText(m.resetsAt), PacingView.updatedText(m.updatedAt, now)).joinToString(" · "),
             color = Palette.Muted, fontSize = 10.sp,
         )
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             IconActionTooltipBox(PacingView.SLOT_HELP, describe = false, modifier = Modifier.weight(1f)) { tip ->
                 Text(PacingView.allowanceText(m), color = Palette.Text, fontSize = 11.sp, modifier = tip.testTag("pacing-allowance-${m.meter}"))
             }
@@ -141,7 +141,7 @@ private fun MeterCard(m: MeterUsage, rule: PacingRule, now: Long, onManual: (() 
         PacingView.reasonText(m)?.let { Text(it, color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.testTag("pacing-reason-${m.meter}")) }
         m.warning?.let { Text(it, color = Palette.Muted, fontSize = 10.sp) }
         if (onManual != null || onOverride != null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 onManual?.let { TextButton(onClick = it, modifier = Modifier.testTag("pacing-manual-${m.meter}")) { Text(if (m.source == "live") "Type %" else "Set %", fontSize = 11.sp, color = Palette.Text) } }
                 onOverride?.let { TextButton(onClick = it, modifier = Modifier.testTag("pacing-override-${m.meter}")) { Text("Override", fontSize = 11.sp, color = Palette.Text) } }
             }
