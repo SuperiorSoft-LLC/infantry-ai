@@ -1089,6 +1089,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-health-daemon"
+version = "1.0.0"
+dependencies = [
+ "infantry-plugin-sdk",
+ "serde_json",
+]
+
+[[package]]
 name = "infantry-migrate"
 version = "0.1.0"
 dependencies = [
