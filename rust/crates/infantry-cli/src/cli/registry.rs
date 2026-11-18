@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 //! The native commands. One line per command; a command missing here goes to the JVM launcher.
 
-use super::{Command, RawCommand};
+use super::{cmd_board, cmd_ticket, Command, Needs, RawCommand};
 
 /// Commands that take their raw words (they never meet the global flag parser).
 pub static RAW: &[RawCommand] = &[
@@ -12,6 +12,9 @@ pub static RAW: &[RawCommand] = &[
 
 pub static COMMANDS: &[&Command] = &[
     // -- board / tickets --
+    &Command { name: "board", needs: Needs::Stream, validate: cmd_board::validate_board, run: cmd_board::run_board },
+    &Command { name: "tickets", needs: Needs::Stream, validate: cmd_board::validate_tickets, run: cmd_board::run_tickets },
+    &Command { name: "ticket", needs: Needs::Stream, validate: cmd_ticket::validate, run: cmd_ticket::run },
     // -- mail / sessions --
     &super::cmd_mail::SEND,
     &super::cmd_mail::INBOX,
