@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-runner-link"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "The runner link (runner_link_* frames, contract 1.11.0): a RemoteRunner client and the infantry-runner-agent, byte-compatible with the Kotlin link (RUST-LINK-1)"
+publish = false
+
+[lib]
+name = "infantry_runner_link"
+path = "src/lib.rs"
+
+[[bin]]
+name = "infantry-runner-agent"
+path = "src/bin/infantry-runner-agent.rs"
+
+[dependencies]
+infantry-protocol = { path = "../infantry-protocol" }
+infantry-runner-api = { path = "../infantry-runner-api" }
+infantry-runner-local = { path = "../infantry-runner-local" }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
+sha2 = "0.10"
+base64 = "0.22"
+getrandom = "0.2"
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+infantry-runner-api = { path = "../infantry-runner-api", features = ["test-support"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
