@@ -1136,6 +1136,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-mcp-daemon"
+version = "1.0.0"
+dependencies = [
+ "infantry-plugin-host",
+ "infantry-plugin-sdk",
+ "infantry-plugin-wit",
+ "serde_json",
+]
+
+[[package]]
 name = "infantry-migrate"
 version = "0.1.0"
 dependencies = [
