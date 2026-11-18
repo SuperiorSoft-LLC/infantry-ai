@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
+# A test guest for infantry-plugin-host's tests (spin, panic, slow, version, storage, echo frame). Its own
+# workspace: the host tests build it for wasm32-wasip2, once plain (v1) and once with `--features v2`.
+[package]
+name = "infantry-plugin-fixture"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+v2 = []
+
+[dependencies]
+infantry-plugin-sdk = { path = "../../../infantry-plugin-sdk" }
+
+[profile.release]
+opt-level = 1
+
+[workspace]

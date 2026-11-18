@@ -1050,6 +1050,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-board"
+version = "0.1.0"
+dependencies = [
+ "infantry-core",
+ "infantry-orchestrator-api",
+ "infantry-protocol",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "infantry-cli"
 version = "0.1.0"
 dependencies = [
@@ -1128,25 +1141,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "infantry-harness-opencode"
-version = "0.1.0"
+name = "infantry-health-daemon"
+version = "1.0.0"
 dependencies = [
- "base64",
- "getrandom 0.2.17",
- "infantry-harness",
- "infantry-runner-local",
+ "infantry-plugin-sdk",
  "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "infantry-harness-pi"
-version = "0.1.0"
-dependencies = [
- "infantry-harness",
- "infantry-runner-local",
- "serde_json",
- "tokio",
 ]
 
 [[package]]
@@ -1170,6 +1169,14 @@ dependencies = [
  "quick-xml",
  "serde_json",
  "wit-bindgen 0.46.0",
+]
+
+[[package]]
+name = "infantry-orchestrator-api"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

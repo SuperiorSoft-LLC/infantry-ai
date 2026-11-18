@@ -70,6 +70,8 @@ pub const LAYERS: &[(&str, Layer, u8)] = &[
     ("infantry-harness-opencode", Layer::Harness, 1),
     ("infantry-harness-pi", Layer::Harness, 1),
     ("infantry-orchestrator-api", Layer::Orchestration, 0),
+    // The board (tickets on infantry.db, lane rules, ticket_* unit, LocalOrchestrator); a wasm plugin once the WIT storage SQL exists.
+    ("infantry-board", Layer::Orchestration, 1),
     ("infantry-board-daemon", Layer::Plugin, 0),
     ("infantry-news-daemon", Layer::Plugin, 0),
     ("infantry-health-daemon", Layer::Plugin, 0),

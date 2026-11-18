@@ -11,7 +11,7 @@ Dependencies point DOWN only. `cargo test -p infantry-guards` enforces this page
 | L1 platform core | infantry-core (0), infantry-plugin-wit (0), infantry-plugin-host (1), infantry-plugin-sdk (1) | Generic mechanisms: the `FrameUnit` registry, event bus, db handle, settings; the plugin contract and host. |
 | L2 runner | infantry-runner-api (0), infantry-runner (1), infantry-runner-local (2), infantry-runner-link (2) | Running processes, locally or on a linked runner. |
 | L3 agents / harnesses | infantry-harness (0), infantry-harness-codex (1), infantry-harness-opencode (1), infantry-harness-pi (1) | One agent CLI each. Agents work with no orchestrator. |
-| L4 orchestration | infantry-orchestrator-api (0) | Board, tickets, pipeline seams. |
+| L4 orchestration | infantry-orchestrator-api (0), infantry-board (1) | Board, tickets, pipeline seams. |
 | Plugin | anything under `plugins/official/*` (e.g. the Board daemon in `plugins/official/Infantry_Board`), infantry-board-daemon, infantry-news-daemon, infantry-health-daemon | A feature. Talks to the platform only through plugin-wit / plugin-sdk. |
 | Top (composition roots) | infantry-daemon, infantry-cli, infantry-migrate, app/src-tauri (`infantry-tauri`) | Wires everything together. May depend on anything. |
 | Tooling | infantry-conformance (wire only), infantry-guards (nothing) | Test and tooling crates with an explicit dependency list. |
