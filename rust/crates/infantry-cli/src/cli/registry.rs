@@ -16,6 +16,8 @@ pub static COMMANDS: &[&Command] = &[
     &super::tools_cmds::SCRIPT,
     &super::tools_cmds::SECRET,
     &super::tools_cmds::RUN_CMD,
+    &super::usage_settings::USAGE,
+    &super::usage_settings::SETTINGS,
     // -- runner --
 ];
 
