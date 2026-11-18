@@ -14,8 +14,9 @@ import com.superiorsoftllc.infantry.session.stateDir
 import java.io.File
 
 /**
- * PLUGIN-MANAGER-1: `infantry plugin ...` manages the plugins root of THIS host (the same files the daemon and the app read),
- * so it contacts no daemon and adds no wire frame. A change to a daemon or harness half takes effect at the next daemon start.
+ * PLUGIN-MANAGER-1: `infantry plugin ...` manages the plugins root of THIS host (the same files the daemon and the app read).
+ * PLUGIN-CLI-HOT-1: install/update/enable/disable/rollback/remove/grants go to a daemon running on this machine (frame `plugin_admin`),
+ * whose manager hot-applies a daemon half; with no daemon they change the files and a daemon or harness half takes effect at the next start.
  * An install without `--grant` prints what the plugin asks for and stops (no prompt): consent is always explicit.
  */
 internal object PluginCli {
@@ -37,7 +38,42 @@ internal object PluginCli {
                                 one catalog from <dir>/<id>.json entry files (file name = id, ids unique), then validated
 <ref> = [source:]id[@version] from a catalog, a .ihq file, a plugin folder, or a URL (the last three are CUSTOM plugins)."""
 
-    fun run(args: List<String>, out: Appendable, err: Appendable, getenv: (String) -> String?): Int {
+    /** PLUGIN-CLI-HOT-1: the commands that change what is installed or loaded; with a daemon on this machine they run THERE, hot. */
+    private val DAEMON_COMMANDS = setOf("install", "update", "enable", "disable", "rollback", "remove", "grants")
+
+    /** A daemon on this machine shares the plugins root; a remote one does not (a `<ref>` may be a local path), so it is not used. */
+    private fun isLocal(url: String): Boolean = runCatching { java.net.URI(url).host?.lowercase() }.getOrNull() in setOf("127.0.0.1", "localhost", "[::1]", "::1")
+
+    /**
+     * PLUGIN-CLI-HOT-1: runs [args] on the running local daemon (its manager hot-applies the change) and returns the exit code, or
+     * null when no local daemon answers (the caller then takes the offline path, whose message says the change waits for a start).
+     */
+    private fun viaDaemon(args: List<String>, out: Appendable, err: Appendable, target: Target?): Int? {
+        if (target == null || !isLocal(target.url) || args.firstOrNull() !in DAEMON_COMMANDS) return null
+        if (daemonReady(target, target.answerTimeoutMs) == null) return null
+        val stream = FrameStream.open(target, err)
+        try {
+            val body = kotlinx.serialization.json.buildJsonObject {
+                put("args", kotlinx.serialization.json.JsonArray(args.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+            }
+            val answer = kotlinx.coroutines.runBlocking {
+                stream.request(com.superiorsoftllc.infantry.protocol.Envelope(com.superiorsoftllc.infantry.protocol.Envelope.PLUGIN_ADMIN, body.toString()), com.superiorsoftllc.infantry.protocol.Envelope.PLUGIN_ADMIN, "plugin ${args.first()}", idempotent = false)
+            }
+            val result = kotlinx.serialization.json.Json.parseToJsonElement(answer.data) as kotlinx.serialization.json.JsonObject
+            fun text(k: String) = (result[k] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+            out.append(text("out")); err.append(text("err"))
+            return text("code").toIntOrNull() ?: 1
+        } catch (e: Exception) {
+            // The daemon was reachable: the change may have been applied, so never fall back to a second, offline attempt.
+            err.appendLine("error: the daemon did not complete `plugin ${args.first()}`: ${e.message?.lineSequence()?.first() ?: e::class.simpleName}")
+            return 1
+        } finally {
+            stream.close()
+        }
+    }
+
+    fun run(args: List<String>, out: Appendable, err: Appendable, getenv: (String) -> String?, daemon: (() -> Target?)? = null): Int {
+        viaDaemon(args, out, err, daemon?.let { runCatching(it).getOrNull() })?.let { return it }
         val dir = stateDir { getenv(it) ?: com.superiorsoftllc.infantry.session.infantrySetting(it) }
         val root = PluginFolders.root(dir, { getenv(it) })
         // BUG FIRSTINSTALL (ticket 97ddfc96): the daemon finds its bundled modules (the official plugins) in the install's

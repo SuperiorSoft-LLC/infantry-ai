@@ -28,6 +28,8 @@ object FrameGate {
         Envelope.PLUGIN_SECRET_GET,
         // RUNNER-POOL-6a: `infantry runner pair|add|rotate|detach <name>` through the daemon (pairing, credentials).
         com.superiorsoftllc.infantry.runners.RunnerLinkService.ADMIN,
+        // PLUGIN-CLI-HOT-1: `infantry plugin install|update|...` through the daemon (installs code, grants permissions).
+        Envelope.PLUGIN_ADMIN,
     )
 
     /**

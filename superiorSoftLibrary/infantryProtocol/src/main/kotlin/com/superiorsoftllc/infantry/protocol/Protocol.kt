@@ -330,6 +330,9 @@ data class Envelope(
         /** DAEMON-HEALTH-1: `{sessionId?}` -> a `health` frame holding one `HealthReport` JSON (daemon, plugins, MCP bridges, environment, restart log). Read-only. */
         const val HEALTH = "health"
 
+        /** Contract 1.156.0 (PLUGIN-CLI-HOT-1): `{"args": ["install", ...]}` (the `infantry plugin` arguments) -> a `plugin_admin` frame `{"code": n, "out": "...", "err": "..."}`. Owner-only; the daemon runs the command on its own plugin manager, so a change reaches the running host hot. */
+        const val PLUGIN_ADMIN = "plugin_admin"
+
         /** Contract 1.120.0 (ROGUE-1): pushed to every client when free RAM drops under `processes.floorMb` (a [com.superiorsoftllc.infantry.session.ProcessReport]), at most once per 10 min. */
         const val PROCESS_PRESSURE = "process_pressure"
         const val MAIL_REFUSED = "mail_refused"

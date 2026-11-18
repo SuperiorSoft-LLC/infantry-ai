@@ -27,6 +27,14 @@ A daemon plugin tool runs in the daemon, which cannot open the agent's files. `i
 A client below 1.147.0 sends plain strings and no `client.projectId`: such a tool sees no local files (a path it cannot read is refused as
 "does not exist") and no default project. A daemon below 1.147.0 never lists `localFiles`, and ignores `client.projectId`.
 
+### PLUGIN-CLI-HOT-1 (contract 1.156.0, additive): `plugin_admin`
+
+`{"args": ["install", "<ref>", ...]}` (the `infantry plugin` arguments) -> `plugin_admin` `{"code": n, "out": "...", "err": "..."}`. Owner-only
+(`FrameGate.OWNER_ONLY`), policy action `plugins.admin`. The daemon runs the command on its own plugin manager, so install, update, enable,
+disable, rollback, remove and grants hot-apply a daemon half (PLUGIN-HOTLOAD-1). The CLI sends it only to a daemon on this machine
+(a `<ref>` may be a local path); with none answering it changes the files and says the change waits for the next start. A daemon below
+1.156.0 answers an error and the CLI reports it; it does not retry offline.
+
 ### TRIG-API-1 (contract 1.155.0, additive): one-shot, owned and session-targeted trigger fields
 
 `TriggerSave` and `TriggerView` (`infantryProtocol/.../Triggers.kt`) gain four fields, each defaulting to today's behaviour:

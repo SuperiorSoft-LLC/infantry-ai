@@ -159,6 +159,8 @@ object ActionCatalog {
         a("runs.stop", DESTRUCTIVE, E.RUN_STOP),
         a("secrets.save", WRITE, E.SECRET_SET, E.SECRET_CLEAR, E.SECRET_IMPORT, E.SECRET_FIELD_SET, E.SECRET_FIELD_DELETE, E.SECRET_DELETE, E.SECRET_MOVE, E.SECRET_LOGIN),
         a("runners.admin", WRITE, RUNNER_ADMIN),
+        // PLUGIN-CLI-HOT-1: `infantry plugin install|update|enable|disable|...` through the daemon (hot apply).
+        a("plugins.admin", WRITE, E.PLUGIN_ADMIN),
 
         // PLUGIN-BRIDGES-1: a client hosting its UI halves' capabilities (announce, answer), and their declared events.
         a("capabilities.host", READ, com.superiorsoftllc.infantry.plugin.api.CapabilityWire.HOST, com.superiorsoftllc.infantry.plugin.api.CapabilityWire.RESULT),

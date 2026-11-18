@@ -741,6 +741,8 @@ class InfantryDaemon(
             // DAEMON-PLUGINS-1: the daemon plugins, loaded once the managers they reach exist (below); every seam reads this
             // holder, so until then (and with no daemon plugin) each answers neutrally.
             val pluginHost = java.util.concurrent.atomic.AtomicReference(com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.empty())
+            // PLUGIN-CLI-HOT-1: the hot plugin manager `plugin_admin` runs `infantry plugin ...` on (set where it is built).
+            val pluginAdminManager = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.infantry.daemon.plugins.manager.PluginManager?>(null)
             // AR-4b: core reads roles through the Roles port (no provider = no persona), looked up at call time.
             val rolesLookup = com.superiorsoftllc.infantry.daemon.RolesLookup { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.infantry.daemon.api.roles.Roles::class) }
             // DAEMON-PLUGINS-1 (`admission`): the guest tokens an official plugin admits NOW (read per request).
@@ -1869,7 +1871,7 @@ class InfantryDaemon(
                                 // CORE-PROGRESS-DOWNLOAD-1: catalog and jar downloads go through the core downloader; each change is a progress task.
                                 coreDownloads = com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.lateDownloads({ pluginHost.get() }, "plugins"),
                                 progressSystem = com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.lateProgress({ pluginHost.get() }, "plugins"),
-                            ),
+                            ).also { pluginAdminManager.set(it) },
                             asks = { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.infantry.daemon.api.attention.OwnerAsks::class) },
                             log = { System.err.println("[infantry] $it") },
                         ),
@@ -2530,6 +2532,7 @@ class InfantryDaemon(
                             ownerCredential = ownerCredential,
                             plugins = plugins,
                             runnerLink = runnerLinkService,
+                            pluginAdmin = { pluginAdminManager.get() },
                             forwarder = frameForwarder,
                             deploymentMode = deploymentMode,
                             daemonConfig = daemonConfig,
@@ -3117,6 +3120,8 @@ private suspend fun handleConnection(
     plugins: com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost = com.superiorsoftllc.infantry.daemon.plugins.DaemonPluginHost.empty(),
     /** RUNNER-POOL-6a: answers the owner-only `runner_admin` frame (`infantry runner`); null = this daemon serves none. */
     runnerLink: com.superiorsoftllc.infantry.runners.RunnerLinkService? = null,
+    /** PLUGIN-CLI-HOT-1: the daemon's hot plugin manager, for the owner-only `plugin_admin` frame; null = none yet. */
+    pluginAdmin: () -> com.superiorsoftllc.infantry.daemon.plugins.manager.PluginManager? = { null },
     /** RUNNER-POOL-7: holds the orchestrator-side frames of sessions a remote orchestrator started here; null = forwards nothing. */
     forwarder: com.superiorsoftllc.infantry.runners.FrameForwarder? = null,
     /** RUNNER-POOL-10: a runner-mode daemon refuses the board frames of a client. */
@@ -3178,6 +3183,25 @@ private suspend fun handleConnection(
             }
             null
         }
+    }
+    // PLUGIN-CLI-HOT-1: `infantry plugin install|update|enable|disable|...` (FrameGate.OWNER_ONLY) runs on the daemon's own manager, whose
+    // hot apply loads/unloads the daemon half in this process. An install may download, so off the loop.
+    frames.register(Envelope.PLUGIN_ADMIN) { env, _ ->
+        val args = runCatching { ((json.parseToJsonElement(env.data) as kotlinx.serialization.json.JsonObject)["args"] as kotlinx.serialization.json.JsonArray).map { (it as kotlinx.serialization.json.JsonPrimitive).content } }.getOrNull()
+            ?: return@register Envelope(Envelope.ERROR, "plugin_admin: the data must be {\"args\": [...]}", requestId = env.requestId)
+        val manager = pluginAdmin() ?: return@register Envelope(Envelope.ERROR, "plugin_admin: this daemon has no plugin manager yet", requestId = env.requestId)
+        session.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val out = StringBuilder()
+            val err = StringBuilder()
+            val code = try { com.superiorsoftllc.infantry.cli.PluginCli.run(args, out, err, manager) } catch (e: Exception) { err.appendLine("error: ${e.message ?: e::class.simpleName}"); 1 }
+            val body = kotlinx.serialization.json.buildJsonObject {
+                put("code", kotlinx.serialization.json.JsonPrimitive(code))
+                put("out", kotlinx.serialization.json.JsonPrimitive(out.toString()))
+                put("err", kotlinx.serialization.json.JsonPrimitive(err.toString()))
+            }
+            outgoing.trySend(Envelope(Envelope.PLUGIN_ADMIN, body.toString(), requestId = env.requestId))
+        }
+        null
     }
     // PLUGIN-BRIDGES-1 (docs/wiki/Bridges.md): this connection may host client-side capabilities (the UI halves it loaded). The
     // registry keys the host by this connection's outgoing channel; a call reaches it as a `capability_call` frame.

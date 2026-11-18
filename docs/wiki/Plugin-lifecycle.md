@@ -112,8 +112,8 @@ per-module class loader is the unit of unload; sharing a loader between plugins 
 
 ## Applying a plugin change in the open window (UI-PLUGIN-BRIDGE-1)
 
-`infantry plugin enable|disable|install|update` changes the plugins root and the daemon half (hot, PLUGIN-HOTLOAD-1); the CLI line
-"takes effect at the next daemon start" is about the harness half only. The open desktop window applies the change through the
+`infantry plugin enable|disable|install|update|rollback|remove|grants` is sent to a daemon running on this machine (the owner-only `plugin_admin` frame, PLUGIN-CLI-HOT-1), whose manager changes the plugins root and the daemon half hot (PLUGIN-HOTLOAD-1); with no local daemon answering, the CLI changes the files and the line
+"takes effect at the next daemon start" is printed, and is also what the harness half always says. The open desktop window applies the change through the
 **`plugins.apply` capability** (a `runs: client` capability of Infantry_Settings, [Bridges](Bridges.md)). It runs the same
 `PluginLifecycle.apply` that Settings > Plugins calls (`PluginLifecycleBridge` in `PluginDropIn.kt` hands it to the capability), so
 there is one swap path. It answers `{applied, message, warnings}` when the window finishes, fails at once with "has no host" when no
