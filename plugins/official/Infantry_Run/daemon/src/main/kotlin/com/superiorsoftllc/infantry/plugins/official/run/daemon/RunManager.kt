@@ -34,6 +34,8 @@ data class RunRecord(
     val name: String? = null,
     val terminal: Boolean = false,
     val interactive: Boolean = false,
+    /** PREVIEW-BRANCH-1: the branch a branch command runs on; null for any other run. */
+    val branch: String? = null,
 )
 
 /**
@@ -63,6 +65,8 @@ data class RunSummary(
     val outcome: String? = null,
     val terminal: Boolean = false,
     val interactive: Boolean = false,
+    /** PREVIEW-BRANCH-1: the branch a branch command runs on (the Run tab shows it on the pill). */
+    val branch: String? = null,
 )
 
 @Serializable
@@ -98,6 +102,8 @@ class RunManager(
     private val projectSecrets: (String, String?) -> Map<String, String>? = { name, _ -> secrets(name) },
     /** SECRET-RENDER-1: renders a saved command's templates before it starts. */
     private val renderer: SecretRenderer? = null,
+    /** PREVIEW-BRANCH-1: finds or makes a branch's checkout for a branch command; null = branch commands cannot start. */
+    private val worktrees: BranchWorktrees? = null,
 ) {
     /** A fixed set of commands (the tests, and any caller with no store behind it). */
     constructor(registry: CommandRegistry, runs: Runs, emit: (Envelope) -> Unit, now: () -> Long = System::currentTimeMillis) :
@@ -161,6 +167,7 @@ class RunManager(
         val rows = clampRows((obj["rows"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_ROWS)
         // SEC-FIX-1 H1(a): a run gets its SAVED command's secrets only; a request naming more is refused, never merged.
         if (obj.containsKey("secrets")) return refuse("run_start refused: a run gets only its saved command's secrets; \"secrets\" is not accepted here")
+        val branch = (obj["branch"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() }
         val run: Run
         val command: SavedCommand
         // The lookup is under [lock] too, so a save or delete running in [unlessRunning] cannot slip between them.
@@ -178,10 +185,18 @@ class RunManager(
                     else "run_start refused: project '$owner' has no folder registered; set the project folder first",
                 )
             }
+            // PREVIEW-BRANCH-1: a branch command needs a branch; any other command takes none.
+            if (command.branch) {
+                if (worktrees == null) return refuse("run_start refused: branch runs are not available on this daemon")
+                if (branch == null) return refuse("run_start refused: command '$commandId' runs on a branch; pass \"branch\" (run_branches lists them)")
+                if (!BranchWorktrees.isBranchName(branch)) return refuse("run_start refused: '$branch' is not a branch name")
+            } else if (branch != null) {
+                return refuse("run_start refused: command '$commandId' does not run on a branch (its cwd and argv name no {worktree} or {branch})")
+            }
             if (inFlight != null) return refuse("run_start refused: a run is already in flight")
             val env = secretEnv(command.secrets.distinct(), command.projectId).getOrElse { return refuse("run_start refused: ${it.message}") }
             val rendered = renderFor(command).getOrElse { return refuse("run_start refused: ${it.message}") }
-            run = Run(UUID.randomUUID().toString(), command, now(), interactive, cols, rows, env, rendered)
+            run = Run(UUID.randomUUID().toString(), command, now(), interactive, cols, rows, env, rendered, branch.takeIf { command.branch })
             inFlight = run
             history.addLast(run)
             prune()
@@ -343,7 +358,17 @@ class RunManager(
         private val env: Map<String, String> = emptyMap(),
         /** SECRET-RENDER-1: temporary rendered files, deleted when the run ends. */
         private val rendered: List<java.io.File> = emptyList(),
+        /** PREVIEW-BRANCH-1: the branch of a branch command; its checkout is prepared in [launch]. */
+        val branch: String? = null,
     ) {
+        /** PREVIEW-BRANCH-1: the checkout in use; removed when the run ends if this run made it. */
+        @Volatile private var prepared: PreparedWorktree? = null
+        /** The pill's label: the command's name, and for a branch run its branch ("Preview app (my-branch)"). */
+        val label: String get() = branch?.let { "${command.name} ($it)" } ?: command.name
+
+        /** True from [launch] of a branch run until its child starts (or the run ends): a stop then ends it before the start. */
+        @Volatile private var preparing = false
+        private val cleaned = java.util.concurrent.atomic.AtomicBoolean(false)
         /** SECRETS-2: the injected values never reach a frame, the scrollback or a line. */
         private val scrubber = SecretScrubber(env.values)
         private val outLock = Any()
@@ -359,11 +384,11 @@ class RunManager(
         private val decoder = AnsiLineDecoder { output("stdout", it) }
 
         fun record(state: String, pid: Long? = null) =
-            RunRecord(runId, command.id, state, startedAt, pid, name = command.name, terminal = hasTerminal, interactive = interactive)
+            RunRecord(runId, command.id, state, startedAt, pid, name = label, terminal = hasTerminal, interactive = interactive, branch = branch)
 
         fun summary(): RunSummary = synchronized(outLock) {
             val state = when { finished -> "FINISHED"; handle != null -> "RUNNING"; else -> "STARTING" }
-            RunSummary(runId, command.id, command.name, state, startedAt, ended?.endedAt, ended?.exitCode, ended?.outcome, hasTerminal, interactive)
+            RunSummary(runId, command.id, label, state, startedAt, ended?.endedAt, ended?.exitCode, ended?.outcome, hasTerminal, interactive, branch)
         }
 
         /** Under [outLock], so no live chunk lands between the snapshot and its sequence. */
@@ -420,6 +445,11 @@ class RunManager(
         }
 
         fun stop(force: Boolean) {
+            // PREVIEW-BRANCH-1: still preparing the checkout: mark the stop; the preparing thread ends the run without starting it.
+            if (handle == null && preparing) {
+                synchronized(outLock) { if (!finished && stopMode == null) stopMode = if (force) "KILLED_FORCED" else "KILLED_GRACEFUL" }
+                return
+            }
             // Not started yet, or the spawn failed: finish() already owns the outcome.
             val p = handle?.let { Stoppable({ it.isAlive }, it::terminate, it::killTree) } ?: return
             synchronized(outLock) { if (finished || stopMode != null) return; stopMode = if (force) "KILLED_FORCED" else "KILLED_GRACEFUL" }
@@ -446,6 +476,32 @@ class RunManager(
         }
 
         fun launch() {
+            val b = branch
+            if (b == null) { spawn(command.argv, relativeCwd(runs, command)); return }
+            // PREVIEW-BRANCH-1: a checkout can take a while (a large repository): never on the socket thread.
+            preparing = true
+            Thread({ prepareAndSpawn(b) }, "infantry-run-prepare").apply { isDaemon = true }.start()
+        }
+
+        /** Finds or makes [b]'s checkout, fills the variables in, then starts the child; a stop meanwhile ends the run unstarted. */
+        private fun prepareAndSpawn(b: String) {
+            val wt = worktrees ?: return finish(null, "FAILED", "branch runs are not available")
+            val root = runs.rootOf(command.projectId)?.let { runCatching { it.canonicalFile }.getOrNull() }
+                ?: return finish(null, "FAILED", "the project has no folder")
+            output("stdout", "[infantry] preparing the checkout of branch $b")
+            val p = wt.prepare(root, command.projectId, b).getOrElse { preparing = false; return finish(null, "FAILED", it.message) }
+            prepared = p
+            output("stdout", "[infantry] " + (if (p.created) "made preview worktree " else "using the worktree ") + p.dir.path)
+            stopMode?.let { preparing = false; return finish(null, it, "stopped before it started") }
+            val rel = p.dir.relativeToOrNull(root)?.path?.replace('\\', '/')
+            if (rel == null || rel.startsWith("..")) { preparing = false; return finish(null, "FAILED", "the worktree of '$b' is outside the project folder") }
+            val cwd = command.cwd?.let { BranchVars.substitute(it, rel, b, null).trimEnd('/') }?.takeIf { it.isNotEmpty() }
+            val argv = command.argv.map { BranchVars.substitute(it, p.dir.path, b, root.path) }
+            spawn(argv, cwd)
+            preparing = false
+        }
+
+        private fun spawn(argv: List<String>, cwd: String?) {
             val listener = object : RunListener {
                 override fun onBytes(bytes: ByteArray) = terminalBytes(bytes)
                 override fun onLine(stream: String, line: String) = lines(stream, line)
@@ -455,7 +511,7 @@ class RunManager(
                 }
             }
             val started = try {
-                runs.start(RunSpec(command.argv, relativeCwd(runs, command), env, projectId = command.projectId, terminal = usePty && !command.detached, cols = cols, rows = rows, detached = command.detached), listener)
+                runs.start(RunSpec(argv, cwd, env, projectId = command.projectId, terminal = usePty && !command.detached, cols = cols, rows = rows, detached = command.detached), listener)
             } catch (e: Exception) {
                 // Never the argv or the message (it can quote it): the class name only.
                 finish(null, "FAILED", "spawn failed (${e::class.simpleName})")
@@ -505,6 +561,7 @@ class RunManager(
         }
 
         fun finish(exitCode: Int?, outcome: String, detail: String?) {
+            removePreview()
             synchronized(outLock) {
                 if (finished) return
                 finished = true
@@ -514,6 +571,16 @@ class RunManager(
                 synchronized(lock) { if (inFlight === this) inFlight = null; prune() }
                 emit(Envelope(Envelope.RUN_FINISHED, wire.encodeToString(RunFinished.serializer(), end)))
             }
+        }
+
+        /** PREVIEW-BRANCH-1: removes the preview worktree this run made (once), before `run_finished`; a ticket's own is kept. */
+        private fun removePreview() {
+            val p = prepared ?: return
+            if (!p.created || !cleaned.compareAndSet(false, true)) return
+            val root = runs.rootOf(command.projectId)?.let { runCatching { it.canonicalFile }.getOrNull() } ?: return
+            val gone = runCatching { worktrees?.remove(root, command.projectId, p.dir) == true }.getOrDefault(false)
+            output("stdout", if (gone) "[infantry] removed preview worktree ${p.dir.path}"
+                else "[infantry] could not remove preview worktree ${p.dir.path}; the next preview of this branch removes it")
         }
     }
 

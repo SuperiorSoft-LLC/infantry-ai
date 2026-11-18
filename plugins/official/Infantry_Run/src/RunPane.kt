@@ -84,6 +84,8 @@ const val RUN_SET_FOLDER_TAG = "run-set-folder"
 const val RUN_FOLDER_PATH_TAG = "run-folder-path"
 const val RUN_FOLDER_SAVE_TAG = "run-folder-save"
 const val RUN_UNASSIGNED_TAG = "run-unassigned"
+/** PREVIEW-BRANCH-1: a branch in Start on branch's list, followed by `-<branch>`. */
+const val RUN_BRANCH_TAG = "run-branch"
 /** Followed by `-<command id>`. */
 const val RUN_ASSIGN_TAG = "run-assign"
 
@@ -103,6 +105,42 @@ object RunCommandForm {
     /** SECRETS-2: secret names, one per line or comma-separated; blanks and repeats dropped. */
     fun secretsOf(text: String): List<String> = text.split('\n', ',').map { it.trim() }.filter { it.isNotEmpty() }.distinct()
 }
+
+/**
+ * PREVIEW-BRANCH-1: a branch command (its cwd or argv names `{worktree}` or `{branch}`) starts on a branch the owner picks;
+ * the daemon runs it in that branch's checkout. The rules here are the daemon's (BranchVars), read off the saved command.
+ */
+object RunBranches {
+    const val WORKTREE = "{worktree}"
+    const val BRANCH = "{branch}"
+    /** The daemon refuses a start at once; a start that goes ahead is answered by the `run` broadcast, never directly. */
+    const val REFUSAL_WAIT_MILLIS = 3_000L
+
+    fun isBranchCommand(c: CommandSpecView): Boolean =
+        (listOfNotNull(c.cwd) + c.argv).any { it.contains(WORKTREE) || it.contains(BRANCH) }
+
+    /** `run_branches` answer -> rows; null when it is not that answer. */
+    fun parse(data: String): List<BranchRow>? = runCatching {
+        val o = kotlinx.serialization.json.Json.parseToJsonElement(data) as kotlinx.serialization.json.JsonObject
+        (o["branches"] as kotlinx.serialization.json.JsonArray).map { e ->
+            val b = e as kotlinx.serialization.json.JsonObject
+            BranchRow(
+                (b["name"] as kotlinx.serialization.json.JsonPrimitive).content,
+                (b["worktree"] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content,
+            )
+        }
+    }.getOrNull()
+
+    /** The `run_start` body for [commandId] on [branch]. */
+    fun startBody(commandId: String, project: String?, branch: String): String = kotlinx.serialization.json.buildJsonObject {
+        put("commandId", kotlinx.serialization.json.JsonPrimitive(commandId))
+        project?.let { put("project", kotlinx.serialization.json.JsonPrimitive(it)) }
+        put("branch", kotlinx.serialization.json.JsonPrimitive(branch))
+    }.toString()
+}
+
+/** PREVIEW-BRANCH-1: one local branch, with the worktree it is checked out in (a ticket's), if any. */
+data class BranchRow(val name: String, val worktree: String? = null)
 
 /** The editor's fields. [editingId] is null for a new command; an edited command keeps its id. */
 internal data class CommandDraft(
@@ -205,6 +243,28 @@ class RunPaneHost internal constructor(
 
     fun start(interactive: Boolean) {
         picked?.let { c -> act { context.start(c.id, interactive, project?.id) } }
+    }
+
+    /** PREVIEW-BRANCH-1: the picked command runs on a branch the owner picks. */
+    val pickedOnBranch: Boolean get() = picked?.let { RunBranches.isBranchCommand(it) } == true
+
+    /** PREVIEW-BRANCH-1: the shown project's local branches (`run_branches`); a failure says why in plain words. */
+    suspend fun branches(): Result<List<BranchRow>> {
+        val body = kotlinx.serialization.json.buildJsonObject { project?.id?.let { put("project", kotlinx.serialization.json.JsonPrimitive(it)) } }.toString()
+        val r = link.request("run_branches", body) ?: return Result.failure(IllegalStateException("not connected to the daemon"))
+        if (r.refused) return Result.failure(IllegalStateException(plainRefusal(r.data)))
+        return RunBranches.parse(r.data)?.let { Result.success(it) } ?: Result.failure(IllegalStateException("this daemon does not list branches (update Infantry_Run)"))
+    }
+
+    /** PREVIEW-BRANCH-1: starts the picked branch command on [branch]; a refusal shows like any other. */
+    fun startOnBranch(branch: String) {
+        val c = picked ?: return
+        localError.value = null
+        scope.launch {
+            val body = RunBranches.startBody(c.id, project?.id, branch)
+            val r = kotlinx.coroutines.withTimeoutOrNull(RunBranches.REFUSAL_WAIT_MILLIS) { link.request("run_start", body) }
+            if (r?.refused == true) localError.value = r.data
+        }
     }
 
     /** RUN-SCOPE-1: moves the unassigned command [c] into the shown project, its cwd unchanged (relative to the folder). */
@@ -428,7 +488,9 @@ fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
                 }
             }
         }
-        OutlinedButton(
+        if (run.pickedOnBranch) {
+            RunBranchStart(run, enabled = canWrite && !inFlight && picked != null && picked.rooted)
+        } else OutlinedButton(
             onClick = { run.start(interactive) },
             enabled = canWrite && !inFlight && picked != null && picked.rooted,
             modifier = Modifier.testTag(RUN_START_TAG),
@@ -466,6 +528,48 @@ fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
             ) { Text("Delete", fontSize = 12.sp) }
         }
         run.current?.let { Text(it.finished?.outcome ?: it.state, color = Palette.Muted, fontSize = 11.sp) }
+    }
+}
+
+/**
+ * PREVIEW-BRANCH-1: Start for a branch command: "Start on branch..." lists the project's local branches (a ticket's
+ * worktree named beside its branch); picking one starts the command in that branch's checkout.
+ */
+@Composable
+private fun RunBranchStart(run: RunPaneHost, enabled: Boolean) {
+    val scope = rememberCoroutineScope()
+    var open by remember { mutableStateOf(false) }
+    var rows by remember { mutableStateOf<List<BranchRow>?>(null) }
+    var why by remember { mutableStateOf<String?>(null) }
+    Box {
+        OutlinedButton(
+            onClick = {
+                open = true; rows = null; why = null
+                scope.launch { run.branches().fold({ rows = it }, { why = it.message }) }
+            },
+            enabled = enabled,
+            modifier = Modifier.testTag(RUN_START_TAG),
+        ) { Text("Start on branch...", fontSize = 12.sp) }
+        com.superiorsoftllc.infantry.ui.InfantryDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            val list = rows
+            when {
+                why != null -> Text(why.orEmpty(), color = Palette.Danger, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                list == null -> Text("Loading branches...", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                list.isEmpty() -> Text("No local branches.", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                else -> list.forEach { b ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(b.name, fontSize = 12.sp)
+                                b.worktree?.let { Text("worktree: $it", color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp) }
+                            }
+                        },
+                        onClick = { open = false; run.startOnBranch(b.name) },
+                        modifier = Modifier.testTag("$RUN_BRANCH_TAG-${b.name}"),
+                    )
+                }
+            }
+        }
     }
 }
 

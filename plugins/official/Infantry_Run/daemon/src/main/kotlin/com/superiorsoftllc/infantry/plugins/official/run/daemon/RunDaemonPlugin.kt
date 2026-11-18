@@ -28,6 +28,7 @@ class RunDaemonPlugin : DaemonPlugin {
             restricted = restricted,
             maxBytes = { api.settings.limit("limits.secrets.renderMaxBytes") ?: SecretRenderer.DEFAULT_MAX_BYTES },
         )
+        val worktrees = BranchWorktrees(RunsGit(runs))
         val manager = RunManager(
             registry = { store.registry },
             runs = runs,
@@ -38,10 +39,16 @@ class RunDaemonPlugin : DaemonPlugin {
             // SECRETS-2b: a command's project first, then the app scope.
             projectSecrets = { name, project -> runs.secretFields(name, project) },
             renderer = renderer,
+            worktrees = worktrees,
         )
+        // PREVIEW-BRANCH-1: a project's local branches (the Run tab's picker, infantry_run_branches).
+        val branches: (String?) -> Result<List<BranchInfo>> = { project ->
+            val root = runs.rootOf(project)?.let { runCatching { it.canonicalFile }.getOrNull() }
+            if (root == null) Result.failure(IllegalStateException(CommandRegistry.NO_ROOT)) else worktrees.branches(root, project)
+        }
 
         RunCommandTools(store, manager, { api.events.broadcast(Envelope.COMMANDS, store.registry.specsJson()) }, { api.events.broadcast(it.type, it.data) }, runs::secretNames,
-            renderer, runs::rootOf, { n, p -> runs.secretFields(n, p)?.keys })
+            renderer, runs::rootOf, { n, p -> runs.secretFields(n, p)?.keys }, branches)
             .all().forEach(api.tools::register)
 
         // SECRET-RENDER-1: the Configuration Render file action; owner-only (module.json), answered with names and the path only.
@@ -69,11 +76,29 @@ class RunDaemonPlugin : DaemonPlugin {
             started.launch()
             null
         }
+        // PREVIEW-BRANCH-1: `run_branches {"project"?}` -> `run_branches {"project", "branches": [{"name", "worktree"?}]}`.
+        api.frames.handle(RUN_BRANCHES) { f, _ ->
+            val project = (runCatching { kotlinx.serialization.json.Json.parseToJsonElement(f.data) }.getOrNull() as? kotlinx.serialization.json.JsonObject)
+                ?.get("project")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { p -> p.isString }?.content }?.takeIf { it.isNotBlank() }
+            branches(project).fold(
+                { Frame(RUN_BRANCHES, kotlinx.serialization.json.Json.encodeToString(BranchList.serializer(), BranchList(project, it))) },
+                { Frame(Envelope.ERROR, "run_branches refused: ${it.message}") },
+            )
+        }
         api.frames.handle(Envelope.RUN_STOP) { f, _ -> reply(manager.stop(f.data)) }
         api.frames.handle(Envelope.RUN_LIST) { _, _ -> reply(manager.list()) }
         api.frames.handle(Envelope.RUN_ATTACH) { f, _ -> reply(manager.attach(f.data)) }
         api.frames.handle(Envelope.RUN_RESIZE) { f, _ -> reply(manager.resize(f.data)) }
         api.frames.handle(Envelope.RUN_INPUT) { f, _ -> reply(manager.input(f.data)) }
+    }
+
+    /** PREVIEW-BRANCH-1: the `run_branches` answer. */
+    @kotlinx.serialization.Serializable
+    data class BranchList(val project: String?, val branches: List<BranchInfo>)
+
+    companion object {
+        /** PREVIEW-BRANCH-1: the frame (request and answer) that lists a project's branches. */
+        const val RUN_BRANCHES = "run_branches"
     }
 
     /** A save or delete: a refusal answers the caller; success pushes the new list to every client. */

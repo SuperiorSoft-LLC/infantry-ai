@@ -12,6 +12,7 @@ Every page of this wiki is listed here, one line each. The pages are written fro
 - [Home](Home.md): the wiki front page, how the pages were checked, how to support the project.
 - [Architecture](Architecture.md): the three layers, the daemon, the protocol, a request from click to daemon and back, slots, scripting.
 - [Variant builds](Variant-builds.md): packaging a feature branch such as feature-calendar as its own variant build, never through the nightly.
+- [App preview of a branch](app-preview.md): the Run tab's Preview app, a Gradle run of any branch's app (branch commands, `{worktree}` / `{branch}` / `{root}`), no build.
 - [Command line](CommandLine.md): `infantry` on your PATH after an install, `install-cli` / `uninstall-cli`, what each OS writes.
 
 ## Build plugins
