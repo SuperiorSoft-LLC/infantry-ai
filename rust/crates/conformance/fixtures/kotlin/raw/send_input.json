@@ -1,0 +1,272 @@
+[
+  {
+    "data": "provider=stub contract=1.155.0 instance=d1c248d8-4aac-4e97-8ad3-cb8263aa98ee since=0 build=dev",
+    "sequence": null,
+    "sessionId": null,
+    "type": "ready"
+  },
+  {
+    "data": "{\"preset\":\"production\",\"label\":\"Production\",\"pinned\":false,\"pinnedBy\":null,\"canSwitch\":false,\"presets\":[{\"id\":\"production\",\"label\":\"Production\",\"description\":\"Everything enabled.\"}],\"disable\":[],\"allow\":[],\"reason\":null,\"notice\":null,\"restricted\":false,\"notices\":[],\"ready\":{},\"seatingError\":null,\"refusal\":null,\"frames\":{}}",
+    "sequence": null,
+    "sessionId": null,
+    "type": "policy"
+  },
+  {
+    "data": "[]",
+    "sequence": null,
+    "sessionId": null,
+    "type": "sessions"
+  },
+  {
+    "data": "[]",
+    "sequence": null,
+    "sessionId": null,
+    "type": "worktrees"
+  },
+  {
+    "data": "{\"id\":\"0b681fff-e639-4d37-99b2-647716605925\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\agenthq-standalone\\\\.worktrees\\\\rust-conf-1\",\"spawnedAt\":1794996114930,\"lastHeartbeat\":1794996114930,\"state\":\"BUSY\",\"providerSessionId\":null,\"childPid\":null,\"runCount\":0,\"resumeCount\":0,\"lastExitCode\":null,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":false,\"dormant\":false,\"lastAction\":\"state busy\",\"lastEventAt\":1794996114986,\"live\":true,\"turnActive\":true}",
+    "sequence": 1,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "session"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"runActivity\":{\"state\":\"thinking\",\"startedAt\":1794996114986,\"turnStartedAt\":1794996114986,\"lastEventAt\":1794996114986}}",
+    "sequence": 2,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "conformance: first turn",
+    "sequence": 3,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "turn"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"runActivity\":{\"state\":\"thinking\",\"startedAt\":1794996114994,\"turnStartedAt\":1794996114994,\"lastEventAt\":1794996114994}}",
+    "sequence": 4,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"tool\":\"stub\",\"activity\":\"starting stub model default in C:\\\\Users\\\\antho\\\\agenthq-standalone\\\\.worktrees\\\\rust-conf-1\"}",
+    "sequence": 5,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "[infantry] * session started (stub · default)",
+    "sequence": 6,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "stderr"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"tool\":\"stub\",\"activity\":\"process started (no OS process)\"}",
+    "sequence": 7,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "{\"id\":\"0b681fff-e639-4d37-99b2-647716605925\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\agenthq-standalone\\\\.worktrees\\\\rust-conf-1\",\"spawnedAt\":1794996114930,\"lastHeartbeat\":1794996115187,\"state\":\"BUSY\",\"providerSessionId\":\"stub-session-1\",\"childPid\":null,\"runCount\":1,\"resumeCount\":0,\"lastExitCode\":null,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":true,\"dormant\":false,\"lastAction\":\"state busy\",\"lastEventAt\":1794996115188,\"live\":true,\"turnActive\":true}",
+    "sequence": 8,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "session"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\"}",
+    "sequence": 9,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "{\"type\":\"step_start\",\"sessionID\":\"stub-session-1\"}",
+    "sequence": 10,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "stdout"
+  },
+  {
+    "data": "{\"type\":\"text\",\"text\":\"[stub] daemon is running without a provider CLI.\"}",
+    "sequence": 11,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "stdout"
+  },
+  {
+    "data": "[stub] daemon is running without a provider CLI.",
+    "sequence": 12,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "text_delta"
+  },
+  {
+    "data": "{\"type\":\"text\",\"text\":\"Every frame on this socket is the real protocol; only the text is scripted.\"}",
+    "sequence": 13,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "stdout"
+  },
+  {
+    "data": "Every frame on this socket is the real protocol; only the text is scripted.",
+    "sequence": 14,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "text_delta"
+  },
+  {
+    "data": "{\"type\":\"step_finish\"}",
+    "sequence": 15,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "stdout"
+  },
+  {
+    "data": "[stub] no provider process was started",
+    "sequence": 16,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "stderr"
+  },
+  {
+    "data": "{\"id\":\"0b681fff-e639-4d37-99b2-647716605925\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\agenthq-standalone\\\\.worktrees\\\\rust-conf-1\",\"spawnedAt\":1794996114930,\"lastHeartbeat\":1794996115834,\"state\":\"IDLE\",\"providerSessionId\":\"stub-session-1\",\"childPid\":null,\"runCount\":1,\"resumeCount\":0,\"lastExitCode\":0,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":false,\"dormant\":false,\"lastAction\":\"state idle\",\"lastOutputAt\":1794996115614,\"lastEventAt\":1794996115836,\"live\":false,\"turnActive\":false}",
+    "sequence": 17,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "session"
+  },
+  {
+    "data": "{\"state\":\"IDLE\",\"detail\":\"\",\"runActivity\":{\"state\":\"finished\",\"startedAt\":1794996115836,\"turnStartedAt\":1794996114994,\"lastEventAt\":1794996115836}}",
+    "sequence": 18,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "{\"exitCode\":0,\"outcome\":\"SUCCEEDED\",\"detail\":\"\"}",
+    "sequence": 19,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "finished"
+  },
+  {
+    "data": "{\"state\":\"IDLE\",\"detail\":\"\",\"runActivity\":{\"state\":\"idle\",\"startedAt\":1794996115845,\"turnStartedAt\":1794996114994,\"lastEventAt\":1794996115845}}",
+    "sequence": 20,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "{\"id\":\"0b681fff-e639-4d37-99b2-647716605925\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\agenthq-standalone\\\\.worktrees\\\\rust-conf-1\",\"spawnedAt\":1794996114930,\"lastHeartbeat\":1794996115870,\"state\":\"IDLE\",\"providerSessionId\":\"stub-session-1\",\"childPid\":null,\"runCount\":1,\"resumeCount\":1,\"lastExitCode\":0,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":false,\"dormant\":false,\"lastAction\":\"state idle\",\"lastOutputAt\":1794996115614,\"lastEventAt\":1794996115923,\"lastTurnAt\":1794996115845,\"live\":false,\"turnActive\":false}",
+    "sequence": 21,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "session"
+  },
+  {
+    "data": "{\"state\":\"IDLE\",\"detail\":\"\"}",
+    "sequence": 22,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "conformance: input",
+    "sequence": 23,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "turn"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"runActivity\":{\"state\":\"thinking\",\"startedAt\":1794996115928,\"turnStartedAt\":1794996115928,\"lastEventAt\":1794996115928}}",
+    "sequence": 24,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "{\"id\":\"0b681fff-e639-4d37-99b2-647716605925\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\agenthq-standalone\\\\.worktrees\\\\rust-conf-1\",\"spawnedAt\":1794996114930,\"lastHeartbeat\":1794996115912,\"state\":\"BUSY\",\"providerSessionId\":\"stub-session-1\",\"childPid\":null,\"runCount\":2,\"resumeCount\":1,\"lastExitCode\":0,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":true,\"dormant\":false,\"lastAction\":\"state busy\",\"lastOutputAt\":1794996115614,\"lastEventAt\":1794996115937,\"lastTurnAt\":1794996115845,\"live\":true,\"turnActive\":true}",
+    "sequence": 25,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "session"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\"}",
+    "sequence": 26,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"tool\":\"stub\",\"activity\":\"Resuming session 0b681fff-e639-4d37-99b2-647716605925...\"}",
+    "sequence": 27,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"tool\":\"stub\",\"activity\":\"starting stub model default in C:\\\\Users\\\\antho\\\\agenthq-standalone\\\\.worktrees\\\\rust-conf-1\"}",
+    "sequence": 28,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"tool\":\"stub\",\"activity\":\"resuming provider session stub-session-1\"}",
+    "sequence": 29,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "{\"state\":\"BUSY\",\"detail\":\"\",\"tool\":\"stub\",\"activity\":\"process started (no OS process)\"}",
+    "sequence": 30,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "{\"type\":\"step_start\",\"sessionID\":\"stub-session-1\"}",
+    "sequence": 31,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "stdout"
+  },
+  {
+    "data": "{\"type\":\"text\",\"text\":\"[stub] daemon is running without a provider CLI.\"}",
+    "sequence": 32,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "stdout"
+  },
+  {
+    "data": "[stub] daemon is running without a provider CLI.",
+    "sequence": 33,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "text_delta"
+  },
+  {
+    "data": "{\"type\":\"text\",\"text\":\"Every frame on this socket is the real protocol; only the text is scripted.\"}",
+    "sequence": 34,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "stdout"
+  },
+  {
+    "data": "Every frame on this socket is the real protocol; only the text is scripted.",
+    "sequence": 35,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "text_delta"
+  },
+  {
+    "data": "{\"type\":\"step_finish\"}",
+    "sequence": 36,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "stdout"
+  },
+  {
+    "data": "[stub] no provider process was started",
+    "sequence": 37,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "stderr"
+  },
+  {
+    "data": "{\"id\":\"0b681fff-e639-4d37-99b2-647716605925\",\"provider\":\"stub\",\"workingDir\":\"C:\\\\Users\\\\antho\\\\agenthq-standalone\\\\.worktrees\\\\rust-conf-1\",\"spawnedAt\":1794996114930,\"lastHeartbeat\":1794996116762,\"state\":\"IDLE\",\"providerSessionId\":\"stub-session-1\",\"childPid\":null,\"runCount\":2,\"resumeCount\":1,\"lastExitCode\":0,\"killOutcome\":null,\"lastError\":null,\"worktreePath\":null,\"worktreeBranch\":null,\"repoRoot\":null,\"worktreeBaseRef\":null,\"model\":null,\"effort\":null,\"agentId\":null,\"role\":null,\"ticketId\":null,\"contextSources\":[],\"projectId\":null,\"unattended\":false,\"report\":null,\"isProcessAlive\":false,\"dormant\":false,\"lastAction\":\"state idle\",\"lastOutputAt\":1794996116545,\"lastEventAt\":1794996116764,\"lastTurnAt\":1794996115845,\"live\":false,\"turnActive\":false}",
+    "sequence": 38,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "session"
+  },
+  {
+    "data": "{\"state\":\"IDLE\",\"detail\":\"\",\"runActivity\":{\"state\":\"finished\",\"startedAt\":1794996116764,\"turnStartedAt\":1794996115928,\"lastEventAt\":1794996116764}}",
+    "sequence": 39,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  },
+  {
+    "data": "{\"exitCode\":0,\"outcome\":\"SUCCEEDED\",\"detail\":\"\"}",
+    "sequence": 40,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "finished"
+  },
+  {
+    "data": "{\"state\":\"IDLE\",\"detail\":\"\",\"runActivity\":{\"state\":\"idle\",\"startedAt\":1794996116771,\"turnStartedAt\":1794996115928,\"lastEventAt\":1794996116771}}",
+    "sequence": 41,
+    "sessionId": "0b681fff-e639-4d37-99b2-647716605925",
+    "type": "status"
+  }
+]

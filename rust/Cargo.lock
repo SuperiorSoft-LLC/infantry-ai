@@ -298,6 +298,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-conformance"
+version = "0.1.0"
+dependencies = [
+ "infantry-protocol",
+ "serde_json",
+ "tungstenite",
+]
+
+[[package]]
 name = "infantry-protocol"
 version = "0.1.0"
 dependencies = [

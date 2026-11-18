@@ -1,0 +1,312 @@
+{
+  "frames": [
+    {
+      "data": "provider=stub contract=1.155.0 instance=<id> since=<ts> build=<build>",
+      "sessionId": null,
+      "type": "ready"
+    },
+    {
+      "data": {
+        "allow": [],
+        "canSwitch": false,
+        "disable": [],
+        "frames": {},
+        "label": "Production",
+        "notice": null,
+        "notices": [],
+        "pinned": false,
+        "pinnedBy": null,
+        "preset": "production",
+        "presets": [
+          {
+            "description": "Everything enabled.",
+            "id": "production",
+            "label": "Production"
+          }
+        ],
+        "ready": {},
+        "reason": null,
+        "refusal": null,
+        "restricted": false,
+        "seatingError": null
+      },
+      "sessionId": null,
+      "type": "policy"
+    },
+    {
+      "data": [],
+      "sessionId": null,
+      "type": "sessions"
+    },
+    {
+      "data": [],
+      "sessionId": null,
+      "type": "worktrees"
+    },
+    {
+      "data": {
+        "agentId": null,
+        "childPid": null,
+        "contextSources": [],
+        "dormant": false,
+        "effort": null,
+        "id": "<id:1>",
+        "isProcessAlive": false,
+        "killOutcome": null,
+        "lastAction": "state busy",
+        "lastError": null,
+        "lastEventAt": "<ts>",
+        "lastExitCode": null,
+        "lastHeartbeat": "<ts>",
+        "live": true,
+        "model": null,
+        "projectId": null,
+        "provider": "stub",
+        "providerSessionId": null,
+        "repoRoot": null,
+        "report": null,
+        "resumeCount": 0,
+        "role": null,
+        "runCount": 0,
+        "spawnedAt": "<ts>",
+        "state": "BUSY",
+        "ticketId": null,
+        "turnActive": true,
+        "unattended": false,
+        "workingDir": "<path>",
+        "worktreeBaseRef": null,
+        "worktreeBranch": null,
+        "worktreePath": null
+      },
+      "sessionId": "<id:1>",
+      "type": "session"
+    },
+    {
+      "data": {
+        "detail": "",
+        "runActivity": {
+          "lastEventAt": "<ts>",
+          "startedAt": "<ts>",
+          "state": "thinking",
+          "turnStartedAt": "<ts>"
+        },
+        "state": "BUSY"
+      },
+      "sessionId": "<id:1>",
+      "type": "status"
+    },
+    {
+      "data": "conformance: spawn",
+      "sessionId": "<id:1>",
+      "type": "turn"
+    },
+    {
+      "data": {
+        "detail": "",
+        "runActivity": {
+          "lastEventAt": "<ts>",
+          "startedAt": "<ts>",
+          "state": "thinking",
+          "turnStartedAt": "<ts>"
+        },
+        "state": "BUSY"
+      },
+      "sessionId": "<id:1>",
+      "type": "status"
+    },
+    {
+      "data": {
+        "activity": "starting stub model default in C:\\Users\\antho\\agenthq-standalone\\.worktrees\\rust-conf-1",
+        "detail": "",
+        "state": "BUSY",
+        "tool": "stub"
+      },
+      "sessionId": "<id:1>",
+      "type": "status"
+    },
+    {
+      "data": "[infantry] * session started (stub · default)",
+      "sessionId": "<id:1>",
+      "type": "stderr"
+    },
+    {
+      "data": {
+        "activity": "process started (no OS process)",
+        "detail": "",
+        "state": "BUSY",
+        "tool": "stub"
+      },
+      "sessionId": "<id:1>",
+      "type": "status"
+    },
+    {
+      "data": {
+        "agentId": null,
+        "childPid": null,
+        "contextSources": [],
+        "dormant": false,
+        "effort": null,
+        "id": "<id:1>",
+        "isProcessAlive": true,
+        "killOutcome": null,
+        "lastAction": "state busy",
+        "lastError": null,
+        "lastEventAt": "<ts>",
+        "lastExitCode": null,
+        "lastHeartbeat": "<ts>",
+        "live": true,
+        "model": null,
+        "projectId": null,
+        "provider": "stub",
+        "providerSessionId": "stub-session-1",
+        "repoRoot": null,
+        "report": null,
+        "resumeCount": 0,
+        "role": null,
+        "runCount": 1,
+        "spawnedAt": "<ts>",
+        "state": "BUSY",
+        "ticketId": null,
+        "turnActive": true,
+        "unattended": false,
+        "workingDir": "<path>",
+        "worktreeBaseRef": null,
+        "worktreeBranch": null,
+        "worktreePath": null
+      },
+      "sessionId": "<id:1>",
+      "type": "session"
+    },
+    {
+      "data": {
+        "detail": "",
+        "state": "BUSY"
+      },
+      "sessionId": "<id:1>",
+      "type": "status"
+    },
+    {
+      "data": {
+        "sessionID": "stub-session-1",
+        "type": "step_start"
+      },
+      "sessionId": "<id:1>",
+      "type": "stdout"
+    },
+    {
+      "data": {
+        "text": "[stub] daemon is running without a provider CLI.",
+        "type": "text"
+      },
+      "sessionId": "<id:1>",
+      "type": "stdout"
+    },
+    {
+      "data": "[stub] daemon is running without a provider CLI.",
+      "sessionId": "<id:1>",
+      "type": "text_delta"
+    },
+    {
+      "data": {
+        "text": "Every frame on this socket is the real protocol; only the text is scripted.",
+        "type": "text"
+      },
+      "sessionId": "<id:1>",
+      "type": "stdout"
+    },
+    {
+      "data": "Every frame on this socket is the real protocol; only the text is scripted.",
+      "sessionId": "<id:1>",
+      "type": "text_delta"
+    },
+    {
+      "data": {
+        "type": "step_finish"
+      },
+      "sessionId": "<id:1>",
+      "type": "stdout"
+    },
+    {
+      "data": "[stub] no provider process was started",
+      "sessionId": "<id:1>",
+      "type": "stderr"
+    },
+    {
+      "data": {
+        "agentId": null,
+        "childPid": null,
+        "contextSources": [],
+        "dormant": false,
+        "effort": null,
+        "id": "<id:1>",
+        "isProcessAlive": false,
+        "killOutcome": null,
+        "lastAction": "state idle",
+        "lastError": null,
+        "lastEventAt": "<ts>",
+        "lastExitCode": 0,
+        "lastHeartbeat": "<ts>",
+        "lastOutputAt": "<ts>",
+        "live": false,
+        "model": null,
+        "projectId": null,
+        "provider": "stub",
+        "providerSessionId": "stub-session-1",
+        "repoRoot": null,
+        "report": null,
+        "resumeCount": 0,
+        "role": null,
+        "runCount": 1,
+        "spawnedAt": "<ts>",
+        "state": "IDLE",
+        "ticketId": null,
+        "turnActive": false,
+        "unattended": false,
+        "workingDir": "<path>",
+        "worktreeBaseRef": null,
+        "worktreeBranch": null,
+        "worktreePath": null
+      },
+      "sessionId": "<id:1>",
+      "type": "session"
+    },
+    {
+      "data": {
+        "detail": "",
+        "runActivity": {
+          "lastEventAt": "<ts>",
+          "startedAt": "<ts>",
+          "state": "finished",
+          "turnStartedAt": "<ts>"
+        },
+        "state": "IDLE"
+      },
+      "sessionId": "<id:1>",
+      "type": "status"
+    },
+    {
+      "data": {
+        "detail": "",
+        "exitCode": 0,
+        "outcome": "SUCCEEDED"
+      },
+      "sessionId": "<id:1>",
+      "type": "finished"
+    },
+    {
+      "data": {
+        "detail": "",
+        "runActivity": {
+          "lastEventAt": "<ts>",
+          "startedAt": "<ts>",
+          "state": "idle",
+          "turnStartedAt": "<ts>"
+        },
+        "state": "IDLE"
+      },
+      "sessionId": "<id:1>",
+      "type": "status"
+    }
+  ],
+  "scenario": "spawn_output"
+}
