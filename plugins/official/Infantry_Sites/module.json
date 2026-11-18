@@ -1,6 +1,6 @@
 {
   "name": "Infantry_Sites",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "apiVersion": 2,
   "author": "Infantry AI",
   "description": "The Infantry AI Hosting dashboard (opened from the Services tab): your hosting servers (read-only: online or offline) with Infantry AI Hosting, and a tool for agents to list them.",
@@ -37,6 +37,14 @@
       }
     }
   },
+  "knowledge": [
+    { "id": "hosting",
+      "summary": "Infantry AI Hosting (Services tab): user signs in, subscribes, server appears; agents use infantry_sites_list, infantry_sites_ssh_exec, infantry_sites_ssh_upload. Read for states and fixes.",
+      "file": "knowledge/hosting.md",
+      "tools": ["infantry_sites_list", "infantry_sites_ssh_exec", "infantry_sites_ssh_upload"],
+      "roles": ["*"], "skipRoles": [], "projects": [] }
+  ],
+  "files": ["knowledge"],
   "tabs": [
     { "id": "infantry.sites", "container": "center" }
   ]
