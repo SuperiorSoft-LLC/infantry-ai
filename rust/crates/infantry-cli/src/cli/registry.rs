@@ -7,6 +7,8 @@ use super::{Command, RawCommand};
 /// Commands that take their raw words (they never meet the global flag parser).
 pub static RAW: &[RawCommand] = &[
     // -- raw commands --
+    RawCommand { matches: super::progress::is_progress, run: super::progress::progress },
+    RawCommand { matches: super::progress::is_run, run: super::progress::run },
 ];
 
 pub static COMMANDS: &[&Command] = &[
