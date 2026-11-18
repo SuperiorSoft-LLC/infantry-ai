@@ -4,7 +4,7 @@
 //! pin, plus restart honesty, webhooks, schedules and nudges).
 use infantry_triggers_daemon::guard::Outcome;
 use infantry_triggers_daemon::model::{TriggerSave, TriggerView};
-use infantry_triggers_daemon::service::{MailRequest, Ports, Service, SessionInfo, StartAnswer};
+use infantry_triggers_daemon::service::{ActionAnswer, MailRequest, Ports, Service, SessionInfo, StartAnswer};
 use infantry_triggers_daemon::store::{Row, Sql, Store, V};
 use infantry_triggers_daemon::webhook::{self, Ingress};
 use serde_json::{json, Value};
@@ -65,6 +65,7 @@ struct Log {
     mails: RefCell<Vec<MailRequest>>,
     sessions: RefCell<Vec<SessionInfo>>,
     started_prompts: RefCell<Vec<String>>,
+    actions: RefCell<Vec<String>>,
 }
 
 #[derive(Clone)]
@@ -103,6 +104,10 @@ impl Ports for Fake {
     fn push_all(&self, _all: &[TriggerView]) {}
     fn publish(&self, _name: &str, _payload: Value) {}
     fn log(&self, _line: &str) {}
+    fn call_action(&self, kind: &str, _fire: Value) -> ActionAnswer {
+        self.0.actions.borrow_mut().push(kind.into());
+        if kind == "acme.notify" { ActionAnswer::Done } else { ActionAnswer::NoHandler }
+    }
 }
 
 fn service() -> (Service<Lite, Fake>, Rc<Log>) {
@@ -242,4 +247,16 @@ fn trigger_logic_reaches_the_daemon_only_through_its_ports() {
             assert!(!text.contains(banned), "{f} names `{banned}`: reach the daemon through service::Ports");
         }
     }
+}
+
+#[test]
+fn a_plugin_action_kind_runs_its_handler() {
+    let (mut s, log) = service();
+    let t = save(&mut s, json!({"name": "ping", "coalesceMs": 0, "action": {"kind": "acme.notify"}}));
+    s.fire(&t.id, "manual", None, None).unwrap();
+    assert_eq!(log.actions.borrow()[0], "acme.notify");
+    assert_eq!(s.events(&t.id).unwrap()[0].disposition, "delivered");
+    let u = save(&mut s, json!({"name": "nobody", "coalesceMs": 0, "action": {"kind": "gone.kind"}}));
+    s.fire(&u.id, "manual", None, None).unwrap();
+    assert_eq!(s.events(&u.id).unwrap()[0].disposition, "refused_unknown_action");
 }

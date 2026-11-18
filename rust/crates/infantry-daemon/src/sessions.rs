@@ -132,6 +132,11 @@ pub trait SessionObserver: Send + Sync {
 
 /// The other frame units beside the session manager (the composition root's registry): the server sends a frame
 /// there when the session manager does not own it.
+/// Which MCP servers beyond the daemon's own a session is handed (walled by default: only granted ones).
+pub trait McpSelector: Send + Sync {
+    fn select(&self, rec: &SessionRecord, plan: &mut infantry_harness::McpPlan);
+}
+
 pub trait FrameUnits: Send + Sync {
     fn owns(&self, ty: &str) -> bool;
     /// One frame from a client (`owner` = it holds the owner credential); the encoded replies for that client.
@@ -241,6 +246,7 @@ pub struct Daemon {
     role_known: std::sync::OnceLock<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
     /// Where tool approvals and questions go (the owner's prompt cards); unset = sessions run with allow-all.
     prompter: std::sync::OnceLock<Arc<dyn crate::harness::Prompter>>,
+    mcp: std::sync::OnceLock<Arc<dyn McpSelector>>,
 }
 
 fn encode(ty: &str, data: String, session: Option<&str>, seq: Option<i64>) -> String {
@@ -319,6 +325,7 @@ impl Daemon {
             launch: Mutex::new(Default::default()),
             role_known: std::sync::OnceLock::new(),
             prompter: std::sync::OnceLock::new(),
+            mcp: std::sync::OnceLock::new(),
         });
         d.refresh_held();
         Ok(d)
@@ -923,6 +930,11 @@ impl Daemon {
         let _ = self.prompter.set(p);
     }
 
+    /// Adds the MCP servers each session was granted to its launch plan (set once, at composition).
+    pub fn set_mcp(&self, m: Arc<dyn McpSelector>) {
+        let _ = self.mcp.set(m);
+    }
+
     /// Sets what every agent process started from now on is told about this daemon.
     pub fn set_launch(&self, base: crate::harness::launch::LaunchBase) {
         *self.launch.lock().unwrap() = base;
@@ -930,7 +942,10 @@ impl Daemon {
 
     fn open(self: &Arc<Self>, e: &Entry) -> Result<Box<dyn HarnessSession>, String> {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let (env, mcp) = self.launch.lock().unwrap().session(&e.rec.id, e.rec.project_id.as_deref(), e.rec.role.as_deref());
+        let (env, mut mcp) = self.launch.lock().unwrap().session(&e.rec.id, e.rec.project_id.as_deref(), e.rec.role.as_deref());
+        if let Some(m) = self.mcp.get() {
+            m.select(&e.rec, &mut mcp);
+        }
         let req = OpenRequest {
             session_id: e.rec.id.clone(),
             cwd: PathBuf::from(&e.rec.working_dir),

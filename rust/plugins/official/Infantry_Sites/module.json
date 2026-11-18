@@ -1,0 +1,31 @@
+{
+  "name": "Infantry_Sites",
+  "version": "1.0.1",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "LicenseRef-SuperiorSoft-Proprietary",
+  "description": "Infantry AI Hosting: your hosting servers (read-only list) and SSH for agents. HOST CONTRACT ONLY: the sidecar that implements it is closed source and is not in this repository; until its binary is installed beside this file the module stays 'not loaded'.",
+  "tier": "official",
+  "sequence": [],
+  "daemon": {
+    "sidecar": { "exe": "bin/infantry-sites", "args": ["--stdio"] },
+    "apiAtLeast": "0.1.0",
+    "needs": ["frames", "http", "storage"],
+    "wants": ["settings", "config"],
+    "tools": [
+      { "name": "infantry_sites_list", "action": "sites.servers.read", "kind": "read", "description": "List your hosting servers (id, name, status, sshReady, ip, region, size, createdAt, destroyAt)." },
+      { "name": "infantry_sites_ssh_exec", "action": "sites.servers.ssh", "kind": "write", "description": "Run a shell command on one of your hosting servers over SSH (args: server?, command, timeoutSec?)." },
+      { "name": "infantry_sites_ssh_upload", "action": "sites.servers.ssh", "kind": "write", "description": "Write a small text file on one of your hosting servers over SSH (args: server?, path, content)." }
+    ],
+    "frames": [
+      { "type": "sites_list", "action": "sites.servers.read", "description": "The Sites panel: {} -> sites_list {state, message?, servers?, limit?, siteUrl?, signUpUrl?, planStatus?, reclaimableUntil?}" },
+      { "type": "sites_ssh_exec", "action": "sites.servers.ssh", "kind": "write", "description": "{server?, command, timeoutSec?} -> sites_ssh_exec {server, exitCode?, stdout, stderr, truncated?, timedOut?} (owner only)" },
+      { "type": "sites_ssh_upload", "action": "sites.servers.ssh", "kind": "write", "description": "{server?, path, content} -> sites_ssh_upload {server, exitCode?, stdout, stderr} (owner only)" }
+    ],
+    "endpoints": {
+      "api": { "prod": "https://superiorsoftllc.tech/api/superiorsoft", "dev": "http://127.0.0.1:18953/api/superiorsoft", "staging": "http://127.0.0.1:18953/api/superiorsoft" },
+      "site": { "prod": "https://superiorsoftllc.tech", "dev": "http://127.0.0.1:18953", "staging": "http://localhost:5173" }
+    }
+  },
+  "tabs": [{ "id": "infantry.sites", "container": "center" }]
+}

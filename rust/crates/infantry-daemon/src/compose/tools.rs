@@ -14,6 +14,10 @@ use std::sync::{Arc, OnceLock};
 pub const PLUGIN_TOOLS: &str = "plugin_tools";
 pub const PLUGIN_TOOL_CALL: &str = "plugin_tool_call";
 pub const PLUGIN_TOOL_RESULT: &str = "plugin_tool_result";
+/// A loaded plugin's capability by id (`{id, args}` -> `capability_result` `{text}`): how one plugin reaches what another
+/// declares without knowing which module it is (a trigger's plugin action kind, for one).
+pub const CAPABILITY_CALL: &str = "capability_call";
+pub const CAPABILITY_RESULT: &str = "capability_result";
 
 pub struct Tools {
     daemon: Arc<Daemon>,
@@ -189,11 +193,20 @@ impl FrameUnit for ToolsUnit {
         "tools"
     }
     fn frames(&self) -> &'static [&'static str] {
-        &[PLUGIN_TOOLS, PLUGIN_TOOL_CALL]
+        &[PLUGIN_TOOLS, PLUGIN_TOOL_CALL, CAPABILITY_CALL]
     }
     fn handle(&self, env: &Envelope, ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
         match env.r#type.as_str() {
             PLUGIN_TOOLS => Ok(vec![reply(env, PLUGIN_TOOLS, Value::Array(self.tools.descriptors()).to_string())]),
+            CAPABILITY_CALL => {
+                let v: Value = serde_json::from_str(&env.data).map_err(|e| Refusal::new(CAPABILITY_CALL, format!("bad payload ({e})")))?;
+                let id = v.get("id").and_then(Value::as_str).ok_or_else(|| Refusal::new(CAPABILITY_CALL, "no capability id"))?;
+                let args = v.get("args").cloned().unwrap_or_else(|| json!({})).to_string();
+                let host = self.tools.plugins().ok_or_else(|| Refusal::new(CAPABILITY_CALL, format!("{id} refused: no loaded plugin answers this capability")))?;
+                let ctx = CallContext { caller: Caller { owner: ctx.owner, ..Default::default() }, ..Default::default() };
+                let text = host.call_capability(id, &args, &ctx).map_err(|e| Refusal(e.message().to_string()))?;
+                Ok(vec![reply(env, CAPABILITY_RESULT, json!({ "text": text }).to_string())])
+            }
             _ => {
                 let v: Value = serde_json::from_str(&env.data).map_err(|e| Refusal::new(PLUGIN_TOOL_CALL, format!("bad payload ({e})")))?;
                 let name = v.get("name").and_then(Value::as_str).ok_or_else(|| Refusal::new(PLUGIN_TOOL_CALL, "no tool name"))?;

@@ -365,6 +365,39 @@ pub struct RunEvents {
     pub bus: infantry_core::bus::EventBus,
 }
 
+/// Pods start their node sessions through the session manager's own `new` frame (unattended).
+pub struct PodSessions {
+    pub daemon: Arc<crate::sessions::Daemon>,
+    pub bus: infantry_core::bus::EventBus,
+}
+
+impl crate::pods::PodSessions for PodSessions {
+    fn start(&self, l: &crate::pods::Launch) -> Result<crate::pods::Started, String> {
+        let body = serde_json::json!({
+            "prompt": l.prompt, "unattended": true, "projectId": l.project_id, "cwd": l.working_dir,
+            "agentId": l.agent_id, "provider": l.provider, "model": l.model,
+        });
+        let mut env = infantry_protocol::Envelope::new(crate::wire::NEW, body.to_string());
+        env.request_id = Some(format!("pod-{}", uuid::Uuid::new_v4()));
+        let mut conn = crate::sessions::Conn::default();
+        let out = self.daemon.handle(env, &mut conn);
+        if let Some(err) = out.iter().filter_map(|t| serde_json::from_str::<infantry_protocol::Envelope>(t).ok()).find(|e| e.r#type == crate::wire::ERROR) {
+            return Err(err.data);
+        }
+        let id = conn.active.ok_or("the daemon started no session")?;
+        let rec = self.daemon.record(&id).ok_or("the session is gone")?;
+        Ok(crate::pods::Started { session_id: id, provider: rec.provider, working_dir: rec.working_dir })
+    }
+    fn kill(&self, session_id: &str, force: bool) {
+        let data = if force { format!("{session_id} force") } else { session_id.to_string() };
+        let mut conn = crate::sessions::Conn::default();
+        let _ = self.daemon.handle(infantry_protocol::Envelope::new(crate::wire::KILL, data), &mut conn);
+    }
+    fn push(&self, status: &serde_json::Value) {
+        self.bus.publish(infantry_protocol::Envelope::new(crate::pods::frames::POD, status.to_string()));
+    }
+}
+
 pub const SESSION_RUN_ENDED: &str = "session.run_ended";
 pub const SESSION_EXITED: &str = "session.exited";
 

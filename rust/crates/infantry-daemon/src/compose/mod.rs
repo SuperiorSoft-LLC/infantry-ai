@@ -14,7 +14,7 @@
 mod adapters;
 mod agent_tools;
 pub mod host_frames;
-mod plugins;
+pub mod plugins;
 mod prompter;
 mod settings;
 pub mod scope;
@@ -250,6 +250,33 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         Arc::new(move |p: Option<&str>| p.and_then(|p| project_dir(&vault_projects, p))),
     ));
 
+    // ---- the MCP registry: owned + plugin servers, grants, per-session plans (walled by default) ------------
+    let mcp = {
+        let ks = vault.keystore().clone();
+        let secret: crate::mcp::SecretFn = Arc::new(move |name, project| ks.resolve(name, project).ok().flatten().and_then(|f| f.get(infantry_vault::keystore::VALUE_FIELD).cloned()));
+        let d = daemon.clone();
+        let session: crate::mcp::SessionFn = Arc::new(move |id| d.record(id).map(|r| crate::mcp::SessionCtx::of(&r)));
+        let pdir = plugins_dir();
+        let plugin_servers: crate::mcp::PluginServersFn = Arc::new(move || pdir.as_deref().map(crate::mcp::plugin_servers).unwrap_or_default());
+        Arc::new(crate::mcp::Registry::new(state_dir, secret, plugin_servers, session))
+    };
+    daemon.set_mcp(mcp.clone());
+
+    // ---- the account hub: providers modules declare, device sign-in, refresh tokens in the vault ----------
+    let account = crate::account::Account::new(
+        plugins_dir().as_deref().map(|d| crate::account::declared_providers(d, &|m| log_line(m))).unwrap_or_default(),
+        Arc::new(crate::account::UreqHttp),
+        Arc::new(crate::account::VaultTokens { keystore: vault.keystore().clone() }),
+    );
+
+    // ---- pods: DAGs of unattended sessions; open pods from the last run are INTERRUPTED -------------------
+    let pods = crate::pods::Pods::new(db.clone(), Arc::new(adapters::PodSessions { daemon: daemon.clone(), bus: bus.clone() }));
+    let interrupted = pods.recover();
+    if !interrupted.is_empty() {
+        log_line(&format!("pods interrupted by the restart: {}", interrupted.len()));
+    }
+    daemon.observe(Arc::new(crate::pods::PodObserver::new(pods.clone())));
+
     // ---- the tool catalog + scripting ---------------------------------------------------------------------
     let tools = Arc::new(Tools::new(daemon.clone()));
     let runs = {
@@ -368,6 +395,9 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         Arc::new(crate::run::RunUnit { runs: runs.clone() }),
         Arc::new(settings::SettingsUnit { db: db.clone() }),
         vault.clone(),
+        Arc::new(crate::mcp::McpUnit { registry: mcp.clone() }),
+        Arc::new(crate::pods::PodsUnit { pods: pods.clone() }),
+        Arc::new(crate::account::AccountUnit { account }),
     ];
     units.extend(knowledge.units());
     if let Some(p) = &plugin_set {
