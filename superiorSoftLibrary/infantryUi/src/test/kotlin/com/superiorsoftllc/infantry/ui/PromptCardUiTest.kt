@@ -76,6 +76,7 @@ class PromptCardUiTest {
             onNodeWithText("relational").assertExists()
             onNodeWithTag(PROMPT_OPTION_TAG_PREFIX + 1).performClick()
             onNodeWithTag(PROMPT_OPTION_TAG_PREFIX + 0).performClick()
+            onNodeWithTag("prompt-other-row").performClick() // ASK-CARD-UNIFY-1: Other is the shared card's row, opened on tap
             onNodeWithTag(PROMPT_OTHER_FIELD_TAG).performTextInput("Redis")
             onNodeWithTag(PROMPT_SUBMIT_TAG).performClick()
             waitForIdle()

@@ -127,7 +127,7 @@ class AskOtherRealDaemonUiTest {
             agent.sendText(frame("prompt_ask", sessionId, buildJsonObject {
                 put("question", "Which cache?"); put("options", options)
             }), true).get()
-            waitUntil(timeoutMillis = waitMs) { onAllNodes(hasTestTag(PROMPT_OTHER_FIELD_TAG)).fetchSemanticsNodes().isNotEmpty() }
+            waitUntil(timeoutMillis = waitMs) { onAllNodes(hasTestTag("prompt-other-row")).fetchSemanticsNodes().isNotEmpty() }
         }
     }
 }
