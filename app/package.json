@@ -1,0 +1,18 @@
+{
+  "name": "infantry-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@11.21.0",
+  "scripts": {
+    "dev": "pnpm --filter @infantry/shell dev",
+    "build": "pnpm --filter @infantry/shell build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

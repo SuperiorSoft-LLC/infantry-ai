@@ -1,0 +1,184 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright (c) SuperiorSoft LLC */
+@import "tailwindcss";
+/* The kit's own classes: a workspace package sits in node_modules, which Tailwind does not scan by itself. */
+@source "./";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+/* Theme follows the .dark class on <html> (dark is the default, see lib/theme.tsx). */
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "Geist Variable", "Segoe UI", sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Infantry status palette (Theme.kt Tones). */
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-info: var(--info);
+  --color-danger: var(--danger);
+  --color-diff-add: var(--diff-add);
+  --color-diff-del: var(--diff-del);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Light tones: Theme.kt LightTones. */
+:root {
+  --radius: 0.5rem;
+  --background: #f4f5f7;
+  --foreground: #1a1c20;
+  --panel: #ffffff;
+  --raised: #e9ebef;
+  --card: #ffffff;
+  --card-foreground: #1a1c20;
+  --popover: #ffffff;
+  --popover-foreground: #1a1c20;
+  --primary: #dc2626;
+  --primary-foreground: #ffffff;
+  --secondary: #e9ebef;
+  --secondary-foreground: #1a1c20;
+  --muted: #e9ebef;
+  --muted-foreground: #5e6470;
+  --accent: #e9ebef;
+  --accent-foreground: #1a1c20;
+  --destructive: #dc2626;
+  --border: #d3d7de;
+  --input: #d3d7de;
+  --ring: #b45309;
+  --ok: #15803d;
+  --warn: #b45309;
+  --info: #2563eb;
+  --danger: #dc2626;
+  --diff-add: #dcfce7;
+  --diff-del: #fee2e2;
+  --chart-1: #dc2626;
+  --chart-2: #15803d;
+  --chart-3: #2563eb;
+  --chart-4: #b45309;
+  --chart-5: #5e6470;
+}
+
+/* Dark tones: Theme.kt DarkTones (default). */
+.dark {
+  --background: #0e0f12;
+  --foreground: #e6e7ea;
+  --panel: #15171b;
+  --raised: #1c1f25;
+  --card: #15171b;
+  --card-foreground: #e6e7ea;
+  --popover: #1c1f25;
+  --popover-foreground: #e6e7ea;
+  --primary: #ef4444;
+  --primary-foreground: #ffffff;
+  --secondary: #1c1f25;
+  --secondary-foreground: #e6e7ea;
+  --muted: #1c1f25;
+  --muted-foreground: #8b909a;
+  --accent: #262a31;
+  --accent-foreground: #e6e7ea;
+  --destructive: #ef4444;
+  --border: #262a31;
+  --input: #2e333b;
+  --ring: #f59e0b;
+  --ok: #4ade80;
+  --warn: #f59e0b;
+  --info: #60a5fa;
+  --danger: #ef4444;
+  --diff-add: #14532d;
+  --diff-del: #4c1d1d;
+  --chart-1: #ef4444;
+  --chart-2: #4ade80;
+  --chart-3: #60a5fa;
+  --chart-4: #f59e0b;
+  --chart-5: #8b909a;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+  html {
+    @apply font-sans;
+    font-size: 14px;
+  }
+  body {
+    @apply bg-background text-foreground antialiased overflow-hidden;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 35%, transparent);
+  }
+  /* Thin scrollbars that match the panels. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+}
+
+@layer utilities {
+  /* Diagonal stripes: busy cards and indeterminate progress (SelectedStripes.kt). */
+  .stripes {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      color-mix(in oklab, var(--primary) 16%, transparent) 0 10px,
+      transparent 10px 20px
+    );
+  }
+  .stripes-info {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      var(--info) 0 6px,
+      color-mix(in oklab, var(--info) 35%, transparent) 6px 12px
+    );
+    background-size: 17px 17px;
+    animation: stripes-move 1s linear infinite;
+  }
+  @keyframes stripes-move {
+    to {
+      background-position: 17px 0;
+    }
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+}

@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
+// Needs input / To review / Working counters and the Board button.
+import { LayoutGrid } from "lucide-react";
+import { cn } from "@infantry/ui";
+import { counters } from "@/mock/data";
+import type { Agent } from "@/mock/types";
+import { KeyHint } from "@infantry/ui";
+
+function Counter({ value, label, tone }: { value: number; label: string; tone: "muted" | "info" | "ok" }) {
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <span className={cn("text-base font-semibold", tone === "info" && "text-info", tone === "ok" && "text-ok")}>{value}</span>
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+export function SidebarCounters({ agents, onBoard }: { agents: Agent[]; onBoard: () => void }) {
+  const needsInput = agents.filter((a) => a.status === "needs-input").length;
+  const working = agents.filter((a) => a.status === "working").length;
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 px-1">
+        <Counter value={needsInput} label="Needs input" tone="muted" />
+        <Counter value={counters.toReview} label="To review" tone="info" />
+        <Counter value={working} label="Working" tone="ok" />
+      </div>
+      <button
+        type="button"
+        onClick={onBoard}
+        className="flex w-full items-center gap-3 rounded-lg border bg-card px-3 py-2.5 text-sm font-semibold hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+      >
+        <LayoutGrid className="size-4 text-muted-foreground" />
+        <span className="flex-1 text-left">Board</span>
+        <span className="grid h-5 min-w-5 place-items-center rounded border border-danger/70 px-1 text-[11px] text-danger">
+          {counters.boardBadge}
+        </span>
+        <KeyHint>{counters.boardShortcut}</KeyHint>
+      </button>
+    </div>
+  );
+}
