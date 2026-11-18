@@ -55,7 +55,37 @@ class LocalSpawns(
     /** The active preset's refusal of a frame of this type (`new`, `kill`), or null: each operation is gated like its frame. */
     private val gate: (type: String) -> String? = { null },
 ) : Spawns {
-    private val lock = Any()
+    /**
+     * START-HANG-1: a lock with a bounded wait ([LimitRegistry.START_WAIT_MS]), never a monitor. A start that hangs inside the board
+     * must not block every start after it: a waiter answers a refusal within the wait, and its plugin pool slot is free again.
+     */
+    private val lock = java.util.concurrent.locks.ReentrantLock()
+
+    /** Since when, and for what, the current holder of [lock] has held it: named in a refusal. */
+    @Volatile private var holder: Pair<String, Long>? = null
+
+    private inline fun <T> exclusive(what: String, busy: (String) -> T, body: () -> T): T {
+        val waitMs = limit(LimitRegistry.START_WAIT_MS).toLong().coerceAtLeast(0)
+        val got = try { lock.tryLock(waitMs, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
+        }
+        if (!got) {
+            val held = holder?.let { (name, since) -> " ($name, running ${(System.currentTimeMillis() - since) / 1000} s)" }.orEmpty()
+            return busy(
+                "another ticket start or spawn is still running on this daemon$held; nothing was started. Retry shortly " +
+                    "(waited $waitMs ms, ${LimitRegistry.START_WAIT_MS.key}).",
+            )
+        }
+        val outer = holder
+        holder = what to System.currentTimeMillis()
+        try {
+            return body()
+        } finally {
+            holder = outer
+            lock.unlock()
+        }
+    }
 
     /** DP-5h-2: the guard's admit / charge behind the minimal port. */
     override val charge: com.superiorsoftllc.infantry.daemon.api.spawns.SpawnCharge = object : com.superiorsoftllc.infantry.daemon.api.spawns.SpawnCharge {
@@ -87,7 +117,7 @@ class LocalSpawns(
     override fun spawn(request: SpawnRequest, by: Caller, narrowing: SpawnNarrowing): SessionsResult<Spawned> {
         gate(Envelope.NEW)?.let { return SessionsResult.Refused(it) }
         if (request.role == null && request.agentId == null) return SessionsResult.Refused("a spawn needs a role or an agentId (or both)")
-        val (created, admitted) = synchronized(lock) {
+        val (created, admitted) = exclusive("spawn", { return SessionsResult.Refused(it) }) {
             val all = sessions()
             val (w, why) = who(by, all, "spawn")
             if (w == null) return SessionsResult.Refused(why!!)
@@ -137,7 +167,7 @@ class LocalSpawns(
         // GAP-006b: an in-progress ticket whose worker cannot carry it is started again, so it is held to the limits too.
         val runsWorker = ticket.status != TicketStatus.IN_PROGRESS || TicketWorkerHealth.problem(worker, ticket.sessionId) != null
         if (!runsWorker) return SessionsResult.Ok(TicketStartOutcome(TicketStartOutcome.ALREADY_IN_PROGRESS, ticket, worker?.let(SessionViews::of)))
-        val (started, a) = synchronized(lock) {
+        val (started, a) = exclusive("start of ticket ${ticket.id.takeLast(8)}", { return SessionsResult.Refused(it) }) {
             val a = when (val r = admission(w, narrowing, SpawnKind.TICKET_WORKER, sessions())) {
                 is SessionsResult.Ok -> r.value
                 else -> return r.map()

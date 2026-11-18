@@ -162,6 +162,21 @@ class LocalSpawnsTest {
         ok(spawns.startTicket("1234abcd", from("s-pm"))).let { assertEquals(TicketStartOutcome.REFUSED, it.outcome); assertEquals("no profile", it.detail) }
     }
 
+    @Test fun `START-HANG-1 a start waiting behind a slow start answers within the wait, never blocks`() {
+        val release = java.util.concurrent.CountDownLatch(1)
+        val entered = java.util.concurrent.CountDownLatch(1)
+        startAnswer = { t -> entered.countDown(); release.await(); StartResult(t, ok = false, reason = "queued", detail = "role:backend") }
+        val slow = Thread { spawns.startTicket("1234abcd", from("s-pm")) }.apply { isDaemon = true; start() }
+        assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS), "the slow start reached the board")
+        val second = java.util.concurrent.CompletableFuture.supplyAsync { spawns.startTicket("1234abcd", from("s-pm")) }
+        val answer = try { second.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (e: java.util.concurrent.TimeoutException) { null }
+        release.countDown()
+        slow.join(5_000)
+        val r = kotlin.test.assertNotNull(answer, "the second start blocked behind the first instead of answering")
+        assertTrue("another ticket start" in refused(r), "$r")
+        assertEquals(1, starts.size, "the second start ran nothing on the board")
+    }
+
     @Test fun `kill scope - own spawns, a pm its own project, never itself, the owner any`() {
         assertEquals("s-w1", ok(spawns.mayKill("s-w1", from("s-pm"))).id, "its own spawn")
         assertEquals("s-other", ok(spawns.mayKill("s-other", from("s-pm"))).id, "a pm: its own project")
