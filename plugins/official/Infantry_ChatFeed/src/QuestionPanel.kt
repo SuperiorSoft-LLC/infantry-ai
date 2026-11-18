@@ -72,8 +72,6 @@ const val QUESTION_SEND_OTHER_TAG = "question-send-other"
 const val QUESTION_LATER_TAG = "question-later"
 const val QUESTION_CANCEL_TAG = "question-cancel"
 
-private val QUESTION_DIGIT_KEYS = listOf(Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six, Key.Seven, Key.Eight, Key.Nine)
-
 /**
  * ASK-1: the selected session's pending owner question, inline in the chat above the Activity box. [shown] is that
  * session's open, not-put-off questions, oldest first; the oldest is drawn, with "1 of N". It pops out when a question
@@ -98,131 +96,36 @@ fun QuestionPanel(
     AnimatedVisibility(visible = current != null, enter = expandVertically(), exit = shrinkVertically()) {
         val q = current ?: last ?: return@AnimatedVisibility
         key(q.id) {
-            var other by remember { mutableStateOf("") }
-            var otherOpen by remember { mutableStateOf(false) }
-            var otherFocused by remember { mutableStateOf(false) }
-            val focus = remember { FocusRequester() }
-            val otherFocus = remember { FocusRequester() }
-            LaunchedEffect(otherOpen) { runCatching { if (otherOpen) otherFocus.requestFocus() else focus.requestFocus() } }
-            LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-            fun send() {
-                if (otherOpen) { if (other.isNotBlank()) answer(QuestionAnswerWire(q.id, otherText = other.trim())) }
-                else q.options.firstOrNull { it.label == q.recommended }?.let { answer(QuestionAnswerWire(q.id, answer = it.label)) }
-            }
-            val shape = RoundedCornerShape(10.dp)
             Box(Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = ChatSidePadding, vertical = 8.dp).testTag(QUESTION_WINDOW_TAG)) {
-            Column(
-                Modifier.fillMaxWidth().heightIn(max = 360.dp).clip(shape).background(Palette.Raised)
-                    .border(1.dp, Palette.Accent, shape).focusRequester(focus).focusable()
-                    .onPreviewKeyEvent { e ->
-                        if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                        val digit: Int = if (otherFocused) -1 else QUESTION_DIGIT_KEYS.indexOf(e.key)
-                        when {
-                            e.key == Key.Escape -> { if (otherOpen) otherOpen = false else onLater(); true }
-                            e.key == Key.Enter && otherOpen && e.isShiftPressed -> false
-                            e.key == Key.Enter -> { send(); true }
-                            digit in q.options.indices -> { answer(QuestionAnswerWire(q.id, answer = q.options[digit].label)); true }
-                            else -> false
+                // ASK-CARD-UNIFY-1: the one shared question card; this panel only adapts the owner-question frame to it.
+                val model = QuestionCardModel(
+                    title = "An agent asks you", question = q.question, options = q.options.map { QuestionCardOption(it.label, it.description) },
+                    recommended = q.recommended, reason = q.reason, asker = questionAsker(q), position = PromptCards.position(shown.size),
+                    footnote = q.defaultAfterMin?.let { "If you do not answer, the recommended option is picked after $it min (you can still change it)." },
+                )
+                QuestionCard(
+                    model, QUESTION_CARD_TAGS, enabled = enabled, onEscape = onLater,
+                    onAnswer = { chosen, other ->
+                        if (other != null) answer(QuestionAnswerWire(q.id, otherText = other))
+                        else chosen.firstOrNull()?.let { answer(QuestionAnswerWire(q.id, answer = it)) }
+                    },
+                    actions = {
+                        TextButton(onClick = { onCancel(q.id) }, enabled = enabled, modifier = Modifier.testTag(QUESTION_CANCEL_TAG)) {
+                            Text("Cancel question", color = Palette.Danger, fontSize = 12.sp)
                         }
-                    }
-                    .verticalScroll(rememberScrollState()).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("An agent asks you", color = Palette.Accent, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                    PromptCards.position(shown.size)?.let { Text(it, color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(QUESTION_POSITION_TAG)) }
-                }
-                Text(questionAsker(q), color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(QUESTION_ASKER_TAG))
-                Text(q.question, color = Palette.Text, fontSize = 14.sp)
-                q.options.forEachIndexed { i, o ->
-                    val recommended = o.label == q.recommended
-                    val optionShape = RoundedCornerShape(6.dp)
-                    Column(
-                        Modifier.fillMaxWidth().clip(optionShape)
-                            .background(if (recommended) Palette.Panel else Palette.Raised)
-                            .border(if (recommended) 2.dp else 1.dp, if (recommended) Palette.Accent else Palette.Border, optionShape)
-                            .clickable(enabled = enabled, role = Role.Button, onClickLabel = "Choose ${o.label}") { answer(QuestionAnswerWire(q.id, answer = o.label)) }
-                            .testTag(QUESTION_OPTION_TAG_PREFIX + i).padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(o.label, color = Palette.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                            if (recommended) {
-                                Text(
-                                    "Recommended", color = Palette.OnAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Palette.Accent)
-                                        .padding(horizontal = 6.dp, vertical = 2.dp).testTag(QUESTION_RECOMMENDED_TAG_PREFIX + i),
-                                )
-                            }
+                        Spacer(Modifier.weight(1f))
+                        OutlinedButton(onClick = onLater, modifier = Modifier.testTag(QUESTION_LATER_TAG)) {
+                            Text("Later", color = Palette.Text, fontSize = 12.sp)
                         }
-                        if (o.description.isNotBlank()) Text(o.description, color = Palette.Muted, fontSize = 12.sp)
-                        if (recommended && q.reason.isNotBlank()) Text("Why: ${q.reason}", color = Palette.Accent, fontSize = 11.sp)
-                    }
-                }
-                q.defaultAfterMin?.let {
-                    Text("If you do not answer, the recommended option is picked after $it min (you can still change it).", color = Palette.Muted, fontSize = 11.sp)
-                }
-                run {
-                    OtherAnswer(
-                        open = otherOpen, text = other, onText = { other = it },
-                        onOpen = { otherOpen = true }, onClose = { otherOpen = false },
-                        onSend = { if (other.isNotBlank()) answer(QuestionAnswerWire(q.id, otherText = other.trim())) }, enabled = enabled,
-                        fieldModifier = Modifier.focusRequester(otherFocus).onFocusChanged { otherFocused = it.isFocused },
-                    )
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { onCancel(q.id) }, enabled = enabled, modifier = Modifier.testTag(QUESTION_CANCEL_TAG)) {
-                        Text("Cancel question", color = Palette.Danger, fontSize = 12.sp)
-                    }
-                    Spacer(Modifier.weight(1f))
-                    OutlinedButton(onClick = onLater, modifier = Modifier.testTag(QUESTION_LATER_TAG)) {
-                        Text("Later", color = Palette.Text, fontSize = 12.sp)
-                    }
-                }
-            }
+                    },
+                )
             }
         }
     }
 }
 
-/**
- * ASK-OTHER: the "Other…" row at the end of a question's options. Closed it is one row; open it is a multi-line field
- * with Send and Cancel (Enter sends, Shift+Enter is a newline, Esc closes: the panel's key handler does those).
- */
-@Composable
-private fun OtherAnswer(
-    open: Boolean,
-    text: String,
-    onText: (String) -> Unit,
-    onOpen: () -> Unit,
-    onClose: () -> Unit,
-    onSend: () -> Unit,
-    fieldModifier: Modifier,
-    enabled: Boolean = true,
-) {
-    val shape = RoundedCornerShape(6.dp)
-    if (!open) {
-        Text(
-            "Other…", color = Palette.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.fillMaxWidth().clip(shape).background(Palette.Raised).border(1.dp, Palette.Border, shape)
-                .clickable(enabled = enabled, role = Role.Button, onClickLabel = "Type your own answer", onClick = onOpen)
-                .testTag(QUESTION_OTHER_ROW_TAG).padding(10.dp),
-        )
-        return
-    }
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        OutlinedTextField(
-            value = text, onValueChange = onText, singleLine = false, minLines = 2, maxLines = 6,
-            label = { Text("Your own answer (Enter sends, Shift+Enter new line, Esc cancels)", fontSize = 11.sp) },
-            modifier = Modifier.fillMaxWidth().then(fieldModifier).testTag(QUESTION_OTHER_FIELD_TAG),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = onSend, enabled = enabled && text.isNotBlank(), modifier = Modifier.testTag(QUESTION_SEND_OTHER_TAG)) {
-                Text("Send", fontSize = 12.sp)
-            }
-            OutlinedButton(onClick = onClose, modifier = Modifier.testTag(QUESTION_OTHER_CANCEL_TAG)) {
-                Text("Cancel", color = Palette.Text, fontSize = 12.sp)
-            }
-        }
-    }
-}
+private val QUESTION_CARD_TAGS = QuestionCardTags(
+    card = "question-card", position = QUESTION_POSITION_TAG, asker = QUESTION_ASKER_TAG, countdown = "question-countdown",
+    optionPrefix = QUESTION_OPTION_TAG_PREFIX, recommendedPrefix = QUESTION_RECOMMENDED_TAG_PREFIX, otherRow = QUESTION_OTHER_ROW_TAG,
+    otherField = QUESTION_OTHER_FIELD_TAG, sendOther = QUESTION_SEND_OTHER_TAG, otherCancel = QUESTION_OTHER_CANCEL_TAG, submit = "question-submit",
+)
