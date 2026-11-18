@@ -8,7 +8,7 @@
 use infantry_daemon::auth::{self, AccessPolicy};
 use infantry_daemon::harness;
 use infantry_daemon::server::{self, App};
-use infantry_daemon::sessions::{Config, Daemon, KILL_SETTLE_MS};
+use infantry_daemon::sessions::{Config, Daemon};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -45,11 +45,7 @@ fn main() {
     };
     let token = auth::token_from_environment().unwrap_or_else(|e| fail(e));
     let policy = AccessPolicy::new(&host, token.as_deref()).unwrap_or_else(|e| fail(e));
-    let cfg = Config {
-        state_dir: state_dir.clone(),
-        default_cwd: std::env::current_dir().unwrap_or_else(|_| state_dir.clone()),
-        kill_settle_ms: KILL_SETTLE_MS,
-    };
+    let cfg = Config::new(state_dir.clone(), std::env::current_dir().unwrap_or_else(|_| state_dir.clone()));
     let daemon = Daemon::new(harness, cfg).unwrap_or_else(|e| fail(e));
     let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap_or_else(|e| fail(e.to_string()));
     rt.block_on(async move {

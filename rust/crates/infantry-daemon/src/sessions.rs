@@ -8,7 +8,7 @@
 use crate::harness::{EventSink, Harness, HarnessEvent, HarnessSession, OpenRequest, Turn, TurnEnd};
 use crate::store::JsonSessionStore;
 use crate::wire;
-use infantry_protocol::session::{AgentWatch, KillOutcome, SessionRecord, SessionState};
+use infantry_protocol::session::{AgentWatch, KillOutcome, QueuedTurn, SessionRecord, SessionState};
 use infantry_protocol::Envelope;
 use serde::Deserialize;
 use serde_json::json;
@@ -22,6 +22,10 @@ use tokio::sync::broadcast;
 pub const BROADCAST_CAPACITY: usize = 4096;
 /// After a kill the run activity settles to `idle` on the next watch tick (Kotlin's `AgentWatchdog`), not at once.
 pub const KILL_SETTLE_MS: u64 = 1_500;
+/// `limits.chat.queueMax` default (CHAT-QUEUE-1): messages a session holds while a turn runs.
+pub const QUEUE_MAX: usize = 20;
+/// `limits.chat.sentIdsKept` default (CHAT-SENDING-1): client message ids remembered daemon-wide.
+pub const SENT_IDS_KEPT: usize = 500;
 
 pub fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
@@ -32,6 +36,17 @@ pub struct Config {
     /// Where a session runs when its `new` names no folder (Kotlin: the daemon's working directory).
     pub default_cwd: PathBuf,
     pub kill_settle_ms: u64,
+    /// `limits.chat.queueMax`.
+    pub queue_max: usize,
+    /// `limits.chat.sentIdsKept`.
+    pub sent_ids_kept: usize,
+}
+
+impl Config {
+    /// The defaults Kotlin ships with.
+    pub fn new(state_dir: PathBuf, default_cwd: PathBuf) -> Config {
+        Config { state_dir, default_cwd, kill_settle_ms: KILL_SETTLE_MS, queue_max: QUEUE_MAX, sent_ids_kept: SENT_IDS_KEPT }
+    }
 }
 
 /// What a `new` frame may carry (JSON data, every field optional).
@@ -70,13 +85,37 @@ pub struct Daemon {
     cache: Mutex<Vec<SessionRecord>>,
     dirty: AtomicBool,
     store: Mutex<JsonSessionStore>,
+    /// CHAT-SENDING-1: `<session>\n<send:id>` of the prompts taken, oldest first.
+    sent: Mutex<std::collections::VecDeque<String>>,
 }
 
 fn encode(ty: &str, data: String, session: Option<&str>, seq: Option<i64>) -> String {
+    encode_req(ty, data, session, seq, None)
+}
+
+fn encode_req(ty: &str, data: String, session: Option<&str>, seq: Option<i64>, request: Option<&str>) -> String {
     let mut e = Envelope::new(ty, data);
     e.session_id = session.map(String::from);
     e.sequence = seq;
+    e.request_id = request.map(String::from);
     serde_json::to_string(&e).unwrap_or_default()
+}
+
+/// Why a frame was refused: a plain reason (an `error` on the frame's session), or the typed `run_in_flight` (session-less).
+enum Refusal {
+    Plain(String),
+    InFlight(String),
+}
+
+impl From<String> for Refusal {
+    fn from(s: String) -> Self {
+        Refusal::Plain(s)
+    }
+}
+impl From<&str> for Refusal {
+    fn from(s: &str) -> Self {
+        Refusal::Plain(s.into())
+    }
 }
 
 impl Daemon {
@@ -112,6 +151,7 @@ impl Daemon {
             cache: Mutex::new(cache),
             dirty: AtomicBool::new(false),
             store: Mutex::new(store),
+            sent: Mutex::new(Default::default()),
         }))
     }
 
@@ -185,17 +225,31 @@ impl Daemon {
     /// One inbound frame; returns the replies for this connection only (session frames go to every connection).
     pub fn handle(self: &Arc<Self>, env: Envelope, conn: &mut Conn) -> Vec<String> {
         let sid = env.session_id.clone().filter(|s| !s.is_empty());
-        let r = match env.r#type.as_str() {
+        let req = env.request_id.clone();
+        // CHAT-SENDING-1: a `prompt` naming its session with a `send:` id is acknowledged; a resend of a taken id is not run again.
+        let send_key = match (&sid, &req) {
+            (Some(s), Some(r)) if env.r#type == wire::PROMPT && r.starts_with(wire::CLIENT_SEND_PREFIX) => Some(format!("{s}\n{r}")),
+            _ => None,
+        };
+        if let Some(k) = &send_key {
+            if !self.claim_send(k) {
+                return vec![encode_req(wire::PROMPT_ACK, "duplicate".into(), sid.as_deref(), None, req.as_deref())];
+            }
+        }
+        let r: Result<(), Refusal> = match env.r#type.as_str() {
             wire::SESSIONS => return vec![encode(wire::SESSIONS, self.sessions_json(), None, None)],
             wire::NEW => {
                 conn.pending_new = Some(serde_json::from_str::<NewOpts>(&env.data).unwrap_or_default());
                 Ok(())
             }
             wire::PROMPT => match &sid {
-                None => self.prompt_new(conn.pending_new.take().unwrap_or_default(), env.data),
+                None => self.prompt_new(conn.pending_new.take().unwrap_or_default(), env.data).map_err(Refusal::from),
                 Some(s) => self.prompt_into(s, env.data),
             },
-            wire::INTERRUPT => self.interrupt(sid.as_deref().unwrap_or(env.data.trim())),
+            wire::QUEUE_ADD => self.queue_add(sid.as_deref().unwrap_or(""), env.data).map_err(Refusal::from),
+            wire::QUEUE_REMOVE => self.queue_remove(sid.as_deref().unwrap_or(""), env.data.trim()).map_err(Refusal::from),
+            wire::QUEUE_FORCE => self.queue_force(sid.as_deref().unwrap_or(""), env.data.trim()).map_err(Refusal::from),
+            wire::INTERRUPT => self.interrupt(sid.as_deref().unwrap_or(env.data.trim())).map_err(Refusal::from),
             wire::KILL => {
                 let mut words = env.data.split_whitespace();
                 let first = words.next().unwrap_or("").to_string();
@@ -203,15 +257,43 @@ impl Daemon {
                     Some(s) => (s.clone(), std::iter::once(first.as_str()).chain(words).collect()),
                     None => (first.clone(), words.collect()),
                 };
-                self.kill(&target, rest.contains(&"force"))
+                self.kill(&target, rest.contains(&"force")).map_err(Refusal::from)
             }
-            wire::SESSION_DELETE => self.delete(sid.as_deref().unwrap_or(env.data.trim())),
-            other => Err(format!("{other} refused: this daemon does not serve that frame yet")),
+            wire::SESSION_DELETE => self.delete(sid.as_deref().unwrap_or(env.data.trim())).map_err(Refusal::from),
+            other => Err(format!("{other} refused: this daemon does not serve that frame yet").into()),
         };
         match r {
-            Ok(()) => Vec::new(),
-            Err(msg) => vec![encode(wire::ERROR, msg, sid.as_deref(), None)],
+            Ok(()) => match send_key {
+                Some(_) => vec![encode_req(wire::PROMPT_ACK, "accepted".into(), sid.as_deref(), None, req.as_deref())],
+                None => Vec::new(),
+            },
+            Err(refusal) => {
+                // A refused prompt is forgotten, so a retry with the same id runs.
+                if let Some(k) = &send_key {
+                    self.release_send(k);
+                }
+                match refusal {
+                    Refusal::Plain(msg) => vec![encode_req(wire::ERROR, msg, sid.as_deref(), None, req.as_deref())],
+                    Refusal::InFlight(msg) => vec![encode_req(wire::ERROR, msg, None, None, req.as_deref())],
+                }
+            }
         }
+    }
+
+    fn claim_send(&self, key: &str) -> bool {
+        let mut ids = self.sent.lock().unwrap();
+        if ids.iter().any(|k| k == key) {
+            return false;
+        }
+        ids.push_back(key.to_string());
+        while ids.len() > self.cfg.sent_ids_kept.max(1) {
+            ids.pop_front();
+        }
+        true
+    }
+
+    fn release_send(&self, key: &str) {
+        self.sent.lock().unwrap().retain(|k| k != key);
     }
 
     fn prompt_new(self: &Arc<Self>, opts: NewOpts, text: String) -> Result<(), String> {
@@ -239,30 +321,98 @@ impl Daemon {
         Ok(())
     }
 
-    fn prompt_into(self: &Arc<Self>, sid: &str, text: String) -> Result<(), String> {
+    fn prompt_into(self: &Arc<Self>, sid: &str, text: String) -> Result<(), Refusal> {
         let entry = self.find(sid).ok_or("prompt refused: no such session")?;
         let mut e = entry.lock().unwrap();
         if e.turn_active {
-            return Err("prompt refused: a turn is running; interrupt it first".into());
+            // Kotlin's typed refusal (1.96.0): nothing ran; the client queues it (`queue_add`) or sends it again later.
+            return Err(Refusal::InFlight(format!("{} {sid}: session {sid} already has a run in flight", wire::RUN_IN_FLIGHT)));
         }
+        self.turn_into(&mut e, text);
+        Ok(())
+    }
+
+    /// CHAT-QUEUE-1 `queue_add`: held at the end of `session.queued`; a session at rest takes it as a turn now.
+    fn queue_add(self: &Arc<Self>, sid: &str, text: String) -> Result<(), String> {
+        let entry = self.find(sid).ok_or_else(|| format!("queue_add refused: unknown session {sid}"))?;
+        let mut e = entry.lock().unwrap();
+        if text.trim().is_empty() {
+            return Err("queue_add refused: nothing to queue".into());
+        }
+        if !e.turn_active {
+            self.turn_into(&mut e, text);
+            return Ok(());
+        }
+        if e.rec.queued.len() >= self.cfg.queue_max {
+            return Err(format!("queue_add refused: the queue of {sid} is full ({} messages)", self.cfg.queue_max));
+        }
+        let id = format!("q-{}", &uuid::Uuid::new_v4().to_string()[..8]);
+        e.rec.queued.push(QueuedTurn { id, text, at: now_ms() });
+        self.push(&mut e);
+        Ok(())
+    }
+
+    fn queue_remove(&self, sid: &str, id: &str) -> Result<(), String> {
+        let entry = self.find(sid).ok_or_else(|| format!("queue_remove refused: unknown session {sid}"))?;
+        let mut e = entry.lock().unwrap();
+        let before = e.rec.queued.len();
+        e.rec.queued.retain(|q| q.id != id);
+        if e.rec.queued.len() == before {
+            return Err(format!("queue_remove refused: no queued message {id} on {sid}"));
+        }
+        self.push(&mut e);
+        Ok(())
+    }
+
+    /// `queue_force`: at rest it is sent as the turn now; mid-turn it needs a harness that takes input mid-turn (none here yet).
+    fn queue_force(self: &Arc<Self>, sid: &str, id: &str) -> Result<(), String> {
+        let entry = self.find(sid).ok_or_else(|| format!("queue_force refused: unknown session {sid}"))?;
+        let mut e = entry.lock().unwrap();
+        let i = e.rec.queued.iter().position(|q| q.id == id).ok_or_else(|| format!("queue_force refused: no queued message {id} on {sid}"))?;
+        if e.turn_active {
+            return Err(format!(
+                "queue_force refused: the {} harness cannot take a message mid-turn; it stays queued for the next turn",
+                self.harness.name()
+            ));
+        }
+        let item = e.rec.queued.remove(i);
+        self.turn_into(&mut e, item.text);
+        Ok(())
+    }
+
+    /// When the session is at rest, sends its oldest held message as the next turn (one per turn end), after the current frames.
+    fn drain_later(self: &Arc<Self>, sid: &str) {
+        let (d, sid) = (self.clone(), sid.to_string());
+        tokio::spawn(async move {
+            let Some(entry) = d.find(&sid) else { return };
+            let mut e = entry.lock().unwrap();
+            if e.removed || e.turn_active || e.rec.state == SessionState::Exited || e.rec.queued.is_empty() {
+                return;
+            }
+            let head = e.rec.queued.remove(0);
+            d.turn_into(&mut e, head.text);
+        });
+    }
+
+    /// A turn into an existing session at rest.
+    fn turn_into(self: &Arc<Self>, e: &mut Entry, text: String) {
         let now = now_ms();
         e.rec.last_turn_at = Some(now);
         // A turn into a session whose process is gone resumes it (a fresh process continues the provider session).
         if e.rec.run_count > 0 && !e.hs.as_ref().is_some_and(|h| h.process_alive()) {
             e.rec.resume_count += 1;
         }
-        self.push(&mut e);
+        self.push(e);
         let st = state_word(e.rec.state).to_ascii_uppercase();
-        self.emit(&mut e, wire::STATUS, wire::status(&st));
-        self.emit(&mut e, wire::TURN, text.clone());
+        self.emit(e, wire::STATUS, wire::status(&st));
+        self.emit(e, wire::TURN, text.clone());
         e.turn_active = true;
         e.turn_started = now;
         e.gen += 1;
-        self.emit(&mut e, wire::STATUS, wire::status_run("BUSY", "thinking", now, now));
+        self.emit(e, wire::STATUS, wire::status_run("BUSY", "thinking", now, now));
         e.rec.kill_outcome = None;
         e.rec.killed_by = None;
-        self.run(&mut e, text);
-        Ok(())
+        self.run(e, text);
     }
 
     /// Starts the turn's run: the start-up lines, the harness turn, then the record that announces the run.
@@ -270,7 +420,9 @@ impl Daemon {
         let provider = self.harness.name().to_string();
         let model = e.rec.model.clone().unwrap_or_else(|| "default".into());
         let resumed = e.rec.run_count > 0;
-        if resumed {
+        // A persistent process (an interactive CLI) that is still up takes the turn as is: nothing is resumed.
+        let warm = e.hs.as_ref().is_some_and(|h| h.process_alive());
+        if resumed && !warm {
             let id = e.rec.id.clone();
             self.emit(e, wire::STATUS, wire::status_activity(&provider, &format!("Resuming session {id}...")));
         }
@@ -278,7 +430,7 @@ impl Daemon {
         self.emit(e, wire::STATUS, wire::status_activity(&provider, &start));
         if !resumed {
             self.emit(e, wire::STDERR, format!("[infantry] * session started ({provider} {} {model})", wire::MIDDOT));
-        } else if let Some(p) = e.rec.provider_session_id.clone() {
+        } else if let Some(p) = e.rec.provider_session_id.clone().filter(|_| !warm) {
             self.emit(e, wire::STATUS, wire::status_activity(&provider, &format!("resuming provider session {p}")));
         }
         if e.hs.is_none() {
@@ -339,7 +491,7 @@ impl Daemon {
         self.emit(e, wire::FINISHED, wire::finished(None, "FAILED", &err));
     }
 
-    fn on_event(&self, id: &str, ev: HarnessEvent) {
+    fn on_event(self: &Arc<Self>, id: &str, ev: HarnessEvent) {
         let Some(entry) = self.find(id) else { return };
         let mut e = entry.lock().unwrap();
         if e.removed {
@@ -375,7 +527,7 @@ impl Daemon {
         }
     }
 
-    fn end_turn(&self, e: &mut Entry, end: TurnEnd, code: Option<i32>, reason: Option<String>, alive: bool) {
+    fn end_turn(self: &Arc<Self>, e: &mut Entry, end: TurnEnd, code: Option<i32>, reason: Option<String>, alive: bool) {
         e.turn_active = false;
         e.rec.last_exit_code = code;
         e.rec.is_process_alive = alive;
@@ -402,9 +554,12 @@ impl Daemon {
         self.emit(e, wire::STATUS, wire::status_run(&st, "finished", now_ms(), e.turn_started));
         self.emit(e, wire::FINISHED, wire::finished(code, outcome, &detail));
         self.emit(e, wire::STATUS, wire::status_run(&st, "idle", now_ms(), e.turn_started));
+        if !e.rec.queued.is_empty() {
+            self.drain_later(&e.rec.id.clone());
+        }
     }
 
-    fn interrupt(&self, sid: &str) -> Result<(), String> {
+    fn interrupt(self: &Arc<Self>, sid: &str) -> Result<(), String> {
         let entry = self.find(sid).ok_or("interrupt refused: no such session")?;
         let mut e = entry.lock().unwrap();
         if !e.turn_active {
@@ -426,6 +581,9 @@ impl Daemon {
         self.push(&mut e);
         let started = e.turn_started;
         self.emit(&mut e, wire::STATUS, wire::status_run("IDLE", "finished", now_ms(), started));
+        if !e.rec.queued.is_empty() {
+            self.drain_later(&e.rec.id.clone());
+        }
         Ok(())
     }
 

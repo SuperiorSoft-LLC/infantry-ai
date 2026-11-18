@@ -20,7 +20,7 @@ fn start() -> (u16, std::path::PathBuf) {
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
-            let cfg = Config { state_dir: d2.clone(), default_cwd: d2, kill_settle_ms: KILL_SETTLE_MS };
+            let cfg = Config::new(d2.clone(), d2);
             let daemon = Daemon::new(Arc::new(Stub::default()), cfg).unwrap();
             let policy = Arc::new(AccessPolicy::new("127.0.0.1", Some(TOKEN)).unwrap());
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
