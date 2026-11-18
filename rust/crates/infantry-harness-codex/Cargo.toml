@@ -1,0 +1,11 @@
+[package]
+name = "infantry-harness-codex"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Infantry AI harness for the OpenAI Codex CLI (codex exec --json, a process per turn)"
+publish = false
+
+[dependencies]
+infantry-harness = { path = "../infantry-harness" }
+serde_json = { version = "1", features = ["preserve_order"] }
