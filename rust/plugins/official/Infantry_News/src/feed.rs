@@ -134,11 +134,12 @@ impl Node {
     }
 }
 
+#[allow(deprecated)]
 fn open(e: &quick_xml::events::BytesStart, nodes: &mut Vec<Node>) -> Result<usize, String> {
     let mut attrs = Vec::new();
     for a in e.attributes() {
         let a = a.map_err(|x| x.to_string())?;
-        let v = a.normalized_value().map_err(|x| x.to_string())?.into_owned();
+        let v = a.unescape_value().map_err(|x| x.to_string())?.into_owned();
         attrs.push((a.key.into_inner().to_string(), v));
     }
     nodes.push(Node { name: e.name().into_inner().to_string(), attrs, text: String::new(), end: 0 });
