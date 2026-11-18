@@ -8,8 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export const INHERIT = "__inherit__";
 
 export function PickerField({
-  id, label, options, inheritLabel = "Project default", value, onChange,
-}: { id: string; label: string; options: string[]; inheritLabel?: string; value?: string; onChange?: (v: string) => void }) {
+  id, label, options, inheritLabel = "Project default", value, onChange, labels,
+}: { id: string; label: string; options: string[]; inheritLabel?: string; value?: string; onChange?: (v: string) => void; labels?: Record<string, string> }) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
@@ -21,7 +21,7 @@ export function PickerField({
           <SelectItem value={INHERIT}>{inheritLabel}</SelectItem>
           {options.map((o) => (
             <SelectItem key={o} value={o}>
-              {o}
+              {labels?.[o] ?? o}
             </SelectItem>
           ))}
         </SelectContent>

@@ -132,7 +132,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Drag between lanes and reorder (mouse, touch, keyboard) | yes | done | |
 | Filters (epic, role, assignee, text) | yes | done | |
 | New / edit ticket: title, description, type | yes | done | |
-| Ticket form: epic, assignee, executor, effort, context limit, runner, images | yes | missing | UI only for the fields (`ticket_save` carries `epicId`). Images need the daemon `image_upload` handler. |
+| Ticket form: epic, assignee, executor, effort, context limit, runner, images | yes | partial | *(RUST-UI-9)* Epic picker (the current project's epics by name; No epic clears it). Assignee is the card menu's ticket picker. Executor, effort, context limit and runner: UI only, needing their `ticket_save` fields checked. Images need the daemon `image_upload` handler. |
 | Delete ticket | yes | done | |
 | Collapse a lane | yes | done | *(RUST-UI-8)* The lane header folds it to title and count, remembered per lane; a folded lane still takes drops. |
 | "All projects" toggle | yes | missing | UI only. |
