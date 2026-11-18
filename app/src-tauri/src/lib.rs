@@ -87,6 +87,10 @@ fn mode(settings: &UiSettings) -> Mode {
 struct UiSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     runner: Option<String>,
+    /// Daemon mode: the sidecar's state dir (RUST-MIGRATE-1: a copy made by `infantry-migrate`, e.g.
+    /// `%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust`); unset = `<app data>/daemon`.
+    #[serde(default, rename = "daemonStateDir", skip_serializing_if = "Option::is_none")]
+    daemon_state_dir: Option<String>,
 }
 
 fn settings_path(state: &std::path::Path) -> PathBuf {
@@ -217,7 +221,13 @@ pub fn run() {
             if mode == Mode::Daemon {
                 // INFANTRY_UI_DAEMON_PORT pins the sidecar's port (tests use 189xx); 0 = any free port.
                 let port = env("UI_DAEMON_PORT").and_then(|p| p.parse().ok()).unwrap_or(0u16);
-                let (cell, state) = (sidecar.clone(), dir.join("daemon"));
+                // INFANTRY_UI_DAEMON_STATE_DIR, else ui.json `daemonStateDir`, else <app data>/daemon.
+                let state = env("UI_DAEMON_STATE_DIR")
+                    .or_else(|| settings.daemon_state_dir.clone())
+                    .filter(|s| !s.trim().is_empty())
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| dir.join("daemon"));
+                let cell = sidecar.clone();
                 let cwd = std::env::current_dir().unwrap_or_else(|_| dir.clone());
                 std::thread::spawn(move || {
                     let r = daemon::ensure(&state, port, &cwd);

@@ -45,6 +45,10 @@ export interface Agent {
   tokensOut: string;
   /** avatar gradient hue */
   hue: number;
+  /** The session's project, by name (RUST-MIGRATE-1). */
+  projectName?: string;
+  /** The other app running this session now ("Infantry (Kotlin)"): shown, and a turn into it is blocked. */
+  heldBy?: string;
 }
 
 export interface DiffLine {

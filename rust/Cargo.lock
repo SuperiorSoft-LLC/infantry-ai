@@ -513,11 +513,13 @@ dependencies = [
  "infantry-conformance",
  "infantry-protocol",
  "infantry-runner",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",
  "tokio",
  "uuid",
+ "windows-sys",
 ]
 
 [[package]]
@@ -544,6 +546,18 @@ dependencies = [
  "infantry-runner-local",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "infantry-migrate"
+version = "0.1.0"
+dependencies = [
+ "infantry-protocol",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "windows-sys",
 ]
 
 [[package]]
