@@ -55,7 +55,7 @@ fn sh(line: &str) -> ProcessSpec {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_runner_spawns_echoes_and_exits() {
-    let (serving, code) = runner(Box::new(ProcessBackend::local()));
+    let (serving, code) = runner(Box::new(ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default()))));
     let url = format!("ws://127.0.0.1:{}", serving.port);
     let client = LinkClient::new(&url, "inf-orch", None);
     let code2 = code.clone();

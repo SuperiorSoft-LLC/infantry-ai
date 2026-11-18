@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
-//! The Rust runner's process backend: a link [`Backend`] over any [`Runner`] (by default the local one), so a
+//! The Rust runner's process backend: a link [`Backend`] over any [`Runner`] (a composition root passes the local one), so a
 //! [`crate::RemoteRunner`] on another machine drives processes here.
 //!
 //! - `runner_link_start` with [`StartRequest::process`] spawns it; the session id is the process id;
@@ -44,11 +44,6 @@ impl ProcessBackend {
     pub fn new(runner: Arc<dyn Runner>) -> Self {
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().thread_name("runner-link-proc").build().expect("runtime");
         ProcessBackend { runner, rt, shared: Arc::new((Mutex::new(Shared::default()), Condvar::new())) }
-    }
-
-    /// Over this machine's [`infantry_runner_local::LocalRunner`].
-    pub fn local() -> Self {
-        Self::new(Arc::new(infantry_runner_local::LocalRunner::default()))
     }
 
     fn push(shared: &(Mutex<Shared>, Condvar), sid: &str, t: &str, data: String) {

@@ -19,7 +19,6 @@ path = "src/bin/infantry-runner-agent.rs"
 [dependencies]
 infantry-protocol = { path = "../infantry-protocol" }
 infantry-runner-api = { path = "../infantry-runner-api" }
-infantry-runner-local = { path = "../infantry-runner-local" }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
@@ -30,5 +29,8 @@ getrandom = "0.2"
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
+# The local Runner is a dev-dependency only: runner-link and runner-local are the same tier of L2 (infantry-guards), so the
+# process-serving agent (examples/process_agent.rs) and the tests compose them; a composition root does in production.
+infantry-runner-local = { path = "../infantry-runner-local" }
 infantry-runner-api = { path = "../infantry-runner-api", features = ["test-support"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }

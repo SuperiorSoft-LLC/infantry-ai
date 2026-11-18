@@ -8,6 +8,7 @@
 //! - [`server::LinkServer`]: the runner end (the `infantry-runner-agent` bin serves it);
 //! - [`client::LinkClient`]: the orchestrator end (pair, hello, health, ping).
 
+pub mod agent;
 pub mod client;
 pub mod pairing;
 pub mod process;
