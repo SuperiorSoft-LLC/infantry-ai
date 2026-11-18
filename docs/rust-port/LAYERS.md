@@ -8,7 +8,7 @@ Dependencies point DOWN only. `cargo test -p infantry-guards` enforces this page
 | Layer | Crates (tier) | What lives here |
 |---|---|---|
 | L0 wire | infantry-protocol (0) | `Envelope`, DTOs, frame names. Byte-compatible with Kotlin `infantryProtocol`. |
-| L1 platform core | infantry-core (0), infantry-plugin-wit (0), infantry-plugin-host (1), infantry-plugin-sdk (1) | Generic mechanisms: the `FrameUnit` registry, event bus, db handle, settings; the plugin contract and host. |
+| L1 platform core | infantry-core (0), infantry-plugin-wit (0), infantry-plugin-host (1), infantry-plugin-sdk (1), infantry-projects (1) | Generic mechanisms: the `FrameUnit` registry, event bus, db handle, settings; the plugin contract and host; projects, workspaces, the project git view, worktrees and ticket branches (infantry-projects). |
 | L2 runner | infantry-runner-api (0), infantry-runner (1), infantry-runner-local (2), infantry-runner-link (2) | Running processes, locally or on a linked runner. |
 | L3 agents / harnesses | infantry-harness (0), infantry-harness-codex (1), infantry-harness-claude (1) | One agent CLI each. Agents work with no orchestrator. |
 | L4 orchestration | infantry-orchestrator-api (0), infantry-board (1) | Board, tickets, pipeline seams. |

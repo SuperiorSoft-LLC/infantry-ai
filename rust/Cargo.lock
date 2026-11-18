@@ -1329,6 +1329,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-projects"
+version = "0.1.0"
+dependencies = [
+ "infantry-core",
+ "infantry-protocol",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "infantry-protocol"
 version = "0.1.0"
 dependencies = [
