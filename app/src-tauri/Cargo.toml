@@ -40,3 +40,12 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# Quick build for owner checks (RUST-BUILD-SPEED-1); see rust/Cargo.toml. `release` stays the full build.
+[profile.owner-test]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+opt-level = 2
+strip = false
