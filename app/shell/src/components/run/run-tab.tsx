@@ -53,6 +53,7 @@ export function RunTab() {
   const [view, setView] = useState<View>("runs");
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [branches, setBranches] = useState<Record<string, string>>({});
   const s = runsStore().getState;
 
   // Keep a selection: the picked run while it is listed, else the newest active one, else the newest.
@@ -107,14 +108,28 @@ export function RunTab() {
                     <p className="truncate font-mono text-[11px] text-muted-foreground">{joinArgs(c.argv)}</p>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {c.project && <Chip className="h-5 text-[10px]">{c.project}</Chip>}
-                      {c.branch && <Chip className="h-5 text-[10px]">{c.branch}</Chip>}
+                      {c.branch && <Chip className="h-5 text-[10px]">branch</Chip>}
                       {c.detached && <Chip tone="amber" className="h-5 text-[10px]">detached</Chip>}
                     </div>
                   </div>
                   <Button variant="ghost" size="icon-xs" aria-label={`Edit ${c.name || c.id}`} onClick={() => edit(c)}>
                     <Pencil />
                   </Button>
-                  <Button size="sm" aria-label={`Start ${c.name || c.id}`} onClick={() => s().start(c.id)}>
+                  {c.branch && (
+                    <Input
+                      className="h-7 w-28 font-mono text-xs"
+                      placeholder="branch"
+                      aria-label={`Branch for ${c.name || c.id}`}
+                      value={branches[c.id] ?? ""}
+                      onChange={(e) => setBranches((b) => ({ ...b, [c.id]: e.target.value }))}
+                    />
+                  )}
+                  <Button
+                    size="sm"
+                    aria-label={`Start ${c.name || c.id}`}
+                    disabled={c.branch && !(branches[c.id] ?? "").trim()}
+                    onClick={() => s().start(c.id, c.branch ? (branches[c.id] ?? "").trim() : undefined)}
+                  >
                     <Play /> Start
                   </Button>
                 </div>

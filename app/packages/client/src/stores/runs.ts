@@ -17,7 +17,10 @@ export interface RunCommand {
   project?: string | null;
   rooted?: boolean;
   detached?: boolean;
-  branch?: string | null;
+  /** The command names {worktree} or {branch}: each start names a branch. */
+  branch?: boolean;
+  secrets?: string[];
+  renders?: string[];
 }
 
 export interface RunCommandDraft {
@@ -100,7 +103,8 @@ export interface RunsActions {
   refresh(): void;
   saveCommand(d: RunCommandDraft): void;
   deleteCommand(id: string): void;
-  start(commandId: string): void;
+  /** [branch] is required for a branch command and refused for any other. */
+  start(commandId: string, branch?: string): void;
   stop(runId: string, force?: boolean): void;
   attach(runId: string): void;
   input(runId: string, text: string): void;
@@ -251,7 +255,7 @@ export function createRunsStore(link: FrameLink): RunsStore {
         send("command_save", body);
       },
       deleteCommand: (id) => send("command_delete", { id }),
-      start: (commandId) => send("run_start", { commandId }),
+      start: (commandId, branch) => send("run_start", branch ? { commandId, branch } : { commandId }),
       stop: (runId, force) => send("run_stop", force ? `${runId} force` : runId),
       attach: (runId) => send("run_attach", { runId }),
       input: (runId, text) => void link.sendFrame({ type: "run_input", data: JSON.stringify({ runId, data: encodeBase64(text) }) }),

@@ -6,6 +6,7 @@
 //! Frames and limits are the Kotlin `Infantry_Run` plugin's (contract 1.33 / 1.108 / 1.134): `command_list|save|delete`,
 //! `run_start|stop|list|attach|resize|input`, `run`, `run_bytes`, `run_finished`, `processes`, `processes_reap`.
 
+pub mod prep;
 pub mod tools;
 
 use crate::sessions::{now_ms, Daemon};
@@ -20,7 +21,7 @@ use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 /// `limits.run.*` defaults (Kotlin `RunManager`).
@@ -68,17 +69,27 @@ pub struct CommandSpec {
     #[serde(default = "default_grace")]
     pub grace_millis: i64,
     #[serde(default)]
-    pub secrets: Vec<Value>,
+    pub secrets: Vec<String>,
     #[serde(default)]
     pub project: Option<String>,
     #[serde(default)]
     pub rooted: bool,
     #[serde(default)]
-    pub renders: Vec<Value>,
+    pub renders: Vec<String>,
     #[serde(default)]
     pub detached: bool,
-    #[serde(default)]
-    pub branch: Option<String>,
+    /// The command names `{worktree}` or `{branch}`: each start names a branch.
+    #[serde(default, deserialize_with = "lenient_bool")]
+    pub branch: bool,
+}
+
+/// `branch` was once written as a string; any non-empty string reads as true.
+fn lenient_bool<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    Ok(match Value::deserialize(d)? {
+        Value::Bool(b) => b,
+        Value::String(s) => !s.is_empty(),
+        _ => false,
+    })
 }
 
 fn default_grace() -> i64 {
@@ -96,8 +107,19 @@ pub struct CommandSave {
     pub cwd: Option<String>,
     pub grace_millis: Option<i64>,
     pub project: Option<String>,
-    pub renders: Option<Vec<Value>>,
+    pub renders: Option<Vec<String>>,
+    pub secrets: Option<Vec<String>>,
     pub detached: Option<bool>,
+}
+
+fn dedup(v: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for s in v.into_iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+        if !out.contains(&s) {
+            out.push(s);
+        }
+    }
+    out
 }
 
 /// The saved commands, in `<state>/commands.json`.
@@ -139,14 +161,16 @@ impl CommandStore {
             cwd: req.cwd.filter(|c| !c.trim().is_empty()).or(old.as_ref().and_then(|o| o.cwd.clone())),
             argv,
             grace_millis: req.grace_millis.or(old.as_ref().map(|o| o.grace_millis)).unwrap_or_else(default_grace).max(0),
-            secrets: old.as_ref().map(|o| o.secrets.clone()).unwrap_or_default(),
+            secrets: req.secrets.map(dedup).or(old.as_ref().map(|o| o.secrets.clone())).unwrap_or_default(),
             project: req.project.filter(|p| !p.trim().is_empty()).or(old.as_ref().and_then(|o| o.project.clone())),
             rooted: old.as_ref().is_some_and(|o| o.rooted),
-            renders: req.renders.or(old.as_ref().map(|o| o.renders.clone())).unwrap_or_default(),
+            renders: req.renders.map(dedup).or(old.as_ref().map(|o| o.renders.clone())).unwrap_or_default(),
             detached: req.detached.or(old.as_ref().map(|o| o.detached)).unwrap_or(false),
-            branch: old.as_ref().and_then(|o| o.branch.clone()),
+            branch: false,
             id: id.clone(),
         };
+        prep::check_command(&spec.argv, spec.cwd.as_deref(), &spec.secrets, &spec.renders)?;
+        let spec = CommandSpec { branch: prep::is_branch_command(&spec.argv, spec.cwd.as_deref()), ..spec };
         match l.iter_mut().find(|c| c.id == id) {
             Some(c) => *c = spec.clone(),
             None => l.push(spec.clone()),
@@ -220,6 +244,14 @@ pub struct Run {
     console: Mutex<Option<Console>>,
     process: Option<Arc<Process>>,
     job: Option<Job>,
+    /// Rendered secret files to delete and the preview worktree to remove when the run ends.
+    cleanup: Mutex<Cleanup>,
+}
+
+#[derive(Default)]
+struct Cleanup {
+    files: Vec<PathBuf>,
+    preview: Option<prep::Prepared>,
 }
 
 impl Run {
@@ -262,6 +294,7 @@ pub struct RunManager {
     default_cwd: PathBuf,
     project_dir: Arc<dyn Fn(&str) -> Option<PathBuf> + Send + Sync>,
     daemon: Arc<Daemon>,
+    ext: OnceLock<prep::Extras>,
 }
 
 fn env_of(ty: &str, data: String) -> Envelope {
@@ -269,16 +302,16 @@ fn env_of(ty: &str, data: String) -> Envelope {
 }
 
 /// Windows: the line runs through `cmd.exe /d /c` so `.cmd`/`.bat` shims and PATH lookups work as in a shell.
-fn command_for(argv: &[String], cwd: PathBuf) -> pty::Command {
+fn command_for(argv: &[String], cwd: PathBuf, env: Vec<(String, String)>) -> pty::Command {
     #[cfg(windows)]
     {
         let line = argv.iter().map(|a| pty::quote_arg(a)).collect::<Vec<_>>().join(" ");
         let comspec = std::env::var("ComSpec").unwrap_or_else(|_| r"C:\Windows\System32\cmd.exe".into());
-        pty::Command { program: comspec, args: vec!["/d".into(), "/c".into(), line], cwd, env: vec![], env_remove: vec![] }
+        pty::Command { program: comspec, args: vec!["/d".into(), "/c".into(), line], cwd, env, env_remove: vec![] }
     }
     #[cfg(not(windows))]
     {
-        pty::Command { program: argv[0].clone(), args: argv[1..].to_vec(), cwd, env: vec![], env_remove: vec![] }
+        pty::Command { program: argv[0].clone(), args: argv[1..].to_vec(), cwd, env, env_remove: vec![] }
     }
 }
 
@@ -326,7 +359,51 @@ impl RunManager {
             default_cwd,
             project_dir,
             daemon,
+            ext: OnceLock::new(),
         })
+    }
+
+    /// The vault (run secrets, renders) and the project git view (branch runs), once composed.
+    pub fn set_extras(&self, e: prep::Extras) {
+        let _ = self.ext.set(e);
+    }
+
+    pub fn extras(&self) -> Option<&prep::Extras> {
+        self.ext.get()
+    }
+
+    pub fn project_folder(&self, project: &str) -> Option<PathBuf> {
+        (self.project_dir)(project)
+    }
+
+    pub fn default_folder(&self) -> PathBuf {
+        self.default_cwd.clone()
+    }
+
+    /// The folder a command's relative paths start from; None = its project has no folder registered.
+    fn command_root(&self, cmd: &CommandSpec) -> Option<PathBuf> {
+        match cmd.project.as_deref() {
+            Some(p) => (self.project_dir)(p),
+            None => Some(self.default_cwd.clone()),
+        }
+    }
+
+    fn undo_preview(&self, p: &Option<prep::Prepared>) {
+        if let (Some(p), Some(ext)) = (p.as_ref().filter(|p| p.created), self.ext.get()) {
+            prep::remove_preview(&ext.projects.git, &p.root, &p.dir);
+        }
+    }
+
+    /// The secret env and rendered files for a run in `cwd`.
+    fn secrets_for(&self, cmd: &CommandSpec, cwd: &Path) -> Result<(Vec<(String, String)>, Vec<PathBuf>), String> {
+        if cmd.secrets.is_empty() && cmd.renders.is_empty() {
+            return Ok((vec![], vec![]));
+        }
+        let ext = self.ext.get().ok_or("secrets are not available on this daemon")?;
+        let pid = cmd.project.as_deref();
+        let env = prep::secret_env(&ext.vault, &cmd.secrets, pid)?;
+        let files = prep::render_all(&ext.vault, cwd, &cmd.renders, pid)?;
+        Ok((env, files))
     }
 
     fn publish(&self, ty: &str, data: String) {
@@ -334,7 +411,9 @@ impl RunManager {
     }
 
     pub fn commands_json(&self, project: Option<&str>) -> String {
-        serde_json::to_string(&self.commands.list(project)).unwrap_or_else(|_| "[]".into())
+        let list: Vec<CommandSpec> =
+            self.commands.list(project).into_iter().map(|c| CommandSpec { rooted: self.command_root(&c).is_some_and(|d| d.is_dir()), ..c }).collect();
+        serde_json::to_string(&list).unwrap_or_else(|_| "[]".into())
     }
 
     /// Saves and pushes the new list to every client.
@@ -362,24 +441,49 @@ impl RunManager {
     /// `run_start`: the command in a new pseudo-terminal; the `run` record (also pushed).
     pub fn start(self: &Arc<Self>, command_id: &str, branch: Option<String>) -> Result<Value, String> {
         let cmd = self.commands.get(command_id).ok_or_else(|| format!("no saved command '{command_id}'"))?;
-        let cwd = match cmd.cwd.as_deref().map(PathBuf::from) {
+        let root = self.command_root(&cmd).ok_or_else(|| match &cmd.project {
+            Some(p) => format!("project '{p}' has no folder registered; set the project folder first"),
+            None => "the command belongs to no project".to_string(),
+        })?;
+        let branch = branch.map(|b| b.trim().to_string()).filter(|b| !b.is_empty());
+        let (mut argv, mut cwd_text, mut preview, mut base) = (cmd.argv.clone(), cmd.cwd.clone(), None, root.clone());
+        if cmd.branch {
+            let b = branch.clone().ok_or_else(|| format!("command '{command_id}' runs on a branch; pass \"branch\" (infantry_run_branches lists them)"))?;
+            let ext = self.ext.get().ok_or("branch runs are not available on this daemon")?;
+            let pid = cmd.project.as_deref().ok_or("a branch command needs a project")?;
+            let prepared = prep::prepare(&ext.projects, pid, &root, &b)?;
+            argv = argv.iter().map(|a| prep::substitute(a, &prepared.dir, &b, &root)).collect();
+            cwd_text = cwd_text.map(|c| prep::substitute(&c, &prepared.dir, &b, &root));
+            base = prepared.dir.clone();
+            preview = Some(prepared);
+        } else if branch.is_some() {
+            return Err(format!("command '{command_id}' does not run on a branch (its cwd and argv name no {} or {})", prep::WORKTREE, prep::BRANCH));
+        }
+        let cwd = match cwd_text.as_deref().map(PathBuf::from) {
             Some(p) if p.is_absolute() => p,
-            rel => {
-                let base = cmd.project.as_deref().and_then(|p| (self.project_dir)(p)).unwrap_or_else(|| self.default_cwd.clone());
-                rel.map(|r| base.join(r)).unwrap_or(base)
-            }
+            Some(rel) => base.join(rel),
+            None => base.clone(),
         };
         if !cwd.is_dir() {
+            self.undo_preview(&preview);
             return Err(format!("{} is not a folder", cwd.display()));
         }
-        let mut child = pty::spawn(&command_for(&cmd.argv, cwd), pty::DEFAULT_ROWS, pty::DEFAULT_COLS).map_err(|e| format!("could not start: {e}"))?;
+        let (env, files) = self.secrets_for(&cmd, &cwd).inspect_err(|_| self.undo_preview(&preview))?;
+        let mut child = match pty::spawn(&command_for(&argv, cwd, env), pty::DEFAULT_ROWS, pty::DEFAULT_COLS) {
+            Ok(c) => c,
+            Err(e) => {
+                files.iter().for_each(|f| drop(std::fs::remove_file(f)));
+                self.undo_preview(&preview);
+                return Err(format!("could not start: {e}"));
+            }
+        };
         let job = Job::new().ok().filter(|j| j.assign(child.pid).is_ok());
         let reader = child.reader.take();
         let run = Arc::new(Run {
             id: format!("run-{}", &uuid::Uuid::new_v4().to_string()[..8]),
             command_id: cmd.id.clone(),
             name: cmd.name.clone(),
-            branch: branch.or(cmd.branch.clone()),
+            branch: branch.filter(|_| cmd.branch),
             started_at: now_ms(),
             pid: Some(child.pid),
             grace_ms: if cmd.grace_millis > 0 { cmd.grace_millis as u64 } else { self.limits.grace_ms },
@@ -400,6 +504,7 @@ impl RunManager {
             console: Mutex::new(child.console.take()),
             process: Some(Arc::new(child.process)),
             job,
+            cleanup: Mutex::new(Cleanup { files, preview }),
         });
         {
             let mut runs = self.runs.lock().unwrap();
@@ -481,6 +586,9 @@ impl RunManager {
         };
         self.publish(f::RUN_FINISHED, body.to_string());
         self.publish(f::RUN, run.record().to_string());
+        let c = std::mem::take(&mut *run.cleanup.lock().unwrap());
+        c.files.iter().for_each(|f| drop(std::fs::remove_file(f)));
+        self.undo_preview(&c.preview);
     }
 
     /// `run_stop`: Ctrl+C, then the tree after the grace; `force` kills it now.

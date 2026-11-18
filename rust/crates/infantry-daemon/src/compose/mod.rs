@@ -225,12 +225,12 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
     // ---- knowledge (roles, traits, skills, prompts, avatars) and the secrets vault ------------------------
     let knowledge = Arc::new(infantry_knowledge::Knowledge::open(db.clone(), state_dir, Arc::new(adapters::KnowledgePorts { daemon: daemon.clone() })));
     let vault_projects = projects.clone();
-    let vault = infantry_vault::unit::VaultUnit::open(
+    let vault = Arc::new(infantry_vault::unit::VaultUnit::open(
         state_dir,
         Default::default(),
         Default::default(),
         Arc::new(move |p: Option<&str>| p.and_then(|p| project_dir(&vault_projects, p))),
-    );
+    ));
 
     // ---- the tool catalog + scripting ---------------------------------------------------------------------
     let tools = Arc::new(Tools::new(daemon.clone()));
@@ -238,6 +238,7 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         let p = projects.clone();
         crate::run::RunManager::new(state_dir, daemon.cfg.default_cwd.clone(), bus.clone(), daemon.clone(), Arc::new(move |id: &str| project_dir(&p, id)))
     };
+    runs.set_extras(crate::run::prep::Extras { vault: vault.clone(), projects: projects.clone() });
     tools.set_runs(runs.clone());
     tools.set_knowledge(knowledge.clone());
     let engines = ScriptEngines::standard();
@@ -337,7 +338,7 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
         Arc::new(QuestionsUnit::new(questions.clone(), asker_of)),
         Arc::new(tools::ToolsUnit { tools: tools.clone() }),
         Arc::new(crate::run::RunUnit { runs: runs.clone() }),
-        Arc::new(vault),
+        vault.clone(),
     ];
     units.extend(knowledge.units());
     if let Some(p) = &plugin_set {
