@@ -34,9 +34,21 @@ pub struct DaemonServices {
     settings: Mutex<BTreeMap<String, String>>,
     db: Arc<Mutex<rusqlite::Connection>>,
     composed: OnceLock<Weak<Composed>>,
+    http: OnceLock<Result<ureq::Agent, String>>,
 }
 
 impl DaemonServices {
+    /// One agent for every plugin call, over the system TLS (Windows SChannel).
+    fn agent(&self) -> Result<&ureq::Agent, String> {
+        self.http
+            .get_or_init(|| {
+                let tls = native_tls::TlsConnector::new().map_err(|e| format!("no TLS for plugin HTTP calls: {e}"))?;
+                Ok(ureq::AgentBuilder::new().tls_connector(Arc::new(tls)).build())
+            })
+            .as_ref()
+            .map_err(|e| e.clone())
+    }
+
     fn save_settings(&self, s: &BTreeMap<String, String>) -> Result<(), String> {
         let text = serde_json::to_string_pretty(s).map_err(|e| e.to_string())?;
         std::fs::write(self.state_dir.join(SETTINGS_FILE), text).map_err(|e| e.to_string())
@@ -96,7 +108,7 @@ impl HostServices for DaemonServices {
     }
     fn http_send(&self, _module: &str, req: HttpRequest) -> Result<HttpResponse, String> {
         let timeout = req.timeout_ms.map(u64::from).unwrap_or(HTTP_TIMEOUT_MS);
-        let mut r = ureq::request(&req.method, &req.url).timeout(Duration::from_millis(timeout));
+        let mut r = self.agent()?.request(&req.method, &req.url).timeout(Duration::from_millis(timeout));
         for (k, v) in &req.headers {
             r = r.set(k, v);
         }
@@ -147,6 +159,7 @@ pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: toki
         settings: Mutex::new(settings),
         db: Arc::new(Mutex::new(db)),
         composed: OnceLock::new(),
+        http: OnceLock::new(),
     });
     let host = match PluginHost::new(services.clone(), Default::default()) {
         Ok(h) => Arc::new(h),
