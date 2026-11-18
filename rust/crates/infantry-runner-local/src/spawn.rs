@@ -17,9 +17,32 @@ use std::time::{Duration, Instant};
 /// Bytes per read from a child's pipe.
 const READ_BUF: usize = 16 * 1024;
 
+/// On Windows a bare program name is looked up on PATH x PATHEXT (npm installs `.cmd` shims, which `CreateProcess` and std
+/// do not find by bare name). A name with a path part or an extension already given is left alone, as is any name not found.
+pub(crate) fn resolve_program(program: &str, env: &[(String, String)]) -> String {
+    if !cfg!(windows) || program.contains(['/', '\\', ':']) {
+        return program.to_string();
+    }
+    let var = |k: &str| {
+        env.iter().rev().find(|(n, _)| n.eq_ignore_ascii_case(k)).map(|(_, v)| std::ffi::OsString::from(v)).or_else(|| std::env::var_os(k))
+    };
+    let Some(path) = var("PATH") else { return program.to_string() };
+    let pathext = var("PATHEXT").map(|v| v.to_string_lossy().into_owned()).unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into());
+    let exts: Vec<&str> = pathext.split(';').filter(|e| !e.is_empty()).collect();
+    for dir in std::env::split_paths(&path) {
+        for e in exts.iter().copied().chain(std::iter::once("")) {
+            let f = dir.join(format!("{program}{e}"));
+            if f.is_file() {
+                return f.to_string_lossy().into_owned();
+            }
+        }
+    }
+    program.to_string()
+}
+
 fn command(spec: &ProcessSpec) -> Command {
     Command {
-        program: spec.program.clone(),
+        program: resolve_program(&spec.program, &spec.env),
         args: spec.args.clone(),
         cwd: spec.cwd.clone().map(Into::into).unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| ".".into())),
         env: spec.env.clone(),

@@ -513,11 +513,13 @@ dependencies = [
  "infantry-conformance",
  "infantry-protocol",
  "infantry-runner",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",
  "tokio",
  "uuid",
+ "windows-sys",
 ]
 
 [[package]]
@@ -525,6 +527,37 @@ name = "infantry-guards"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+]
+
+[[package]]
+name = "infantry-harness"
+version = "0.1.0"
+dependencies = [
+ "infantry-runner-api",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "infantry-harness-codex"
+version = "0.1.0"
+dependencies = [
+ "infantry-harness",
+ "infantry-runner-local",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "infantry-migrate"
+version = "0.1.0"
+dependencies = [
+ "infantry-protocol",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "windows-sys",
 ]
 
 [[package]]

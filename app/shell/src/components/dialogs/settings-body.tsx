@@ -8,6 +8,7 @@ import { useUi } from "@/state/ui-state";
 import { Switch } from "@infantry/ui";
 import { Label } from "@infantry/ui";
 import { PickerField } from "./picker-field";
+import { DeclaredSettings, SettingsSearch, useDeclaredTabs } from "@/components/settings/declared-settings";
 
 const sections = ["Appearance", "Daemon", "Notifications", "Voice", "About"] as const;
 
@@ -50,18 +51,21 @@ function RunnerRow() {
 
 export function SettingsBody() {
   const ui = useUi();
-  const [section, setSection] = useState<(typeof sections)[number]>("Appearance");
+  const [section, setSection] = useState<string>("Appearance");
+  const [query, setQuery] = useState("");
+  const declared = useDeclaredTabs().filter((t) => !(sections as readonly string[]).includes(t));
+  const searching = query.trim() !== "";
   return (
     <div className="grid gap-4 sm:grid-cols-[160px_1fr]">
       <nav aria-label="Settings sections" className="flex gap-1 overflow-x-auto sm:flex-col">
-        {sections.map((s) => (
+        {[...sections, ...declared].map((s) => (
           <button
             key={s}
             type="button"
             onClick={() => setSection(s)}
             className={cn(
               "rounded-md px-3 py-1.5 text-left text-[13px] whitespace-nowrap",
-              s === section ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+              s === section && !searching ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >
             {s}
@@ -69,7 +73,9 @@ export function SettingsBody() {
         ))}
       </nav>
       <div className="space-y-2">
-        {section === "Appearance" && (
+        <SettingsSearch query={query} onQuery={setQuery} />
+        {(searching || declared.includes(section)) && <DeclaredSettings tab={section} query={query} />}
+        {!searching && section === "Appearance" && (
           <>
             <SettingRow id="set-dark" title="Dark theme" hint="Light theme when off">
               <Switch id="set-dark" checked={ui.theme === "dark"} onCheckedChange={ui.toggleTheme} />
@@ -80,7 +86,7 @@ export function SettingsBody() {
             <PickerField id="set-accent" label="Accent" options={["Red", "Amber", "Blue", "Green"]} inheritLabel="Default (Red)" />
           </>
         )}
-        {section === "Daemon" && (
+        {!searching && section === "Daemon" && (
           <>
             <RunnerRow />
             <PickerField id="set-daemon" label="Daemon" options={["This computer", "vps-runner-01"]} inheritLabel="This computer" />
@@ -89,17 +95,17 @@ export function SettingsBody() {
             </SettingRow>
           </>
         )}
-        {section === "Notifications" && (
+        {!searching && section === "Notifications" && (
           <SettingRow id="set-toast" title="Milestone toasts" hint="One toast when a goal is met">
             <Switch id="set-toast" defaultChecked />
           </SettingRow>
         )}
-        {section === "Voice" && (
+        {!searching && section === "Voice" && (
           <SettingRow id="set-tts" title="Read comms aloud" hint="Uses the TTS plugin when installed">
             <Switch id="set-tts" />
           </SettingRow>
         )}
-        {section === "About" && (
+        {!searching && section === "About" && (
           <div className="rounded-lg border bg-card p-3 text-[13px]">
             <p className="font-semibold">Infantry AI</p>
             <p className="font-mono text-xs text-muted-foreground">build 1.6.0+20261117.2317.6afaed5e8 · Tauri v2 template</p>
