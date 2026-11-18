@@ -46,7 +46,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Board button with count | yes | done | *(fixed today)* The count was a fixed 3. It now counts To Do + In Progress. |
 | Search agents | yes | done | Ctrl+K works *(fixed today)*. |
 | Role filter chips | yes | done | *(fixed today)* They listed sample roles. They now list the daemon's roles. |
-| Groups by status (Waiting on you / Ready to check / Running / Quiet) | yes | partial | Rust has Running / Quiet only. UI only. |
+| Groups by status (Waiting on you / Ready to check / Running / Quiet) | yes | done | *(RUST-UI-9)* Ready to check = a quiet session whose ticket is in Pending. |
 | Card: avatar, state dot, role, last line, age, ticket | yes | done | |
 | Card badges: AUTO, report-back, watchdog, progress bar, runner | yes | partial | Progress line and ticket only. The rest is UI only (fields are on the session/agent frames). |
 | Pulsing border while busy, selected stripes | yes | partial | Live ring only. Cosmetic. |
