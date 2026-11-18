@@ -91,7 +91,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Pending send: sending / sent / retry | yes | done | No "Discard this message": UI only. |
 | Jump to latest, stick to bottom | yes | done | |
 | Load older pages on scroll up | yes | partial | History loads on open. No paging: UI only. |
-| Search this chat (Ctrl+F) | yes | missing | *(fixed today)* A dead button was removed. UI only. |
+| Search this chat (Ctrl+F) | yes | done | *(RUST-UI-9)* Ctrl+F opens a search bar over the transcript: match count, Enter / Shift+Enter step through matches (scrolled into view and ringed), Esc closes. Searches loaded history only. |
 | Expand / collapse all, history buttons | yes | missing | *(fixed today)* These were dead buttons and were removed. UI only. |
 | Read comms aloud | yes | missing | *(fixed today)* A dead button was removed. Needs a TTS plugin (`spoken` frame exists). |
 
@@ -187,7 +187,7 @@ All *(fixed today)*: before this sweep no window-wide key worked, and the hints 
 | Ctrl+Shift+N switch agent, Ctrl+Alt+K end session | yes | done | *(RUST-UI-8)* |
 | Ctrl+Shift+K stop background processes | yes | missing | UI only (`processes_reap`, per session). |
 | Ctrl+L connect dialog | yes | missing | UI only. |
-| Ctrl+F chat search | yes | missing | See transcript. |
+| Ctrl+F chat search | yes | done | *(RUST-UI-9)* |
 
 ## Settings and appearance
 

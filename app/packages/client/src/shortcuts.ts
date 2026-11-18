@@ -11,6 +11,7 @@ export type Shortcut =
   | { kind: "composer" } // Ctrl+/
   | { kind: "nextNeedsInput" } // Ctrl+J
   | { kind: "agent"; step: 1 | -1 } // Alt+Down / Alt+Up
+  | { kind: "chatSearch" } // Ctrl+F: search this chat
   | { kind: "switchAgent" } // Ctrl+Shift+N: switch the selected session's provider / model
   | { kind: "endSession" } // Ctrl+Alt+K: end the selected session (graceful kill; it can be resumed)
   | { kind: "tab"; digit: string }; // Ctrl+0..9: the tab whose hint is ^<digit> (^8 = the Board)
@@ -44,6 +45,8 @@ export function shortcutOf(e: KeyPress): Shortcut | null {
       return { kind: "composer" };
     case "j":
       return { kind: "nextNeedsInput" };
+    case "f":
+      return { kind: "chatSearch" };
     default:
       return null;
   }
@@ -70,3 +73,6 @@ export function hostLabel(url: string): string {
   }
   return /^(localhost|127\.\d+\.\d+\.\d+|\[?::1\]?)$/.test(host) ? "This computer" : host;
 }
+
+/** The window event Ctrl+F raises; the open transcript shows its search bar. */
+export const CHAT_SEARCH_EVENT = "infantry:chat-search";
