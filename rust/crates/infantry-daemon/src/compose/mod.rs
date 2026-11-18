@@ -60,6 +60,10 @@ pub use tools::{Tools, PLUGIN_TOOL_CALL};
 pub const BUS_CAPACITY: usize = 4096;
 /// How often the mail router re-checks deferred wakes.
 pub const MAIL_TICK_MS: u64 = 5_000;
+/// How often the generic `clock.tick` bus event is emitted (plugins pump timers on it: the plugin ABI has no timer).
+pub const CLOCK_TICK_MS: u64 = 1_000;
+/// The named event of the daemon's clock, payload `{"at": <epoch ms>}`.
+pub const CLOCK_TICK: &str = "clock.tick";
 /// The shortest timer-hook period (`scripting.hooks.timerMinSeconds` default).
 pub const TIMER_MIN_SECS: u64 = 60;
 /// Where plugin daemon halves are installed (`<dir>/official/<Module>/module.json`); else `<exe dir>/plugins`.
@@ -410,6 +414,7 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
 
     // ---- session life -> usage, mail wakes, the done protocol ----------------------------------------------
     daemon.observe(Arc::new(adapters::WorkObserver { dispatcher, usage: usage.clone(), mail: mail.clone(), handle: handle.clone() }));
+    daemon.observe(Arc::new(adapters::RunEvents { bus: bus.clone() }));
 
     // ---- RUST-SESS-2: the watchdog (never fails a session) and the done-worker reaper -----------------------
     daemon.start_watchdog(Arc::new(watch::Ports { daemon: daemon.clone(), mail: mail.clone(), attention: attention.clone() }), crate::sessions::WatchConfig::default());
@@ -426,6 +431,17 @@ pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, St
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(_) => break,
                 }
+            }
+        });
+    }
+    {
+        let b = bus.clone();
+        tokio::spawn(async move {
+            let mut t = tokio::time::interval(Duration::from_millis(CLOCK_TICK_MS));
+            t.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                t.tick().await;
+                b.emit(CLOCK_TICK, serde_json::json!({ "at": now_ms() }));
             }
         });
     }
@@ -542,6 +558,19 @@ impl FrameUnits for Composed {
             out.push(serde_json::to_string(&e).unwrap_or_default());
         }
         out
+    }
+
+    fn route(&self, method: &str, path: &str) -> Option<bool> {
+        self.plugins.as_ref()?.route_owner(method, path).map(|(_, public)| public)
+    }
+
+    fn serve_route(&self, c: crate::sessions::RouteCall) -> (u16, Vec<(String, String)>, Vec<u8>) {
+        let Some((p, _)) = self.plugins.as_ref().and_then(|h| h.route_owner(&c.method, &c.path)) else { return (404, Vec::new(), b"no such route".to_vec()) };
+        let req = infantry_plugin_host::RouteRequest { method: c.method, path: c.path, query: c.query, headers: c.headers, body: c.body };
+        match p.handle_route(&req) {
+            Ok(r) => (r.status, r.headers, r.body),
+            Err(e) => (500, vec![("Content-Type".into(), "text/plain".into())], e.message().as_bytes().to_vec()),
+        }
     }
 
     fn http(&self) -> Option<axum::Router> {

@@ -18,6 +18,8 @@ use tokio::sync::broadcast::error::RecvError;
 
 /// How often the store is written when something changed.
 pub const FLUSH_MS: u64 = 250;
+/// The largest body a plugin route is handed (a plugin may cap lower itself).
+pub const ROUTE_BODY_MAX_BYTES: usize = 1_048_576;
 
 pub const BUILD: &str = concat!("rust-", env!("CARGO_PKG_VERSION"));
 
@@ -228,9 +230,35 @@ async fn guarded(State(s): State<Shared>, req: axum::extract::Request, next: axu
     next.run(req).await
 }
 
+/// Any other path: a route a loaded plugin declares, behind the access policy unless it is a public route (whose plugin
+/// authenticates it, e.g. a webhook's signature).
+async fn plugin_route(State(s): State<Shared>, req: axum::extract::Request) -> Response {
+    let (method, path) = (req.method().as_str().to_string(), req.uri().path().to_string());
+    let Some(units) = s.app.daemon.units() else { return (StatusCode::NOT_FOUND, "not found").into_response() };
+    let Some(public) = units.route(&method, &path) else { return (StatusCode::NOT_FOUND, "not found").into_response() };
+    if !public {
+        if let Some(r) = check(&s.app, req.uri(), req.headers()) {
+            return r;
+        }
+    }
+    let query = req.uri().query().unwrap_or("").to_string();
+    let headers: Vec<(String, String)> = req.headers().iter().filter_map(|(k, v)| Some((k.to_string(), v.to_str().ok()?.to_string()))).collect();
+    let body = match axum::body::to_bytes(req.into_body(), ROUTE_BODY_MAX_BYTES).await {
+        Ok(b) => b.to_vec(),
+        Err(_) => return (StatusCode::PAYLOAD_TOO_LARGE, format!("body is larger than {ROUTE_BODY_MAX_BYTES} bytes")).into_response(),
+    };
+    let call = crate::sessions::RouteCall { method, path, query, headers, body };
+    let (status, hdrs, body) = tokio::task::spawn_blocking(move || units.serve_route(call)).await.unwrap_or((500, Vec::new(), b"the route failed".to_vec()));
+    let mut resp = Response::builder().status(StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR));
+    for (k, v) in hdrs {
+        resp = resp.header(k, v);
+    }
+    resp.body(axum::body::Body::from(body)).unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+}
+
 fn router_with(app: App, gateway: Option<Arc<Gateway>>) -> Router {
     let shared = Shared { app: app.clone(), gateway };
-    let mut r = Router::new().route("/ws", get(ws)).route("/health", get(health)).with_state(shared.clone());
+    let mut r = Router::new().route("/ws", get(ws)).route("/health", get(health)).fallback(plugin_route).with_state(shared.clone());
     if let Some(extra) = app.daemon.units().and_then(|u| u.http()) {
         r = r.merge(extra.layer(axum::middleware::from_fn_with_state(shared, guarded)));
     }
