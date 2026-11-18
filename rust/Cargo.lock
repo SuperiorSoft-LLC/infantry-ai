@@ -513,6 +513,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-guards"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "infantry-protocol"
 version = "0.1.0"
 dependencies = [
