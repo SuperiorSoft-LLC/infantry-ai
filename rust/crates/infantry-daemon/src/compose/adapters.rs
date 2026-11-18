@@ -358,6 +358,28 @@ fn usage_info(r: &SessionRecord) -> UsageSession {
     UsageSession { id: r.id.clone(), run_count: r.run_count as i64, ticket_id: r.ticket_id.clone(), role: r.role.clone(), provider: r.provider.clone(), model: r.model.clone() }
 }
 
+/// Session life as named bus events, for plugins (a generic seam): `session.run_ended` `{sessionId, outcome, detail,
+/// role, projectId, ticketId}` when a turn ends (`outcome` = SUCCEEDED, FAILED, KILLED_*), `session.exited`
+/// `{sessionId}` when its process is gone.
+pub struct RunEvents {
+    pub bus: infantry_core::bus::EventBus,
+}
+
+pub const SESSION_RUN_ENDED: &str = "session.run_ended";
+pub const SESSION_EXITED: &str = "session.exited";
+
+impl SessionObserver for RunEvents {
+    fn on_turn_end(&self, rec: &SessionRecord, outcome: &str, detail: &str) {
+        self.bus.emit(
+            SESSION_RUN_ENDED,
+            serde_json::json!({"sessionId": rec.id, "outcome": outcome, "detail": detail, "role": rec.role, "projectId": rec.project_id, "ticketId": rec.ticket_id}),
+        );
+    }
+    fn on_exit(&self, rec: &SessionRecord) {
+        self.bus.emit(SESSION_EXITED, serde_json::json!({"sessionId": rec.id}));
+    }
+}
+
 impl SessionObserver for WorkObserver {
     fn on_turn(&self, rec: &SessionRecord, _text: &str) {
         let origin = if rec.ticket_id.is_some() || rec.spawner_session_id.is_some() { TurnOrigin::Agent } else { TurnOrigin::Owner };

@@ -25,6 +25,14 @@ impl PluginFrameUnit {
         let frames: Vec<&'static str> = p.decl.frames.iter().map(|f| &*Box::leak(f.r#type.clone().into_boxed_str())).collect();
         Some(PluginFrameUnit { host, module_id: module_id.into(), name, frames: Box::leak(frames.into_boxed_slice()) })
     }
+
+    /// The unit for an installed module's declared frames whether or not it is loaded now (a module enabled later
+    /// answers at once; until then its frames refuse "not loaded").
+    pub fn declared(host: Arc<PluginHost>, module_id: &str, frame_types: &[String]) -> PluginFrameUnit {
+        let name: &'static str = Box::leak(format!("plugin:{module_id}").into_boxed_str());
+        let frames: Vec<&'static str> = frame_types.iter().map(|f| &*Box::leak(f.clone().into_boxed_str())).collect();
+        PluginFrameUnit { host, module_id: module_id.into(), name, frames: Box::leak(frames.into_boxed_slice()) }
+    }
 }
 
 fn refusal(frame_type: &str, e: &CallError) -> Refusal {

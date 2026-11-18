@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-triggers-daemon"
+version = "1.2.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Infantry_Triggers daemon half (WASM component): stored triggers, coalescing, ceilings, schedules, one-shots, ship, webhooks, prompt nudges"
+publish = false
+
+[lib]
+name = "infantry_triggers_daemon"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+infantry-plugin-sdk = { path = "../../../../crates/infantry-plugin-sdk" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hmac = "0.12"
+sha2 = "0.10"
+
+[dev-dependencies]
+rusqlite = { version = "0.32", features = ["bundled"] }
+infantry-plugin-host = { path = "../../../../crates/infantry-plugin-host" }
+infantry-plugin-wit = { path = "../../../../crates/infantry-plugin-wit" }

@@ -137,12 +137,17 @@ impl LoadedPlugin {
     }
 }
 
-/// `GET /path` (or a bare `/path` = any method) against a request.
-fn route_matches(decl: &str, method: &str, path: &str) -> bool {
-    match decl.split_once(' ') {
-        Some((m, p)) => m.eq_ignore_ascii_case(method) && p == path,
-        None => decl == path,
+/// `GET /path` (or a bare `/path` = any method) against a request. A `{name}` segment matches any one non-empty segment.
+pub fn route_matches(decl: &str, method: &str, path: &str) -> bool {
+    let (m, p) = match decl.split_once(' ') {
+        Some((m, p)) => (Some(m), p),
+        None => (None, decl),
+    };
+    if m.is_some_and(|m| !m.eq_ignore_ascii_case(method)) {
+        return false;
     }
+    let (want, got): (Vec<&str>, Vec<&str>) = (p.trim_end_matches('/').split('/').collect(), path.trim_end_matches('/').split('/').collect());
+    want.len() == got.len() && want.iter().zip(&got).all(|(w, g)| if w.starts_with('{') && w.ends_with('}') { !g.is_empty() } else { w == g })
 }
 
 pub struct PluginHost {
@@ -288,6 +293,15 @@ impl PluginHost {
     /// `module id -> loaded | refused: why | failed: why | unloaded`.
     pub fn statuses(&self) -> BTreeMap<String, String> {
         self.statuses.lock().unwrap().clone()
+    }
+
+    /// The loaded plugin that declares route `method path`, and whether that route is public (no daemon bearer).
+    pub fn route_owner(&self, method: &str, path: &str) -> Option<(Arc<LoadedPlugin>, bool)> {
+        self.loaded().into_iter().find_map(|p| {
+            let public = p.decl.public_routes.iter().any(|r| route_matches(r, method, path));
+            let private = p.decl.routes.iter().any(|r| route_matches(r, method, path));
+            (public || private).then(|| (p.clone(), public))
+        })
     }
 
     /// Every tool of every healthy plugin.

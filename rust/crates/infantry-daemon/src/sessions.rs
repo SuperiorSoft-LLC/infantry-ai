@@ -141,6 +141,24 @@ pub trait FrameUnits: Send + Sync {
     fn hello(&self) -> Vec<String>;
     /// HTTP routes the units serve beside `/ws` (behind the same access policy).
     fn http(&self) -> Option<axum::Router>;
+    /// A route a plugin declares (`daemon.routes` / `daemon.publicRoutes`): Some(public) when one matches.
+    fn route(&self, _method: &str, _path: &str) -> Option<bool> {
+        None
+    }
+    /// Serves a declared plugin route: (status, headers, body). Blocking: call it on the blocking pool.
+    fn serve_route(&self, _req: RouteCall) -> (u16, Vec<(String, String)>, Vec<u8>) {
+        (404, Vec::new(), b"no such route".to_vec())
+    }
+}
+
+/// One HTTP request to a plugin route.
+#[derive(Debug, Clone, Default)]
+pub struct RouteCall {
+    pub method: String,
+    pub path: String,
+    pub query: String,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
 }
 
 /// Per connection: a bare `new` waiting for its first prompt, or the session a JSON `new` bound (BIND-AT-CREATION).

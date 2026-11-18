@@ -32,6 +32,10 @@ pub struct AttentionUnit {
     store: Arc<AttentionStore>,
 }
 
+/// `attention_raise` (an `AttentionRaise` object) -> `attention` (the item): a plugin raises an item (a trigger's trip),
+/// the Kotlin `Attention.raise` service as a frame. Owner-level: plugins' in-process requests and the owner only.
+pub const ATTENTION_RAISE: &str = "attention_raise";
+
 impl AttentionUnit {
     pub fn new(store: Arc<AttentionStore>) -> Self {
         AttentionUnit { store }
@@ -43,11 +47,19 @@ impl FrameUnit for AttentionUnit {
         "attention"
     }
     fn frames(&self) -> &'static [&'static str] {
-        &[f::ATTENTION_LIST, f::ATTENTION_ACK]
+        &[f::ATTENTION_LIST, f::ATTENTION_ACK, ATTENTION_RAISE]
     }
-    fn handle(&self, env: &Envelope, _ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
+    fn handle(&self, env: &Envelope, ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
         match env.r#type.as_str() {
             f::ATTENTION_LIST => Ok(vec![reply(env, f::ATTENTION_ITEMS, to_json(&self.store.list(false)))]),
+            ATTENTION_RAISE => {
+                if !ctx.owner {
+                    return Err(Refusal::new(ATTENTION_RAISE, "owner only"));
+                }
+                let r: super::attention::AttentionRaise = parse(env)?;
+                let item = self.store.raise(&r).map_err(|e| Refusal::new(ATTENTION_RAISE, e))?;
+                Ok(vec![reply(env, f::ATTENTION, to_json(&item))])
+            }
             _ => {
                 // Success answers nothing: the change is broadcast as an `attention` frame.
                 self.store.acknowledge(env.data.trim().trim_matches('"')).map_err(|e| Refusal::new(f::ATTENTION_ACK, e))?;
