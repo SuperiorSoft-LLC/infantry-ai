@@ -150,11 +150,10 @@ of the sessions suite against the Kotlin fixtures (`fixtures/kotlin/sessions`), 
 
 Differences from the fixtures, and how they are handled:
 
-- Two `status` activity lines carry the session's folder verbatim (`starting stub model default in <folder>`), and the
-  normalizer only blanks folder-valued *keys*. The fixtures were recorded with the Kotlin daemon running in
-  `.worktrees/rust-conf-1`, so the CLI compare runs the Rust daemon from that same folder; the in-process test swaps its
-  temp folder for the recorded one before the diff. Recording the fixtures again with a normalizer that also blanks
-  paths inside strings would remove the dependency.
+- Two `status` activity lines carry the session's folder verbatim (`starting stub model default in <folder>`).
+  RUST-DAEMON-2: the normalizer now blanks absolute paths inside any string, and the fixtures were re-recorded against
+  the stub Kotlin daemon (installed build `20261117-181728-6afaed5e`, `INFANTRY_PROVIDER=stub`, port 18963, temp
+  state), so the compare runs from any folder and the in-process test needs no folder swap.
 - After a kill, Kotlin's run activity settles to `idle` (and the record gains its `watch`) on the next agent-watchdog
   tick, seconds later; the `kill` and `remove` fixtures depend on that delay. The Rust daemon has no watchdog yet, so it
   emits that settle once, `KILL_SETTLE_MS` (1.5 s) after a kill.
@@ -164,7 +163,7 @@ Reproduce:
 
 ```
 cargo build --release -p infantry-daemon -p infantry-conformance --example spawn_sessions   # in rust/
-# from .worktrees/rust-conf-1, with a temp state dir:
+# from any folder, with a temp state dir:
 infantry-daemon --port 18961 --provider stub --state-dir %TEMP%\rd1
 infantry-conformance compare --url ws://127.0.0.1:18961 [--token T]
 spawn_sessions ws://127.0.0.1:18961 5            # then read the RSS of the daemon pid
