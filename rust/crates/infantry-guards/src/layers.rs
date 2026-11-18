@@ -61,6 +61,8 @@ pub const LAYERS: &[(&str, Layer, u8)] = &[
     ("infantry-plugin-wit", Layer::Core, 0),
     ("infantry-plugin-host", Layer::Core, 1),
     ("infantry-plugin-sdk", Layer::Core, 1),
+    // projects, workspaces, project git, worktrees, ticket branches: platform level; the orchestrator calls into it.
+    ("infantry-projects", Layer::Core, 1),
     ("infantry-runner-api", Layer::Runner, 0),
     ("infantry-runner", Layer::Runner, 1),
     ("infantry-runner-local", Layer::Runner, 2),
