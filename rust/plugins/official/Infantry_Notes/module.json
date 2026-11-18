@@ -1,0 +1,55 @@
+{
+  "name": "Infantry_Notes",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "description": "The project knowledge notes: memory notes (project, role, session, global), the append-only decisions log and the issues log.",
+  "tier": "official",
+  "sequence": [],
+  "buildOrder": 80,
+  "tabs": [
+    { "id": "infantry.notes", "container": "center" }
+  ],
+  "actions": [
+    { "id": "memory.save", "label": "Add or edit a note", "kind": "write", "frames": ["memory_save"] },
+    { "id": "memory.delete", "label": "Delete a note", "kind": "destructive", "frames": ["memory_delete", "memory_purge_role"] }
+  ],
+  "daemon": {
+    "component": "daemon.component",
+    "needs": ["storage", "frames", "events"],
+    "wants": ["settings"],
+    "apiAtLeast": "1.59.0",
+    "storage": { "adopt": ["decisions", "issues", "issue_events", "memory_notes"] },
+    "frames": [
+      { "type": "decision_list", "action": "knowledge.read", "kind": "read" },
+      { "type": "decision_get", "action": "knowledge.read", "kind": "read" },
+      { "type": "decision_add", "action": "knowledge.decision.add", "kind": "write" },
+      { "type": "issue_list", "action": "knowledge.read", "kind": "read" },
+      { "type": "issue_get", "action": "knowledge.read", "kind": "read" },
+      { "type": "issue_precheck", "action": "knowledge.read", "kind": "read" },
+      { "type": "issue_open", "action": "knowledge.issue.save", "kind": "write" },
+      { "type": "issue_attempt", "action": "knowledge.issue.save", "kind": "write" },
+      { "type": "issue_fix", "action": "knowledge.issue.save", "kind": "write" },
+      { "type": "memory_search", "action": "memory.read", "kind": "read" },
+      { "type": "memory_list", "action": "memory.read", "kind": "read" },
+      { "type": "memory_get", "action": "memory.read", "kind": "read" },
+      { "type": "memory_save", "action": "memory.save", "kind": "write" },
+      { "type": "memory_delete", "action": "memory.delete", "kind": "destructive" },
+      { "type": "memory_purge_role", "action": "memory.delete", "kind": "destructive" }
+    ],
+    "config": [
+      {
+        "node": "infantry.notes", "group": "Knowledge", "title": "Notes", "tab": "Project", "order": 910,
+        "applies": "Applies to: who may write or delete global notes (shared by every project on this install).",
+        "keywords": ["notes", "memory", "global", "knowledge", "write"],
+        "fields": [
+          { "key": "knowledge.globalWriteRoles", "type": "text", "label": "Roles that may write global notes", "default": "pm", "scope": "daemon", "order": 1, "description": "Comma-separated role ids. The owner (no session) may always write. Every agent may read." }
+        ]
+      }
+    ],
+    "tools": [
+      { "name": "infantry_memory", "action": "memory.read", "kind": "read", "description": "Read and write knowledge notes (what `infantry memory show|search|index|save|delete` does). action=show needs name; action=search needs query (matches names, descriptions and bodies); action=index lists notes; action=write needs name, description, body (replaces the note; optional folder); action=update needs name and content (appends; with find it replaces that one exact passage); action=delete needs name. scope: project (default), global (shared by every project on this install; writing needs a role in setting knowledge.globalWriteRoles, default pm), role (your role's notes), session; show without scope tries role, then project (which includes global), then session." }
+    ]
+  }
+}
