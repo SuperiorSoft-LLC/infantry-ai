@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "plugins/official/Infantry_Health/daemon", "plugins/official/Infantry_News", "plugins/official/Infantry_Mcp/daemon", "plugins/official/Infantry_Settings/daemon", "plugins/official/Infantry_Plugins/daemon", "plugins/official/Infantry_Chat/daemon", "plugins/official/Infantry_Docs/daemon", "plugins/official/Infantry_JobFeed/daemon", "plugins/official/Infantry_Cards/daemon", "plugins/official/Infantry_Git/daemon"]
+members = ["crates/*", "plugins/official/Infantry_Health/daemon", "plugins/official/Infantry_News", "plugins/official/Infantry_Notes", "plugins/official/Infantry_Mcp/daemon", "plugins/official/Infantry_Settings/daemon", "plugins/official/Infantry_Plugins/daemon", "plugins/official/Infantry_Chat/daemon", "plugins/official/Infantry_Docs/daemon", "plugins/official/Infantry_JobFeed/daemon", "plugins/official/Infantry_Cards/daemon", "plugins/official/Infantry_Git/daemon"]

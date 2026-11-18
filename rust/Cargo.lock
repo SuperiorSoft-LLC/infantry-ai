@@ -1359,6 +1359,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-notes"
+version = "1.0.0"
+dependencies = [
+ "rusqlite",
+ "serde_json",
+ "wit-bindgen 0.46.0",
+]
+
+[[package]]
 name = "infantry-orchestrator-api"
 version = "0.1.0"
 dependencies = [
