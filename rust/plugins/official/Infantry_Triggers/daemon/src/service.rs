@@ -92,6 +92,24 @@ pub trait Ports {
     fn at_max_late_ms(&self) -> i64 {
         DEFAULT_AT_MAX_LATE_MS
     }
+    /// TRIG-ACTIONS-1: runs a plugin action kind (a capability id another module declares) for one fire.
+    fn call_action(&self, _kind: &str, _fire: Value) -> ActionAnswer {
+        ActionAnswer::NoHandler
+    }
+}
+
+/// What a plugin's action handler did with a fire (Kotlin `TriggerActionResult`).
+#[derive(Debug, Clone, PartialEq)]
+pub enum ActionAnswer {
+    /// It started a session; the run ends with that session.
+    Started(String),
+    /// It sent mail.
+    Mailed,
+    /// It finished the work itself.
+    Done,
+    Refused(String),
+    /// No loaded module answers the kind.
+    NoHandler,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -590,11 +608,36 @@ impl<S: Sql, P: Ports> Service<S, P> {
         match t.action.kind.as_str() {
             "start_next" => self.launch_start_next(&t, &run),
             "prompt" => self.launch_nudge(&t, &run),
-            _ => {
-                // TRIG-ACTIONS-1: no handler for a plugin's action kind is registered on this host.
-                self.refund(&t.id, &run.run_id);
-                self.complete(&run.run_id, Outcome::Succeeded);
-                self.redispose(&run, d::REFUSED_UNKNOWN_ACTION, Some(format!("no handler for '{}'", t.action.kind)));
+            kind => {
+                // TRIG-ACTIONS-1: the kind is a capability a loaded module declares; it runs with no state borrowed.
+                let fire = json!({ "trigger": t, "source": run.first_event, "runId": run.run_id });
+                match self.ports.call_action(kind, fire) {
+                    ActionAnswer::Started(sid) => match self.exits.remove(&sid) {
+                        Some(ended) => self.complete(&run.run_id, ended),
+                        None => {
+                            self.run_sessions.insert(sid, run.run_id.clone());
+                        }
+                    },
+                    ActionAnswer::Mailed => {
+                        self.refund(&t.id, &run.run_id);
+                        self.complete(&run.run_id, Outcome::Succeeded);
+                        self.redispose(&run, d::MAILED, None);
+                    }
+                    ActionAnswer::Done => {
+                        self.complete(&run.run_id, Outcome::Succeeded);
+                        self.redispose(&run, d::DELIVERED, None);
+                    }
+                    ActionAnswer::Refused(why) => {
+                        self.refund(&t.id, &run.run_id);
+                        self.complete(&run.run_id, Outcome::Succeeded);
+                        self.redispose(&run, d::REFUSED, Some(short(&why, MAX_DIGEST)));
+                    }
+                    ActionAnswer::NoHandler => {
+                        self.refund(&t.id, &run.run_id);
+                        self.complete(&run.run_id, Outcome::Succeeded);
+                        self.redispose(&run, d::REFUSED_UNKNOWN_ACTION, Some(format!("no handler for '{kind}'")));
+                    }
+                }
             }
         }
     }

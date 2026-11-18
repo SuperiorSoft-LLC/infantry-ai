@@ -23,7 +23,7 @@ use infantry_plugin_sdk::types::{CallContext, Caller, Frame, HttpResponse, Named
 use infantry_plugin_sdk::{export_plugin, host, Plugin};
 use model::{TriggerSave, TriggerView};
 use serde_json::{json, Value};
-use service::{MailRequest, Ports, Service, SessionInfo, StartAnswer};
+use service::{ActionAnswer, MailRequest, Ports, Service, SessionInfo, StartAnswer};
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use store::{Row, Sql, Store, V};
@@ -205,6 +205,16 @@ impl Ports for HostPorts {
     fn log(&self, line: &str) {
         host::log::info(line);
     }
+    fn call_action(&self, kind: &str, fire: Value) -> ActionAnswer {
+        let body = json!({ "id": kind, "args": fire }).to_string();
+        let f = match request("capability_call", &body) {
+            Ok(f) => f,
+            Err(e) if e.contains("no loaded plugin answers") => return ActionAnswer::NoHandler,
+            Err(e) => return ActionAnswer::Refused(format!("action failed: {e}")),
+        };
+        let text = serde_json::from_str::<Value>(&f.data).ok().and_then(|v| s(&v, "text")).unwrap_or_default();
+        action_answer(&text)
+    }
     fn at_max_late_ms(&self) -> i64 {
         host::config::get(AT_MAX_LATE_KEY).and_then(|v| v.trim().parse::<f64>().ok()).map(|f| (f as i64).max(0)).unwrap_or(service::DEFAULT_AT_MAX_LATE_MS)
     }
@@ -380,6 +390,19 @@ impl Plugin for Triggers {
             }
             Ok(())
         });
+    }
+}
+
+/// A handler's answer: `{"result": "started", "sessionId"} | {"result": "mailed"} | {"result": "done"} |
+/// {"result": "refused", "reason"}`.
+pub fn action_answer(text: &str) -> ActionAnswer {
+    let v: Value = serde_json::from_str(text).unwrap_or(Value::Null);
+    match (s(&v, "result").as_deref(), s(&v, "sessionId")) {
+        (Some("started"), Some(sid)) => ActionAnswer::Started(sid),
+        (Some("mailed"), _) => ActionAnswer::Mailed,
+        (Some("done"), _) => ActionAnswer::Done,
+        (Some("refused"), _) => ActionAnswer::Refused(s(&v, "reason").unwrap_or_else(|| "refused".into())),
+        _ => ActionAnswer::Refused(format!("action failed: the handler answered no result ({})", text.chars().take(80).collect::<String>())),
     }
 }
 
