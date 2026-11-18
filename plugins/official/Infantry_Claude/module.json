@@ -1,6 +1,6 @@
 {
   "name": "Infantry_Claude",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "apiVersion": 2,
   "author": "Infantry AI",
   "license": "NOASSERTION",
@@ -29,7 +29,7 @@
     "ids": ["claude"],
     "cli": { "id": "claude", "command": "claude", "label": "Claude Code" },
     "settings": ["harness.claude.liveIdleMinutes", "harness.claude.mode", "harness.claude.approvalHookSeconds", "harness.claude.firstTurnSubmitSeconds", "harness.claude.firstTurnReplySeconds", "harness.claude.authMode", "harness.claude.userMcpServers"],
-    "hooks": ["watch", "mcp", "session", "models", "stats", "usage"],
+    "hooks": ["watch", "mcp", "session", "models", "stats", "usage", "ask"],
     "authModes": ["api-key", "subscription-login"],
     "authProbe": { "argv": ["claude", "auth", "status"], "signedInField": "loggedIn", "loginCommand": "claude auth login", "loginArgv": ["claude", "auth", "login"] },
     "credential": { "env": "ANTHROPIC_API_KEY", "label": "Claude Code", "help": "Create an API key in the Anthropic Console (console.anthropic.com). Only needed when you choose API key; with a Claude subscription you log in instead." },

@@ -2,7 +2,9 @@
 // Copyright (c) SuperiorSoft LLC
 package com.superiorsoftllc.infantry.plugins.official.claude.harness
 
+import com.superiorsoftllc.infantry.harness.api.HarnessAnswer
 import com.superiorsoftllc.infantry.harness.api.HarnessProcess
+import com.superiorsoftllc.infantry.harness.api.HarnessQuestion
 import com.superiorsoftllc.infantry.harness.api.HarnessRequest
 import com.superiorsoftllc.infantry.harness.api.HarnessSession
 import com.superiorsoftllc.infantry.harness.api.MCP_PID_FILE_ENV
@@ -72,6 +74,8 @@ class ClaudeTtySession(
     private val userMcp: () -> String? = { null },
     /** MCP-CLAUDE-1: the session's plan as ONE config file plus denied tool rules (nothing = infantry only, the old path). */
     private val delivery: (Map<String, String>) -> ClaudeMcpDelivery = { ClaudeMcpDelivery() },
+    /** ASK-STUCK-1: put one question to the owner for an Infantry session id (blocking; the host's prompt card). Default: nobody answers. */
+    private val ask: (String, HarnessQuestion) -> HarnessAnswer = { _, _ -> HarnessAnswer.NONE },
 ) : HarnessSession {
     override val label: String = "claude"
 
@@ -88,6 +92,8 @@ class ClaudeTtySession(
         val sessionId: String, val cwd: String, val events: File, val settings: File, val mcpPid: File? = null, val transcriptStart: Long = 0,
         val approval: ToolApproval = ToolApproval.ALLOW_ALL, val hookToken: String? = null,
         val firstPrompt: File? = null, val recovered: Boolean = false,
+        /** ASK-STUCK-1: the token of the AskUserQuestion hook's URL, and the Infantry session its questions are asked for. */
+        val questionToken: String? = null, val infantrySession: String? = null,
     )
 
     private val launches = IdentityHashMap<HarnessProcess, Launch>()
@@ -141,7 +147,13 @@ class ClaudeTtySession(
         val watch = watchSettings(env).takeIf { request.toolApproval == ToolApproval.ALLOW_ALL }
         val hookToken = UUID.randomUUID().toString().takeIf { ClaudePermissionHook.wanted(request.toolApproval) }
         val hook = hookToken?.let { ClaudePermissionHook.entry(permissionHooks.url(it), approvalHookSeconds()) }
-        settings.writeText(ClaudeCommand.ttySettings(events.absolutePath, watch, bypass = ClaudeCommand.permissionMode(request.toolApproval) == "bypassPermissions", permissionHook = hook))
+        // ASK-STUCK-1: every mode gets the AskUserQuestion hook (the CLI's own menu would wait on keys nobody sends).
+        val questionToken = UUID.randomUUID().toString()
+        val questionHook = ClaudeQuestionHook.entry(permissionHooks.url(questionToken, ClaudeQuestionHook.PATH), approvalHookSeconds())
+        settings.writeText(ClaudeCommand.ttySettings(
+            events.absolutePath, watch, bypass = ClaudeCommand.permissionMode(request.toolApproval) == "bypassPermissions", permissionHook = hook,
+            questionHook = questionHook,
+        ))
         val process = HarnessProcess(
             command = argv(executable(), request, if (resume == null) id else null, resume, settings.absolutePath, env, mapOf(MCP_PID_FILE_ENV to mcpPid.absolutePath)),
             env = mapOf("CLAUDE_CODE_ENABLE_TODO_TOOLS" to "1") + ClaudeCommand.contextLimitEnv(request.contextLimit),
@@ -150,6 +162,7 @@ class ClaudeTtySession(
                 id, request.project, events, settings, mcpPid, transcriptStart(resume, request.project), request.toolApproval, hookToken,
                 // Only a session that starts a conversation here keeps (or gets back) a first prompt; a real resume has its own history.
                 firstPrompt = if (resume == null) ClaudeResume.firstPromptFile(stateDir(), id) else null, recovered = recovered,
+                questionToken = questionToken, infantrySession = env[ClaudeCommand.SESSION_ID_ENV]?.takeIf { it.isNotBlank() },
             ) }
         return process
     }
@@ -162,7 +175,7 @@ class ClaudeTtySession(
 
     override fun connect(out: SessionOutput, launched: HarnessProcess): SessionConnection {
         val launch = synchronized(launches) { launches.remove(launched) } ?: error("this process was not launched by the interactive claude session")
-        return TtyConnection(out, launch, configDir(), clock, bootTimeoutMs, pidAlive, permissionHooks, firstTurn()).also { if (poll) it.startPolling() }
+        return TtyConnection(out, launch, configDir(), clock, bootTimeoutMs, pidAlive, permissionHooks, firstTurn(), ask).also { if (poll) it.startPolling() }
     }
 
     /** One interactive claude in its terminal. Every state change happens in [tick] (the poller thread) or under [lock]. */
@@ -175,6 +188,7 @@ class ClaudeTtySession(
         private val pidAlive: (Long) -> Boolean = ::processAlive,
         private val hooks: PermissionHookServer? = null,
         private val firstTurn: ClaudeFirstTurn = ClaudeFirstTurn(),
+        private val ask: (String, HarnessQuestion) -> HarnessAnswer = { _, _ -> HarnessAnswer.NONE },
     ) : SessionConnection {
         /** [own] = CLI-PTY-4: the CLI began it by itself (nothing to paste); reported with [SessionOutput.turnStarted]. */
         private class Turn(val prompt: String, val own: Boolean = false) {
@@ -256,7 +270,30 @@ class ClaudeTtySession(
         private var dialogMark = 0L
         private var dialogSeenAt: Long? = null
 
-        init { launch.hookToken?.let { token -> hooks?.register(token, ::answerPermission) } }
+        init {
+            launch.hookToken?.let { token -> hooks?.register(token, ::answerPermission) }
+            launch.questionToken?.let { token -> hooks?.register(token, ::answerQuestion) }
+        }
+
+        /**
+         * ASK-STUCK-1: one AskUserQuestion `PreToolUse` hook call (a server thread): each question becomes the owner's prompt card and the
+         * answer goes back as the tool's `answers`, so claude never draws its menu. Counted as an open hook call: the dialog fallback waits.
+         */
+        fun answerQuestion(body: String): String {
+            hookCalls.incrementAndGet()
+            try {
+                val sid = launch.infantrySession
+                return ClaudeQuestionHook.decide(body) { q ->
+                    if (sid == null) HarnessAnswer.NONE else ask(sid, q)
+                }.also { out.detail("interactive claude: AskUserQuestion answered through Infantry AI's prompt card") }
+            } finally {
+                synchronized(lock) {
+                    hookCalls.decrementAndGet()
+                    dialogMark = screenTotal
+                    dialogSeenAt = null
+                }
+            }
+        }
 
         /** G3: one `PermissionRequest` hook call (a server thread): answered from the launch's Tool approval. */
         fun answerPermission(body: String): String {
@@ -371,6 +408,7 @@ class ClaudeTtySession(
         override fun onExit(exitCode: Int) {
             running = false
             launch.hookToken?.let { hooks?.unregister(it) }
+            launch.questionToken?.let { hooks?.unregister(it) }
             // The screen is the only account of why a terminal program quit: show its tail when it did not exit cleanly.
             if (exitCode != 0) out.detail("the interactive claude exited (code $exitCode); screen: " + synchronized(lock) { screenTail() })
             // The host ends its turn in flight itself (sent or still queued here), so nothing is ended twice.
