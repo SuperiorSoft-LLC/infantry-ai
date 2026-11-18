@@ -130,3 +130,42 @@ pwsh scripts/perf/ui-smoke.ps1                     # functional check of the Tau
 ```
 
 Ports: 18911 for the Kotlin test daemon, 18912 for the bridge test and 18930 for WebView2 DevTools. Every script refuses ports outside 189xx and never touches 8787/8788/8797/8798.
+
+## Rust daemon (RUST-DAEMON-1, 2026-11-18)
+
+`rust/crates/infantry-daemon`: tokio + axum, the v1 `/ws` sessions frames, the stub provider. Release build on Windows 11,
+measured with `Get-Process` (working set / private bytes) on a fresh state dir, port 18961.
+
+| | Working set | Private bytes | Threads |
+|---|---|---|---|
+| Idle, no sessions (3 s after start) | 5.6 MB | 1.2 MB | 7 |
+| 5 stub sessions (one turn each, at rest, still listed) | 6.7 MB | 1.6 MB | 7 |
+
+For comparison, the Kotlin daemon with no agents sits at ~550 MB working set (the table above). The stub spawns no
+process, so these numbers are the daemon alone; a `claude` session adds the CLI and its console as in the Tauri column.
+
+**Conformance:** `infantry-conformance compare` against this daemon (`--provider stub`, port 18961) passes all 7 scenarios
+of the sessions suite against the Kotlin fixtures (`fixtures/kotlin/sessions`), three runs in a row.
+`cargo test -p infantry-daemon` runs the same suite in process (port 0) and diffs it against the fixtures.
+
+Differences from the fixtures, and how they are handled:
+
+- Two `status` activity lines carry the session's folder verbatim (`starting stub model default in <folder>`), and the
+  normalizer only blanks folder-valued *keys*. The fixtures were recorded with the Kotlin daemon running in
+  `.worktrees/rust-conf-1`, so the CLI compare runs the Rust daemon from that same folder; the in-process test swaps its
+  temp folder for the recorded one before the diff. Recording the fixtures again with a normalizer that also blanks
+  paths inside strings would remove the dependency.
+- After a kill, Kotlin's run activity settles to `idle` (and the record gains its `watch`) on the next agent-watchdog
+  tick, seconds later; the `kill` and `remove` fixtures depend on that delay. The Rust daemon has no watchdog yet, so it
+  emits that settle once, `KILL_SETTLE_MS` (1.5 s) after a kill.
+- `ready` says `contract=1.155.0`, the version the fixtures were recorded at (`wire::CONTRACT`).
+
+Reproduce:
+
+```
+cargo build --release -p infantry-daemon -p infantry-conformance --example spawn_sessions   # in rust/
+# from .worktrees/rust-conf-1, with a temp state dir:
+infantry-daemon --port 18961 --provider stub --state-dir %TEMP%\rd1
+infantry-conformance compare --url ws://127.0.0.1:18961 [--token T]
+spawn_sessions ws://127.0.0.1:18961 5            # then read the RSS of the daemon pid
+```
