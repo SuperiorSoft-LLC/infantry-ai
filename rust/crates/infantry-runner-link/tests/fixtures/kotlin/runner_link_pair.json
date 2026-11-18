@@ -1,0 +1,4 @@
+{
+  "request": "{\"type\":\"runner_link_pair\",\"data\":\"{\\\"code\\\":\\\"<redacted>\\\",\\\"orchestratorId\\\":\\\"inf-6W0ykK_TIvQA\\\",\\\"orchestratorName\\\":\\\"rust-orchestrator\\\",\\\"grantProjects\\\":[],\\\"grantHarnesses\\\":[]}\",\"requestId\":\"<request-id>\"}",
+  "answer": "{\"type\":\"runner_link_reply\",\"data\":\"{\\\"runnerId\\\":\\\"<id>\\\",\\\"runnerName\\\":\\\"kotlin-runner\\\",\\\"credential\\\":\\\"<redacted>\\\",\\\"contract\\\":\\\"1.11.0\\\",\\\"grantedProjects\\\":[],\\\"grantedHarnesses\\\":[],\\\"grantRefusal\\\":null,\\\"replacedOrchestrator\\\":null}\",\"requestId\":\"<request-id>\"}"
+}
