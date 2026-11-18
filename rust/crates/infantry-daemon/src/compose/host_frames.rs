@@ -30,7 +30,7 @@ pub const SESSION_JOB_LOG: &str = "session_job_log";
 pub const MODULE_CARDS: &str = "module_cards";
 pub const AGENT_REGISTRY: &str = "agent_registry";
 pub const PLUGINS_OP: &str = "plugins_op";
-const FRAMES: &[&str] = &[SESSION_GET, SESSION_JOBS, SESSION_JOB_LOG, MODULE_CARDS, AGENT_REGISTRY, PLUGINS_OP, super::project_files::PROJECT_FILES];
+const FRAMES: &[&str] = &[SESSION_GET, SESSION_JOBS, SESSION_JOB_LOG, MODULE_CARDS, AGENT_REGISTRY, PLUGINS_OP, super::project_files::PROJECT_FILES, infantry_protocol::frames::SESSION_PROJECT];
 
 /// Transcript frames `session_get` returns when the caller names no `lines`.
 pub const TRANSCRIPT_LINES: usize = 40;
@@ -397,6 +397,20 @@ impl FrameUnit for HostFrames {
             MODULE_CARDS => Ok(self.module_cards(env)),
             AGENT_REGISTRY => self.agent_registry(env, &d, ctx),
             PLUGINS_OP => self.plugins_op(env, &d, ctx),
+            // `session_project` `{sessionId, projectId}`: no answer; clients see the session push.
+            infantry_protocol::frames::SESSION_PROJECT => {
+                let t = infantry_protocol::frames::SESSION_PROJECT;
+                let sid = d["sessionId"].as_str().unwrap_or("").trim().to_string();
+                let pid = d["projectId"].as_str().unwrap_or("").trim().to_string();
+                if sid.is_empty() {
+                    return Err(Refusal::new(t, "expects a sessionId"));
+                }
+                if self.projects.get(&pid).is_err() {
+                    return Err(Refusal::new(t, format!("no project '{}'", pid.chars().take(80).collect::<String>())));
+                }
+                self.daemon.set_project(&sid, &pid).map_err(|e| Refusal::new(t, e))?;
+                Ok(Vec::new())
+            }
             // In-process callers only (a plugin guest, conn 0): a client or agent connection never writes these files.
             super::project_files::PROJECT_FILES if ctx.conn_id != 0 => Err(Refusal::new(super::project_files::PROJECT_FILES, "only a plugin may ask")),
             super::project_files::PROJECT_FILES => super::project_files::answer(&self.projects, &env.data)

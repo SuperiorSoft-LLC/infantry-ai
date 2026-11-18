@@ -993,6 +993,15 @@ impl Daemon {
     }
 
     /// Routes every session's tool approvals and questions (set once, at composition).
+    /// `session_project`: moves a session to another project (the caller checked the project exists); pushed and stored.
+    pub fn set_project(&self, sid: &str, project_id: &str) -> Result<(), String> {
+        let entry = self.find(sid).ok_or_else(|| format!("unknown session '{sid}'"))?;
+        let mut e = entry.lock().unwrap();
+        e.rec.project_id = Some(project_id.to_string());
+        self.push(&mut e);
+        Ok(())
+    }
+
     pub fn set_prompter(&self, p: Arc<dyn crate::harness::Prompter>) {
         let _ = self.prompter.set(p);
     }
