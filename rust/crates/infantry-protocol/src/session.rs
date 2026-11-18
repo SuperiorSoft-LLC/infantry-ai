@@ -259,6 +259,9 @@ session_record! {
     #[serde(default, skip_serializing_if = "Option::is_none")] mcp_changed_at: Option<i64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")] mcp_servers: Vec<McpServerStatusView>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")] queued: Vec<QueuedTurn>,
+    /// RUST-MIGRATE-1 (additive, Rust daemon only): the other app that is running this session right now (a session
+    /// migrated from the Kotlin app that is live there). Computed per listing, never stored; a turn is refused while set.
+    #[serde(default, skip_serializing_if = "Option::is_none")] held_by: Option<String>,
 }
 
 impl SessionRecord {

@@ -6,12 +6,16 @@
 //! Lock order: the session list, then one session, then the record cache. Nothing takes the list while holding a session.
 
 use crate::harness::{EventSink, Harness, HarnessEvent, HarnessSession, OpenRequest, Turn, TurnEnd};
+use crate::board::Board;
+use crate::held;
 use crate::store::JsonSessionStore;
 use crate::wire;
 use infantry_protocol::session::{AgentWatch, KillOutcome, QueuedTurn, SessionRecord, SessionState};
+use infantry_protocol::agents::AgentListRequest;
 use infantry_protocol::Envelope;
 use serde::Deserialize;
 use serde_json::json;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -106,6 +110,12 @@ pub struct Daemon {
     store: Mutex<JsonSessionStore>,
     /// CHAT-SENDING-1: `<session>\n<send:id>` of the prompts taken, oldest first.
     sent: Mutex<std::collections::VecDeque<String>>,
+    /// Projects and agent profiles, read-only from the state dir's db (RUST-MIGRATE-1).
+    board: Board,
+    /// The app this state dir was migrated from, when it was (RUST-MIGRATE-1).
+    source: Option<held::Source>,
+    /// Session id -> the app running it now: listed as `heldBy`, a turn into it refused.
+    held: Mutex<BTreeMap<String, String>>,
 }
 
 fn encode(ty: &str, data: String, session: Option<&str>, seq: Option<i64>) -> String {
@@ -161,7 +171,8 @@ impl Daemon {
             cache.push(rec.clone());
             list.push((rec.id.clone(), Arc::new(Mutex::new(Entry::new(rec, false, 0)))));
         }
-        Ok(Arc::new(Daemon {
+        let cfg_dir = cfg.state_dir.clone();
+        let d = Arc::new(Daemon {
             harness,
             cfg,
             instance: uuid::Uuid::new_v4().to_string(),
@@ -171,7 +182,48 @@ impl Daemon {
             dirty: AtomicBool::new(false),
             store: Mutex::new(store),
             sent: Mutex::new(Default::default()),
-        }))
+            board: Board::new(&cfg_dir),
+            source: held::Source::of(&cfg_dir),
+            held: Mutex::new(BTreeMap::new()),
+        });
+        d.refresh_held();
+        Ok(d)
+    }
+
+    /// Re-reads which sessions the app this dir was migrated from is running (no-op for a dir that is not a copy).
+    /// When that changed, the records carry the new `heldBy` and every client gets a fresh `sessions`.
+    pub fn refresh_held(&self) -> bool {
+        let Some(src) = &self.source else { return false };
+        let Some(now) = src.held() else { return false };
+        {
+            let mut held = self.held.lock().unwrap();
+            if *held == now {
+                return false;
+            }
+            *held = now.clone();
+        }
+        let entries: Vec<_> = self.list.lock().unwrap().iter().map(|(_, e)| e.clone()).collect();
+        for e in entries {
+            let mut e = e.lock().unwrap();
+            e.rec.held_by = now.get(&e.rec.id).cloned();
+        }
+        for r in self.cache.lock().unwrap().iter_mut() {
+            r.held_by = now.get(&r.id).cloned();
+        }
+        self.broadcast(wire::SESSIONS, self.sessions_json());
+        true
+    }
+
+    /// `Err` with the refusal when another app is running this session.
+    fn not_held(&self, verb: &str, sid: &str) -> Result<(), String> {
+        match self.held.lock().unwrap().get(sid) {
+            Some(app) => Err(format!("{verb} refused: session {sid} is live in {app}; stop it there first (one session never runs in two apps)")),
+            None => Ok(()),
+        }
+    }
+
+    pub fn held_count(&self) -> usize {
+        self.held.lock().unwrap().len()
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<String> {
@@ -201,7 +253,9 @@ impl Daemon {
         if !self.dirty.swap(false, Ordering::SeqCst) {
             return;
         }
-        let snapshot = self.cache.lock().unwrap().clone();
+        let mut snapshot = self.cache.lock().unwrap().clone();
+        // `heldBy` is computed per listing, never stored.
+        snapshot.iter_mut().for_each(|r| r.held_by = None);
         if let Err(e) = self.store.lock().unwrap().save(&snapshot) {
             eprintln!("[infantry] could not save sessions: {e}");
         }
@@ -266,6 +320,15 @@ impl Daemon {
         e.rec.last_action = Some(format!("state {}", state_word(s)));
     }
 
+    /// A list frame from the board, or an `error` when the db could not be read.
+    fn board_reply(&self, ty: &str, req: Option<&str>, r: Result<serde_json::Result<String>, String>) -> Vec<String> {
+        match r {
+            Ok(Ok(json)) => vec![encode_req(ty, json, None, None, req)],
+            Ok(Err(e)) => vec![encode_req(wire::ERROR, format!("{ty}: {e}"), None, None, req)],
+            Err(e) => vec![encode_req(wire::ERROR, format!("{ty}: {e}"), None, None, req)],
+        }
+    }
+
     /// One inbound frame; returns the replies for this connection only (session frames go to every connection).
     pub fn handle(self: &Arc<Self>, env: Envelope, conn: &mut Conn) -> Vec<String> {
         let sid = env.session_id.clone().filter(|s| !s.is_empty());
@@ -301,18 +364,35 @@ impl Daemon {
                     Err(msg) => vec![encode_req(wire::ERROR, msg, sid.as_deref(), None, req.as_deref())],
                 };
             }
-            // No board here yet: the lists the app asks for on connect are empty.
-            wire::AGENT_LIST => return vec![encode(wire::AGENTS, "[]".into(), None, None)],
-            wire::PROJECT_LIST => return vec![encode(wire::PROJECTS, "[]".into(), None, None)],
+            // Projects and profiles from the state dir's db, read-only (RUST-MIGRATE-1). No tickets here yet.
+            wire::AGENT_LIST => {
+                let p = serde_json::from_str::<AgentListRequest>(&env.data).ok().and_then(|r| r.project_id);
+                return self.board_reply(wire::AGENTS, req.as_deref(), self.board.agents(p.as_deref()).map(|a| serde_json::to_string(&a)));
+            }
+            wire::PROJECT_LIST => return self.board_reply(wire::PROJECTS, req.as_deref(), self.board.projects().map(|p| serde_json::to_string(&p))),
+            wire::PROJECT_GET => {
+                let id = env.data.trim();
+                return match self.board.project(id) {
+                    Ok(Some(p)) => vec![encode_req(wire::PROJECT, serde_json::to_string(&p).unwrap_or_default(), None, None, req.as_deref())],
+                    Ok(None) => vec![encode_req(wire::ERROR, format!("project_get refused: no project {id}"), None, None, req.as_deref())],
+                    Err(e) => vec![encode_req(wire::ERROR, format!("project_get failed: {e}"), None, None, req.as_deref())],
+                };
+            }
             wire::TICKET_LIST => return vec![encode(wire::TICKETS, "[]".into(), None, None)],
             wire::PROMPT => match (&sid, conn.active.clone().filter(|a| self.find(a).is_some())) {
                 (None, Some(active)) => self.prompt_into(&active, env.data),
                 (None, None) => self.prompt_new(conn.pending_new.take().unwrap_or_default(), env.data).map_err(Refusal::from),
-                (Some(s), _) => self.prompt_into(s, env.data),
+                (Some(s), _) => self.not_held("prompt", s).map_err(Refusal::from).and_then(|_| self.prompt_into(s, env.data)),
             },
-            wire::QUEUE_ADD => self.queue_add(sid.as_deref().unwrap_or(""), env.data).map_err(Refusal::from),
+            wire::QUEUE_ADD => {
+                let s = sid.as_deref().unwrap_or("");
+                self.not_held("queue_add", s).and_then(|_| self.queue_add(s, env.data)).map_err(Refusal::from)
+            }
             wire::QUEUE_REMOVE => self.queue_remove(sid.as_deref().unwrap_or(""), env.data.trim()).map_err(Refusal::from),
-            wire::QUEUE_FORCE => self.queue_force(sid.as_deref().unwrap_or(""), env.data.trim()).map_err(Refusal::from),
+            wire::QUEUE_FORCE => {
+                let s = sid.as_deref().unwrap_or("");
+                self.not_held("queue_force", s).and_then(|_| self.queue_force(s, env.data.trim())).map_err(Refusal::from)
+            }
             wire::INTERRUPT => self.interrupt(sid.as_deref().unwrap_or(env.data.trim())).map_err(Refusal::from),
             wire::KILL => {
                 let mut words = env.data.split_whitespace();

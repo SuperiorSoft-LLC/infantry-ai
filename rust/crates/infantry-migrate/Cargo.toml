@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-migrate"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "RUST-MIGRATE-1: snapshot a live Kotlin state dir into a Rust state dir (read-only on the source), verify it, report its status"
+publish = false
+
+[lib]
+name = "infantry_migrate"
+path = "src/lib.rs"
+
+[[bin]]
+name = "infantry-migrate"
+path = "src/main.rs"
+
+[dependencies]
+rusqlite = { version = "0.37", features = ["bundled", "backup"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.10"
+infantry-protocol = { path = "../infantry-protocol" }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization"] }

@@ -4,7 +4,7 @@
 // a card whose session did not change in a flush keeps the same object and does not re-render.
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { isRunning, type AgentProfile, type SessionView, type TicketSummary } from "@infantry/client";
+import { isRunning, type AgentProfile, type ProjectSummary, type SessionView, type TicketSummary } from "@infantry/client";
 import type { Agent, AgentStatus } from "@/mock/types";
 import { useDaemon } from "./daemon";
 
@@ -19,6 +19,7 @@ function statusOf(v: SessionView): AgentStatus {
 
 function statusLine(v: SessionView): string {
   const r = v.record;
+  if (r.heldBy) return `live in ${r.heldBy}`;
   if (r.watchLabel) return r.watchLabel;
   if (r.waiting?.reason) return `waiting: ${r.waiting.reason}`;
   const st = v.status;
@@ -54,7 +55,12 @@ function title(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
-export function toAgent(v: SessionView, profiles: Record<string, AgentProfile>, tickets: Record<string, TicketSummary>): Agent {
+export function toAgent(
+  v: SessionView,
+  profiles: Record<string, AgentProfile>,
+  tickets: Record<string, TicketSummary>,
+  projects: ProjectSummary[] = [],
+): Agent {
   const r = v.record;
   const profile = r.agentId ? profiles[r.agentId] : undefined;
   let tin = 0, tout = 0;
@@ -82,33 +88,44 @@ export function toAgent(v: SessionView, profiles: Record<string, AgentProfile>, 
     tokensIn: `${compact(tin)} in`,
     tokensOut: `${compact(tout)} out`,
     hue: hueOf(r.id),
+    projectName: r.projectId ? (projects.find((p) => p.id === r.projectId)?.name ?? r.projectId) : undefined,
+    heldBy: r.heldBy ?? undefined,
   };
 }
 
-const cache = new WeakMap<SessionView, { profiles: unknown; tickets: unknown; agent: Agent }>();
+const cache = new WeakMap<SessionView, { profiles: unknown; tickets: unknown; projects: unknown; agent: Agent }>();
 
-function cachedAgent(v: SessionView, profiles: Record<string, AgentProfile>, tickets: Record<string, TicketSummary>): Agent {
+function cachedAgent(
+  v: SessionView,
+  profiles: Record<string, AgentProfile>,
+  tickets: Record<string, TicketSummary>,
+  projects: ProjectSummary[],
+): Agent {
   const hit = cache.get(v);
-  if (hit && hit.profiles === profiles && hit.tickets === tickets) return hit.agent;
-  const agent = toAgent(v, profiles, tickets);
-  cache.set(v, { profiles, tickets, agent });
+  if (hit && hit.profiles === profiles && hit.tickets === tickets && hit.projects === projects) return hit.agent;
+  const agent = toAgent(v, profiles, tickets, projects);
+  cache.set(v, { profiles, tickets, projects, agent });
   return agent;
 }
 
 /** Every session as an Agent, newest first. */
 export function useAgentList(): Agent[] {
-  const { sessions, agents, tickets } = useDaemon(useShallow((s) => ({ sessions: s.sessions, agents: s.agents, tickets: s.tickets })));
+  const { sessions, agents, tickets, projects } = useDaemon(
+    useShallow((s) => ({ sessions: s.sessions, agents: s.agents, tickets: s.tickets, projects: s.projects })),
+  );
   return useMemo(
     () =>
       Object.values(sessions)
         .sort((a, b) => b.record.spawnedAt - a.record.spawnedAt)
-        .map((v) => cachedAgent(v, agents, tickets)),
-    [sessions, agents, tickets],
+        .map((v) => cachedAgent(v, agents, tickets, projects)),
+    [sessions, agents, tickets, projects],
   );
 }
 
 /** One session as an Agent (null when it is gone). */
 export function useAgent(id: string): Agent | null {
-  const { view, agents, tickets } = useDaemon(useShallow((s) => ({ view: s.sessions[id], agents: s.agents, tickets: s.tickets })));
-  return view ? cachedAgent(view, agents, tickets) : null;
+  const { view, agents, tickets, projects } = useDaemon(
+    useShallow((s) => ({ view: s.sessions[id], agents: s.agents, tickets: s.tickets, projects: s.projects })),
+  );
+  return view ? cachedAgent(view, agents, tickets, projects) : null;
 }
