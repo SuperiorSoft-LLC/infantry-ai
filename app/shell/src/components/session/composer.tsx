@@ -35,13 +35,15 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
   };
   const queued = useDaemon((s) => (sessionId ? s.sessions[sessionId]?.record.queued : undefined)) ?? NO_QUEUE;
   const online = useDaemon((s) => s.connection.state === "open");
+  // RUST-MIGRATE-1: a session live in the other app is never run here too (the daemon refuses it as well).
+  const heldBy = useDaemon((s) => (sessionId ? s.sessions[sessionId]?.record.heldBy : undefined)) ?? undefined;
   // Actions are stable: picking them shallowly keeps the composer out of every streaming flush.
   const { send, spawn, interrupt, unqueue, forceQueued } = useDaemon(
     useShallow((s) => ({ send: s.send, spawn: s.spawn, interrupt: s.interrupt, unqueue: s.unqueue, forceQueued: s.forceQueued })),
   );
 
   const submit = () => {
-    if (!text.trim() || !online) return;
+    if (!text.trim() || !online || heldBy) return;
     if (sessionId) send(sessionId, text);
     else spawn(text);
     setText("");
@@ -76,8 +78,11 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
             }
           }}
           aria-label="Prompt"
+          disabled={!!heldBy}
           placeholder={
-            !sessionId
+            heldBy
+              ? `Live in ${heldBy}: resume it there, or stop it there first`
+              : !sessionId
               ? "Start a new session..."
               : busy
                 ? "Agent is busy. Enter to queue: sent as its next turn when this one ends"
@@ -102,7 +107,7 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
             <IconButton label="Stop" className="text-danger hover:text-danger" disabled={!busy || !sessionId || !online} onClick={() => sessionId && interrupt(sessionId)}>
               <Square className="fill-current" />
             </IconButton>
-            <IconButton label={busy ? "Queue message" : "Send"} className="text-danger hover:text-danger" disabled={!text.trim() || !online} onClick={submit}>
+            <IconButton label={busy ? "Queue message" : "Send"} className="text-danger hover:text-danger" disabled={!text.trim() || !online || !!heldBy} onClick={submit}>
               <SendHorizontal />
             </IconButton>
           </div>

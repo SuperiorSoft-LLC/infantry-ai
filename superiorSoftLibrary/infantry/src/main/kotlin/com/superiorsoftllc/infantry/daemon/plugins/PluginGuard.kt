@@ -7,7 +7,6 @@ import kotlinx.coroutines.runBlocking
 import java.lang.management.ManagementFactory
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadPoolExecutor
@@ -66,11 +65,48 @@ class PluginGuard(
     val disabled: Boolean get() = disabledReason != null
 
     private val threads = AtomicInteger()
-    private val pool: ExecutorService = ThreadPoolExecutor(
+    private val pool: ThreadPoolExecutor = ThreadPoolExecutor(
         poolSize.coerceAtLeast(1), poolSize.coerceAtLeast(1), 30, TimeUnit.SECONDS, LinkedBlockingQueue(queueLimit.coerceAtLeast(0).coerceAtLeast(1)),
         { r -> Thread(r, "plugin-$moduleId-${threads.incrementAndGet()}").apply { isDaemon = true; contextClassLoader = classLoader } },
     ).apply { allowCoreThreadTimeOut(true) }
     private val cpu = ManagementFactory.getThreadMXBean()
+
+    /**
+     * START-HANG-1: stand-in threads for calls that timed out but are still running where an interrupt cannot reach them (waiting to
+     * enter a monitor). Each one keeps the pool at [poolSize] usable workers, so a hung call never keeps a slot; at most [poolSize]
+     * stand-ins, so a burst of hung calls cannot grow threads without end (the breaker deals with a plugin that keeps hanging).
+     */
+    private val standIns = Any()
+    @Volatile var extraThreads = 0
+        private set
+
+    /** A job's state: running, finished, or abandoned with / without a stand-in. Changed only under [standIns]. */
+    private class Job { var state = JobState.RUNNING }
+
+    private fun finished(job: Job) = synchronized(standIns) {
+        val had = job.state == JobState.ABANDONED_WITH_STAND_IN
+        job.state = JobState.FINISHED
+        if (had) {
+            extraThreads--
+            pool.corePoolSize = poolSize.coerceAtLeast(1) + extraThreads
+            pool.maximumPoolSize = poolSize.coerceAtLeast(1) + extraThreads
+        }
+    }
+
+    /** Called after a cancel: when [job] still runs, it is abandoned and (under the cap) a stand-in takes its slot. */
+    private fun abandon(job: Job, what: String) = synchronized(standIns) {
+        if (job.state != JobState.RUNNING) return@synchronized
+        if (extraThreads >= poolSize.coerceAtLeast(1)) {
+            job.state = JobState.ABANDONED
+            log("[plugins] daemon plugin $moduleId: $what abandoned while still running; no stand-in ($extraThreads already, the most)")
+            return@synchronized
+        }
+        job.state = JobState.ABANDONED_WITH_STAND_IN
+        extraThreads++
+        pool.maximumPoolSize = poolSize.coerceAtLeast(1) + extraThreads
+        pool.corePoolSize = poolSize.coerceAtLeast(1) + extraThreads
+        log("[plugins] daemon plugin $moduleId: $what abandoned while still running; a stand-in thread keeps its slot free ($extraThreads)")
+    }
     private val pollMs = 50L
     private val probeCeilingMs = minOf(hangCeilingMs, probeMs)
 
@@ -113,16 +149,21 @@ class PluginGuard(
 
     private suspend fun <T> guarded(what: String, timeoutMs: Long, block: () -> T, ceilingOverrideMs: Long? = null, probe: Boolean = false): Result<T> {
         val worker = java.util.concurrent.atomic.AtomicReference<Thread?>()
+        val job = Job()
         val future = try {
             pool.submit(Callable {
                 worker.set(Thread.currentThread())
-                val start = runCatching { cpu.currentThreadCpuTime }.getOrDefault(-1L)
-                val value = block()
-                if (start >= 0) {
-                    val usedMs = (cpu.currentThreadCpuTime - start) / 1_000_000
-                    if (usedMs > cpuMsPerCall) throw PluginLimitException("$what used $usedMs ms of CPU (limit $cpuMsPerCall ms)")
+                try {
+                    val start = runCatching { cpu.currentThreadCpuTime }.getOrDefault(-1L)
+                    val value = block()
+                    if (start >= 0) {
+                        val usedMs = (cpu.currentThreadCpuTime - start) / 1_000_000
+                        if (usedMs > cpuMsPerCall) throw PluginLimitException("$what used $usedMs ms of CPU (limit $cpuMsPerCall ms)")
+                    }
+                    value
+                } finally {
+                    finished(job)
                 }
-                value
             })
         } catch (e: RejectedExecutionException) {
             return Result.failure(IllegalStateException("plugin $moduleId is busy ($poolSize running, $queueLimit queued); $what refused"))
@@ -134,6 +175,7 @@ class PluginGuard(
         } catch (e: kotlinx.coroutines.CancellationException) {
             // BOARD-STALL-3: the caller gave up (its own timeout/cancel): drop the job so a queued one never runs later.
             future.cancel(true)
+            if (worker.get() != null) abandon(job, what)
             throw e
         } catch (e: QueuedTooLongException) {
             // BOARD-BREAKER-1: the call never started (every worker busy with other calls): a backlog, not a hang. No strike.
@@ -146,6 +188,7 @@ class PluginGuard(
             Result.failure(e)
         } catch (e: TimeoutException) {
             future.cancel(true)
+            abandon(job, what)
             // BOARD-DOWN-1: a slow call (a DB lock, a git call) fails only itself; a plugin that keeps timing out is disabled.
             val n = consecutiveTimeouts.incrementAndGet()
             // BOARD-COOLDOWN-STUCK-1: once open, only a failed probe re-arms the window (the caller handles that). A call that
@@ -274,6 +317,8 @@ class PluginGuard(
 
     fun shutdown() { pool.shutdownNow() }
 }
+
+private enum class JobState { RUNNING, FINISHED, ABANDONED, ABANDONED_WITH_STAND_IN }
 
 class PluginLimitException(message: String) : RuntimeException(message)
 

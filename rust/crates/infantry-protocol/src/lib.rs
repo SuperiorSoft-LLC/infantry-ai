@@ -9,6 +9,7 @@
 pub mod agents;
 pub mod envelope;
 pub mod frames;
+pub mod projects;
 pub mod prompts;
 pub mod session;
 pub mod usage;
