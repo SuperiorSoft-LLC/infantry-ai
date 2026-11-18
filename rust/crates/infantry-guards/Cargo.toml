@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-guards"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Test-only guard: maps every workspace crate to a layer (docs/rust-port/LAYERS.md) and fails on an upward, sideways or unknown edge"
+publish = false
+
+[dependencies]
+serde_json = "1"
