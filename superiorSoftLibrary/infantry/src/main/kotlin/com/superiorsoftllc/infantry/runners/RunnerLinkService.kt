@@ -149,7 +149,7 @@ class RunnerLinkService(
             for (attempt in 1..SERVE_ATTEMPTS) {
                 failure = runCatching { serve(store, t) }.exceptionOrNull()
                 if (failure == null) break
-                if (attempt < SERVE_ATTEMPTS) Thread.sleep(SERVE_RETRY_MS)
+                if (attempt < SERVE_ATTEMPTS) Thread.sleep(com.superiorsoftllc.infantry.settings.LimitRegistry.RUNNER_SERVE_RETRY_MS.default)
             }
             failure?.let { log("[infantry] runner link: could not serve the link: ${it.message}") }
         } else if (!paired && !standing && serving != null) {
@@ -969,7 +969,6 @@ class RunnerLinkService(
     companion object {
         const val ANY_HOST = "0.0.0.0"
         private const val SERVE_ATTEMPTS = 5
-        private const val SERVE_RETRY_MS = 200L
         /** RUNNER-PAIR-1: the endpoint host printed when no address of this runner is known (set INFANTRY_RUNNER_HOST / --host). */
         const val UNKNOWN_HOST = "<this-server-address>"
         /** RUNNER-ENDPOINT-1: the address and port the PC dials this runner on, given on `docker run -e` (see docker/entrypoint.sh). */
