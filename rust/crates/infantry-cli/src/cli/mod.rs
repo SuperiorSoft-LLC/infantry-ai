@@ -16,6 +16,7 @@ pub mod usage_settings;
 pub mod health;
 pub mod local_cmds;
 pub mod progress;
+pub mod issue;
 pub mod conn;
 pub mod registry;
 pub mod usage;

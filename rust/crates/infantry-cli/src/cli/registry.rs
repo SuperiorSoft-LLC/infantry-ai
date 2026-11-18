@@ -24,6 +24,7 @@ pub static COMMANDS: &[&Command] = &[
     &super::local_cmds::INSTALL_CLI,
     &super::local_cmds::UNINSTALL_CLI,
     &super::local_cmds::REMOTE,
+    &super::issue::ISSUE,
     // -- runner --
 ];
 

@@ -264,7 +264,7 @@ pub fn contract_notice(cli: &str, ready: &str) -> Option<(bool, String)> {
     })
 }
 
-fn check_contract(ctx: &mut Ctx) {
+pub fn check_contract(ctx: &mut Ctx) {
     if let Some(ready) = ctx.stream().ready_data() {
         if let Some((_, line)) = contract_notice(super::CONTRACT, &ready) {
             ctx.err(line);
