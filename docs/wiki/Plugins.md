@@ -2,6 +2,8 @@
 
 # Plugins
 
+![The Plugins tab](../../assets/screenshots/rust/rust-09-plugins-dark.png)
+
 > **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
 
 ## Plugins in the Rust framework

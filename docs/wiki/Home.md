@@ -2,6 +2,8 @@
 
 # Infantry AI wiki
 
+![The app: agent sidebar and PM chat](../../assets/screenshots/rust/rust-01-cli-chat-agent-sidebar-dark.png)
+
 <!-- shared:pitch -->Infantry AI is a command post for coding agents: a ticket board, agents on their own git branches, mail, shared project knowledge, Lua scripts that automate your process, and plugins that build the app itself.<!-- /shared:pitch -->
 
 > **Beta.** <!-- shared:beta_line -->Infantry AI is in Beta. It works and we use it every day, but not every part is fully tested yet: you are an early tester. Please report anything that breaks on GitHub.<!-- /shared:beta_line -->  

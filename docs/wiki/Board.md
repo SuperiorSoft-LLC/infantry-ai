@@ -2,6 +2,8 @@
 
 # Board and epics
 
+![The board](../../assets/screenshots/rust/rust-04-board-dark.png)
+
 > **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
 
 ## Rust (current)

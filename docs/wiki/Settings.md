@@ -2,6 +2,8 @@
 
 # Settings
 
+![The Settings modal](../../assets/screenshots/rust/rust-11-settings-modal-dark.png)
+
 > **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
 
 ## Settings in Rust (current)

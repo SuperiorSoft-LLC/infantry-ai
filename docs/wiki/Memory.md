@@ -1,5 +1,7 @@
 # Memory (project knowledge notes)
 
+![The Notes tab](../../assets/screenshots/rust/rust-08-notes-dark.png)
+
 > **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
 
 ## Rust (current)
