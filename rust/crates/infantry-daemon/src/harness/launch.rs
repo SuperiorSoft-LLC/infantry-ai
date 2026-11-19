@@ -71,6 +71,22 @@ impl LaunchBase {
     }
 }
 
+/// Setting: the one cargo target folder every agent shares (`CARGO_TARGET_DIR`). Empty or `off` = leave cargo alone.
+pub const CARGO_TARGET_SETTING: &str = "cargo.targetDir";
+/// Default folder name under the state dir.
+pub const CARGO_TARGET_FOLDER: &str = "cargo-target";
+
+/// The env a session gets so no worktree builds its own multi-GB `target`: `CARGO_TARGET_DIR` from the setting [value],
+/// else `<state_dir>/cargo-target`. None when the owner turned it off.
+pub fn cargo_target_env(value: Option<&str>, state_dir: &Path) -> Option<(String, String)> {
+    let v = value.map(str::trim).unwrap_or("");
+    if matches!(v.to_lowercase().as_str(), "off" | "none" | "false") {
+        return None;
+    }
+    let dir = if v.is_empty() { state_dir.join(CARGO_TARGET_FOLDER) } else { PathBuf::from(v) };
+    Some(("CARGO_TARGET_DIR".into(), dir.display().to_string()))
+}
+
 /// The `infantry` launcher: [`BIN_ENV`] when it names a file, else `infantry(.exe)` beside [exe], else None.
 pub fn cli_launcher(get: &dyn Fn(&str) -> Option<String>, exe: Option<&Path>) -> Option<Vec<String>> {
     if let Some(b) = get(BIN_ENV).map(|b| b.trim().to_string()).filter(|b| !b.is_empty() && Path::new(b).is_file()) {
@@ -96,6 +112,14 @@ mod tests {
         assert_eq!(senv, env.as_slice());
         assert_eq!(plan.mcp_servers_json()["mcpServers"]["infantry"]["args"][0], "mcp");
         assert!(LaunchBase::default().session("s", None, None).1.add.is_empty());
+    }
+
+    #[test]
+    fn one_shared_cargo_target_unless_turned_off() {
+        let s = Path::new("C:/state");
+        assert_eq!(cargo_target_env(None, s).unwrap().1, s.join("cargo-target").display().to_string());
+        assert_eq!(cargo_target_env(Some("D:/ct"), s).unwrap(), ("CARGO_TARGET_DIR".to_string(), "D:/ct".to_string()));
+        assert!(cargo_target_env(Some("off"), s).is_none());
     }
 
     #[test]

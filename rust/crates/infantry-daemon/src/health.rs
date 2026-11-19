@@ -354,11 +354,22 @@ impl Health {
 }
 
 /// What the report needs from the composed daemon, as functions (core names no plugin).
+/// Setting: free disk (MB) under which `infantry health` warns.
+pub const MIN_DISK_SETTING: &str = "health.minDiskMb";
+pub const DEFAULT_MIN_DISK_MB: u64 = 10_240;
+
+/// The disk warning line, or None when the disk is fine (or unknown).
+pub fn disk_warning(free_mb: Option<u64>, min_mb: u64) -> Option<String> {
+    free_mb.filter(|f| *f < min_mb).map(|f| format!("WARNING: low disk: {f} MB free, below {min_mb} MB (setting {MIN_DISK_SETTING}); delete build output (target folders)"))
+}
+
 pub struct HealthSources {
     pub build: String,
     pub plugins: Box<dyn Fn() -> BTreeMap<String, String> + Send + Sync>,
     pub hooks: Box<dyn Fn() -> Option<usize> + Send + Sync>,
     pub harnesses: Box<dyn Fn() -> Vec<String> + Send + Sync>,
+    /// The `health.minDiskMb` setting (None = the default, [`DEFAULT_MIN_DISK_MB`]).
+    pub min_disk_mb: Box<dyn Fn() -> Option<u64> + Send + Sync>,
     /// (project path, worktree path, branch) of the session, else of the project (None = none applies).
     pub paths: Box<dyn Fn(Option<&str>, Option<&str>) -> (Option<String>, Option<String>, Option<String>) + Send + Sync>,
 }
@@ -491,6 +502,7 @@ pub fn report(h: &Health, src: &HealthSources, session_id: Option<&str>, project
         "hookFailures": null,
         "freeMemoryMb": free_memory_mb(),
         "freeDiskMb": free_disk_mb(&h.state_dir),
+        "diskWarning": disk_warning(free_disk_mb(&h.state_dir), (src.min_disk_mb)().unwrap_or(DEFAULT_MIN_DISK_MB)),
         "environment": {
             "os": os, "arch": std::env::consts::ARCH, "shells": shells(&os),
             "projectPath": project, "worktreePath": worktree, "gitBranch": branch,
@@ -554,6 +566,9 @@ pub fn render(r: &Value) -> String {
     }
     if !r["freeMemoryMb"].is_null() || !r["freeDiskMb"].is_null() {
         line(format!("free: memory {} MB, disk {} MB", opt(&r["freeMemoryMb"]), opt(&r["freeDiskMb"])));
+    }
+    if let Some(w) = r["diskWarning"].as_str() {
+        line(w.to_string());
     }
     let e = &r["environment"];
     let s = |k: &str| e[k].as_str().map(String::from);
@@ -715,5 +730,17 @@ mod tests {
             assert_eq!(owner_ports(|_| None), DEV_OWNER_PORTS.to_vec());
             assert!(owner_ports(|_| Some("1".into())).is_empty());
         }
+    }
+}
+
+#[cfg(test)]
+mod disk_warning_tests {
+    use super::*;
+
+    #[test]
+    fn warns_only_below_the_threshold() {
+        assert!(disk_warning(Some(1000), 10_240).unwrap().contains("low disk"));
+        assert!(disk_warning(Some(20_000), 10_240).is_none());
+        assert!(disk_warning(None, 10_240).is_none());
     }
 }
