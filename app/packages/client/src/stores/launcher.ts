@@ -15,6 +15,8 @@ export interface HarnessInfo {
   models?: string[] | null;
   available?: boolean;
   unavailableReason?: string | null;
+  /** The effort levels this harness takes. */
+  efforts?: string[] | null;
 }
 
 export interface ModelGroup {
@@ -74,9 +76,10 @@ export interface NewAgentDraft {
   harness: string | null;
   group: string | null;
   model: string | null;
+  effort?: string | null;
   task: string;
 }
-export const EMPTY_DRAFT: NewAgentDraft = { roleId: null, harness: null, group: null, model: null, task: "" };
+export const EMPTY_DRAFT: NewAgentDraft = { roleId: null, harness: null, group: null, model: null, effort: null, task: "" };
 
 /** Roles narrowed by id and name, best match first (exact, prefix, then substring). */
 export function rankRoles(roles: Role[], query: string): Role[] {
@@ -131,7 +134,6 @@ export function withHarness(d: NewAgentDraft, harness: string, harnesses: Harnes
 export function addBlockedReason(d: NewAgentDraft): string | null {
   if (!d.roleId) return "Pick a role first";
   if (!d.harness) return "Pick a harness";
-  if (!d.model) return "Pick a model";
   if (!d.task.trim()) return "Type the agent's first task";
   return null;
 }

@@ -9,16 +9,15 @@ import {
   EMPTY_DRAFT,
   addBlockedReason,
   createLauncherStore,
-  modelsFor,
   rankRoles,
   roleList,
-  withHarness,
   withRole,
   type LauncherStore,
   type NewAgentDraft,
 } from "@infantry/client";
-import { Chip, EmptyState, Input, Textarea, cn } from "@infantry/ui";
+import { EmptyState, Input, Textarea, cn } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
+import { ExecutorPicker } from "./executor-picker";
 import { RoleAvatar } from "@/components/agents/agent-avatar";
 import { RoleGlyph } from "@/components/agents/role-icon";
 import { useRoles, useRolesLoaded } from "@/components/knowledge/use-knowledge";
@@ -52,23 +51,6 @@ function Step({ n, title, missing, children }: { n: number; title: string; missi
   );
 }
 
-function Choice({ label, active, onPick, disabled }: { label: string; active: boolean; onPick: () => void; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      disabled={disabled}
-      onClick={onPick}
-      className={cn(
-        "rounded-full border px-2.5 py-1 text-xs transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-40",
-        active ? "border-warn bg-warn/10 text-foreground" : "border-border text-muted-foreground hover:border-info/40 hover:text-foreground",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
 export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDraft; onChange: (d: NewAgentDraft) => void; onSubmit: () => void }) {
   useRolesLoaded();
   const { harnesses, catalog } = useLauncher();
@@ -78,8 +60,6 @@ export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDra
   const [query, setQuery] = useState("");
   const all = useMemo(() => roleList(rolesById).filter((r) => !r.disabled), [rolesById]);
   const options = useMemo(() => rankRoles(all, query), [all, query]);
-  const groups = modelsFor(draft.harness, harnesses, catalog);
-  const shown = groups.filter((g) => !draft.group || g.group === draft.group || groups.length === 1);
   const roleMissing = draft.roleId === null;
 
   // Catalogs that arrive after a role was picked seed the executor then, without losing the draft.
@@ -136,36 +116,14 @@ export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDra
       </Step>
 
       {draft.roleId && (
-        <Step n={2} title="Harness, provider and model" missing={!draft.harness || !draft.model}>
-          {harnesses.length === 0 ? (
-            <p className="text-xs text-muted-foreground">The daemon has not listed its harnesses; the role's own pin is used.</p>
-          ) : (
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Harness">
-              {harnesses.map((h) => (
-                <Choice
-                  key={h.id}
-                  label={h.id}
-                  active={h.id === draft.harness}
-                  disabled={h.available === false}
-                  onPick={() => onChange(withHarness(draft, h.id, harnesses, catalog))}
-                />
-              ))}
-            </div>
-          )}
-          {groups.length > 1 && (
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Provider">
-              <Choice label="All" active={!draft.group} onPick={() => onChange({ ...draft, group: null })} />
-              {groups.map((g) => (
-                <Choice key={g.group} label={g.label} active={g.group === draft.group} onPick={() => onChange({ ...draft, group: g.group })} />
-              ))}
-            </div>
-          )}
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Model">
-            {shown.flatMap((g) =>
-              g.models.map((m) => <Choice key={`${g.group}/${m}`} label={m} active={m === draft.model} onPick={() => onChange({ ...draft, model: m, group: g.group })} />),
-            )}
-            {shown.length === 0 && draft.model && <Chip tone="blue" mono>{draft.model}</Chip>}
-          </div>
+        <Step n={2} title="Harness, provider and model" missing={!draft.harness}>
+          <ExecutorPicker
+            idPrefix="new-agent"
+            value={{ harness: draft.harness, group: draft.group, model: draft.model, effort: draft.effort ?? null }}
+            harnesses={harnesses}
+            catalog={catalog}
+            onChange={(v) => onChange({ ...draft, ...v })}
+          />
         </Step>
       )}
 
@@ -192,5 +150,6 @@ export function addAgent(d: NewAgentDraft): void {
   const opts: Record<string, unknown> = { role: d.roleId };
   if (d.harness) opts.provider = d.harness;
   if (d.model) opts.model = d.model;
+  if (d.effort) opts.effort = d.effort;
   if (store.spawnWith(opts)) store.sendFrame({ type: "prompt", data: d.task.trim() });
 }

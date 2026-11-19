@@ -8,11 +8,11 @@ import { useEffect, useState } from "react";
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
 import { ArrowLeftRight, BarChart3, CircleX, RotateCw } from "lucide-react";
-import { createSessionActions, isMidTurnRefusal, modelsFor, type SessionActions, type SessionStats } from "@infantry/client";
-import { AppDialog, Button, IconButton, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@infantry/ui";
+import { createSessionActions, isMidTurnRefusal, type SessionActions, type SessionStats } from "@infantry/client";
+import { AppDialog, Button, IconButton } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { useLauncher } from "@/components/dialogs/new-agent-dialog";
-import { Field } from "@/components/knowledge/parts";
+import { ExecutorPicker, type ExecutorValue } from "@/components/dialogs/executor-picker";
 
 type Modal = "restart" | "swap" | "stats" | "delete";
 
@@ -144,29 +144,22 @@ function RestartDialog({ sessionId, onClose }: { sessionId: string; onClose: () 
   );
 }
 
-const CUSTOM = "__custom__";
-
 function SwapDialog({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
   const { harnesses, catalog } = useLauncher();
   const record = useDaemon((s) => s.sessions[sessionId]?.record);
-  const [provider, setProvider] = useState(record?.provider ?? "");
-  const [model, setModel] = useState("");
-  const [effort, setEffort] = useState("");
+  const [pick, setPick] = useState<ExecutorValue>({ harness: record?.provider ?? null, group: null, model: null, effort: null });
   const [busy, setBusy] = useState(false);
   const [why, setWhy] = useState<string | null>(null);
-  const [custom, setCustom] = useState(false);
 
   useEffect(() => {
-    if (harnesses.length === 0) setCustom(true);
-    else if (!provider && harnesses.length) setProvider(harnesses.find((h) => h.default)?.id ?? harnesses[0].id);
+    if (!pick.harness && harnesses.length) setPick((p) => ({ ...p, harness: harnesses.find((h) => h.default)?.id ?? harnesses[0].id }));
   }, [harnesses]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const models = [...new Set(modelsFor(provider, harnesses, catalog).flatMap((g) => g.models))];
   const submit = (): void => {
     setBusy(true);
     setWhy(null);
     sessionActions()
-      .swap({ sessionId, provider: provider.trim(), model: model.trim() || undefined, effort: effort.trim() || undefined })
+      .swap({ sessionId, provider: pick.harness ?? "", model: pick.model ?? undefined, effort: pick.effort ?? undefined })
       .then(onClose, (e) => setWhy(String(e)))
       .finally(() => setBusy(false));
   };
@@ -181,49 +174,14 @@ function SwapDialog({ sessionId, onClose }: { sessionId: string; onClose: () => 
           <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button size="sm" disabled={busy || !provider.trim()} onClick={submit}>
+          <Button size="sm" disabled={busy || !pick.harness} onClick={submit}>
             Switch
           </Button>
         </div>
       }
     >
       <div className="space-y-3">
-        <Field id="swap-provider" label="Provider">
-          {custom ? (
-            <Input id="swap-provider" value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="claude" />
-          ) : (
-            <Select value={provider || undefined} onValueChange={(v) => (v === CUSTOM ? setCustom(true) : (setProvider(v), setModel("")))}>
-              <SelectTrigger id="swap-provider" className="w-full">
-                <SelectValue placeholder="Pick a provider" />
-              </SelectTrigger>
-              <SelectContent>
-                {harnesses.map((h) => (
-                  <SelectItem key={h.id} value={h.id} disabled={h.available === false}>
-                    {h.id}
-                    {h.available === false ? " (unavailable)" : ""}
-                  </SelectItem>
-                ))}
-                <SelectItem value={CUSTOM}>Other...</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-        </Field>
-        <Field id="swap-model" label="Model" hint="Empty = the provider's default model.">
-          <Input id="swap-model" list="swap-model-options" value={model} onChange={(e) => setModel(e.target.value)} placeholder="default" />
-          <datalist id="swap-model-options">
-            {models.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-        </Field>
-        <Field id="swap-effort" label="Effort">
-          <Input id="swap-effort" list="swap-effort-options" value={effort} onChange={(e) => setEffort(e.target.value)} placeholder="default" />
-          <datalist id="swap-effort-options">
-            {["low", "medium", "high", "xhigh", "max"].map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-        </Field>
+        <ExecutorPicker idPrefix="swap" value={pick} harnesses={harnesses} catalog={catalog} onChange={setPick} />
         <Refusal text={why} />
       </div>
     </AppDialog>
