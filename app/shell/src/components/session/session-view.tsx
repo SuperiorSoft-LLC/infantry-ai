@@ -39,7 +39,7 @@ export function SessionView() {
   }, [agent?.id, requestHistory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col bg-background">
+    <main className="flex min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
       {agent && <SessionHeader agent={agent} />}
       <SessionTabBar tabs={tabs} value={ui.sessionTab} onChange={(id) => ui.set("sessionTab", id)} />
 
