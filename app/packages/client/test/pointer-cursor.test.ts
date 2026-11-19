@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 // Guard: a non-interactive element (div, span, li ...) with an onClick must say it is clickable
 // (cursor-pointer, role, data-clickable), since the base CSS gives the hand cursor only to those.
 const ROOTS = [join(__dirname, "../../ui/src"), join(__dirname, "../../../shell/src")];
-const TAG = /<(div|span|li|tr|td|p|section|article|img|svg|h[1-6])\b((?:[^<>]|=>|\{[^{}]*\})*?)>/gs;
+const TAG = /<(div|span|li|tr|td|p|section|article|img|svg|h[1-6])\b((?:\{[^{}]*\}|[^<>{}])*?)>/gs;
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((n) => {
