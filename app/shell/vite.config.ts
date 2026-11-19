@@ -17,7 +17,14 @@ const daemonHttp = daemon.replace(/^ws/, "http").replace(/\/ws$/, "");
 export default defineConfig(() => ({
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: { "@": path.resolve(__dirname, "./src") },
+    // The workspace packages resolve by path, so the build needs no node_modules links (Windows installs are
+    // link-free: nodeLinker hoisted, symlink false). Same as the tsconfig paths.
+    alias: [
+      { find: /^@infantry\/ui\/styles\.css$/, replacement: path.resolve(__dirname, "../packages/ui/src/styles.css") },
+      { find: /^@infantry\/ui$/, replacement: path.resolve(__dirname, "../packages/ui/src/index.ts") },
+      { find: /^@infantry\/client$/, replacement: path.resolve(__dirname, "../packages/client/src/index.ts") },
+      { find: "@", replacement: path.resolve(__dirname, "./src") },
+    ],
   },
   clearScreen: false,
   server: {
