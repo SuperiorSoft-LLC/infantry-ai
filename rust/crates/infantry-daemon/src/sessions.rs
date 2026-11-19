@@ -23,7 +23,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
 mod lifecycle;
-pub use lifecycle::{evaluate, Pending, Stats, WatchConfig, WatchPorts, CARRY_MAX_CHARS};
+pub use lifecycle::{waiting_line, evaluate, Pending, Stats, WatchConfig, WatchPorts, CARRY_MAX_CHARS};
 use infantry_protocol::frames as pf;
 
 /// The inbound frame types this unit serves; the strangler gateway routes these here (with `agent_list`, read from the
@@ -43,6 +43,7 @@ pub fn owns(ty: &str) -> bool {
             | wire::KILL
             | wire::SESSION_DELETE
             | pf::SESSION_RESTART
+            | pf::WAITING
             | pf::SESSION_SWAP
             | pf::SESSION_STATS_GET
             | pf::SESSION_MCP_RECONNECT
@@ -640,6 +641,14 @@ impl Daemon {
                 self.kill(&target, rest.contains(&"force")).map_err(Refusal::from)
             }
             wire::SESSION_DELETE => self.delete(sid.as_deref().unwrap_or(env.data.trim())).map_err(Refusal::from),
+            pf::WAITING => {
+                let reply = |ty: &str, d: String| vec![encode_req(ty, d, sid.as_deref(), None, req.as_deref())];
+                let Some(s) = sid.clone() else { return reply(wire::ERROR, "waiting refused: no session (the flag is for the calling session)".into()) };
+                return match serde_json::from_str::<infantry_protocol::session::WaitingRequest>(&env.data).map_err(|e| format!("bad request ({e})")).and_then(|q| self.waiting(&s, &q)) {
+                    Ok(w) => reply(pf::WAITING, w.and_then(|w| serde_json::to_string(&w).ok()).unwrap_or_else(|| "null".into())),
+                    Err(m) => reply(wire::ERROR, format!("waiting refused: {m}")),
+                };
+            }
             pf::SESSION_RESTART => {
                 let v: serde_json::Value = serde_json::from_str(&env.data).unwrap_or(serde_json::Value::Null);
                 let s = v["sessionId"].as_str().map(String::from).or(sid.clone()).unwrap_or_default();
@@ -927,6 +936,7 @@ impl Daemon {
         if e.rec.run_count > 0 && !e.hs.as_ref().is_some_and(|h| h.process_alive()) {
             e.rec.resume_count += 1;
         }
+        e.rec.waiting = None;
         self.push(e);
         let st = state_word(e.rec.state).to_ascii_uppercase();
         self.emit(e, wire::STATUS, wire::status(&st));

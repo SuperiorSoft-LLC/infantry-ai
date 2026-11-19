@@ -15,7 +15,7 @@
 use super::{now_ms, state_word, Daemon, Entry};
 use crate::wire;
 use infantry_protocol::agents::{SessionSwap, SessionSwapped, SwapExecutor};
-use infantry_protocol::session::{AgentWatch, SessionRecord, SessionState};
+use infantry_protocol::session::{AgentWatch, SessionRecord, SessionState, SessionWaiting, WaitingRequest};
 use infantry_protocol::Envelope;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -198,6 +198,56 @@ pub fn evaluate(rec: &SessionRecord, turn_active: bool, turn_started: i64, pendi
 
 fn label(r: &SessionRecord) -> String {
     format!("{}/{}", r.role.as_deref().unwrap_or("-"), r.agent_id.clone().unwrap_or_else(|| r.id.chars().take(8).collect()))
+}
+
+impl Daemon {
+    /// `waiting` `{op: on|off|get, reason?, minutes?}`: flags the session "active but waiting" (or clears it); `get`
+    /// reads. Returns the flag now in force (`None` = not waiting). `on` needs a reason and 1..=`WAITING_MAX_MINUTES`.
+    pub fn waiting(self: &Arc<Self>, sid: &str, req: &WaitingRequest) -> Result<Option<SessionWaiting>, String> {
+        let entry = self.find(sid).ok_or_else(|| format!("unknown session '{sid}'"))?;
+        let mut e = entry.lock().unwrap();
+        match req.op.as_str() {
+            "get" => Ok(e.rec.waiting.clone()),
+            "off" => {
+                if e.rec.waiting.take().is_some() {
+                    self.push(&mut e);
+                }
+                Ok(None)
+            }
+            "on" => {
+                let reason: String = req.reason.as_deref().unwrap_or("").trim().chars().take(WAITING_REASON_CHARS).collect();
+                if reason.is_empty() {
+                    return Err("waiting on needs a reason (what you are waiting for)".into());
+                }
+                let minutes = req.minutes.map(i64::from).unwrap_or(WAITING_DEFAULT_MINUTES);
+                if !(1..=WAITING_MAX_MINUTES).contains(&minutes) {
+                    return Err(format!("minutes must be 1..{WAITING_MAX_MINUTES} (limits.waiting.maxMinutes)"));
+                }
+                let now = now_ms();
+                let until = now + minutes * 60_000;
+                let w = SessionWaiting { reason, since: now, until_at: until, expires_at: until + WAITING_GRACE_MINUTES * 60_000, clear_on_output: false, output_grace_ms: 0 };
+                e.rec.waiting = Some(w.clone());
+                self.push(&mut e);
+                Ok(Some(w))
+            }
+            other => Err(format!("unknown waiting op '{}' (on, off, get)", other.chars().take(40).collect::<String>())),
+        }
+    }
+}
+
+/// `limits.waiting.*` defaults.
+pub const WAITING_DEFAULT_MINUTES: i64 = 30;
+pub const WAITING_GRACE_MINUTES: i64 = 5;
+pub const WAITING_MAX_MINUTES: i64 = 10_080;
+pub const WAITING_REASON_CHARS: usize = 200;
+
+/// The one-line answer of the `waiting` frame / `infantry_waiting` tool.
+pub fn waiting_line(w: Option<&SessionWaiting>, now: i64) -> String {
+    match w {
+        None => "not waiting".into(),
+        Some(w) if now > w.expires_at => format!("waiting EXPIRED {} min past the expected end: {}", (now - w.until_at) / 60_000, w.reason),
+        Some(w) => format!("waiting {} min of ~{}: {}", (now - w.since) / 60_000, (w.until_at - w.since) / 60_000, w.reason),
+    }
 }
 
 impl Daemon {

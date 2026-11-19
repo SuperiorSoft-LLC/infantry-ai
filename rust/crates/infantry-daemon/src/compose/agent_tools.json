@@ -371,5 +371,120 @@
    ],
    "additionalProperties": false
   }
+ },
+ {
+  "name": "infantry_waiting",
+  "readOnly": false,
+  "description": "Flag YOUR session 'active but waiting' (on) or not waiting (off). Use it when your turn is about to end while you wait on a process (a build, a long test, a background job): your card shows 'waiting' with your reason instead of looking idle, and no watcher nudges you. It turns itself off when your next turn starts, and expires after untilMinutes (+ a grace). get = read the flag. The CLI does the same without MCP: infantry waiting on --reason \"...\" [--minutes N] | off.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "mode": {
+     "type": "string",
+     "enum": [
+      "on",
+      "off",
+      "get"
+     ]
+    },
+    "reason": {
+     "type": "string",
+     "description": "mode on: what you are waiting for (required)."
+    },
+    "untilMinutes": {
+     "type": "integer",
+     "description": "mode on: how long you expect to wait (omit = the default setting)."
+    }
+   },
+   "additionalProperties": false,
+   "required": [
+    "mode"
+   ]
+  }
+ },
+ {
+  "name": "infantry_pod_state",
+  "readOnly": true,
+  "description": "Summary of the pod: saved PROFILES (templates, not running) grouped by role under `agents`, SESSIONS by status; optionally one project's `roster` (its live AGENTS, BUSY/IDLE/OFFLINE: who can be assigned work) and one pod's node state.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "projectId": {
+     "type": "string",
+     "description": "Include this project's live roster (running agents, not profiles). Default: the caller's own project; \"all\" (pm / owner callers only) covers every project."
+    },
+    "podId": {
+     "type": "string",
+     "description": "Include this pod's state and nodes."
+    }
+   },
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_session_restart",
+  "readOnly": false,
+  "description": "Restart a session: the same session, a fresh conversation (its next turn is a first turn). A running turn is refused unless force=true, which stops it first.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "sessionId": {
+     "type": "string",
+     "description": "Session id, or a unique prefix of one."
+    },
+    "force": {
+     "type": "boolean",
+     "description": "Stop a running turn first."
+    }
+   },
+   "additionalProperties": false,
+   "required": [
+    "sessionId"
+   ]
+  }
+ },
+ {
+  "name": "infantry_capability_list",
+  "readOnly": true,
+  "description": "List the capabilities the loaded plugins offer (id, module, runs, action, available). Call one by its dotted id from a script: ih.call(\"id\", {...}).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_attention_raise",
+  "readOnly": false,
+  "description": "Raise an item on the owner's attention list (kind, outcome, detail; optional ticketId / sessionId). For scripts and agents that report something the owner must see.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "kind": {
+     "type": "string",
+     "description": "An attention kind, e.g. session_resumed, stalled, unreported."
+    },
+    "outcome": {
+     "type": "string",
+     "description": "A short machine word for what happened, e.g. resumed_after_restart."
+    },
+    "detail": {
+     "type": "string",
+     "description": "What the owner reads, at most 2000 characters."
+    },
+    "ticketId": {
+     "type": "string"
+    },
+    "sessionId": {
+     "type": "string"
+    }
+   },
+   "additionalProperties": false,
+   "required": [
+    "kind",
+    "outcome",
+    "detail"
+   ]
+  }
  }
 ]

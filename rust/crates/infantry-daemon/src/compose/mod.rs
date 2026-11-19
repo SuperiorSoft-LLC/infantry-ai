@@ -324,6 +324,8 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             usage: usage.clone(),
             mail: mail.clone(),
             registry: agent_registry.clone(),
+            pods: pods.clone(),
+            attention: attention.clone(),
             project_dir: Arc::new(move |id: &str| project_dir(&p, id)),
         }));
     }
