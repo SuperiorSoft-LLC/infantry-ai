@@ -77,6 +77,21 @@
   }
  },
  {
+  "name": "infantry_epic_base",
+  "readOnly": false,
+  "description": "Read, set or clear ONE epic's base branch: new tickets in the epic cut their branch from it, overriding the project's base. A branch that does not resolve where tickets are cut is refused with the reason. Tickets already started keep their recorded base.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "epicId": {"type": "string", "description": "Full epic id."},
+    "branch": {"type": "string", "description": "Branch to set; omit (with clear unset) to read."},
+    "clear": {"type": "boolean", "description": "true removes the setting; the epic's tickets fall back to the project's base."}
+   },
+   "required": ["epicId"],
+   "additionalProperties": false
+  }
+ },
+ {
   "name": "infantry_ticket_get",
   "readOnly": true,
   "description": "Read ONE ticket back: title, verbatim description, status, project, role/agent, provider, model, branch, worker session, attached images.",
