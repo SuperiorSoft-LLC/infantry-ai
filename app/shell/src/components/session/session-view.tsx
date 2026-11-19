@@ -15,6 +15,7 @@ import { SessionTabBar } from "./session-tab-bar";
 import { Transcript } from "./transcript";
 import { Composer } from "./composer";
 import { PromptCards } from "./prompt-cards";
+import { ActivityBox } from "./activity-box";
 import { SessionDialogs } from "./session-actions";
 
 export function SessionView() {
@@ -45,6 +46,7 @@ export function SessionView() {
       {ui.sessionTab === "cli" ? (
         <>
           <div className="relative flex min-h-0 flex-1 flex-col">
+            {agent && <ActivityBox sessionId={agent.id} />}
             {agent ? (
               <Transcript agent={agent} sessionId={agent.id} />
             ) : (

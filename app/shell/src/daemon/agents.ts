@@ -83,6 +83,7 @@ export function toAgent(
     ticketTitle: r.ticketId ? tickets[r.ticketId]?.title : undefined,
     progress: r.progress && isRunning(r) ? (r.progress.percent ?? null) : undefined,
     age: ago(r.lastHeartbeat),
+    activityAt: v.activityAt ?? r.lastEventAt ?? r.lastHeartbeat,
     lastLine: v.lastLine || r.workingDir,
     group: status === "working" || status === "needs-input" ? "running" : "quiet",
     provider: r.provider,
