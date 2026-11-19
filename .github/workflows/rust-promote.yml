@@ -21,7 +21,6 @@ permissions:
 jobs:
   promote:
     runs-on: ubuntu-24.04
-    environment: rust-release
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ inputs.tag }}
