@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// Left sidebar: counters, board, search, role filter, Running / Quiet groups, New agent.
+// Left sidebar: counters, board, search, role filter, the Waiting on you / Ready to check / Running / Quiet groups,
+// New agent.
 import { useCallback, useEffect } from "react";
 import { Search, UserPlus, SearchX, Unplug } from "lucide-react";
 import { useAgentList } from "@/daemon/agents";
 import { useDaemon } from "@/daemon/daemon";
+import { useRolesLoaded } from "@/components/knowledge/use-knowledge";
 import { useUi } from "@/state/ui-state";
 import { Input } from "@infantry/ui";
 import { Button } from "@infantry/ui";
@@ -14,9 +16,11 @@ import { KeyHint } from "@infantry/ui";
 import { SidebarCounters } from "./sidebar-counters";
 import { RoleFilterChips } from "./role-filter-chips";
 import { AgentGroup } from "./agent-group";
+import { AGENT_SEARCH_ID } from "@/components/layout/use-shortcuts";
 
 export function AgentSidebar() {
   const ui = useUi();
+  useRolesLoaded();
   const agents = useAgentList();
   const link = useDaemon((s) => s.connection.state);
   const select = useCallback((id: string) => ui.set("selectedAgentId", id), [ui.set]);
@@ -30,8 +34,10 @@ export function AgentSidebar() {
       (ui.roleFilter === "all" || a.roleId === ui.roleFilter) &&
       (!q || `${a.name} ${a.roleId} ${a.ticketTitle ?? ""} ${a.sessionId}`.toLowerCase().includes(q)),
   );
-  const running = visible.filter((a) => a.group === "running");
-  const quiet = visible.filter((a) => a.group === "quiet");
+  const waiting = visible.filter((a) => a.status === "needs-input");
+  const review = visible.filter((a) => a.status === "review");
+  const running = visible.filter((a) => a.status === "working");
+  const quiet = visible.filter((a) => a.status !== "needs-input" && a.status !== "review" && a.status !== "working");
 
   return (
     <aside aria-label="Agents" className="flex h-full w-[268px] shrink-0 flex-col border-r bg-background">
@@ -44,6 +50,7 @@ export function AgentSidebar() {
             onChange={(e) => ui.set("search", e.target.value)}
             placeholder="Search agents..."
             aria-label="Search agents"
+            id={AGENT_SEARCH_ID}
             className="h-10 bg-card pr-10 pl-8"
           />
           <KeyHint className="absolute top-1/2 right-3 -translate-y-1/2">^K</KeyHint>
@@ -63,6 +70,8 @@ export function AgentSidebar() {
             <EmptyState icon={<SearchX className="size-6" />} title="No agents match" hint="Clear the search or pick another role." />
           ) : (
             <>
+              <AgentGroup title="Waiting on you" tone="warn" agents={waiting} selectedId={ui.selectedAgentId} onSelect={select} />
+              <AgentGroup title="Ready to check" tone="info" agents={review} selectedId={ui.selectedAgentId} onSelect={select} />
               <AgentGroup title="Running" tone="ok" agents={running} selectedId={ui.selectedAgentId} onSelect={select} />
               <AgentGroup title="Quiet" tone="muted" agents={quiet} selectedId={ui.selectedAgentId} onSelect={select} />
             </>

@@ -225,3 +225,9 @@ export function json<T>(data: string): T | null {
 export function isRunning(r: Pick<SessionRecord, "state" | "turnActive">): boolean {
   return r.turnActive === true || r.state === "BUSY" || r.state === "STARTING" || r.state === "WAITING_INPUT";
 }
+
+/** Sessions of the selected project. A session with no projectId is global (e.g. the Assistant) and always shows; no selected project shows all. */
+export function inProject<T extends { record: Pick<SessionRecord, "projectId"> }>(items: T[], projectId: string | null | undefined): T[] {
+  if (!projectId) return items;
+  return items.filter((v) => !v.record.projectId || v.record.projectId === projectId);
+}

@@ -169,6 +169,13 @@ impl Normalizer {
                 continue;
             }
             let v = self.frame(f);
+            // The scripting plugin's `automation-stats` push (one per wake) is not a session frame; the Kotlin fixtures were
+            // captured with no scripting plugin, so it is ambient here too.
+            if v.get("type").and_then(Value::as_str) == Some("timeline_item")
+                && v.pointer("/data/source").and_then(Value::as_str) == Some("automation-stats")
+            {
+                continue;
+            }
             if out.last() != Some(&v) {
                 out.push(v);
             }

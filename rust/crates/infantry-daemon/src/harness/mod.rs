@@ -4,10 +4,11 @@
 //! back neutral [`HarnessEvent`]s; it names no vendor. A harness says what host mechanisms it uses ([`Capabilities`]:
 //! `pty-screen`, `file-tail`, `hook-channel`) and whether it keeps one process across turns.
 //!
-//! Implementations: [`stub`] (scripted, no process; `INFANTRY_PROVIDER=stub`) and [`claude`] (through `infantry-runner`).
-//! Codex, opencode, pi, gemini plug in the same way.
+//! Implementations: [`stub`] (scripted, no process; `INFANTRY_PROVIDER=stub`) and [`driven`], which runs any
+//! `infantry-harness` crate (one agent CLI each) on the local runner. The registry is [`by_name`].
 
-pub mod claude;
+pub mod driven;
+pub mod launch;
 pub mod stub;
 
 use std::path::PathBuf;
@@ -23,8 +24,19 @@ pub struct Capabilities {
     pub persistent_process: bool,
 }
 
+/// Where a session's tool approvals and questions go: the owner's prompt cards. Each call returns at once; [done] runs
+/// (on any thread) once the owner, the timer or the session's end resolved it.
+pub trait Prompter: Send + Sync {
+    /// The approval mode a session runs with (its scoped setting, else the env, else the default).
+    fn mode(&self, session: &str, project: Option<&str>, role: Option<&str>) -> infantry_harness::ApprovalMode;
+    fn approve(&self, session: &str, tool: &str, input: &str, done: Box<dyn FnOnce(bool) + Send>);
+    fn ask(&self, session: &str, questions: Vec<infantry_harness::HarnessQuestion>, done: Box<dyn FnOnce(Vec<infantry_harness::HarnessAnswer>) + Send>);
+    /// The session ended: its open cards close.
+    fn end(&self, _session: &str) {}
+}
+
 /// Opens one daemon session's harness side.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OpenRequest {
     /// The daemon session id.
     pub session_id: String,
@@ -33,6 +45,20 @@ pub struct OpenRequest {
     pub effort: Option<String>,
     /// The daemon's state dir (per-session files go under it).
     pub state_dir: PathBuf,
+    /// The session env the agent process gets ([`launch::LaunchBase::session`]).
+    pub env: Vec<(String, String)>,
+    /// The MCP servers the agent gets (the infantry entry when the CLI is found).
+    pub mcp: infantry_harness::McpPlan,
+    /// What the session may do without asking.
+    pub approval: infantry_harness::ApprovalMode,
+    /// Where its approvals and questions go; None = nobody can answer (an ask is denied).
+    pub prompter: Option<std::sync::Arc<dyn Prompter>>,
+}
+
+impl std::fmt::Debug for OpenRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpenRequest").field("session_id", &self.session_id).field("cwd", &self.cwd).field("approval", &self.approval).finish_non_exhaustive()
+    }
 }
 
 /// One turn.
@@ -73,6 +99,26 @@ pub enum HarnessEvent {
     TurnEnded { end: TurnEnd, exit_code: Option<i32>, reason: Option<String>, process_alive: bool },
     /// The process went away outside a turn end (a crash, the CLI's own exit).
     Exited { code: Option<i32> },
+    /// A tool call began (its name): counted in the session's stats.
+    Tool(String),
+    /// Token usage of one model request, as the CLI reported it: the session's stats.
+    Usage(TokenUsage),
+    /// The CLI's view of the session's own MCP server and of every server it reports (G12).
+    McpState { state: String, servers: Vec<(String, String)> },
+}
+
+/// Hands one message to the running turn; true = the CLI took it. Called with no session lock held (it waits briefly).
+pub type Injector = Box<dyn FnOnce(String) -> bool + Send>;
+/// How long an inject waits for the CLI's answer.
+pub const INJECT_WAIT_MS: u64 = 3_000;
+
+/// One model request's token counts as the harness reported them (never estimated).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TokenUsage {
+    pub input: u64,
+    pub cached: u64,
+    pub output: u64,
+    pub reasoning: u64,
 }
 
 /// Where a harness sends its events (one per daemon session, delivered in order).
@@ -90,6 +136,10 @@ pub trait Harness: Send + Sync {
     fn name(&self) -> &str;
     fn capabilities(&self) -> Capabilities;
     fn open(&self, req: OpenRequest, sink: EventSink) -> Result<Box<dyn HarnessSession>, String>;
+    /// The provider's `/` commands (`command_catalog`).
+    fn commands(&self) -> Vec<infantry_harness::HarnessCommand> {
+        Vec::new()
+    }
 }
 
 /// One daemon session's harness side. Methods never block for long; output arrives through the [`EventSink`].
@@ -102,13 +152,44 @@ pub trait HarnessSession: Send {
     fn close(&mut self, force: bool);
     /// The session's process is alive.
     fn process_alive(&self) -> bool;
+    /// Mid-turn input (a queued message forced into the running turn); None = this session cannot take it.
+    fn injector(&self) -> Option<Injector> {
+        None
+    }
+    /// Reconnects the session's own MCP server inside the CLI; false = it cannot (no process, or no such command).
+    fn reconnect_mcp(&mut self) -> bool {
+        false
+    }
+}
+
+/// The provider a daemon runs when none is named.
+pub const DEFAULT_PROVIDER: &str = infantry_harness_claude::ID;
+
+/// The agent-CLI harness (the neutral `infantry-harness` trait: models, sign-in, launch) for a provider id.
+pub fn neutral(name: &str) -> Option<std::sync::Arc<dyn infantry_harness::Harness>> {
+    Some(match name {
+        infantry_harness_claude::ID => std::sync::Arc::new(infantry_harness_claude::ClaudeHarness::default()),
+        infantry_harness_codex::ID => std::sync::Arc::new(infantry_harness_codex::CodexHarness::default()),
+        infantry_harness_opencode::ID => std::sync::Arc::new(infantry_harness_opencode::OpenCodeHarness::default()),
+        infantry_harness_pi::ID => std::sync::Arc::new(infantry_harness_pi::PiHarness::default()),
+        // HARNESS REGISTRATION SPOT: a new provider crate adds one arm here and its id to
+        // [`REGISTERED`]; nothing else in the daemon names a provider.
+        _ => return None,
+    })
 }
 
 /// The harness for a provider name, or None when this daemon has no such harness.
 pub fn by_name(name: &str) -> Option<Box<dyn Harness>> {
-    match name {
-        stub::NAME => Some(Box::new(stub::Stub::default())),
-        claude::NAME => Some(Box::new(claude::ClaudeHarness::default())),
-        _ => None,
+    if name == stub::NAME {
+        return Some(Box::new(stub::Stub::default()));
     }
+    neutral(name).map(|h| Box::new(driven::Driven::new(h)) as Box<dyn Harness>)
+}
+
+/// Every provider this build can run, in the order the harness list shows them (the stub is a test harness, not listed).
+pub const REGISTERED: &[&str] = &[infantry_harness_claude::ID, infantry_harness_codex::ID, infantry_harness_opencode::ID, infantry_harness_pi::ID];
+
+/// Every registered harness except `skip` (the daemon's default, already built).
+pub fn all_except(skip: &str) -> Vec<std::sync::Arc<dyn Harness>> {
+    REGISTERED.iter().filter(|n| **n != skip).filter_map(|n| by_name(n)).map(std::sync::Arc::from).collect()
 }

@@ -43,8 +43,14 @@ export interface Agent {
   runs: number;
   tokensIn: string;
   tokensOut: string;
+  /** False when no `usage` frame reached this window for the session: the totals are unknown, not zero. */
+  tokensKnown: boolean;
   /** avatar gradient hue */
   hue: number;
+  /** The session's project, by name (RUST-MIGRATE-1). */
+  projectName?: string;
+  /** The other app running this session now ("Infantry (Kotlin)"): shown, and a turn into it is blocked. */
+  heldBy?: string;
 }
 
 export interface DiffLine {

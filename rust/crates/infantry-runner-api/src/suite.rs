@@ -106,6 +106,32 @@ pub async fn suite(runner: &dyn Runner, scratch_dir: &str) {
     assert!(c.stdout.contains("suite-piped-out"), "piped stdout: {c:?}");
     assert_eq!(c.code, Some(0), "piped exit: {c:?}");
 
+    // a bare program name is found on PATH (+ PATHEXT on Windows: a `.cmd` shim, like npm installs)
+    {
+        let dir = os.join(scratch_dir, &format!("bare-{tag}"));
+        std::fs::create_dir_all(&dir).expect("bare dir");
+        let name = format!("suitebare{tag}");
+        let (file, body) = if os.windows { (format!("{name}.cmd"), "@echo off
+
+echo suite-bare-ok
+
+") } else { (name.clone(), "#!/bin/sh
+echo suite-bare-ok
+") };
+        let path = os.join(&dir, &file);
+        std::fs::write(&path, body).expect("bare shim");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        }
+        let sep = if os.windows { ";" } else { ":" };
+        let old = std::env::var("PATH").unwrap_or_default();
+        let c = run(runner, ProcessSpec::new(name, Vec::<String>::new()).env("PATH", format!("{dir}{sep}{old}"))).await;
+        assert!(c.stdout.contains("suite-bare-ok") && c.code == Some(0), "bare program via PATH: {c:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     // stderr is its own stream
     let c = run(runner, os.sh("echo suite-piped-err 1>&2")).await;
     assert!(c.stderr.contains("suite-piped-err") && !c.stdout.contains("suite-piped-err"), "piped stderr: {c:?}");

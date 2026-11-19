@@ -19,14 +19,34 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[features]
+# Embed the built UI (shell/dist) and do NOT load devUrl. Tauri enables this for `tauri build`; a plain `cargo build` needs it
+# explicitly or the window loads http://localhost:1420 ("localhost refused to connect"). Owner builds: scripts/rust-owner-build.ps1.
+custom-protocol = ["tauri/custom-protocol"]
+
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-websocket = "2"
 tauri-plugin-dialog = "2"
-infantry-runner = { path = "../../rust/crates/infantry-runner" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# The desktop app starts the daemon sidecar or runs agents in its embedded runner; a phone does neither (RUST-MOBILE-1):
+# it connects to a remote daemon only.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+infantry-harness = { path = "../../rust/crates/infantry-harness" }
+infantry-harness-claude = { path = "../../rust/crates/infantry-harness-claude" }
+infantry-runner-local = { path = "../../rust/crates/infantry-runner-local" }
+tokio = { version = "1", features = ["rt", "sync", "time"] }
+uuid = { version = "1", features = ["v4"] }
+# RUST-UPD-1: self-update from a signed feed, and the machine's addresses for phone pairing.
+tauri-plugin-updater = "2"
+if-addrs = "0.13"
+
+# Pairing by QR code (RUST-MOBILE-1).
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+tauri-plugin-barcode-scanner = "2"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
@@ -36,3 +56,12 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# Quick build for owner checks (RUST-BUILD-SPEED-1); see rust/Cargo.toml. `release` stays the full build.
+[profile.owner-test]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+opt-level = 2
+strip = false

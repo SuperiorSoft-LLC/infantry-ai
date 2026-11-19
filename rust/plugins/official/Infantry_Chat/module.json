@@ -1,0 +1,126 @@
+{
+  "name": "Infantry_Chat",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "description": "COMMS mail tools: inbox, read, message, announce and the project directory. Daemon half only: mail tools and the image upload frames.",
+  "tier": "official",
+  "sequence": [],
+  "daemon": {
+    "component": "daemon.component",
+    "apiAtLeast": "0.1.0",
+    "needs": [
+      "frames"
+    ],
+    "frames": [
+      { "type": "image_upload", "action": "images.upload", "kind": "write" },
+      { "type": "image_fetch", "action": "images.read", "kind": "read" }
+    ],
+    "tools": [
+      {
+        "name": "infantry_announce",
+        "action": "mail.send",
+        "kind": "write",
+        "description": "Announce one message to every live agent of your project (one COMMS mail each). Only the roles in setting announce.allowedRoles (default owner, pm) may announce."
+      },
+      {
+        "name": "infantry_inbox",
+        "action": "mail.read",
+        "kind": "read",
+        "description": "Your COMMS inbox: counts and one line per item, newest unread first. Params: limit, offset, unreadOnly, previews.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "description": "At most this many items (default: setting limits.tools.inboxLimit, 20)."
+            },
+            "offset": {
+              "type": "integer",
+              "description": "Skip this many items (paging; 0 = the newest)."
+            },
+            "unreadOnly": {
+              "type": "boolean",
+              "default": false,
+              "description": "Only the messages not read yet."
+            },
+            "previews": {
+              "type": "boolean",
+              "description": "Add a one-line preview of each body (default false)."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "infantry_read",
+        "action": "mail.read",
+        "kind": "read",
+        "description": "Read one message of your inbox in full and mark it read.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "messageId": {
+              "type": "string",
+              "description": "Message id from infantry_inbox, or a unique prefix of one."
+            },
+            "bodyChars": {
+              "type": "integer",
+              "description": "Cut the body to this many characters (default: the whole body)."
+            }
+          },
+          "required": [
+            "messageId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "infantry_message",
+        "action": "mail.send",
+        "kind": "write",
+        "description": "Send COMMS mail to an agent id, a role, a session id, or role@project (needs allowCrossProject).",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "to": {
+              "type": "string",
+              "description": "Recipient: agent id, role, session id, or role@<project id or name> (cross-project, with allowCrossProject)."
+            },
+            "body": {
+              "type": "string",
+              "description": "The message."
+            },
+            "subject": {
+              "type": "string",
+              "description": "Optional subject."
+            },
+            "replyTo": {
+              "type": "string",
+              "description": "Optional message id this answers."
+            },
+            "allowCrossProject": {
+              "type": "boolean",
+              "description": "Send even though the recipient is in another project (refused by default)."
+            }
+          },
+          "required": [
+            "to",
+            "body"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "infantry_projects",
+        "action": "mail.read",
+        "kind": "read",
+        "description": "Look up projects: id, name, description and the roles with a live session."
+      }
+    ],
+    "wants": [
+      "settings"
+    ]
+  }
+}

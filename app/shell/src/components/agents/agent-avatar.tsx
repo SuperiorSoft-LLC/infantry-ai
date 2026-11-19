@@ -1,44 +1,79 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// Round agent avatar: a role glyph on a hue gradient, with an optional status dot (AgentAvatar.kt).
-import { cn } from "@infantry/ui";
-import type { Agent } from "@/mock/types";
-import { RoleIcon } from "./role-icon";
-import { StatusDot } from "@infantry/ui";
+// Worker avatar (AgentAvatar.kt): the role's picture when the daemon has one (override or bundled), else the generated
+// pixel bot in the role colour, with live motion per state and an optional status dot.
+import { cn, StatusDot } from "@infantry/ui";
+import { daemonStore } from "@/daemon/daemon";
+import { useRoles } from "@/components/knowledge/use-knowledge";
+import type { Agent, AgentStatus } from "@/mock/types";
+import { PixelBot } from "./pixel-bot";
 
 const sizes = {
-  xs: "size-6 [&_svg]:size-3",
-  sm: "size-8 [&_svg]:size-4",
-  md: "size-10 [&_svg]:size-5",
-  lg: "size-12 [&_svg]:size-6",
+  xs: "size-6",
+  sm: "size-8",
+  md: "size-10",
+  lg: "size-12",
+  xl: "size-16",
 } as const;
+export type AvatarSize = keyof typeof sizes;
+
+/** `ws://host:port/ws` -> `http://host:port`, where the daemon serves `/avatars/<id>`. */
+export function httpBase(wsUrl: string): string {
+  return wsUrl.replace(/^ws/, "http").replace(/\/ws\/?$/, "");
+}
+
+function avatarSrc(url: string, version?: string | null): string {
+  if (/^https?:/.test(url)) return url;
+  const base = httpBase(daemonStore().getState().connection.url);
+  return `${base}${url}${version ? `?v=${encodeURIComponent(version)}` : ""}`;
+}
+
+/** The picture for a role: its image, else the generated pixel bot. Square, fills its box. */
+export function RoleFace({ roleId, status = "idle", live = true, className }: { roleId: string; status?: AgentStatus; live?: boolean; className?: string }) {
+  const role = useRoles((s) => s.roles[roleId]);
+  const av = role?.avatar;
+  const color = av?.color ?? role?.color ?? "#6b7cff";
+  if (av?.url) {
+    return <img src={avatarSrc(av.url, av.version)} alt="" draggable={false} className={cn("size-full object-cover [image-rendering:pixelated]", className)} />;
+  }
+  return <PixelBot roleId={roleId} color={color} status={status} live={live} className={cn("size-full", className)} />;
+}
+
+/** A role's avatar on its own (no agent): the dialog's role cards. */
+export function RoleAvatar({ roleId, size = "md", className }: { roleId: string; size?: AvatarSize; className?: string }) {
+  return (
+    <span className={cn("inline-flex shrink-0 overflow-hidden rounded-md bg-muted/40 p-0.5", sizes[size], className)}>
+      <RoleFace roleId={roleId} live={false} />
+    </span>
+  );
+}
 
 export function AgentAvatar({
   agent,
   size = "md",
   showStatus = true,
   ring,
+  live = true,
   className,
 }: {
   agent: Agent;
-  size?: keyof typeof sizes;
+  size?: AvatarSize;
   showStatus?: boolean;
   ring?: boolean;
+  /** Only the busy few move; a still list passes false. */
+  live?: boolean;
   className?: string;
 }) {
   return (
     <span className={cn("relative inline-flex shrink-0", className)}>
       <span
         className={cn(
-          "grid place-items-center rounded-full text-white shadow-inner",
+          "inline-flex overflow-hidden rounded-lg bg-muted/40 p-0.5",
           sizes[size],
           ring && "ring-2 ring-foreground/80 ring-offset-2 ring-offset-background",
         )}
-        style={{
-          background: `radial-gradient(circle at 30% 25%, hsl(${agent.hue} 80% 62%), hsl(${agent.hue + 30} 55% 22%))`,
-        }}
       >
-        <RoleIcon roleId={agent.roleId} />
+        <RoleFace roleId={agent.roleId} status={agent.status} live={live} />
       </span>
       {showStatus && (
         <StatusDot

@@ -7,6 +7,19 @@
 //! - [`jsonl`]: the JSON-lines mapping of the same world, spoken over stdio by a native sidecar (`daemon.sidecar`).
 //!
 //! The WIT is frozen at 0.1.0: changes are additive only (new imports; exports never change).
+//!
+//! # Manifest rules (`module.json`, read by infantry-plugin-host)
+//! - `daemon.component` (a `.wasm` in the module folder) or `daemon.sidecar` (`{exe, args}`), never both.
+//! - `daemon.needs` / `daemon.wants` name the [`GRANTABLE_IMPORTS`]; an import that is not requested is not linked,
+//!   so a component that imports it is refused at load ("does not request").
+//! - Tool names match `^[a-z][a-z0-9_]{2,63}$`. A capability id may be dotted (`news.headlines`); a
+//!   `runs: "daemon"` capability is answered by the daemon tool with the same `action`, else by the tool named
+//!   after the id with `.`/`-` turned into `_` (`news_headlines`). `call-tool` receives the TOOL name.
+//! - `daemon.config` takes the Kotlin grouped shape `[{node, fields:[{key, scope, default}]}]` or flat
+//!   `[{key, scope, default}]`; `config.get(key)` serves the `scope: "daemon"` fields.
+//! - `daemon.limits.cpuMsPerCall` (fuel + epoch budget), `toolTimeoutMs`, `callTimeoutMs`; three runaways in a
+//!   row, or one trap, disable the plugin, never the host. Loading the same module id again hot swaps it: new
+//!   calls go to the new version while the old one drains, then gets `stop`.
 
 pub mod jsonl;
 

@@ -1,0 +1,247 @@
+[
+ {
+  "op": 0,
+  "frames": [
+   {
+    "type": "ticket",
+    "requestId": null,
+    "data": "{\"id\":\"ticket-9f4815c8\",\"title\":\"First\",\"description\":\"body\",\"ticketType\":\"defect\",\"projectId\":\"p1\",\"epicId\":\"e1\",\"status\":\"todo\",\"position\":0,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008915607,\"updatedAt\":1795008915607,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}"
+   },
+   {
+    "type": "ticket",
+    "requestId": "r0",
+    "data": "{\"id\":\"ticket-9f4815c8\",\"title\":\"First\",\"description\":\"body\",\"ticketType\":\"defect\",\"projectId\":\"p1\",\"epicId\":\"e1\",\"status\":\"todo\",\"position\":0,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008915607,\"updatedAt\":1795008915607,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}"
+   }
+  ]
+ },
+ {
+  "op": 1,
+  "frames": [
+   {
+    "type": "ticket",
+    "requestId": null,
+    "data": "{\"id\":\"ticket-540753b3\",\"title\":\"Second\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":1,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008916197,\"updatedAt\":1795008916197,\"agentId\":null,\"provider\":\"claude\",\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":\"local\",\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":\"claude\",\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":3,\"contextLimit\":200000,\"effectiveContextLimit\":{\"value\":200000,\"source\":\"ticket\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":\"high\",\"effectiveEffort\":{\"value\":\"high\",\"source\":\"ticket\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}"
+   },
+   {
+    "type": "ticket",
+    "requestId": "r1",
+    "data": "{\"id\":\"ticket-540753b3\",\"title\":\"Second\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":1,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008916197,\"updatedAt\":1795008916197,\"agentId\":null,\"provider\":\"claude\",\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":\"local\",\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":\"claude\",\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":3,\"contextLimit\":200000,\"effectiveContextLimit\":{\"value\":200000,\"source\":\"ticket\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":\"high\",\"effectiveEffort\":{\"value\":\"high\",\"source\":\"ticket\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}"
+   }
+  ]
+ },
+ {
+  "op": 2,
+  "frames": [
+   {
+    "type": "ticket",
+    "requestId": null,
+    "data": "{\"id\":\"ticket-25d92180\",\"title\":\"Parked\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"backlog\",\"position\":0,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008916742,\"updatedAt\":1795008916742,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":false,\"worktreeBranch\":null,\"includeLinkedTasksContext\":false,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":false,\"source\":\"ticket\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}"
+   },
+   {
+    "type": "ticket",
+    "requestId": "r2",
+    "data": "{\"id\":\"ticket-25d92180\",\"title\":\"Parked\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"backlog\",\"position\":0,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008916742,\"updatedAt\":1795008916742,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":false,\"worktreeBranch\":null,\"includeLinkedTasksContext\":false,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":false,\"source\":\"ticket\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}"
+   }
+  ]
+ },
+ {
+  "op": 3,
+  "frames": [
+   {
+    "type": "ticket",
+    "requestId": null,
+    "data": "{\"id\":\"ticket-5541efa5\",\"title\":\"Needs mcp\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":2,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008917276,\"updatedAt\":1795008917276,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"replace\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":{\"require\":[{\"server\":\"github\",\"capability\":null,\"purpose\":\"open PRs\"}]}}"
+   },
+   {
+    "type": "ticket",
+    "requestId": "r3",
+    "data": "{\"id\":\"ticket-5541efa5\",\"title\":\"Needs mcp\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":2,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008917276,\"updatedAt\":1795008917276,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"replace\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":{\"require\":[{\"server\":\"github\",\"capability\":null,\"purpose\":\"open PRs\"}]}}"
+   }
+  ]
+ },
+ {
+  "op": 4,
+  "frames": [
+   {
+    "type": "ticket",
+    "requestId": null,
+    "data": "{\"id\":\"ticket-9f4815c8\",\"title\":\"First, edited\",\"description\":\"body\",\"ticketType\":\"defect\",\"projectId\":\"p1\",\"epicId\":\"e1\",\"status\":\"todo\",\"position\":0,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008915607,\"updatedAt\":1795008917901,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}"
+   },
+   {
+    "type": "ticket",
+    "requestId": "r4",
+    "data": "{\"id\":\"ticket-9f4815c8\",\"title\":\"First, edited\",\"description\":\"body\",\"ticketType\":\"defect\",\"projectId\":\"p1\",\"epicId\":\"e1\",\"status\":\"todo\",\"position\":0,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008915607,\"updatedAt\":1795008917901,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}"
+   }
+  ]
+ },
+ {
+  "op": 5,
+  "frames": [
+   {
+    "type": "ticket",
+    "requestId": null,
+    "data": "{\"id\":\"ticket-540753b3\",\"title\":\"Second\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"done\",\"position\":0,\"wontFix\":true,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008916197,\"updatedAt\":1795008918388,\"agentId\":null,\"provider\":\"claude\",\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":\"local\",\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":\"claude\",\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":3,\"contextLimit\":200000,\"effectiveContextLimit\":{\"value\":200000,\"source\":\"ticket\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":\"high\",\"effectiveEffort\":{\"value\":\"high\",\"source\":\"ticket\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}"
+   },
+   {
+    "type": "ticket",
+    "requestId": null,
+    "data": "{\"id\":\"ticket-5541efa5\",\"title\":\"Needs mcp\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":1,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008917276,\"updatedAt\":1795008917276,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"replace\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":{\"require\":[{\"server\":\"github\",\"capability\":null,\"purpose\":\"open PRs\"}]}}"
+   },
+   {
+    "type": "ticket",
+    "requestId": "r5",
+    "data": "{\"id\":\"ticket-540753b3\",\"title\":\"Second\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"done\",\"position\":0,\"wontFix\":true,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008916197,\"updatedAt\":1795008918388,\"agentId\":null,\"provider\":\"claude\",\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":\"local\",\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":\"claude\",\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":3,\"contextLimit\":200000,\"effectiveContextLimit\":{\"value\":200000,\"source\":\"ticket\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":\"high\",\"effectiveEffort\":{\"value\":\"high\",\"source\":\"ticket\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}"
+   }
+  ]
+ },
+ {
+  "op": 6,
+  "frames": [
+   {
+    "type": "ticket",
+    "requestId": null,
+    "data": "{\"id\":\"ticket-25d92180\",\"title\":\"Parked\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":0,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008916742,\"updatedAt\":1795008918855,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":false,\"worktreeBranch\":null,\"includeLinkedTasksContext\":false,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":false,\"source\":\"ticket\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}"
+   },
+   {
+    "type": "ticket",
+    "requestId": null,
+    "data": "{\"id\":\"ticket-9f4815c8\",\"title\":\"First, edited\",\"description\":\"body\",\"ticketType\":\"defect\",\"projectId\":\"p1\",\"epicId\":\"e1\",\"status\":\"todo\",\"position\":1,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008915607,\"updatedAt\":1795008917901,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}"
+   },
+   {
+    "type": "ticket",
+    "requestId": null,
+    "data": "{\"id\":\"ticket-5541efa5\",\"title\":\"Needs mcp\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":2,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008917276,\"updatedAt\":1795008917276,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"replace\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":{\"require\":[{\"server\":\"github\",\"capability\":null,\"purpose\":\"open PRs\"}]}}"
+   },
+   {
+    "type": "ticket",
+    "requestId": "r6",
+    "data": "{\"id\":\"ticket-25d92180\",\"title\":\"Parked\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":0,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008916742,\"updatedAt\":1795008918855,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":false,\"worktreeBranch\":null,\"includeLinkedTasksContext\":false,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":false,\"source\":\"ticket\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}"
+   }
+  ]
+ },
+ {
+  "op": 7,
+  "frames": [
+   {
+    "type": "ticket",
+    "requestId": "r7",
+    "data": "{\"id\":\"ticket-5541efa5\",\"title\":\"Needs mcp\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":2,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008917276,\"updatedAt\":1795008917276,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"replace\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":{\"require\":[{\"server\":\"github\",\"capability\":null,\"purpose\":\"open PRs\"}]}}"
+   }
+  ]
+ },
+ {
+  "op": 8,
+  "frames": [
+   {
+    "type": "ticket",
+    "requestId": "r8",
+    "data": "{\"id\":\"ticket-25d92180\",\"title\":\"Parked\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":0,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008916742,\"updatedAt\":1795008918855,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":false,\"worktreeBranch\":null,\"includeLinkedTasksContext\":false,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":false,\"source\":\"ticket\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}"
+   }
+  ]
+ },
+ {
+  "op": 9,
+  "frames": [
+   {
+    "type": "tickets",
+    "requestId": "r9",
+    "data": "[{\"id\":\"ticket-9f4815c8\",\"title\":\"First, edited\",\"description\":\"body\",\"ticketType\":\"defect\",\"projectId\":\"p1\",\"epicId\":\"e1\",\"status\":\"todo\",\"position\":1,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008915607,\"updatedAt\":1795008917901,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null}]"
+   }
+  ]
+ },
+ {
+  "op": 10,
+  "frames": [
+   {
+    "type": "error",
+    "requestId": "r10",
+    "data": "ticket_save refused: a new ticket enters todo or backlog, not 'pending'"
+   }
+  ]
+ },
+ {
+  "op": 11,
+  "frames": [
+   {
+    "type": "error",
+    "requestId": "r11",
+    "data": "ticket_save refused: malformed ticket_save payload: Encountered an unknown key 'position' at offset 37 at path: $"
+   }
+  ]
+ },
+ {
+  "op": 12,
+  "frames": [
+   {
+    "type": "error",
+    "requestId": "r12",
+    "data": "ticket_move refused: status 'in_review' is not a column: backlog, todo, in_progress, pending, done"
+   }
+  ]
+ },
+ {
+  "op": 13,
+  "frames": [
+   {
+    "type": "error",
+    "requestId": "r13",
+    "data": "ticket_save refused: title is blank"
+   }
+  ]
+ },
+ {
+  "op": 14,
+  "frames": [
+   {
+    "type": "error",
+    "requestId": "r14",
+    "data": "ticket_save refused: malformed ticket_save payload: Encountered an unknown key 'bogus' at offset 14 at path: $"
+   }
+  ]
+ },
+ {
+  "op": 15,
+  "frames": [
+   {
+    "type": "error",
+    "requestId": "r15",
+    "data": "ticket_move refused: no ticket 'ticket-nope'"
+   }
+  ]
+ },
+ {
+  "op": 16,
+  "frames": [
+   {
+    "type": "error",
+    "requestId": "r16",
+    "data": "ticket_get refused: no ticket 'ticket-nope'"
+   }
+  ]
+ },
+ {
+  "op": 17,
+  "frames": [
+   {
+    "type": "tickets",
+    "requestId": null,
+    "data": "[{\"id\":\"ticket-25d92180\",\"title\":\"Parked\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":0,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008916742,\"updatedAt\":1795008918855,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":false,\"worktreeBranch\":null,\"includeLinkedTasksContext\":false,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":false,\"source\":\"ticket\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null},{\"id\":\"ticket-9f4815c8\",\"title\":\"First, edited\",\"description\":\"body\",\"ticketType\":\"defect\",\"projectId\":\"p1\",\"epicId\":\"e1\",\"status\":\"todo\",\"position\":1,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008915607,\"updatedAt\":1795008917901,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null},{\"id\":\"ticket-5541efa5\",\"title\":\"Needs mcp\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":2,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008917276,\"updatedAt\":1795008917276,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"replace\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":{\"require\":[{\"server\":\"github\",\"capability\":null,\"purpose\":\"open PRs\"}]}}]"
+   },
+   {
+    "type": "tickets",
+    "requestId": "r17",
+    "data": "[{\"id\":\"ticket-25d92180\",\"title\":\"Parked\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":0,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008916742,\"updatedAt\":1795008918855,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":false,\"worktreeBranch\":null,\"includeLinkedTasksContext\":false,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":false,\"source\":\"ticket\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null},{\"id\":\"ticket-9f4815c8\",\"title\":\"First, edited\",\"description\":\"body\",\"ticketType\":\"defect\",\"projectId\":\"p1\",\"epicId\":\"e1\",\"status\":\"todo\",\"position\":1,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008915607,\"updatedAt\":1795008917901,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null},{\"id\":\"ticket-5541efa5\",\"title\":\"Needs mcp\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":2,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008917276,\"updatedAt\":1795008917276,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"replace\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":{\"require\":[{\"server\":\"github\",\"capability\":null,\"purpose\":\"open PRs\"}]}}]"
+   }
+  ]
+ },
+ {
+  "op": 18,
+  "frames": [
+   {
+    "type": "tickets",
+    "requestId": "r18",
+    "data": "[{\"id\":\"ticket-25d92180\",\"title\":\"Parked\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":0,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008916742,\"updatedAt\":1795008918855,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":false,\"worktreeBranch\":null,\"includeLinkedTasksContext\":false,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":false,\"source\":\"ticket\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null},{\"id\":\"ticket-9f4815c8\",\"title\":\"First, edited\",\"description\":\"body\",\"ticketType\":\"defect\",\"projectId\":\"p1\",\"epicId\":\"e1\",\"status\":\"todo\",\"position\":1,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008915607,\"updatedAt\":1795008917901,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"merge\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":null},{\"id\":\"ticket-5541efa5\",\"title\":\"Needs mcp\",\"description\":\"\",\"ticketType\":null,\"projectId\":null,\"epicId\":null,\"status\":\"todo\",\"position\":2,\"wontFix\":false,\"links\":[],\"heldBy\":[],\"holdReason\":null,\"createdAt\":1795008917276,\"updatedAt\":1795008917276,\"agentId\":null,\"provider\":null,\"model\":null,\"useWorktree\":null,\"worktreeBranch\":null,\"includeLinkedTasksContext\":null,\"queuedFor\":null,\"queuedAt\":null,\"queuedAgent\":null,\"queueRank\":null,\"runner\":null,\"queuedAgentName\":null,\"sessionId\":null,\"hasWork\":null,\"executorOverrides\":{\"provider\":null,\"model\":null},\"effectiveExecutor\":null,\"effectiveContext\":{\"includeLinkedTasksContext\":{\"value\":true,\"source\":\"default\"},\"includeSkillsContext\":{\"value\":true,\"source\":\"default\"}},\"lastRun\":null,\"start\":null,\"branch\":null,\"base\":null,\"skillIds\":[],\"skillsMode\":\"replace\",\"includeSkillsContext\":null,\"images\":[],\"weight\":null,\"contextLimit\":null,\"effectiveContextLimit\":{\"value\":500000,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no context limit mapping\"},\"effort\":null,\"effectiveEffort\":{\"value\":null,\"source\":\"default\",\"support\":\"unsupported\",\"how\":\"this harness declares no effort mapping\"},\"mcp\":{\"require\":[{\"server\":\"github\",\"capability\":null,\"purpose\":\"open PRs\"}]}}]"
+   }
+  ]
+ }
+]
