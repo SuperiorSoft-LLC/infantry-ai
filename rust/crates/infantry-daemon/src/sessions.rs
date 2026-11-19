@@ -198,6 +198,8 @@ struct Entry {
     episode: Option<lifecycle::Episode>,
     /// The done-worker reaper waits for this turn's end.
     reap_pending: bool,
+    /// The watchdog saw this turn silent past `session.hungKillMinutes`: the child is hung (cleared by any output).
+    hung: bool,
 }
 
 impl Entry {
@@ -215,6 +217,7 @@ impl Entry {
             stats: Stats::default(),
             episode: None,
             reap_pending: false,
+            hung: false,
         }
     }
 }
@@ -964,7 +967,21 @@ impl Daemon {
         let model = e.rec.model.clone().unwrap_or_else(|| "default".into());
         let resumed = e.rec.run_count > 0;
         // A persistent process (an interactive CLI) that is still up takes the turn as is: nothing is resumed.
-        let warm = e.hs.as_ref().is_some_and(|h| h.process_alive());
+        let mut warm = e.hs.as_ref().is_some_and(|h| h.process_alive());
+        // A child the watchdog found hung is killed by its pid and replaced: the turn never attaches to it.
+        if std::mem::take(&mut e.hung) && e.hs.is_some() {
+            let pid = e.rec.child_pid;
+            self.emit(e, wire::STATUS, wire::status_activity(&provider, &format!("previous process{} hung (no output past the limit): killing it", pid.map(|p| format!(" (pid {p})")).unwrap_or_default())));
+            if let Some(mut hs) = e.hs.take() {
+                hs.close(true);
+            }
+            if let Some(p) = pid.and_then(|p| u32::try_from(p).ok()) {
+                infantry_runner::job::kill_pid(p);
+            }
+            e.rec.child_pid = None;
+            e.rec.is_process_alive = false;
+            warm = false;
+        }
         if resumed && !warm {
             let id = e.rec.id.clone();
             self.emit(e, wire::STATUS, wire::status_activity(&provider, &format!("Resuming session {id}...")));
@@ -994,6 +1011,7 @@ impl Daemon {
         match e.hs.as_mut().unwrap().send_turn(turn) {
             Ok(start) => {
                 let line = match start.pid {
+                    Some(p) if warm && e.rec.child_pid == Some(i64::from(p)) => format!("turn sent to the running process (pid {p})"),
                     Some(p) => format!("process started (pid {p})"),
                     None => "process started (no OS process)".into(),
                 };
@@ -1088,11 +1106,13 @@ impl Daemon {
         match ev {
             HarnessEvent::ProviderSession(p) => e.rec.provider_session_id = Some(p),
             HarnessEvent::Stdout(l) if e.turn_active => {
+                e.hung = false;
                 e.rec.last_output_at = Some(now_ms());
                 self.notify(|o| o.on_stdout(&e.rec, &l));
                 self.emit(&mut e, wire::STDOUT, l);
             }
             HarnessEvent::Text(t) if e.turn_active => {
+                e.hung = false;
                 e.rec.last_output_at = Some(now_ms());
                 self.emit(&mut e, wire::TEXT_DELTA, t);
             }

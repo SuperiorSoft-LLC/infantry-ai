@@ -513,7 +513,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
 
     let c = Arc::new(Composed {
         state_dir: state_dir.to_path_buf(),
-        db,
+        db: db.clone(),
         bus: bus.clone(),
         registry,
         daemon: daemon.clone(),
@@ -539,7 +539,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     daemon.observe(Arc::new(adapters::RunEvents { bus: bus.clone() }));
 
     // ---- RUST-SESS-2: the watchdog (never fails a session) and the done-worker reaper -----------------------
-    daemon.start_watchdog(Arc::new(watch::Ports { daemon: daemon.clone(), mail: mail.clone(), attention: attention.clone() }), crate::sessions::WatchConfig::default());
+    daemon.start_watchdog(Arc::new(watch::Ports { daemon: daemon.clone(), mail: mail.clone(), attention: attention.clone(), settings: settings::SettingsUnit { db: db.clone() } }), crate::sessions::WatchConfig::default());
     watch::spawn_reaper(daemon.clone(), c.projects.clone(), &bus);
 
     // ---- background: bus -> clients, hooks, timers, usage, mail tick, exec ticker -------------------------
