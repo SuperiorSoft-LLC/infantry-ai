@@ -20,7 +20,8 @@ $out = Join-Path $env:CARGO_TARGET_DIR 'owner-test'
 $stagedPlugins = Join-Path $out 'plugins'
 if (Test-Path $stagedPlugins) { Remove-Item $stagedPlugins -Recurse -Force }
 # Git Bash, never C:\Windows\system32\bash.exe (that is WSL: no cargo, no python on its PATH).
-$gitBash = Join-Path (Split-Path (Split-Path (Get-Command git).Source -Parent) -Parent) 'bin\bash.exe'
+$gitRoot = Split-Path (Get-Command git).Source -Parent; while ($gitRoot -and -not (Test-Path (Join-Path $gitRoot 'bin\bash.exe'))) { $gitRoot = Split-Path $gitRoot -Parent }
+$gitBash = Join-Path $gitRoot 'bin\bash.exe'
 if (-not (Test-Path $gitBash)) { throw "BUILD REFUSED: Git Bash not found at $gitBash" }
 & $gitBash (Join-Path $repo 'rust/plugins/stage.sh') $stagedPlugins release
 if ($LASTEXITCODE -ne 0) { throw 'BUILD REFUSED: plugin staging failed' }
@@ -49,15 +50,15 @@ if (-not $SkipMsi) {
     $cfg = @('--config', 'src-tauri/bundle-stage/tauri.bundle.conf.json')
     if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
         $kd = Join-Path $env:TEMP "infantry-msi-key-$sha"; New-Item -ItemType Directory -Force $kd | Out-Null
-        Push-Location (Join-Path $repo 'app'); try { pnpm tauri signer generate --ci -p '' -w "$kd	est.key" | Out-Null } finally { Pop-Location }
-        $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content "$kd	est.key" -Raw; $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
-        $ov = Join-Path $kd 'ov.json'; (@{ plugins = @{ updater = @{ pubkey = (Get-Content "$kd	est.key.pub" -Raw).Trim() } } } | ConvertTo-Json -Depth 5) | Set-Content $ov
+        Push-Location (Join-Path $repo 'app'); try { pnpm tauri signer generate --ci -p '' -w "$kd/test.key" | Out-Null } finally { Pop-Location }
+        $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content "$kd/test.key" -Raw; $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
+        $ov = Join-Path $kd 'ov.json'; (@{ plugins = @{ updater = @{ pubkey = (Get-Content "$kd/test.key.pub" -Raw).Trim() } } } | ConvertTo-Json -Depth 5) | Set-Content $ov
         $cfg += @('--config', $ov); Write-Output 'MSI signed with a THROWAWAY test key (no installed app trusts it)'
     }
     Push-Location (Join-Path $repo 'app')
     try { pnpm tauri build --bundles msi @cfg --config '{"bundle":{"createUpdaterArtifacts":true}}'; if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' } } finally { Pop-Location }
-    $msiDir = Join-Path $env:CARGO_TARGET_DIR 'releaseundle\msi'
-    if (-not (Test-Path $msiDir)) { $msiDir = Join-Path $repo 'app\src-tauri	argeteleaseundle\msi' }
+    $msiDir = Join-Path $env:CARGO_TARGET_DIR 'release/bundle/msi'
+    if (-not (Test-Path $msiDir)) { $msiDir = Join-Path $repo 'app/src-tauri/target/release/bundle/msi' }
     Copy-Item (Join-Path $msiDir '*.msi*') $dest
     Write-Output "MSI: $((Get-ChildItem $dest -Filter *.msi | Select-Object -First 1).FullName)"
 }
