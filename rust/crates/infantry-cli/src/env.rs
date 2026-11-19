@@ -97,11 +97,20 @@ pub const PLUGIN_TOOL_TIMEOUT_MS: Limit =
     Limit { key: "limits.plugins.toolTimeoutMs", default: 60_000, min: 1, max: None, legacy_env: &[] };
 pub const CLI_ANSWER_TIMEOUT_MS: Limit = Limit {
     key: "limits.cli.answerTimeoutMs",
-    default: 20_000,
+    default: 60_000,
     min: 1,
     max: None,
     legacy_env: &["INFANTRY_CLI_ANSWER_TIMEOUT_MS", "AGENTHQ_CLI_ANSWER_TIMEOUT_MS"],
 };
+
+/// How long a TCP connect to the daemon may take before the CLI gives up (also the write timeout on the socket).
+pub const CLI_CONNECT_TIMEOUT_MS: Limit =
+    Limit { key: "limits.cli.connectTimeoutMs", default: 10_000, min: 1, max: None, legacy_env: &[] };
+
+/// `connectTimeoutMs`: the limit (`INFANTRY_LIMIT_CLI_CONNECT_TIMEOUT_MS`), else its default.
+pub fn connect_timeout_ms(getenv: Getenv) -> i64 {
+    CLI_CONNECT_TIMEOUT_MS.from_env(getenv).unwrap_or(CLI_CONNECT_TIMEOUT_MS.default)
+}
 
 /// `answerTimeoutMs`: `INFANTRY_CLI_ANSWER_TIMEOUT_MS` (> 0), else the limit, else its default.
 pub fn answer_timeout_ms(getenv: Getenv) -> i64 {
