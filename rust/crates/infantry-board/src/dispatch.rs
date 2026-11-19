@@ -238,9 +238,31 @@ impl Dispatcher {
     }
 
     /// Lane resolution, under the flight lock (pure: env reads only, plus a profile save for a lane clone).
-    fn lane(&self, assigned: &str, project: Option<&str>, workers: &[Worker], f: &Flight) -> Lane {
+    fn lane(&self, assigned: &str, project: Option<&str>, workers: &[Worker], f: &Flight, rows: &HashMap<String, TicketRow>, self_id: &str) -> Lane {
         let env = self.env.as_ref();
         let in_project: Vec<&Seat> = Self::seats(workers, f).filter(|s| s.project_id.as_deref() == project).collect();
+        // `lanes.maxInProgress`: count the in_progress TICKETS of the role (a ticket whose worker run failed or ended is
+        // still in_progress and still holds its slot), plus starts reserved but not yet in_progress.
+        let role = assigned.strip_prefix("role:").map(str::to_string).or_else(|| role_of(env, Some(assigned)));
+        if let Some(role) = role.as_deref() {
+            let in_progress = |r: &TicketRow| r.status == status::IN_PROGRESS;
+            let held = rows
+                .values()
+                .filter(|r| in_progress(r) && r.id != self_id && r.project_id.as_deref() == project)
+                .filter(|r| role_of(env, r.agent_id.as_deref()).as_deref() == Some(role))
+                .count();
+            let reserved = f
+                .starting
+                .iter()
+                .map(|(id, s)| (id, s))
+                .chain(f.deferred.iter().map(|d| (&d.id, &d.seat)))
+                .filter(|(id, s)| id.as_str() != self_id && s.project_id.as_deref() == project && s.role.as_deref() == Some(role))
+                .filter(|(id, _)| !rows.get(id.as_str()).is_some_and(in_progress))
+                .count();
+            if (held + reserved) as u32 >= env.max_in_progress(project, role).max(1) {
+                return Lane::Busy(format!("role:{role}"));
+            }
+        }
         if let Some(max) = env.max_workers(project) {
             if in_project.len() as u32 >= max {
                 return Lane::Busy(format!("project:{}", project.unwrap_or("none")));
@@ -382,7 +404,7 @@ impl Dispatcher {
             drop(f);
             return self.refused(&id, project.as_deref(), "this ticket is already starting");
         }
-        let seat = match self.lane(&assigned, project.as_deref(), &workers, &f) {
+        let seat = match self.lane(&assigned, project.as_deref(), &workers, &f, &rows, &id) {
             Lane::Refuse(m) => {
                 drop(f);
                 return self.refused(&id, project.as_deref(), m);
@@ -1030,7 +1052,8 @@ impl Dispatcher {
     /// The next ticket of a seat's lane: the agent's own queue, then what waits on its lane, then (auto start) the
     /// top ready ticket assigned to the same agent or role. None = nothing started.
     pub fn drain(&self, seat: &Seat) -> Option<TicketAnswer> {
-        if !self.env.auto_start_next() {
+        if !self.env.auto_start_next(seat.project_id.as_deref()) {
+            eprintln!("[board] auto-start skipped: hooks.json autoStart=false (project {})", seat.project_id.as_deref().unwrap_or("none"));
             return None;
         }
         let (rows, links, _) = self.board.rows().ok()?;
@@ -1059,6 +1082,13 @@ impl Dispatcher {
         for id in candidates.into_iter().filter(|i| seen.insert(i.clone())) {
             if let Ok(a) = self.start(&id, StartOrigin::QueueDrain, None) {
                 if a.ticket.start.as_ref().is_some_and(|s| s.ok || s.reason == reason::DEFERRED) {
+                    let why = format!(
+                        "lane of {} freed in project {} (lanes.maxInProgress allows it)",
+                        lane_role.as_deref().unwrap_or("agent"),
+                        seat.project_id.as_deref().unwrap_or("none")
+                    );
+                    eprintln!("[board] auto-start {id}: {why}");
+                    self.hook(hooks::TICKET_AUTO_STARTED, &id, seat.project_id.as_deref(), json!({ "reason": why, "role": seat.role }));
                     return Some(a);
                 }
             }

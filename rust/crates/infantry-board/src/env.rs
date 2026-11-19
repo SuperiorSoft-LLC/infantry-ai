@@ -200,6 +200,11 @@ pub trait BoardEnv: Send + Sync {
     fn lane_cap(&self, _project_id: Option<&str>, _role: &str) -> u32 {
         1
     }
+    /// `lanes.maxInProgress` (scopes app, project, role): the most tickets of `role` in `project_id` that may be
+    /// in_progress at once, whether or not their worker is alive. Default 1; at least 1.
+    fn max_in_progress(&self, _project_id: Option<&str>, _role: &str) -> u32 {
+        1
+    }
     /// The most ticket workers a project may run at once; None = no cap.
     fn max_workers(&self, _project_id: Option<&str>) -> Option<u32> {
         None
@@ -225,7 +230,8 @@ pub trait BoardEnv: Send + Sync {
         120
     }
     /// After a worker leaves its lane (done, failed, unassigned), start the lane's next ticket.
-    fn auto_start_next(&self) -> bool {
+    /// False when the project's hooks.json turns auto start off (a hook with `autoStart=false`).
+    fn auto_start_next(&self, _project_id: Option<&str>) -> bool {
         true
     }
     /// LANE-CAPS / INSTALL-PROFILE-1: save a new agent profile (a lane clone or a role's first profile); None = cannot.
@@ -297,6 +303,10 @@ pub struct StaticEnv {
     pub live_roles: Vec<(String, String)>,
     /// Lane cap per role (0 = the default 1).
     pub lane_cap: u32,
+    /// `lanes.maxInProgress` (0 = follow `lane_cap`, so a test that widens the lane widens both).
+    pub max_in_progress: u32,
+    /// `hooks.json` autoStart=false.
+    pub auto_start_off: bool,
     pub rules: Vec<infantry_orchestrator_api::RoutingRule>,
     /// Slow-start slots (0 = the default 4).
     pub start_slots: usize,
@@ -380,6 +390,12 @@ impl BoardEnv for StaticEnv {
     }
     fn lane_cap(&self, _project_id: Option<&str>, _role: &str) -> u32 {
         self.lane_cap.max(1)
+    }
+    fn max_in_progress(&self, _project_id: Option<&str>, _role: &str) -> u32 {
+        if self.max_in_progress == 0 { self.lane_cap.max(1) } else { self.max_in_progress }
+    }
+    fn auto_start_next(&self, _project_id: Option<&str>) -> bool {
+        !self.auto_start_off
     }
     fn max_parallel_starts(&self) -> usize {
         if self.start_slots == 0 { 4 } else { self.start_slots }

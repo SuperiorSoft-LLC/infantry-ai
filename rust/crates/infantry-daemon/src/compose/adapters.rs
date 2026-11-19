@@ -71,11 +71,30 @@ pub struct DaemonBoardEnv {
     usage: Arc<UsageService>,
     /// The notification service, set once it exists (it is built after the board env).
     notify: std::sync::OnceLock<Arc<infantry_mail::notify::push::NotifyService>>,
+    /// Scoped settings (`lanes.maxInProgress`).
+    settings: super::settings::SettingsUnit,
+    /// The script hook store, set once it exists (`autoStart=false` hooks).
+    hooks: std::sync::OnceLock<Arc<infantry_scripting::hooks::HookStore>>,
 }
 
+/// `lanes.maxInProgress`: scopes app, project, role; default 1.
+pub const LANES_MAX_IN_PROGRESS: &str = "lanes.maxInProgress";
+
 impl DaemonBoardEnv {
-    pub fn new(daemon: Arc<Daemon>, projects: Arc<Projects>, state_dir: &Path, usage: Arc<UsageService>) -> DaemonBoardEnv {
-        DaemonBoardEnv { daemon, projects, profiles: ProfileBoard::new(state_dir), usage, notify: std::sync::OnceLock::new() }
+    pub fn new(daemon: Arc<Daemon>, projects: Arc<Projects>, state_dir: &Path, usage: Arc<UsageService>, db: Arc<infantry_core::db::Db>) -> DaemonBoardEnv {
+        DaemonBoardEnv {
+            daemon,
+            projects,
+            profiles: ProfileBoard::new(state_dir),
+            usage,
+            notify: std::sync::OnceLock::new(),
+            settings: super::settings::SettingsUnit { db },
+            hooks: std::sync::OnceLock::new(),
+        }
+    }
+
+    pub fn set_hooks(&self, h: Arc<infantry_scripting::hooks::HookStore>) {
+        let _ = self.hooks.set(h);
     }
 
     pub fn set_notify(&self, n: Arc<infantry_mail::notify::push::NotifyService>) {
@@ -186,6 +205,20 @@ impl BoardEnv for DaemonBoardEnv {
     }
     fn lane_cap(&self, project_id: Option<&str>, role: &str) -> u32 {
         project_id.map(|p| self.projects.store.lane_cap_of(p, role)).unwrap_or(1).max(1) as u32
+    }
+    fn max_in_progress(&self, project_id: Option<&str>, role: &str) -> u32 {
+        let d = serde_json::json!({ "project": project_id, "role": role });
+        let v = self.settings.resolve(LANES_MAX_IN_PROGRESS, &d)["value"].clone();
+        v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok())).filter(|n| *n >= 1).unwrap_or(1) as u32
+    }
+    fn auto_start_next(&self, project_id: Option<&str>) -> bool {
+        let off = |v: Option<&serde_json::Value>| match v {
+            Some(serde_json::Value::Bool(b)) => !*b,
+            Some(serde_json::Value::String(s)) => matches!(s.trim().to_lowercase().as_str(), "false" | "off" | "0" | "no"),
+            _ => false,
+        };
+        let Some(h) = self.hooks.get() else { return true };
+        !h.list(project_id.unwrap_or("")).iter().any(|hook| hook.enabled && off(hook.args.get("autoStart")))
     }
     fn routing_rules(&self, project_id: Option<&str>) -> Vec<OrchRule> {
         self.project(project_id).map(|p| p.routing_rules.iter().filter_map(to_orch).collect()).unwrap_or_default()
