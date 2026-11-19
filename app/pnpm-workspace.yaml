@@ -4,3 +4,6 @@
 packages:
   - packages/*
   - shell
+nodeLinker: hoisted
+symlink: false
+packageImportMethod: copy
