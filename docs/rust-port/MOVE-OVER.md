@@ -38,3 +38,19 @@ repo with a `feature-base` branch, real `claude` workers on haiku. Agents-per-pr
 - Migrated owner hooks fail on `agenthq_project_config_get`, `infantry_memory`, `infantry_notify` (tools missing) and on the exec bridge being off.
 - CLI `agents --live` fails: `agent_roster` frame unsupported. `ticket comments` is not a CLI subcommand.
 - Not run: `cargo test` for the changed crates.
+
+## Owner hooks on Rust
+
+Run on a throwaway test daemon (port 18977, fresh state dir, no sessions; only the owner's `scripting.*` settings rows, the owner's project scripts and `hooks.json`, and the Infantry_Settings plugin), with throwaway tickets. The scripts were not edited. The test daemon was killed by pid and its state deleted.
+
+| Hook (script) | Trigger | Result | Evidence |
+|---|---|---|---|
+| done-protocol-lane-enter-done (done-protocol-5) | lane enter done | PASS (bridge) | the `git` exec now runs (exit=128 only because the owner's merge repo path does not exist in the scratch box); before: `infantry_exec refused: the process bridge is off`. The run then stops at "ticket has no branch" because the throwaway ticket has no worker branch, which is the script's own check. |
+| mem-check-done / mem-check-timer (mem-check) | lane enter done | PASS | `ran mem-check for ticket.moved: OK` (`agenthq_processes` resolves to the new `infantry_processes`) |
+| worker-idle-nudge (worker-idle-nudge-4) | every 60s | PASS | OK, 3 actions; before: `unknown tool or alias 'agenthq_project_config_get'` |
+| worker-silent-ping, worker-watch, hook-health, gh-build-done, mail-hook-keeper | timers | PASS | `ran ...: OK` |
+| one-worker-inprogress (lane-one-worker) | lane enter in_progress | NOT RUN | entering in_progress starts a worker, which would launch a real harness. The same `infantry_project_config_get` call is proven by worker-idle-nudge above. |
+| claude-auth-scan (claude-auth) | every 120s | FAIL here, not proven | `infantry_memory` lives in the Infantry_Notes plugin, which the test box did not load. Re-check on a box with the Notes plugin. |
+| the other hooks (lane-park, lane-pending-note, lane-pin-check, usage-governor, build-tick, vc-merge, needs-owner-alert, worker-issue-wake, on-mail-sent, pm-mail-dedupe, build-done, qa-done, vc-merge-done, done-protocol-merge) | lane moves, mail, ticket.commented, exec.done | NOT RUN | their events were not fired in the box; none showed a failure |
+
+Fixes: c7d81a1a6 (scripts read `scripting.*` from the settings table), 976b5ed12 (`infantry_project_config_*` default projectId; this is in the Settings plugin, so the plugin must be rebuilt and shipped), 4e7b10036 (`infantry_processes`, `_reap`).
