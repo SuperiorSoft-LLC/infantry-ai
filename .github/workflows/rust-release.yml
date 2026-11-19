@@ -109,7 +109,7 @@ jobs:
       - name: Collect
         run: |
           set -euo pipefail
-          mkdir -p dist; d="$(find app/src-tauri/target -type d -path '*bundle/msi' | head -n1)"
+          mkdir -p dist; d="$(find app/src-tauri/target -type d -path '*bundle/msi' -print -quit)"
           cp "$d"/*.msi "dist/InfantryAI-Rust_${VERSION}_x64.msi"
           cp "$d"/*.msi.sig "dist/InfantryAI-Rust_${VERSION}_x64.msi.sig"
           echo "${{ steps.key.outputs.signing }}" > dist/SIGNING-windows
@@ -161,7 +161,7 @@ jobs:
       - name: Sign the APK (release keystore, else a throwaway test key)
         run: |
           set -euo pipefail
-          apk="$(find app/src-tauri/gen/android -path '*outputs/apk*' -name '*release*.apk' | head -n1)"
+          apk="$(find app/src-tauri/gen/android -path '*outputs/apk*' -name '*release*.apk' -print -quit)"
           test -n "$apk" || { echo "::error::no release APK was built"; exit 1; }
           bt="$ANDROID_HOME/build-tools/36.0.0"
           if [ -n "$ANDROID_KEYSTORE_B64" ]; then
@@ -220,7 +220,7 @@ jobs:
           pnpm tauri build --bundles appimage --config src-tauri/bundle-stage/tauri.bundle.conf.json \
             --config "{\"version\":\"$VERSION\",\"bundle\":{\"createUpdaterArtifacts\":true}}" \
             --config "$RUNNER_TEMP/key.json"
-          mkdir -p ../dist; d="$(find src-tauri/target -type d -path '*bundle/appimage' | head -n1)"
+          mkdir -p ../dist; d="$(find src-tauri/target -type d -path '*bundle/appimage' -print -quit)"
           cp "$d"/*.AppImage "../dist/InfantryAI-Rust_${VERSION}_amd64.AppImage"
           cp "$d"/*.AppImage.sig "../dist/InfantryAI-Rust_${VERSION}_amd64.AppImage.sig"
           echo "${{ steps.key.outputs.signing }}" > ../dist/SIGNING-linux
@@ -264,7 +264,7 @@ jobs:
           pnpm tauri build --bundles app --config src-tauri/bundle-stage/tauri.bundle.conf.json \
             --config "{\"version\":\"$VERSION\",\"bundle\":{\"createUpdaterArtifacts\":true}}" \
             --config "$RUNNER_TEMP/key.json"
-          mkdir -p ../dist; d="$(find src-tauri/target -type d -path '*bundle/macos' | head -n1)"
+          mkdir -p ../dist; d="$(find src-tauri/target -type d -path '*bundle/macos' -print -quit)"
           cp "$d"/*.app.tar.gz "../dist/InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz"
           cp "$d"/*.app.tar.gz.sig "../dist/InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz.sig"
           echo "${{ steps.key.outputs.signing }}" > ../dist/SIGNING-macos
@@ -294,7 +294,7 @@ jobs:
           set -euo pipefail
           base="https://github.com/${{ github.repository }}/releases/download/$TAG"
           last="${{ needs.plan.outputs.last }}"
-          { echo "Infantry AI (Rust) $VERSION"; echo; git log --no-merges --pretty='- %s' ${last:+"$last..HEAD"} | head -n 30; } > notes.txt
+          { echo "Infantry AI (Rust) $VERSION"; echo; git log -n 30 --no-merges --pretty='- %s' ${last:+"$last..HEAD"}; } > notes.txt
           cd dist
           entries=("windows-x86_64=InfantryAI-Rust_${VERSION}_x64.msi:InfantryAI-Rust_${VERSION}_x64.msi.sig" "android-aarch64=InfantryAI-Rust_${VERSION}_arm64.apk")
           [ -f "InfantryAI-Rust_${VERSION}_amd64.AppImage" ] && entries+=("linux-x86_64=InfantryAI-Rust_${VERSION}_amd64.AppImage:InfantryAI-Rust_${VERSION}_amd64.AppImage.sig")
