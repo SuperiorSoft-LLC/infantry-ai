@@ -233,7 +233,7 @@ fn open_link_once(ep: &Endpoint) -> Result<Link, ConnError> {
     let mut last = None;
     let mut tcp = None;
     for a in addrs {
-        match TcpStream::connect_timeout(&a, Duration::from_secs(5)) {
+        match TcpStream::connect_timeout(&a, Duration::from_millis(t.connect_timeout_ms.max(1) as u64)) {
             Ok(s) => {
                 tcp = Some(s);
                 break;
@@ -242,7 +242,8 @@ fn open_link_once(ep: &Endpoint) -> Result<Link, ConnError> {
         }
     }
     let tcp = tcp.ok_or_else(|| ConnError::Connect(last.map_or("no address".into(), |e| e.to_string())))?;
-    let _ = tcp.set_read_timeout(Some(Duration::from_secs(15)));
+    let _ = tcp.set_read_timeout(Some(Duration::from_millis(t.connect_timeout_ms.max(1) as u64)));
+    let _ = tcp.set_write_timeout(Some(Duration::from_millis(t.connect_timeout_ms.max(1) as u64)));
     let _ = tcp.set_nodelay(true);
     match tungstenite::client_tls_with_config(request, tcp, None, None) {
         Ok((socket, _)) => Ok(Link { socket, frames: Vec::new(), closed: false }),
@@ -445,7 +446,7 @@ impl FrameStream {
                 last_error = Some(frame.data);
             }
         }
-        Err(ConnError::Failed(last_error.unwrap_or_else(|| format!("no answer to {what} within {timeout_ms}ms"))))
+        Err(ConnError::Failed(last_error.unwrap_or_else(|| format!("daemon at {} did not answer {what} within {timeout_ms}ms", self.ep.target.url))))
     }
 
     /// `requestLastOf`: send [env] then [fence]; the LAST frame of [answers] before the fence's [fence_type] answer.
@@ -466,7 +467,8 @@ impl FrameStream {
         let mut last_error: Option<String> = None;
         let timeout = self.answer_timeout_ms();
         let deadline = Instant::now() + Duration::from_millis(timeout);
-        let none = |e: &Option<String>| ConnError::Failed(e.clone().unwrap_or_else(|| format!("no answer to {what} within {timeout}ms")));
+        let url = self.ep.target.url.clone();
+        let none = |e: &Option<String>| ConnError::Failed(e.clone().unwrap_or_else(|| format!("daemon at {url} did not answer {what} within {timeout}ms")));
         while Instant::now() < deadline {
             if self.generation != sent_at {
                 return Err(ConnError::Failed(format!(

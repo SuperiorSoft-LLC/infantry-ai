@@ -34,6 +34,7 @@ pub struct Target {
     pub token: Option<String>,
     pub token_source: String,
     pub answer_timeout_ms: i64,
+    pub connect_timeout_ms: i64,
     pub session_id: Option<String>,
 }
 
@@ -360,6 +361,7 @@ pub fn resolve(conn: &Connection, getenv: Getenv) -> Result<Target, String> {
         token,
         token_source: source,
         answer_timeout_ms: env::answer_timeout_ms(getenv),
+        connect_timeout_ms: env::connect_timeout_ms(getenv),
         session_id: env::non_blank(getenv, "INFANTRY_SESSION_ID"),
     })
 }
