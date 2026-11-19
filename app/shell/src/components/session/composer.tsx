@@ -7,10 +7,10 @@
 // move, Tab or Enter completes, Esc closes. Images (paste, or the clip button) upload at once with `image_upload`
 // (purpose chat, the session's project) and ride the prompt as `[image: <path>]` lines (Kotlin IMG-2).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, ImagePlus, Play, CircleX, Trash2, RotateCw, Square, SendHorizontal, X, Zap, Maximize2, Minimize2, Search, History } from "lucide-react";
+import { ArrowLeftRight, ImagePlus, Play, CircleX, Trash2, RotateCw, MoreHorizontal, Square, SendHorizontal, X, Zap, Maximize2, Minimize2, Search, History } from "lucide-react";
 import { cn } from "@infantry/ui";
 import { Textarea } from "@infantry/ui";
-import { IconButton } from "@infantry/ui";
+import { IconButton, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@infantry/ui";
 import { CHAT_SEARCH_EVENT, imageTag, matchSlash, slashCatalog, slashPrefix, uploadImage, type QueuedTurnView, type SlashCommand } from "@infantry/client";
 import { useShallow } from "zustand/react/shallow";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
@@ -214,7 +214,31 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
           className="min-h-20 resize-none border-0 bg-transparent px-4 py-3 text-[15px] shadow-none focus-visible:ring-0 dark:bg-transparent"
         />
         <div className="flex items-center justify-between gap-2 px-2 pb-2">
-          <div role="toolbar" aria-label="Session actions" className="flex items-center gap-1 rounded-lg border border-danger/60 p-1">
+          <div role="toolbar" aria-label="Session actions (compact)" className="flex items-center gap-1 rounded-lg border border-danger/60 p-1 sm:hidden">
+            <IconButton label="Attach image" className="rounded-full" disabled={!online || !!heldBy} onClick={() => fileInput.current?.click()}>
+              <ImagePlus />
+            </IconButton>
+            {tools.slice(0, 1).map(({ label, icon: Icon }) => (
+              <IconButton key={label} label={label} className="rounded-full" onClick={actions[label]}>
+                <Icon />
+              </IconButton>
+            ))}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton label="More session actions" className="rounded-full">
+                  <MoreHorizontal />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="top">
+                {tools.slice(1).map(({ label, icon: Icon, danger }) => (
+                  <DropdownMenuItem key={label} disabled={!actions[label]} onSelect={() => actions[label]?.()} className={cn(danger && "text-danger")}>
+                    <Icon /> {label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <div role="toolbar" aria-label="Session actions" className="hidden items-center gap-1 rounded-lg border border-danger/60 p-1 sm:flex">
             {tools.map(({ label, icon: Icon, danger }) => (
               <IconButton
                 key={label}
@@ -235,7 +259,7 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
               hidden
               onChange={(e) => (void attach(Array.from(e.target.files ?? [])), (e.target.value = ""))}
             />
-            <IconButton label="Attach image" disabled={!online || !!heldBy} onClick={() => fileInput.current?.click()}>
+            <IconButton label="Attach image" className="hidden sm:inline-flex" disabled={!online || !!heldBy} onClick={() => fileInput.current?.click()}>
               <ImagePlus />
             </IconButton>
             <IconButton label="Stop" className="text-danger hover:text-danger" disabled={!busy || !sessionId || !online} onClick={() => sessionId && interrupt(sessionId)}>
