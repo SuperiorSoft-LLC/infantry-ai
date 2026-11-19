@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "notes": "Fixture notes",
+  "pub_date": "2026-11-19T13:13:27.878Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "SIGNATURE-TEXT",
+      "url": "http://127.0.0.1:19411/dl/setup.exe"
+    },
+    "android-aarch64": {
+      "signature": "",
+      "url": "http://127.0.0.1:19411/dl/InfantryAI-Rust_0.2.0_arm64.apk",
+      "sha256": "cb4870807289f0ebb14bbfc941421b08f5766fa0346c1828bd5f09a955ccd560",
+      "size": 14
+    }
+  }
+}

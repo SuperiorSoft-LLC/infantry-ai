@@ -1,0 +1,301 @@
+# RUST-UPD-2: the Rust app's release pipeline (Tauri 2 shell in app/, daemon in rust/, Android via Tauri mobile).
+#
+# A push to main that changes app/src-tauri/tauri.conf.json (a version bump) builds every target, signs the updater
+# artifacts and makes a DRAFT GitHub release rust-v<version> holding the installers, the APK, SHA256SUMS and latest.json.
+# Nothing is published and the update feed is NOT touched: the owner tests the draft, then runs rust-promote.yml.
+# By hand (workflow_dispatch) with channel=nightly it makes a draft prerelease rust-v<next patch>-nightly.<run>.
+#
+# Versions: a feature bumps the MINOR, a bug fix bumps the PATCH; the plan job refuses a version that did not move or
+# went back, or that differs between tauri.conf.json and Cargo.toml (app/src-tauri/scripts/release-tools.mjs).
+#
+# Secrets (the OWNER creates them, app/src-tauri/UPDATER.md "Release secrets"; none is ever in the repo):
+#   TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD   the updater key pair's private half
+#   ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD   the APK release keystore
+# Without them the jobs use THROWAWAY test keys and say so in the release notes: fine for the owner's first test,
+# but nothing signed that way is trusted by a real install.
+name: rust-release
+
+on:
+  push:
+    branches: [main]
+    paths: ['app/src-tauri/tauri.conf.json']
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: stable builds the version in tauri.conf.json; nightly builds the next patch as a prerelease
+        type: choice
+        options: [stable, nightly]
+        default: stable
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-release
+  cancel-in-progress: false
+
+env:
+  CHANNEL: ${{ inputs.channel || 'stable' }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      build: ${{ steps.p.outputs.build }}
+      version: ${{ steps.p.outputs.version }}
+      tag: ${{ steps.p.outputs.tag }}
+      bump: ${{ steps.p.outputs.bump }}
+      prerelease: ${{ steps.p.outputs.prerelease }}
+      last: ${{ steps.p.outputs.last }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Plan (is this a new version? which tag?)
+        id: p
+        shell: bash
+        run: |
+          set -euo pipefail
+          last="$(git tag --list 'rust-v*' --sort=-v:refname | grep -v -- '-nightly' | head -n1 || true)"
+          echo "last=$last" >> "$GITHUB_OUTPUT"
+          # A push that edited tauri.conf.json without moving the version is not a release.
+          if [ "${{ github.event_name }}" = push ]; then
+            v="$(node -p "require('./app/src-tauri/tauri.conf.json').version")"
+            if [ -n "$last" ] && [ "$last" = "rust-v$v" ]; then
+              echo "build=false" >> "$GITHUB_OUTPUT"; echo "version $v is already released; nothing to build"; exit 0
+            fi
+          fi
+          node app/src-tauri/scripts/release-tools.mjs plan app/src-tauri/tauri.conf.json app/src-tauri/Cargo.toml "$last" "$CHANNEL" "$GITHUB_RUN_NUMBER" | tee -a "$GITHUB_OUTPUT"
+          echo "build=true" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults: { run: { shell: bash } }
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: app/package.json }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: pnpm, cache-dependency-path: app/pnpm-lock.yaml }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            rust
+            app/src-tauri
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+      - name: Updater signing key
+        id: key
+        run: bash app/src-tauri/scripts/updater-key.sh "$RUNNER_TEMP/key.json"
+      - name: Build the installer (NSIS) with signed updater artifacts
+        working-directory: app
+        env: { INFANTRY_BUNDLE_PROFILE: release, CARGO_BUILD_JOBS: '4' }
+        run: |
+          set -euo pipefail
+          bash src-tauri/scripts/stage-bundle.sh
+          pnpm tauri build --config src-tauri/bundle-stage/tauri.bundle.conf.json \
+            --config "{\"version\":\"$VERSION\",\"bundle\":{\"createUpdaterArtifacts\":true}}" \
+            --config "$RUNNER_TEMP/key.json"
+      - name: Collect
+        run: |
+          set -euo pipefail
+          mkdir -p dist; d="$(find app/src-tauri/target -type d -path '*bundle/nsis' | head -n1)"
+          cp "$d"/*-setup.exe "dist/InfantryAI-Rust_${VERSION}_x64-setup.exe"
+          cp "$d"/*-setup.exe.sig "dist/InfantryAI-Rust_${VERSION}_x64-setup.exe.sig"
+          echo "${{ steps.key.outputs.signing }}" > dist/SIGNING-windows
+      - uses: actions/upload-artifact@v4
+        with: { name: dist-windows, path: dist/*, if-no-files-found: error }
+
+  android:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: app/package.json }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: pnpm, cache-dependency-path: app/pnpm-lock.yaml }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: android-actions/setup-android@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: aarch64-linux-android }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: app/src-tauri }
+      - name: Android NDK
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+      - name: Build the APK (arm64)
+        working-directory: app
+        env: { CARGO_BUILD_JOBS: '4' }
+        run: pnpm tauri android build --apk --target aarch64 --config "{\"version\":\"$VERSION\"}"
+      - name: Sign the APK (release keystore, else a throwaway test key)
+        run: |
+          set -euo pipefail
+          apk="$(find app/src-tauri/gen/android -name '*.apk' -path '*release*' | head -n1)"
+          bt="$ANDROID_HOME/build-tools/35.0.0"
+          if [ -n "$ANDROID_KEYSTORE_B64" ]; then
+            printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            ks="$RUNNER_TEMP/release.keystore"; pass="$ANDROID_KEYSTORE_PASSWORD"; alias="$ANDROID_KEY_ALIAS"; kpass="$ANDROID_KEY_PASSWORD"; kind=real
+          else
+            ks="$RUNNER_TEMP/test.keystore"; pass=testtest; alias=test; kpass=testtest; kind=test
+            keytool -genkeypair -keystore "$ks" -storepass "$pass" -keypass "$kpass" -alias "$alias" -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=Infantry test" >/dev/null
+            echo "::warning::No ANDROID_KEYSTORE_B64 secret: the APK is signed with a THROWAWAY test key. It cannot update an install made from a different key."
+          fi
+          mkdir -p dist
+          "$bt/zipalign" -f -p 4 "$apk" "$RUNNER_TEMP/aligned.apk"
+          "$bt/apksigner" sign --ks "$ks" --ks-pass "pass:$pass" --ks-key-alias "$alias" --key-pass "pass:$kpass" --out "dist/InfantryAI-Rust_${VERSION}_arm64.apk" "$RUNNER_TEMP/aligned.apk"
+          "$bt/apksigner" verify "dist/InfantryAI-Rust_${VERSION}_arm64.apk"
+          echo "$kind" > dist/SIGNING-android
+      - uses: actions/upload-artifact@v4
+        with: { name: dist-android, path: dist/*, if-no-files-found: error }
+
+  linux:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    continue-on-error: true   # macOS and Linux are best effort until the owner asks for them to gate a release
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev patchelf libssl-dev
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: app/package.json }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: pnpm, cache-dependency-path: app/pnpm-lock.yaml }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            rust
+            app/src-tauri
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+      - name: Updater signing key
+        id: key
+        run: bash app/src-tauri/scripts/updater-key.sh "$RUNNER_TEMP/key.json"
+      - name: Build the AppImage with signed updater artifacts
+        working-directory: app
+        env: { INFANTRY_BUNDLE_PROFILE: release, CARGO_BUILD_JOBS: '4' }
+        run: |
+          set -euo pipefail
+          bash src-tauri/scripts/stage-bundle.sh
+          pnpm tauri build --bundles appimage --config src-tauri/bundle-stage/tauri.bundle.conf.json \
+            --config "{\"version\":\"$VERSION\",\"bundle\":{\"createUpdaterArtifacts\":true}}" \
+            --config "$RUNNER_TEMP/key.json"
+          mkdir -p ../dist; d="$(find src-tauri/target -type d -path '*bundle/appimage' | head -n1)"
+          cp "$d"/*.AppImage "../dist/InfantryAI-Rust_${VERSION}_amd64.AppImage"
+          cp "$d"/*.AppImage.sig "../dist/InfantryAI-Rust_${VERSION}_amd64.AppImage.sig"
+          echo "${{ steps.key.outputs.signing }}" > ../dist/SIGNING-linux
+      - uses: actions/upload-artifact@v4
+        with: { name: dist-linux, path: dist/*, if-no-files-found: error }
+
+  macos:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: macos-14
+    timeout-minutes: 90
+    continue-on-error: true   # unsigned and not notarized until the owner supplies an Apple Developer ID
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: app/package.json }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: pnpm, cache-dependency-path: app/pnpm-lock.yaml }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            rust
+            app/src-tauri
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+      - name: Updater signing key
+        id: key
+        run: bash app/src-tauri/scripts/updater-key.sh "$RUNNER_TEMP/key.json"
+      - name: Build the app bundle with signed updater artifacts
+        working-directory: app
+        env: { INFANTRY_BUNDLE_PROFILE: release, CARGO_BUILD_JOBS: '4' }
+        run: |
+          set -euo pipefail
+          bash src-tauri/scripts/stage-bundle.sh
+          pnpm tauri build --bundles app --config src-tauri/bundle-stage/tauri.bundle.conf.json \
+            --config "{\"version\":\"$VERSION\",\"bundle\":{\"createUpdaterArtifacts\":true}}" \
+            --config "$RUNNER_TEMP/key.json"
+          mkdir -p ../dist; d="$(find src-tauri/target -type d -path '*bundle/macos' | head -n1)"
+          cp "$d"/*.app.tar.gz "../dist/InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz"
+          cp "$d"/*.app.tar.gz.sig "../dist/InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz.sig"
+          echo "${{ steps.key.outputs.signing }}" > ../dist/SIGNING-macos
+      - uses: actions/upload-artifact@v4
+        with: { name: dist-macos, path: dist/*, if-no-files-found: error }
+
+  draft:
+    needs: [plan, windows, android, linux, macos]
+    # Windows and Android gate the release; Linux and macOS are added when they built.
+    if: ${{ !cancelled() && needs.windows.result == 'success' && needs.android.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # creates the DRAFT release; nothing else
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      TAG: ${{ needs.plan.outputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: actions/download-artifact@v4
+        with: { pattern: 'dist-*', path: dist, merge-multiple: true }
+      - name: latest.json, SHA256SUMS and notes
+        run: |
+          set -euo pipefail
+          base="https://github.com/${{ github.repository }}/releases/download/$TAG"
+          last="${{ needs.plan.outputs.last }}"
+          { echo "Infantry AI (Rust) $VERSION"; echo; git log --no-merges --pretty='- %s' ${last:+"$last..HEAD"} | head -n 30; } > notes.txt
+          cd dist
+          entries=("windows-x86_64=InfantryAI-Rust_${VERSION}_x64-setup.exe:InfantryAI-Rust_${VERSION}_x64-setup.exe.sig" "android-aarch64=InfantryAI-Rust_${VERSION}_arm64.apk")
+          [ -f "InfantryAI-Rust_${VERSION}_amd64.AppImage" ] && entries+=("linux-x86_64=InfantryAI-Rust_${VERSION}_amd64.AppImage:InfantryAI-Rust_${VERSION}_amd64.AppImage.sig")
+          [ -f "InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz" ] && entries+=("darwin-aarch64=InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz:InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz.sig")
+          signing="real"; grep -qs test SIGNING-* && signing="TEST keys (not trusted by any installed app)"
+          { echo; echo "Signing: $signing."; echo "DRAFT: not published. Test the build, then run the rust-promote workflow."; } >> ../notes.txt
+          node ../app/src-tauri/scripts/release-tools.mjs feed "$VERSION" ../notes.txt "$base" latest.json "${entries[@]}"
+          rm -f SIGNING-*; sha256sum * > SHA256SUMS
+      - name: Draft release (replaces an earlier draft of the same tag; never a published one)
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "${{ github.repository }}" --json isDraft -q .isDraft 2>/dev/null | grep -q true; then
+            gh release delete "$TAG" --yes --repo "${{ github.repository }}"
+          fi
+          pre=(); [ "${{ needs.plan.outputs.prerelease }}" = true ] && pre=(--prerelease)
+          gh release create "$TAG" dist/* --draft "${pre[@]}" --target "$GITHUB_SHA" --title "Infantry AI (Rust) $VERSION" --notes-file notes.txt --repo "${{ github.repository }}"

@@ -1932,6 +1932,7 @@ dependencies = [
  "infantry-harness",
  "infantry-harness-claude",
  "infantry-runner-local",
+ "semver",
  "serde",
  "serde_json",
  "tauri",

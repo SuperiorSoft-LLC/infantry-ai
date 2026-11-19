@@ -1,0 +1,46 @@
+# RUST-UPD-2: publishes a tested draft from rust-release.yml and points the update feed at it. Manual only.
+#
+# The owner downloads and tests the draft release, then runs this with its tag. It needs the `rust-release` environment,
+# which the owner configures with required reviewers (Settings > Environments), so a run waits for an explicit approval.
+#   1. The draft becomes a published release (a prerelease for a nightly).
+#   2. Its latest.json is copied to the rolling release rust-<channel>, the address installed apps read
+#      (app/src-tauri/src/feed.rs DEFAULT_FEED). Installed apps see the update after this step and not before.
+name: rust-promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The draft release to publish (rust-v0.2.0, or rust-v0.2.1-nightly.31)
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    environment: rust-release
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Publish the release and update the feed
+        run: |
+          set -euo pipefail
+          case "$TAG" in rust-v*) ;; *) echo "not a rust release tag: $TAG" >&2; exit 1;; esac
+          channel=stable; case "$TAG" in *-nightly.*) channel=nightly;; esac
+          gh release view "$TAG" --repo "$REPO" --json isDraft -q .isDraft | grep -q true || { echo "$TAG is not a draft" >&2; exit 1; }
+          mkdir feed; gh release download "$TAG" --repo "$REPO" --pattern latest.json --dir feed
+          if [ "$channel" = nightly ]; then
+            gh release edit "$TAG" --repo "$REPO" --draft=false --prerelease --latest=false
+          else
+            gh release edit "$TAG" --repo "$REPO" --draft=false --prerelease=false --latest=false
+          fi
+          roll="rust-$channel"
+          gh release view "$roll" --repo "$REPO" >/dev/null 2>&1 || gh release create "$roll" --repo "$REPO" --prerelease --latest=false --target "$GITHUB_SHA" \
+            --title "Update feed: $channel" --notes "Rolling release holding the $channel update feed (latest.json). Do not delete."
+          gh release upload "$roll" feed/latest.json --repo "$REPO" --clobber
+          echo "published $TAG; the $channel feed now points at it"
