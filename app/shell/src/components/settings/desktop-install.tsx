@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff, Copy, RefreshCw, Download } from "lucide-react";
 import qrcode from "qrcode-generator";
 import { desktopPairingLink, qrPath, updateNotice, type UpdateInfo } from "@infantry/client";
-import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from "@infantry/ui";
+import { Button, Input, Label, ProgressLine, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from "@infantry/ui";
 import { isMobile, isTauri } from "@/daemon/daemon";
 import { attentionStore } from "@/components/mail/use-mail";
 
@@ -17,6 +17,8 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 }
 
 const desktop = () => isTauri && !isMobile;
+// RUST-UPD-2: the update commands exist on the desktop (Tauri updater plugin) and on Android (android_update.rs); iOS has none.
+const updatable = () => isTauri;
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function Row({ id, title, hint, children }: { id: string; title: string; hint: React.ReactNode; children?: React.ReactNode }) {
@@ -33,7 +35,7 @@ function Row({ id, title, hint, children }: { id: string; title: string; hint: R
 
 /** At start (desktop, `updater.autoCheck` on): one check; a newer build posts an "update available" notice. Never installs. */
 export function startUpdateCheck(): void {
-  if (!desktop()) return;
+  if (!updatable()) return;
   void call<{ autoCheck: boolean }>("update_settings_get")
     .then((s) => (s.autoCheck ? call<UpdateInfo>("update_check") : null))
     .then((u) => {
@@ -61,10 +63,23 @@ export function UpdaterRows() {
   const [found, setFound] = useState<UpdateInfo | null>(null);
   const [busy, setBusy] = useState<"check" | "install" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ state: string; done: number; total: number; message: string } | null>(null);
   const load = () => call<UpdaterView>("update_settings_get").then((x) => (setV(x), setFeed(x.feedUrl)), () => setV(null));
   useEffect(() => {
-    if (desktop()) void load();
+    if (updatable()) void load();
   }, []);
+  // Android: the download runs in the background, so the bar polls its progress. The desktop installs in one call.
+  useEffect(() => {
+    if (busy !== "install" || !isMobile) return;
+    const t = setInterval(() => {
+      void call<{ state: string; done: number; total: number; message: string }>("update_progress").then((p) => {
+        setProgress(p);
+        if (p.state === "error") (setError(p.message), setBusy(null));
+        if (p.state === "done") setBusy(null);
+      }, () => undefined);
+    }, 500);
+    return () => clearInterval(t);
+  }, [busy]);
   if (!v) return null;
   const save = (patch: Record<string, unknown>) =>
     call("update_settings_set", patch).then(load, (e) => setError(message(e)));
@@ -82,6 +97,7 @@ export function UpdaterRows() {
   const install = async () => {
     setBusy("install");
     setError(null);
+    setProgress(null);
     try {
       await call("update_install");
     } catch (e) {
@@ -134,7 +150,20 @@ export function UpdaterRows() {
       <Row
         id="upd-check"
         title={found?.available ? `Version ${found.version} is available` : found ? "You run the newest version" : "Updates"}
-        hint={error ? <span className="text-danger">{error}</span> : found?.available ? (found.notes ?? "The daemon stops, the installer replaces the files, and the app starts again.") : "Check the feed for a newer build."}
+        hint={
+          error ? (
+            <span className="text-danger">{error}</span>
+          ) : busy === "install" && isMobile ? (
+            <div className="w-56 space-y-1">
+              <ProgressLine value={progress && progress.state === "downloading" && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : null} />
+              <div>{progress?.state === "verifying" ? "Checking the download…" : progress?.state === "installing" ? "Confirm the install on the screen that opens." : "Downloading…"}</div>
+            </div>
+          ) : found?.available ? (
+            (found.notes ?? (isMobile ? "The new version downloads here, then Android asks you to confirm the install." : "The daemon stops, the installer replaces the files, and the app starts again."))
+          ) : (
+            "Check the feed for a newer build."
+          )
+        }
       >
         <div className="flex gap-2">
           <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void check()}>
@@ -142,7 +171,7 @@ export function UpdaterRows() {
           </Button>
           {found?.available && (
             <Button size="sm" disabled={busy !== null || !found.canInstall} onClick={() => void install()}>
-              <Download /> {busy === "install" ? "Installing…" : "Install and restart"}
+              <Download /> {busy === "install" ? (isMobile ? "Downloading…" : "Installing…") : isMobile ? "Download and install" : "Install and restart"}
             </Button>
           )}
         </div>

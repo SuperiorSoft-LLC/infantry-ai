@@ -157,14 +157,27 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_barcode_scanner::init());
     #[cfg(target_os = "android")]
-    let builder = builder.plugin(keystore::init());
+    let builder = builder.plugin(keystore::init()).plugin(crate::android_update::init());
+    // RUST-UPD-2: Android adds the update commands (the same names the desktop has); iOS has no updater.
+    #[cfg(target_os = "android")]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        endpoint,
+        remote_save,
+        remote_forget,
+        crate::android_update::update_settings_get,
+        crate::android_update::update_settings_set,
+        crate::android_update::update_check,
+        crate::android_update::update_install,
+        crate::android_update::update_progress
+    ]);
+    #[cfg(not(target_os = "android"))]
+    let builder = builder.invoke_handler(tauri::generate_handler![endpoint, remote_save, remote_forget]);
     builder
         .setup(|app| {
             // The scanner's permission is granted here, not in capabilities/ (the desktop build has no scanner plugin).
             app.add_capability(include_str!("../mobile-capabilities/mobile.json"))?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![endpoint, remote_save, remote_forget])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -98,3 +98,36 @@ Settings > Daemon > "Allow phone connections" (`ui.json` `remoteAccess`) does tw
 
 The token reaches the page only after "Show pairing code" is pressed. The phone app (RUST-MOBILE-1) scans the code or
 reads the link.
+
+## Release pipeline and Android (RUST-UPD-2)
+
+- **Releases:** `.github/workflows/rust-release.yml` runs on a push to `main` that changes `tauri.conf.json` (a version
+  bump), or by hand (`channel` stable or nightly). It builds the Windows NSIS installer, the Android APK (arm64), and
+  best-effort Linux (AppImage) and macOS (app bundle, unsigned) builds, signs the updater artifacts, and makes a DRAFT
+  release `rust-v<version>` with `SHA256SUMS` and `latest.json`. It never publishes and never touches the feed.
+- **Versions:** a feature bumps the minor, a bug fix bumps the patch. Bump `tauri.conf.json` and `Cargo.toml` together;
+  `scripts/release-tools.mjs plan` refuses a version that did not move, went back, or differs between the two. A nightly
+  is the next patch with `-nightly.<run>`.
+- **Publishing:** after testing the draft, run `rust-promote.yml` with its tag. It waits on the `rust-release`
+  environment (required reviewers), publishes the release and copies `latest.json` to the rolling release
+  `rust-stable` or `rust-nightly`, which is the address installed apps read.
+- **Android:** the phone reads the same `latest.json`. Its entry is `android-aarch64` (or `android-universal`) with the
+  APK `url`, `sha256` and `size`, and an empty `signature` (the Tauri desktop reader needs the field). Settings > About
+  shows "update available", "Download and install" downloads the APK with a progress bar, checks the sha256, and hands it
+  to Android's package installer (`REQUEST_INSTALL_PACKAGES`; the first time Android asks to allow installs from the app).
+  The APK must be signed with the same key as the installed app, so the Android release keystore must stay the same.
+  Code: `src/feed.rs` (rules), `src/android_update.rs` (commands), `gen/android/.../UpdatePlugin.kt` (download, install).
+
+### Release secrets (the owner creates them; never in the repo)
+
+```
+pnpm tauri signer generate -w ~/.tauri/infantry-updater.key         # then: TAURI_SIGNING_PRIVATE_KEY = the key file's text
+keytool -genkeypair -v -keystore infantry-release.keystore -alias infantry -keyalg RSA -keysize 2048 -validity 10000
+base64 -w0 infantry-release.keystore                                # ANDROID_KEYSTORE_B64
+```
+
+GitHub repository secrets: `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, `ANDROID_KEYSTORE_B64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Then commit the updater PUBLIC key to
+`plugins.updater.pubkey` in `tauri.conf.json`. Without the secrets the pipeline signs with throwaway test keys and says so
+in the release notes. Create the `rust-release` environment (Settings > Environments) with the owner as required reviewer.
+Test the pipeline's scripts: `node --test src-tauri/scripts`.

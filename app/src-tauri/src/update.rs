@@ -22,39 +22,9 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-/// The feed when the user set none: one `latest.json` per channel on the product's public releases.
-pub const DEFAULT_FEED: &str = "https://github.com/SuperiorSoft-LLC/infantry-ai/releases/download/rust-{channel}/latest.json";
+pub use crate::feed::{feed_for, UpdaterSettings, CHANNELS, DEFAULT_FEED};
 /// tauri.conf.json carries this until the owner generates the signing key pair (UPDATER.md).
 pub const PUBKEY_PLACEHOLDER: &str = "OWNER-SETS-THE-UPDATER-PUBLIC-KEY";
-pub const CHANNELS: [&str; 2] = ["stable", "nightly"];
-
-/// `ui.json` `updater`.
-#[derive(Serialize, Deserialize, Default, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdaterSettings {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub feed_url: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub channel: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub auto_check: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub auto_install: Option<bool>,
-}
-
-impl UpdaterSettings {
-    pub fn channel(&self) -> &str {
-        self.channel.as_deref().filter(|c| CHANNELS.contains(c)).unwrap_or("stable")
-    }
-    pub fn feed_template(&self) -> &str {
-        self.feed_url.as_deref().map(str::trim).filter(|u| !u.is_empty()).unwrap_or(DEFAULT_FEED)
-    }
-}
-
-/// The feed for `channel`: `{channel}` replaced.
-pub fn feed_for(template: &str, channel: &str) -> String {
-    template.replace("{channel}", channel)
-}
 
 /// Whether the build carries a real public key (not the placeholder, not empty).
 pub fn signed(pubkey: Option<&str>) -> bool {
