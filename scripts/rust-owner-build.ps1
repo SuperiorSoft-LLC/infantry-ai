@@ -3,7 +3,7 @@
 # RUST-BUG (4625fff6 window "localhost refused to connect"): the ONE owner-test build of the Rust app + daemon.
 # Builds the UI bundle, builds the shell WITH the custom-protocol feature (embeds shell/dist, never loads devUrl),
 # asserts the exe embeds the UI, then packages <DistRoot>\builds\<stamp>-rust-<sha>\. Never launches anything.
-param([string]$DistRoot = 'C:\Users\antho\agenthq-dist', [string]$SwitchScriptFrom = '')
+param([string]$DistRoot = 'C:\Users\antho\agenthq-dist', [string]$SwitchScriptFrom = '', [switch]$SkipMsi)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'rust-build-env.ps1') -Owner
@@ -40,6 +40,27 @@ foreach ($f in 'infantry-daemon.exe','infantry-migrate.exe','infantry.exe') { Co
 Copy-Item $stagedPlugins $dest -Recurse
 Set-Content (Join-Path $dest 'start.cmd') "@echo off`r`nrem Rust app, default port 18990, own state dir (%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust)`r`nset INFANTRY_PORT=18990`r`nset INFANTRY_PLUGINS_DIR=%~dp0plugins`r`nstart `"`" `"%~dp0InfantryAI-Rust.exe`""
 if ($SwitchScriptFrom) { Copy-Item $SwitchScriptFrom (Join-Path $dest 'switch-to-rust.ps1') }
+
+# RUST-INSTALLER (60bc4e42): also produce the per-user MSI (the installable, auto-updating form) next to the folder build.
+# Release-profile exes are staged by stage-bundle.sh; the MSI is signed with the TEST updater key unless TAURI_SIGNING_PRIVATE_KEY is set.
+if (-not $SkipMsi) {
+    $env:INFANTRY_BUNDLE_PROFILE = 'release'
+    & $gitBash (Join-Path $repo 'app/src-tauri/scripts/stage-bundle.sh'); if ($LASTEXITCODE -ne 0) { throw 'MSI: staging failed' }
+    $cfg = @('--config', 'src-tauri/bundle-stage/tauri.bundle.conf.json')
+    if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+        $kd = Join-Path $env:TEMP "infantry-msi-key-$sha"; New-Item -ItemType Directory -Force $kd | Out-Null
+        Push-Location (Join-Path $repo 'app'); try { pnpm tauri signer generate --ci -p '' -w "$kd	est.key" | Out-Null } finally { Pop-Location }
+        $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content "$kd	est.key" -Raw; $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
+        $ov = Join-Path $kd 'ov.json'; (@{ plugins = @{ updater = @{ pubkey = (Get-Content "$kd	est.key.pub" -Raw).Trim() } } } | ConvertTo-Json -Depth 5) | Set-Content $ov
+        $cfg += @('--config', $ov); Write-Output 'MSI signed with a THROWAWAY test key (no installed app trusts it)'
+    }
+    Push-Location (Join-Path $repo 'app')
+    try { pnpm tauri build --bundles msi @cfg --config '{"bundle":{"createUpdaterArtifacts":true}}'; if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' } } finally { Pop-Location }
+    $msiDir = Join-Path $env:CARGO_TARGET_DIR 'releaseundle\msi'
+    if (-not (Test-Path $msiDir)) { $msiDir = Join-Path $repo 'app\src-tauri	argeteleaseundle\msi' }
+    Copy-Item (Join-Path $msiDir '*.msi*') $dest
+    Write-Output "MSI: $((Get-ChildItem $dest -Filter *.msi | Select-Object -First 1).FullName)"
+}
 $min = [math]::Round(((Get-Date) - $t0).TotalMinutes, 1)
 Set-Content (Join-Path $dest 'README.txt') "Infantry AI (Rust/Tauri) owner-test build $sha. Run start.cmd (port 18990). UI embedded (custom-protocol, checked). Build time: $min min (cached, incremental)."
 Write-Output "BUILD OK $dest ($min min)"

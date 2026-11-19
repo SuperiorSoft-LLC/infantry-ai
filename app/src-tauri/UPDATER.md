@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Installer and updater (RUST-UPD-1)
 
-The Rust desktop app installs with an NSIS installer and updates itself through the Tauri updater plugin. This page
+The Rust desktop app installs with a per-user MSI (WiX; NSIS also builds)  and updates itself through the Tauri updater plugin. This page
 does what the Kotlin `Infantry_Updater` does, the Tauri way.
 
 ## Build the installer
@@ -131,3 +131,18 @@ GitHub repository secrets: `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_K
 `plugins.updater.pubkey` in `tauri.conf.json`. Without the secrets the pipeline signs with throwaway test keys and says so
 in the release notes. Create the `rust-release` environment (Settings > Environments) with the owner as required reviewer.
 Test the pipeline's scripts: `node --test src-tauri/scripts`.
+
+## MSI (RUST-INSTALLER)
+
+- `tauri.conf.json` bundles `msi` and `nsis`; the release workflow and `scripts/rust-owner-build.ps1` build the MSI
+  (`--bundles msi`). The MSI is PER USER: `windows/main.wxs` is Tauri's WiX template with `InstallScope="perUser"` and
+  `INSTALLDIR` = `%LOCALAPPDATA%\Programs\<product>` (set by `SetDirectory`, which keeps WiX validation ICE64 quiet).
+  No admin prompt, so the updater installs silently. `wix.upgradeCode` in `tauri.bundle.conf.json` is fixed: never change it.
+- The updater entry `windows-x86_64` in `latest.json` points at the MSI and its `.msi.sig`. After the MSI runs, the
+  template's `LaunchApplication` restarts the app. State (`%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust`), `ui.json` and the
+  token live outside the install folder, so an upgrade keeps them; `plugins/` is replaced with the new version's.
+- `daemonPort` in `ui.json` pins a second install's sidecar port (the MSI restart inherits no env).
+- Proof: `scripts/rust-update-e2e.ps1 -V0 <dir> -V1 <dir>` installs MSI X as a throwaway product, serves a local feed,
+  drives update_check + update_install, and asserts the app is back on X+1 with settings and state kept. Build the two
+  MSIs with a test overlay (productName `Infantry AI MSITest`, identifier `...msitest`, own upgradeCode, test key). Debug
+  builds accept an `http://127.0.0.1` feed; release builds need https.

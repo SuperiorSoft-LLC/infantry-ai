@@ -84,6 +84,10 @@ pub(crate) struct UiSettings {
     /// `%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust`); unset = `<app data>/daemon`.
     #[serde(default, rename = "daemonStateDir", skip_serializing_if = "Option::is_none")]
     daemon_state_dir: Option<String>,
+    /// Daemon mode: the sidecar's port when INFANTRY_UI_DAEMON_PORT is unset (an installed app relaunched by the MSI
+    /// inherits no env, so a second install, e.g. the update test, pins its port here); unset = 18990.
+    #[serde(default, rename = "daemonPort", skip_serializing_if = "Option::is_none")]
+    daemon_port: Option<u16>,
     /// RUST-UPD-1: the update feed, channel and auto-check / auto-install (update.rs).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) updater: Option<crate::update::UpdaterSettings>,
@@ -278,7 +282,7 @@ pub fn run() {
             let mode = mode(&settings);
             let sidecar: SidecarCell = Arc::new((Mutex::new(None), Condvar::new()));
             let cwd = std::env::current_dir().unwrap_or_else(|_| dir.clone());
-            let port = env("UI_DAEMON_PORT").and_then(|p| p.parse().ok()).unwrap_or(daemon::DEFAULT_PORT);
+            let port = env("UI_DAEMON_PORT").and_then(|p| p.parse().ok()).or(settings.daemon_port).unwrap_or(daemon::DEFAULT_PORT);
             let mut daemon_state = None;
             crate::update::keep_cli_path(settings.add_cli.unwrap_or(false));
             if mode == Mode::Daemon {

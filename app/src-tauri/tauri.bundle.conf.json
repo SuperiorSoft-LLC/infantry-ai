@@ -10,6 +10,11 @@
       "nsis": {
         "installMode": "currentUser",
         "installerHooks": "windows/installer-hooks.nsh"
+      },
+      "wix": {
+        "upgradeCode": "3b0e7f4a-5d2c-4c8e-9a61-7e1f2d9c4b85",
+        "template": "windows/main.wxs",
+        "language": "en-US"
       }
     }
   }

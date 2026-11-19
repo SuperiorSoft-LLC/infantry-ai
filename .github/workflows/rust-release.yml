@@ -96,21 +96,21 @@ jobs:
       - name: Updater signing key
         id: key
         run: bash app/src-tauri/scripts/updater-key.sh "$RUNNER_TEMP/key.json"
-      - name: Build the installer (NSIS) with signed updater artifacts
+      - name: Build the installer (MSI, per user) with signed updater artifacts
         working-directory: app
         env: { INFANTRY_BUNDLE_PROFILE: release, CARGO_BUILD_JOBS: '4' }
         run: |
           set -euo pipefail
           bash src-tauri/scripts/stage-bundle.sh
-          pnpm tauri build --config src-tauri/bundle-stage/tauri.bundle.conf.json \
+          pnpm tauri build --bundles msi --config src-tauri/bundle-stage/tauri.bundle.conf.json \
             --config "{\"version\":\"$VERSION\",\"bundle\":{\"createUpdaterArtifacts\":true}}" \
             --config "$RUNNER_TEMP/key.json"
       - name: Collect
         run: |
           set -euo pipefail
-          mkdir -p dist; d="$(find app/src-tauri/target -type d -path '*bundle/nsis' | head -n1)"
-          cp "$d"/*-setup.exe "dist/InfantryAI-Rust_${VERSION}_x64-setup.exe"
-          cp "$d"/*-setup.exe.sig "dist/InfantryAI-Rust_${VERSION}_x64-setup.exe.sig"
+          mkdir -p dist; d="$(find app/src-tauri/target -type d -path '*bundle/msi' | head -n1)"
+          cp "$d"/*.msi "dist/InfantryAI-Rust_${VERSION}_x64.msi"
+          cp "$d"/*.msi.sig "dist/InfantryAI-Rust_${VERSION}_x64.msi.sig"
           echo "${{ steps.key.outputs.signing }}" > dist/SIGNING-windows
       - uses: actions/upload-artifact@v4
         with: { name: dist-windows, path: dist/*, if-no-files-found: error }
@@ -284,7 +284,7 @@ jobs:
           last="${{ needs.plan.outputs.last }}"
           { echo "Infantry AI (Rust) $VERSION"; echo; git log --no-merges --pretty='- %s' ${last:+"$last..HEAD"} | head -n 30; } > notes.txt
           cd dist
-          entries=("windows-x86_64=InfantryAI-Rust_${VERSION}_x64-setup.exe:InfantryAI-Rust_${VERSION}_x64-setup.exe.sig" "android-aarch64=InfantryAI-Rust_${VERSION}_arm64.apk")
+          entries=("windows-x86_64=InfantryAI-Rust_${VERSION}_x64.msi:InfantryAI-Rust_${VERSION}_x64.msi.sig" "android-aarch64=InfantryAI-Rust_${VERSION}_arm64.apk")
           [ -f "InfantryAI-Rust_${VERSION}_amd64.AppImage" ] && entries+=("linux-x86_64=InfantryAI-Rust_${VERSION}_amd64.AppImage:InfantryAI-Rust_${VERSION}_amd64.AppImage.sig")
           [ -f "InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz" ] && entries+=("darwin-aarch64=InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz:InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz.sig")
           signing="real"; grep -qs test SIGNING-* && signing="TEST keys (not trusted by any installed app)"
