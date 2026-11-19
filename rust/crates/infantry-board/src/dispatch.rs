@@ -1106,10 +1106,7 @@ impl Dispatcher {
         let p = row.project_id.as_deref();
         self.hook(hooks::TICKET_MOVED, &row.id, p, Self::moved(&row, status::IN_PROGRESS, status::DONE, None));
         self.hook(hooks::TICKET_DONE, &row.id, p, json!({ "sessionId": req.session_id, "commentId": comment.id }));
-        if let Some(starter) = &row.started_by {
-            let first = req.summary.lines().next().unwrap_or("");
-            self.env.notify_session(starter, "[AUTOMATIC] ticket done", &format!("{} \"{}\" is done: {}", row.id, take(&row.title, 60), take(first, 200)));
-        }
+        self.report_done(&row, Some(&req.summary));
         let seat = self.leave(&req.session_id, &row);
         if req.stop_worker {
             self.sessions.stop(&req.session_id, "ticket done");
@@ -1158,6 +1155,7 @@ impl Dispatcher {
                     )?;
                     self.hook(hooks::TICKET_MOVED, &row.id, p, Self::moved(&row, status::IN_PROGRESS, status::DONE, None));
                     self.hook(hooks::TICKET_DONE, &row.id, p, json!({ "sessionId": report.session_id, "commentId": c.id }));
+                    self.report_done(&row, Some(&c.body));
                 }
                 (true, None) => self.failure(&row, report, "the worker ended cleanly without a done comment, so the ticket stays in_progress"),
                 (false, _) => self.failure(&row, report, &format!("the worker's run ended {}{}", report.outcome, if detail.is_empty() { String::new() } else { format!(": {detail}") })),
@@ -1170,13 +1168,37 @@ impl Dispatcher {
         Ok(())
     }
 
+    /// AUTO-REPORT-1: setting `board.autoReport` (default on). Off, the starter hears only from the worker.
+    fn auto_report(&self) -> bool {
+        let raw = self.board.db().read(|c| store::setting(c, "board.autoReport")).ok().flatten().unwrap_or_default();
+        !matches!(raw.trim().trim_matches('"').to_ascii_lowercase().as_str(), "false" | "off" | "0")
+    }
+
+    /// One line to the ticket's starter: id, title, the done comment's first line, the branch and the merge target.
+    fn report_done(&self, row: &TicketRow, summary: Option<&str>) {
+        if !self.auto_report() {
+            return;
+        }
+        let Some(starter) = row.started_by.clone().or_else(|| self.starter_of(&row.id)) else { return };
+        let first = summary.and_then(|s| s.lines().find(|l| !l.trim().is_empty())).unwrap_or("");
+        let facts = self.env.branch_facts(row.project_id.as_deref(), row.worktree_branch.as_deref().or(row.branch.as_deref()), row.base.as_deref());
+        let line = format!(
+            "{} \"{}\" is done: {}{}",
+            row.id,
+            take(&row.title, 60),
+            take(first, 200),
+            facts.map(|f| format!(" | {f}")).unwrap_or_default()
+        );
+        self.env.notify_session(&starter, "[AUTOMATIC] ticket done", &line);
+    }
+
     fn failure(&self, row: &TicketRow, report: &DoneReport, what: &str) {
         let body = format!(
             "[AUTOMATIC FAILURE] {what}. Worker {}. Restart it with ticket_start, unassign it, or move it.",
             report.session_id
         );
         let _ = self.comment(&row.id, &body, "issue", CommentAuthor::daemon());
-        if let Some(starter) = row.started_by.clone().or_else(|| self.starter_of(&row.id)) {
+        if let Some(starter) = row.started_by.clone().or_else(|| self.starter_of(&row.id)).filter(|_| self.auto_report()) {
             self.env.notify_session(&starter, "[AUTOMATIC FAILURE] ticket run", &format!("{} \"{}\": {what}", row.id, take(&row.title, 60)));
         }
         self.hook(

@@ -137,6 +137,22 @@ impl BoardEnv for DaemonBoardEnv {
     fn notify_session(&self, session_id: &str, subject: &str, line: &str) -> bool {
         self.daemon.deliver(session_id, &format!("{subject}\n{line}")).is_ok()
     }
+    fn branch_facts(&self, project_id: Option<&str>, branch: Option<&str>, base: Option<&str>) -> Option<String> {
+        let dir = super::project_dir(&self.projects, project_id?)?;
+        let run = |args: &[&str]| std::process::Command::new("git").arg("-C").arg(&dir).args(args).output().ok();
+        let out = |args: &[&str]| run(args).filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).filter(|t| !t.is_empty());
+        let branch = branch?;
+        let short = |r: &str| out(&["rev-parse", "--short=9", "--verify", "--quiet", r]);
+        let tip = short(branch)?;
+        let target = base.map(str::to_string).or_else(|| out(&["rev-parse", "--abbrev-ref", "HEAD"]))?;
+        let merged = run(&["merge-base", "--is-ancestor", branch, &target]).is_some_and(|o| o.status.success());
+        let target_tip = short(&target).unwrap_or_default();
+        Some(if merged {
+            format!("branch {branch} @ {tip} merged into {target} @ {target_tip}")
+        } else {
+            format!("branch {branch} @ {tip} NOT merged into {target} @ {target_tip} yet")
+        })
+    }
     fn lane_cap(&self, project_id: Option<&str>, role: &str) -> u32 {
         project_id.map(|p| self.projects.store.lane_cap_of(p, role)).unwrap_or(1).max(1) as u32
     }

@@ -131,3 +131,44 @@ fn concurrent_starts_do_not_block() {
         assert_eq!(f.board.get(id).unwrap().status, "in_progress");
     }
 }
+
+fn start_by(o: &infantry_board::LocalOrchestrator, id: &str, who: &str) {
+    block_on(o.start(TicketStartRequest { id: id.into(), started_by: Some(who.into()) })).unwrap();
+}
+
+fn notes(f: &Fixture) -> Vec<String> {
+    f.env.notified.lock().unwrap().clone()
+}
+
+/// AUTO-REPORT-1: every way a worker finishes mails the starter one line, and `board.autoReport=false` silences it.
+#[test]
+fn the_starter_is_mailed_on_done_on_a_clean_end_and_on_an_end_without_a_report() {
+    use infantry_orchestrator_api::dto::{CommentAdd, CommentAuthor};
+    use infantry_orchestrator_api::DoneReport;
+    let (f, _l, _d, o) = setup("work-autoreport", StaticEnv { lane_cap: 10, ..kotlin_daemon_env() }, Duration::ZERO);
+    let ids = tickets(&f, 3);
+    for id in &ids {
+        start_by(&o, id, "starter-1");
+    }
+    // 1. the explicit done
+    block_on(o.done(TicketDone { ticket_id: ids[0].clone(), session_id: "s1".into(), summary: "commit abc: did it".into(), stop_worker: true })).unwrap();
+    assert!(notes(&f).iter().any(|n| n.starts_with("starter-1 ") && n.contains(&ids[0]) && n.contains("Work 1") && n.contains("commit abc")), "{:?}", notes(&f));
+    // 2. a clean end after a done comment (the done protocol closes it)
+    let author = CommentAuthor { kind: CommentAuthor::SESSION.into(), session_id: Some("s2".into()), agent_id: None };
+    block_on(o.comment_add(CommentAdd { ticket_id: ids[1].clone(), body: "commit def: finished".into(), kind: Some("done".into()), state: None, author })).unwrap();
+    block_on(o.on_done(DoneReport { ticket_id: ids[1].clone(), session_id: "s2".into(), outcome: "SUCCEEDED".into(), detail: None })).unwrap();
+    assert_eq!(block_on(o.get(ids[1].clone())).unwrap().status, "done");
+    assert!(notes(&f).iter().any(|n| n.contains(&ids[1]) && n.contains("commit def")), "{:?}", notes(&f));
+    // 3. a clean end with no done comment
+    let before = notes(&f).len();
+    block_on(o.on_done(DoneReport { ticket_id: ids[2].clone(), session_id: "s3".into(), outcome: "SUCCEEDED".into(), detail: None })).unwrap();
+    assert!(notes(&f)[before..].iter().any(|n| n.contains(&ids[2]) && n.contains("without a done comment")), "{:?}", notes(&f));
+    // 4. the setting off: no mail
+    f.board.db().write(|c| c.execute("INSERT INTO settings(key, value, updated_at) VALUES ('board.autoReport', 'false', 1)", [])).unwrap();
+    f.env.push_ids(&["ticket-00000004"]);
+    save(&f.orch, r#"{"title":"Work 4","projectId":"p1","agentId":"role:backend"}"#);
+    start_by(&o, "ticket-00000004", "starter-1");
+    let before = notes(&f).len();
+    block_on(o.done(TicketDone { ticket_id: "ticket-00000004".into(), session_id: "s4".into(), summary: "x".into(), stop_worker: true })).unwrap();
+    assert_eq!(notes(&f).len(), before, "autoReport off must stay silent");
+}
