@@ -18,7 +18,24 @@ path = "src/main.rs"
 
 [dependencies]
 infantry-protocol = { path = "../infantry-protocol" }
+infantry-harness = { path = "../infantry-harness" }
+infantry-harness-claude = { path = "../infantry-harness-claude" }
 infantry-runner = { path = "../infantry-runner" }
+infantry-runner-local = { path = "../infantry-runner-local" }
+infantry-core = { path = "../infantry-core" }
+infantry-board = { path = "../infantry-board" }
+infantry-orchestrator-api = { path = "../infantry-orchestrator-api" }
+infantry-projects = { path = "../infantry-projects" }
+infantry-usage = { path = "../infantry-usage" }
+infantry-mail = { path = "../infantry-mail" }
+infantry-scripting = { path = "../infantry-scripting" }
+infantry-plugin-host = { path = "../infantry-plugin-host" }
+infantry-plugin-wit = { path = "../infantry-plugin-wit" }
+infantry-harness-codex = { path = "../infantry-harness-codex" }
+infantry-harness-opencode = { path = "../infantry-harness-opencode" }
+infantry-harness-pi = { path = "../infantry-harness-pi" }
+infantry-knowledge = { path = "../infantry-knowledge" }
+infantry-vault = { path = "../infantry-vault" }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }
 serde = { version = "1", features = ["derive"] }
@@ -26,6 +43,15 @@ serde_json = { version = "1", features = ["preserve_order"] }
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 sha2 = "0.10"
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "handshake"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+ureq = { version = "2", default-features = false, features = ["native-tls"] }
+native-tls = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_SystemInformation", "Win32_System_ProcessStatus", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 infantry-conformance = { path = "../conformance" }
+tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }

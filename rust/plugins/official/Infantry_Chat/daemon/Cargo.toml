@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-chat-daemon"
+version = "1.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Infantry_Chat daemon half (WASM component)"
+publish = false
+
+
+[lib]
+name = "infantry_chat_daemon"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+infantry-plugin-sdk = { path = "../../../../crates/infantry-plugin-sdk" }
+serde_json = "1"
+base64 = "0.22"
+sha2 = "0.10"
+
+
+[dev-dependencies]
+infantry-plugin-host = { path = "../../../../crates/infantry-plugin-host" }
+infantry-plugin-wit = { path = "../../../../crates/infantry-plugin-wit" }

@@ -7,10 +7,12 @@
 //!   (`pty-screen`) and the runner answers the terminal's cursor-position queries itself;
 //! - every process lives in its own Job Object (a process group elsewhere): [`KillScope::Tree`] kills every descendant, and
 //!   the whole tree dies with the runner;
-//! - `file-tail` on `infantry_runner::tail::AppendedLines`; `hook-channel` on `infantry_runner::hooks::HookServer`.
+//! - `file-tail` on `infantry_runner::tail::AppendedLines`; `hook-channel` on `infantry_runner::hooks::HookServer`;
+//! - `loopback-http` on a small HTTP/1.1 client ([`http`]); `staged-files` in the scratch folder's `staged/`.
 
 #[cfg(windows)]
 mod conpty;
+mod http;
 mod hub;
 mod spawn;
 
@@ -20,7 +22,7 @@ use infantry_runner::job::Job;
 use infantry_runner::screen::Screen;
 use infantry_runner::tail::AppendedLines;
 use infantry_runner_api::{
-    HookCall, HookEndpoint, KillScope, Pong, ProcEvent, ProcHandle, ProcId, ProcessSpec, Runner, RunnerError, RunnerFuture,
+    HookCall, HookEndpoint, HttpEvent, HttpRequest, KillScope, Pong, ProcEvent, ProcHandle, ProcId, ProcessSpec, Runner, RunnerError, RunnerFuture,
     ScreenSnapshot, Size, TailFrom, TailSpec,
 };
 use std::collections::HashMap;
@@ -386,5 +388,28 @@ impl Runner for LocalRunner {
                 LocalRunner::kill_now(&p, KillScope::Tree);
             }
         }))
+    }
+
+    fn http(&self, req: HttpRequest) -> RunnerFuture<'_, mpsc::UnboundedReceiver<HttpEvent>> {
+        Box::pin(async move { http::start(req) })
+    }
+
+    fn stage_file<'a>(&'a self, name: &'a str, contents: &'a [u8]) -> RunnerFuture<'a, String> {
+        Box::pin(async move {
+            let plain = !name.is_empty()
+                && name != "."
+                && name != ".."
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'));
+            if !plain {
+                return Err(RunnerError::Unsupported(format!("stage_file: {name:?} is not a plain file name")));
+            }
+            let dir = self.scratch.join("staged");
+            std::fs::create_dir_all(&dir)?;
+            let file = dir.join(name);
+            if std::fs::read(&file).ok().as_deref() != Some(contents) {
+                std::fs::write(&file, contents)?;
+            }
+            Ok(file.to_string_lossy().into_owned())
+        })
     }
 }

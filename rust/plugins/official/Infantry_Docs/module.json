@@ -1,0 +1,58 @@
+{
+  "name": "Infantry_Docs",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "description": "In-app docs lookup: the user-facing wiki pages ship inside the component and an agent reads one on demand (docs.list, docs.show). Daemon half only.",
+  "tier": "official",
+  "sequence": [],
+  "daemon": {
+    "component": "daemon.component",
+    "apiAtLeast": "0.1.0",
+    "needs": [],
+    "tools": [
+      {
+        "name": "docs_list",
+        "action": "docs.read",
+        "kind": "read",
+        "description": "The bundled docs pages: name and one-line title (capability docs.list)."
+      },
+      {
+        "name": "docs_show",
+        "action": "docs.show",
+        "kind": "read",
+        "description": "One docs page text by name (capability docs.show): args page."
+      }
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "docs.list",
+      "description": "The bundled docs pages: name and one-line title. docs.show gives the text.",
+      "runs": "daemon",
+      "kind": "read",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "id": "docs.show",
+      "description": "One docs page text (for example usage). Unknown page = an error naming the available ones.",
+      "runs": "daemon",
+      "kind": "read",
+      "params": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "page"
+        ]
+      }
+    }
+  ]
+}

@@ -12,9 +12,8 @@
 //! - [`session`]: one running harness session (the PTY, its driver, the tick loop);
 //! - [`stream`]: stream-json records as structured events.
 //!
-//! [`claude`] is ONE harness implementation; nothing outside it names a vendor.
+//! No harness lives here: agent CLIs are L3 crates (`infantry-harness-claude`, RUST-HARN-CLAUDE-1).
 
-pub mod claude;
 pub mod harness;
 pub mod hooks;
 pub mod job;

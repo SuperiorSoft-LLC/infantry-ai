@@ -1,0 +1,4 @@
+{
+  "request": "{\"type\":\"runner_link_health\",\"data\":\"{}\",\"requestId\":\"<request-id>\"}",
+  "answer": "{\"type\":\"runner_link_reply\",\"data\":\"{\\\"state\\\":\\\"up\\\",\\\"running\\\":0,\\\"freeSlots\\\":2147483647,\\\"load\\\":null}\",\"requestId\":\"<request-id>\"}"
+}

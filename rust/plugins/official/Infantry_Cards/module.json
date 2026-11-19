@@ -1,0 +1,127 @@
+{
+  "name": "Infantry_Cards",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "description": "Chat card directory (cards.list, cards.show) and the safe card image proxy (card_image frame). Daemon half only.",
+  "tier": "official",
+  "sequence": [],
+  "daemon": {
+    "component": "daemon.component",
+    "apiAtLeast": "0.1.0",
+    "needs": [
+      "frames"
+    ],
+    "tools": [
+      {
+        "name": "cards_list",
+        "action": "cards.read",
+        "kind": "read",
+        "description": "The chat card types installed plugins declare: type, module, summary (capability cards.list)."
+      },
+      {
+        "name": "cards_show",
+        "action": "cards.show",
+        "kind": "read",
+        "description": "The spec an agent needs to write one card type (capability cards.show): args type."
+      }
+    ],
+    "wants": [
+      "http",
+      "settings"
+    ],
+    "frames": [
+      {
+        "type": "card_image",
+        "action": "cards.read",
+        "kind": "read"
+      }
+    ],
+    "config": [
+      {
+        "node": "infantry.cards.images",
+        "group": "Chat cards",
+        "title": "Card images (thumbnails)",
+        "tab": "Plugins",
+        "order": 960,
+        "keywords": [
+          "card",
+          "image",
+          "thumbnail",
+          "news",
+          "proxy"
+        ],
+        "fields": [
+          {
+            "key": "cards.images.enabled",
+            "type": "checkbox",
+            "label": "Show card thumbnails (the daemon fetches them only from hosts the card type declares)",
+            "default": true,
+            "scope": "daemon",
+            "order": 1
+          },
+          {
+            "key": "cards.images.allow",
+            "type": "text",
+            "label": "Extra image hosts for every card type (comma separated; example.com exact, *.example.com any subdomain)",
+            "default": "",
+            "scope": "daemon",
+            "order": 2
+          },
+          {
+            "key": "limits.cards.imageBytes",
+            "type": "number",
+            "label": "Largest card image fetched (bytes)",
+            "default": 2097152,
+            "min": 1024,
+            "max": 20971520,
+            "step": 1024,
+            "scope": "daemon",
+            "order": 3
+          },
+          {
+            "key": "cards.specMaxBytes",
+            "type": "number",
+            "label": "Largest spec returned by cards.show (bytes)",
+            "default": 16384,
+            "min": 256,
+            "max": 1048576,
+            "step": 256,
+            "scope": "daemon",
+            "order": 4
+          }
+        ]
+      }
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "cards.list",
+      "description": "Every installed chat card type, one line each.",
+      "runs": "daemon",
+      "kind": "read",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "id": "cards.show",
+      "description": "The spec of one card type.",
+      "runs": "daemon",
+      "kind": "read",
+      "params": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      }
+    }
+  ]
+}

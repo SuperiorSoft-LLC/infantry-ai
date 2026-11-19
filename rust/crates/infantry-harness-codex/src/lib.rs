@@ -49,6 +49,7 @@ impl CodexHarness {
             a.push("-c".into());
             a.push(format!("model_reasoning_effort={}", toml_str(e)));
         }
+        a.extend(mcp_args(&req.mcp));
         a.push("-".into()); // the prompt comes on stdin
         a
     }
@@ -56,6 +57,22 @@ impl CodexHarness {
     fn codex_home(probe: &dyn Probe) -> Option<PathBuf> {
         probe.env("CODEX_HOME").map(PathBuf::from).or_else(|| probe.home().map(|h| h.join(".codex")))
     }
+}
+
+/// The plan's delivered stdio servers as codex `-c mcp_servers.<name>.{command,args,env}` overrides.
+pub fn mcp_args(plan: &infantry_harness::McpPlan) -> Vec<String> {
+    let mut a = Vec::new();
+    for s in plan.delivered() {
+        let infantry_harness::McpTransport::Stdio { command, env, .. } = &s.transport else { continue };
+        let Some((program, args)) = command.split_first() else { continue };
+        let key: String = s.name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect();
+        let list = args.iter().map(|x| toml_str(x)).collect::<Vec<_>>().join(",");
+        let table = env.iter().map(|(k, v)| format!("{}={}", toml_str(k), toml_str(v))).collect::<Vec<_>>().join(",");
+        a.extend(["-c".into(), format!("mcp_servers.{key}.command={}", toml_str(program))]);
+        a.extend(["-c".into(), format!("mcp_servers.{key}.args=[{list}]")]);
+        a.extend(["-c".into(), format!("mcp_servers.{key}.env={{{table}}}")]);
+    }
+    a
 }
 
 /// The flags for an approval mode. `codex exec` cannot put a question to the host, so [`ApprovalMode::Ask`] runs as

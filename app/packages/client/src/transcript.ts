@@ -131,3 +131,20 @@ export function applyFrames(items: readonly TranscriptItem[], frames: readonly E
 function joinDelta(a: string, b: string): string {
   return a + b;
 }
+
+/** The text a transcript search reads from one item. */
+function searchText(item: TranscriptItem): string {
+  const o = item as unknown as Record<string, unknown>;
+  return ["text", "from", "tool", "activity", "path", "outcome"].map((k) => (typeof o[k] === "string" ? (o[k] as string) : "")).join("\n");
+}
+
+/** Indices of [items] whose text holds [query] (case-insensitive); none for a blank query. */
+export function searchItems(items: readonly TranscriptItem[], query: string): number[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const out: number[] = [];
+  items.forEach((it, i) => {
+    if (searchText(it).toLowerCase().includes(q)) out.push(i);
+  });
+  return out;
+}

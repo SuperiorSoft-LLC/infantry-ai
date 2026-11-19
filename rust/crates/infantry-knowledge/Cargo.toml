@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-knowledge"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "Infantry AI roles, traits, skills, layered skills, prompt library and avatars (L1 platform), plus the start-brief sections they feed"
+publish = false
+build = "build.rs"
+
+[dependencies]
+infantry-protocol = { path = "../infantry-protocol" }
+infantry-core = { path = "../infantry-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+rusqlite = { version = "0.32", features = ["bundled"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+
+[dev-dependencies]
+tempfile = "3"

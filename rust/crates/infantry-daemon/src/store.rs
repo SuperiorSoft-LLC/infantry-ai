@@ -37,8 +37,14 @@ impl JsonSessionStore {
         let parsed = serde_json::from_str::<Value>(&text).map_err(|e| e.to_string()).and_then(|v| {
             let list = v.get("sessions").cloned().unwrap_or(Value::Array(vec![]));
             let arr = list.as_array().cloned().unwrap_or_default();
-            // One bad record does not cost the others.
-            Ok(arr.into_iter().filter_map(|r| serde_json::from_value::<SessionRecord>(r).ok()).collect::<Vec<_>>())
+            // One bad record does not cost the others, but it is said out loud.
+            Ok(arr
+                .into_iter()
+                .filter_map(|r| {
+                    let id = r["id"].as_str().unwrap_or("?").to_string();
+                    serde_json::from_value::<SessionRecord>(r).map_err(|e| eprintln!("[infantry] session {id} not loaded: {e}")).ok()
+                })
+                .collect::<Vec<_>>())
         });
         parsed.map_err(|e| {
             self.read_only = true;

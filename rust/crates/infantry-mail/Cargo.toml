@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-mail"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "Infantry AI mail and notifications (L1 platform): mailbox, router, bg-job notifier, /mail/* HTTP, notification bus, attention, owner questions, pending prompts, approval rules, notify sounds"
+publish = false
+
+[dependencies]
+infantry-protocol = { path = "../infantry-protocol" }
+infantry-core = { path = "../infantry-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+regex = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "json", "query"] }
+
+[dev-dependencies]
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

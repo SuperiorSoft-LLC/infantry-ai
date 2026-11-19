@@ -1,17 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // One agent in the sidebar. Selected = amber border + scrolling stripes (SelectedStripes); a busy PM card is striped (SelectedStripes.kt).
-import { memo } from "react";
+import { memo, useState } from "react";
 import { cn } from "@infantry/ui";
 import type { Agent } from "@/mock/types";
 import { AgentAvatar } from "./agent-avatar";
+import { AgentMenu } from "./agent-menu";
 import { ProgressLine, SelectedStripes } from "@infantry/ui";
+
+const chipTone: Record<Agent["status"], string> = {
+  working: "border-info/50 text-info",
+  "needs-input": "border-warn/60 text-warn",
+  error: "border-danger/60 text-danger",
+  done: "border-ok/50 text-ok",
+  review: "border-warn/40 text-warn",
+  idle: "border-border text-muted-foreground",
+};
 
 /** Memoised: a card re-renders only when its own session (or the selection) changed. */
 export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: { agent: Agent; selected: boolean; onSelect: (id: string) => void }) {
   const striped = agent.roleId === "pm" && agent.status === "working";
   const compact = agent.group === "quiet";
+  const [menu, setMenu] = useState(false);
   return (
+    <div className="group/card relative" onContextMenu={(e) => (e.preventDefault(), setMenu(true))}>
     <button
       type="button"
       onClick={() => onSelect(agent.id)}
@@ -26,7 +38,7 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
     >
       <SelectedStripes active={selected} />
       <div className="relative flex items-start gap-3">
-        <AgentAvatar agent={agent} size="md" className="mt-4" />
+        <AgentAvatar agent={agent} size="lg" live={!compact} className="mt-3" />
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-baseline justify-between gap-2">
             <span className="truncate text-[15px] font-semibold">{agent.name}</span>
@@ -39,12 +51,20 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
             </div>
           )}
 
-          {!compact && !striped && <div className="truncate text-xs text-muted-foreground">{agent.statusLine}</div>}
+          {agent.heldBy ? (
+            <div className="truncate text-xs font-medium text-warn" title="Running in the other app: resume it there, or stop it there first">
+              {agent.statusLine}
+            </div>
+          ) : (
+            !compact && !striped && <div className="truncate text-xs text-muted-foreground">{agent.statusLine}</div>
+          )}
           {agent.progress !== undefined && !compact && <ProgressLine value={agent.progress} className="my-1.5" />}
 
           <div className="flex min-w-0 items-center gap-2 text-xs">
             <span className={cn("shrink-0 font-medium", agent.roleId === "pm" ? "text-warn" : "text-info")}>{agent.roleId}</span>
+            <span className={cn("shrink-0 rounded-full border px-1.5 text-[10px] leading-4", chipTone[agent.status])}>{agent.status}</span>
             <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{agent.sessionId}</span>
+            {agent.projectName && <span className="shrink-0 truncate text-foreground/80">{agent.projectName}</span>}
             <span className="truncate text-muted-foreground">{agent.lastLine}</span>
           </div>
 
@@ -57,5 +77,7 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
         </div>
       </div>
     </button>
+    <AgentMenu sessionId={agent.id} open={menu} onOpenChange={setMenu} />
+    </div>
   );
 });

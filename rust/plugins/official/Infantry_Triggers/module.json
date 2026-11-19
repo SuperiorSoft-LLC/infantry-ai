@@ -1,0 +1,115 @@
+{
+  "name": "Infantry_Triggers",
+  "version": "1.2.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "description": "Triggers that start work on an event.",
+  "tier": "official",
+  "sequence": [],
+  "capabilities": [
+    {
+      "id": "triggers.list",
+      "description": "List the triggers (optionally one kind or one project). Answers an array of triggers as the Triggers tab shows them.",
+      "runs": "daemon",
+      "action": "triggers.read",
+      "kind": "read",
+      "params": {
+        "type": "object",
+        "properties": {
+          "kind": { "type": "string", "description": "Only this kind: manual, schedule, ship, webhook or at." },
+          "projectId": { "type": "string", "description": "Only triggers of this project." }
+        }
+      },
+      "result": { "type": "array" }
+    },
+    {
+      "id": "triggers.save",
+      "description": "Create (no id) or edit a trigger: {id?, name, kind (manual|schedule|ship|webhook|at), enabled?, action {kind: start_next|prompt, agentId?, prompt?}, intervalMs? (schedule), fireAt? (at: epoch ms; fires once, then disabled), deleteAfterFire? (at: deleted after it fired), webhookSecret? (webhook), projectId? (prompt), coalesceMs?, ceilingRuns?, ceilingWindowMs?, ref? (an opaque key)}. owner is never set by a caller. Answers the saved trigger.",
+      "runs": "daemon",
+      "action": "triggers.save",
+      "kind": "write",
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "kind": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "action": { "type": "object" },
+          "intervalMs": { "type": "integer" },
+          "fireAt": { "type": "integer" },
+          "deleteAfterFire": { "type": "boolean" },
+          "ref": { "type": "string" },
+          "webhookSecret": { "type": "string" },
+          "projectId": { "type": "string" },
+          "coalesceMs": { "type": "integer" },
+          "ceilingRuns": { "type": "integer" },
+          "ceilingWindowMs": { "type": "integer" }
+        },
+        "required": ["name"]
+      },
+      "result": { "type": "object" }
+    },
+    {
+      "id": "triggers.delete",
+      "description": "Delete a trigger and its event log: {id}.",
+      "runs": "daemon",
+      "action": "triggers.delete",
+      "kind": "destructive",
+      "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] },
+      "result": { "type": "object", "properties": { "deleted": { "type": "string" } } }
+    },
+    {
+      "id": "triggers.fire",
+      "description": "Feed one manual event to a trigger now: {id}. Coalescing, the ceiling and a trip apply as for any event. Answers the trigger after it.",
+      "runs": "daemon",
+      "action": "triggers.fire",
+      "kind": "write",
+      "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] },
+      "result": { "type": "object" }
+    }
+  ],
+  "daemon": {
+    "component": "daemon.component",
+    "apiAtLeast": "0.1.0",
+    "side": "orchestrator",
+    "needs": ["storage", "frames", "events"],
+    "wants": ["settings"],
+    "config": [
+      {
+        "node": "infantry.triggers.daemon", "group": "Triggers", "title": "Triggers: one-shots", "tab": "Plugins", "order": 940,
+        "applies": "Applies to: one-shot (at) triggers whose time passed while the daemon was down.",
+        "keywords": ["trigger", "one-shot", "at", "late", "missed", "reminder"],
+        "fields": [
+          { "key": "triggers.at.maxLateMs", "type": "number", "label": "A one-shot found this many milliseconds late still fires; later is recorded missed", "default": 900000, "min": 0, "max": 604800000, "step": 60000, "scope": "daemon", "order": 1 }
+        ]
+      }
+    ],
+    "storage": { "adopt": ["triggers", "trigger_events", "trigger_webhooks"] },
+    "hooks": ["status"],
+    "tools": [
+      { "name": "triggers_list", "action": "triggers.read", "kind": "read", "description": "List the triggers: {kind?, projectId?} -> an array of triggers (capability triggers.list)." },
+      { "name": "triggers_save", "action": "triggers.save", "kind": "write", "description": "Create (no id) or edit a trigger (capability triggers.save); answers the saved trigger." },
+      { "name": "triggers_delete", "action": "triggers.delete", "kind": "destructive", "description": "Delete a trigger and its event log: {id} (capability triggers.delete)." },
+      { "name": "triggers_fire", "action": "triggers.fire", "kind": "write", "description": "Feed one manual event to a trigger now: {id} (capability triggers.fire); answers the trigger after it." }
+    ],
+    "frames": [
+      { "type": "trigger_save", "action": "triggers.save", "kind": "write" },
+      { "type": "trigger_list", "action": "triggers.read", "kind": "read" },
+      { "type": "trigger_fire", "action": "triggers.fire", "kind": "write" },
+      { "type": "trigger_arm", "action": "triggers.fire", "kind": "write" },
+      { "type": "trigger_disable", "action": "triggers.fire", "kind": "write" },
+      { "type": "trigger_delete", "action": "triggers.delete", "kind": "destructive" },
+      { "type": "trigger_events", "action": "triggers.read", "kind": "read" }
+    ],
+    "routes": ["POST /hooks/{id}"],
+    "publicRoutes": ["POST /hooks/{id}"]
+  },
+  "tabs": [{ "id": "infantry.triggers", "container": "center" }],
+  "actions": [
+    { "id": "triggers.save", "label": "New or edit a trigger", "kind": "write", "frames": ["trigger_save"] },
+    { "id": "triggers.fire", "label": "Fire, arm or disable a trigger", "kind": "write", "frames": ["trigger_fire", "trigger_arm", "trigger_disable"] },
+    { "id": "triggers.delete", "label": "Delete a trigger", "kind": "destructive", "frames": ["trigger_delete"] }
+  ]
+}

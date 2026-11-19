@@ -5,6 +5,8 @@
 //            `connect` = INFANTRY_URL / INFANTRY_PORT (+ token file, like the CLI); `embedded` = the in-app runner
 //            (INFANTRY_UI_LOCAL=1 or the Settings > Daemon switch). The socket is opened from Rust.
 //   Browser: `?daemon=ws://…`, else VITE_INFANTRY_URL, else same-origin `/ws` (the daemon, or the dev proxy).
+//   Phone:   `remote` (RUST-MOBILE-1): no daemon runs on the phone; the paired remote daemon's URL, its token from the
+//            keystore. Unpaired (no URL yet), the app shows the connect screen instead of the shell.
 //   Stress:  INFANTRY_UI_STRESS=1 (Tauri) or `?stress=1` (browser): fake sessions, no daemon.
 import { useStore } from "zustand";
 import { browserTransport, createDaemonStore, startStress, type DaemonActions, type DaemonState, type DaemonStore, type StressOptions } from "@infantry/client";
@@ -21,8 +23,12 @@ interface Endpoint {
   perf?: string | null;
   /** Tauri: `embedded` | `daemon` | `connect`. */
   mode?: string;
-  /** Daemon mode: why the sidecar did not start. */
+  /** Daemon mode: why the sidecar did not start; remote mode: why the token could not be read. */
   error?: string | null;
+  /** Daemon mode: the running sidecar is older than the daemon binary on disk (restart it). */
+  note?: string | null;
+  /** Remote mode: the paired daemon's display name. */
+  name?: string | null;
 }
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -37,6 +43,14 @@ export let perfScenario: string | null = null;
 export let runnerMode = "browser";
 /** Daemon mode: why the sidecar did not start (null = it is up). */
 export let daemonError: string | null = null;
+/** Daemon mode: a plain warning that the running daemon is stale (it may refuse newer frames). */
+export let daemonNote: string | null = null;
+/** A phone build (Tauri mobile): it connects to a remote daemon and runs none. */
+export let isMobile = false;
+/** A phone that is not paired with a daemon yet: main.tsx shows the connect screen. */
+export let needsPairing = false;
+/** The paired daemon: its socket URL and display name (remote mode). */
+export let remote: { url: string; name: string | null } | null = null;
 
 async function resolveEndpoint(): Promise<Endpoint> {
   const q = new URLSearchParams(location.search);
@@ -65,9 +79,15 @@ export async function initDaemon(): Promise<DaemonStore> {
   perfScenario = e.perf ?? null;
   runnerMode = e.mode ?? (isTauri ? (localMode ? "embedded" : "connect") : "browser");
   daemonError = e.error ?? null;
-  if (daemonError) console.error(`[infantry] daemon mode: ${daemonError}`);
+  daemonNote = e.note ?? null;
+  if (daemonNote) console.warn(`[infantry] ${daemonNote}`);
+  if (daemonError) console.error(`[infantry] ${runnerMode} mode: ${daemonError}`);
+  isMobile = runnerMode === "remote";
+  needsPairing = isMobile && !e.url;
+  remote = isMobile && e.url ? { url: e.url, name: e.name ?? null } : null;
   const transport = localMode ? localTransport() : isTauri ? tauriTransport(e.url, e.token) : browserTransport(e.url, e.token);
-  store = createDaemonStore({ url: localMode ? "embedded runner" : runnerMode === "daemon" ? `${e.url} (sidecar)` : e.url, transport, offline: e.stress });
+  store = createDaemonStore({ url: localMode ? "embedded runner" : runnerMode === "daemon" ? `${e.url} (sidecar)` : e.url || "not paired", transport, offline: e.stress || needsPairing });
+  if (needsPairing) return store;
   if (e.stress) {
     const opts = Object.fromEntries(Object.entries(stressOptions()).filter(([, v]) => v !== undefined));
     startStress(store, opts);
