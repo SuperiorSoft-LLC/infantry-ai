@@ -163,6 +163,30 @@
   }
  },
  {
+  "name": "infantry_usage_override",
+  "readOnly": false,
+  "description": "Override the usage pacing allowance for a meter (owner and pm roles; setting usage.overrideRoles). value = a ticket-worker count, 'none' (no limit) or 'clear' (the pacing rule decides again). The override lasts hours hours, default until the meter resets (else 2h).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "meter": {
+     "type": "string",
+     "description": "The meter to override (claude, codex, opencode-go, ...)"
+    },
+    "value": {
+     "type": "string",
+     "description": "A worker count, 'none' or 'clear'"
+    },
+    "hours": {
+     "type": "number",
+     "description": "How long the override lasts, in hours (default: until the meter resets)"
+    }
+   },
+   "required": ["meter", "value"],
+   "additionalProperties": false
+  }
+ },
+ {
   "name": "infantry_pace",
   "readOnly": true,
   "description": "Read the pacing history the daemon recorded from the plan meters: per provider window the percent used, the pace delta, the projected landing at reset, the momentum and the forecast to reset.",

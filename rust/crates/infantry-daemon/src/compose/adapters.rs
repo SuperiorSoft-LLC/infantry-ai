@@ -29,6 +29,14 @@ pub fn ended(r: &SessionRecord) -> bool {
     matches!(r.state, SessionState::Exited | SessionState::Failed)
 }
 
+/// The usage pacer's "running workers": a session with a ticket that is live AND working (starting or in a turn).
+/// Idle, waiting-for-input, exited sessions and the PM do not hold a worker slot.
+pub fn counts_as_worker(r: &SessionRecord) -> bool {
+    r.ticket_id.is_some()
+        && matches!(r.state, SessionState::Starting | SessionState::Busy)
+        && !r.role.as_deref().map(|x| x.trim().eq_ignore_ascii_case("pm")).unwrap_or(false)
+}
+
 /// ROUTING-1: a rule list is accepted when every rule names a harness this daemon runs.
 pub fn validate_routing(daemon: &Daemon, rules: Vec<RoutingRule>) -> Result<Vec<RoutingRule>, String> {
     let have = daemon.providers();
@@ -452,5 +460,32 @@ impl infantry_knowledge::DaemonPorts for KnowledgePorts {
     }
     fn live_role_ids(&self) -> std::collections::HashSet<String> {
         self.daemon.records().into_iter().filter(|r| !ended(r)).filter_map(|r| r.role).map(|r| r.trim().to_ascii_lowercase()).collect()
+    }
+}
+
+#[cfg(test)]
+mod worker_count_tests {
+    use super::*;
+
+    fn rec(state: &str, ticket: Option<&str>, role: Option<&str>) -> SessionRecord {
+        let mut v = serde_json::json!({ "id": "s1", "provider": "claude", "workingDir": ".", "spawnedAt": 0, "lastHeartbeat": 0, "state": state });
+        if let Some(t) = ticket {
+            v["ticketId"] = t.into();
+        }
+        if let Some(r) = role {
+            v["role"] = r.into();
+        }
+        serde_json::from_value(v).expect("record")
+    }
+
+    #[test]
+    fn only_a_working_ticket_session_counts() {
+        assert!(counts_as_worker(&rec("BUSY", Some("t1"), Some("backend"))));
+        assert!(counts_as_worker(&rec("STARTING", Some("t1"), None)));
+        assert!(!counts_as_worker(&rec("IDLE", Some("t1"), Some("backend"))), "idle");
+        assert!(!counts_as_worker(&rec("WAITING_INPUT", Some("t1"), None)), "waiting");
+        assert!(!counts_as_worker(&rec("EXITED", Some("t1"), None)), "exited");
+        assert!(!counts_as_worker(&rec("BUSY", None, Some("backend"))), "no ticket");
+        assert!(!counts_as_worker(&rec("BUSY", Some("t1"), Some("PM"))), "the pm");
     }
 }

@@ -166,7 +166,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         let meters: infantry_usage::service::WorkerMeters = Arc::new(move || {
             d.records()
                 .iter()
-                .filter(|r| r.ticket_id.is_some() && !adapters::ended(r))
+                .filter(|r| adapters::counts_as_worker(r))
                 .map(|r| infantry_usage::pacing::meter_for(&r.provider, r.model.as_deref()))
                 .collect()
         });

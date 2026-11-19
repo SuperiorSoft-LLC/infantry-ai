@@ -404,6 +404,17 @@ impl AgentTools {
                 }
                 Ok(out.join("\n"))
             }
+            "infantry_usage_override" => (|| {
+                let meter = s(a, "meter").ok_or("meter is required")?;
+                let value = s(a, "value").ok_or("value is required (a worker count, none or clear)")?;
+                let hours = match a.get("hours") {
+                    Some(Value::Number(x)) => x.as_f64(),
+                    Some(Value::String(x)) => x.trim().parse().ok(),
+                    _ => None,
+                };
+                let role = if inv.owner || inv.session_id.is_none() { "owner".to_string() } else { inv.role.clone().unwrap_or_default() };
+                self.usage.override_allowance(&meter, &value, hours, &role)
+            })(),
             "infantry_pace" => Ok(serde_json::to_string(&self.usage.pace_report(&Value::Object(a.clone()).to_string())).unwrap_or_default()),
             _ => return None,
         };
@@ -411,5 +422,17 @@ impl AgentTools {
             Ok(t) => ToolResult::ok(t),
             Err(e) => ToolResult::err(format!("{name} refused: {e}")),
         })
+    }
+}
+
+#[cfg(test)]
+mod catalog_guard_tests {
+    use super::*;
+
+    #[test]
+    fn usage_override_is_declared_and_writable() {
+        let t = agent_catalog().into_iter().find(|t| t.name == "infantry_usage_override").expect("infantry_usage_override must be declared");
+        assert!(!t.read_only);
+        assert_eq!(t.input_schema["required"], json!(["meter", "value"]));
     }
 }
