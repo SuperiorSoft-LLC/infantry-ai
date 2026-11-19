@@ -253,15 +253,6 @@ impl Daemon {
 
     /// `session_swap`: moves one session (no agent's) onto another provider / model / effort / role, in place.
     pub fn swap(self: &Arc<Self>, req: SessionSwap) -> Result<SessionSwapped, String> {
-        self.swap_session(req, false)
-    }
-
-    /// `agent_swap`'s session consequence: the same in-place move for a session that belongs to an agent.
-    pub fn swap_agent_session(self: &Arc<Self>, req: SessionSwap) -> Result<SessionSwapped, String> {
-        self.swap_session(req, true)
-    }
-
-    fn swap_session(self: &Arc<Self>, req: SessionSwap, of_agent: bool) -> Result<SessionSwapped, String> {
         let sid = req.session_id.trim().to_string();
         let provider = req.provider.trim().to_lowercase();
         if provider.is_empty() {
@@ -271,7 +262,7 @@ impl Daemon {
         self.not_held("session_swap", &sid)?;
         let harness = self.harness_for(Some(&provider)).ok_or_else(|| format!("'{}' isn't available here; pick another provider", trunc(&provider, 40)))?;
         let mut e = entry.lock().unwrap();
-        if !of_agent && e.rec.agent_id.as_deref().is_some_and(|a| !a.trim().is_empty()) {
+        if e.rec.agent_id.as_deref().is_some_and(|a| !a.trim().is_empty()) {
             return Err("this session belongs to an agent; switch the agent instead (agent_swap)".into());
         }
         if e.turn_active {

@@ -473,17 +473,6 @@ pub struct TicketUnassign {
     pub note: Option<String>,
 }
 
-/// `agent_switch` (AGENT-TASKS-4): `agent_id` leaves its in-progress ticket (handoff, back to todo) for `ticket_id`; `now`
-/// ends its worker at once instead of after its turn.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AgentSwitch {
-    pub agent_id: String,
-    pub ticket_id: String,
-    #[serde(default)]
-    pub now: bool,
-}
-
 /// `ticket_link` / `ticket_unlink`: `type` is any [`link_type::ALL`] name, stored in one direction.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

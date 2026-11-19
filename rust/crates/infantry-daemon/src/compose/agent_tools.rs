@@ -29,8 +29,6 @@ pub struct AgentTools {
     pub bus: EventBus,
     pub usage: Arc<UsageService>,
     pub mail: Arc<infantry_mail::mail::router::MailRouter>,
-    /// The agent registry the `infantry_agent_list|get|enable|disable` tools read.
-    pub registry: Arc<super::agent_registry::AgentRegistry>,
     pub project_dir: Arc<dyn Fn(&str) -> Option<std::path::PathBuf> + Send + Sync>,
 }
 
@@ -161,18 +159,6 @@ impl AgentTools {
             Ok(t) => ToolResult::ok(t),
             Err(e) => ToolResult::err(format!("{name} {e}")),
         })
-    }
-
-    /// One line per agent: `id  name  [disabled]  (contributor/source)`.
-    fn agent_line(e: &Value) -> String {
-        format!(
-            "{}	{}{}	({}/{})",
-            e["definition"]["id"].as_str().unwrap_or(""),
-            e["definition"]["name"].as_str().unwrap_or(""),
-            if e["enabled"].as_bool().unwrap_or(true) { "" } else { "	[disabled]" },
-            e["contributor"].as_str().unwrap_or(""),
-            e["source"].as_str().unwrap_or("")
-        )
     }
 
     fn caller_project(&self, inv: &ToolInvoker) -> Option<String> {
@@ -428,25 +414,6 @@ impl AgentTools {
                 };
                 let role = if inv.owner || inv.session_id.is_none() { "owner".to_string() } else { inv.role.clone().unwrap_or_default() };
                 self.usage.override_allowance(&meter, &value, hours, &role)
-            })(),
-            "infantry_agent_list" => {
-                let all = self.registry.list();
-                Ok(if all.is_empty() { "no agents".to_string() } else { all.iter().map(Self::agent_line).collect::<Vec<_>>().join("
-") })
-            }
-            "infantry_agent_get" => (|| {
-                let id = s(a, "id").ok_or("id is required")?;
-                self.registry.get(&id).map(|v| serde_json::to_string_pretty(&v).unwrap_or_default()).map_err(|_| format!("no agent '{id}'"))
-            })(),
-            "infantry_agent_enable" | "infantry_agent_disable" => (|| {
-                let enable = name.ends_with("enable") && !name.ends_with("disable");
-                // The user's override: an agent caller (a session's MCP process) is refused.
-                if inv.session_id.is_some() && !inv.owner {
-                    return Err(format!("an agent may not {} agents; ask the owner", if enable { "enable" } else { "disable" }));
-                }
-                let id = s(a, "id").ok_or("id is required")?;
-                let e = self.registry.set_enabled(&id, enable).map_err(|_| format!("no agent '{id}'"))?;
-                Ok(format!("agent '{}' is {}", e["definition"]["id"].as_str().unwrap_or(&id), if e["enabled"].as_bool().unwrap_or(true) { "enabled" } else { "disabled" }))
             })(),
             "infantry_pace" => Ok(serde_json::to_string(&self.usage.pace_report(&Value::Object(a.clone()).to_string())).unwrap_or_default()),
             _ => return None,

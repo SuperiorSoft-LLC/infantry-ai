@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::{Duration, Instant};
 
 use infantry_core::bus::EventBus;
-use infantry_orchestrator_api::dto::{link_type, status, AgentSwitch, CommentAdd, CommentAuthor, TicketMove, TicketStart};
+use infantry_orchestrator_api::dto::{link_type, status, CommentAdd, CommentAuthor, TicketMove, TicketStart};
 use infantry_orchestrator_api::{
     hooks, AgentQueueEntry, AgentQueueRequest, AgentQueueState, DoneAnswer, DoneReport, LaunchRequest, Limit, OrchError,
     SessionLauncher, StartNextRequest, StartOrigin, TicketAnswer, TicketAssign, TicketDone, TicketUnassign, WorkerState,
@@ -758,59 +758,6 @@ impl Dispatcher {
     /// AGENT-TASKS-2: an in_progress ticket goes back to the top of todo (branch, base and agent kept); its worker
     /// ends now (idle, or `now`) or when its turn ends (bounded by `unassign_wait_secs`). A handoff comment records it.
     pub fn unassign(&self, req: &TicketUnassign) -> Result<TicketAnswer, OrchError> {
-        self.unassign_with(req, None)
-    }
-
-    /// AGENT-TASKS-4: move `agent_ref` from its in-progress ticket to `ticket_id`. ONE commit: the current ticket goes to
-    /// todo (top, handoff) and `ticket_id` heads the agent's queue; the worker then ends like an unassign (`now` honoured)
-    /// and its exit starts the new ticket, so the agent never holds two in-progress tickets. With no current ticket this
-    /// is an assign that starts.
-    pub fn switch(&self, req: &AgentSwitch) -> Result<TicketAnswer, OrchError> {
-        let to = rules::check_id(&req.ticket_id).map_err(OrchError::Refused)?;
-        let agent = self.resolve_agent(&req.agent_id)?;
-        let agent_id = agent.id.clone().ok_or_else(|| OrchError::Refused(format!("agent '{}' has no profile id", agent.name)))?;
-        let (rows, _, _) = self.board.rows()?;
-        let current = self.workers(&rows).into_iter().find(|w| w.seat.agent_id.as_deref() == Some(agent_id.as_str())).map(|w| w.ticket_id);
-        let Some(current) = current else {
-            return self.assign(&TicketAssign { id: to, agent_id, queue: false, at: None });
-        };
-        if current == to {
-            return Err(OrchError::Refused(format!("agent {} is already on {to}", agent.name)));
-        }
-        let target = rows.get(&to).ok_or_else(|| OrchError::Refused(format!("no ticket '{}'", take(&to, 80))))?;
-        if target.status != status::TODO {
-            return Err(OrchError::Refused(format!("ticket {to} is {}: only a todo ticket can be switched to", target.status)));
-        }
-        if let Some(m) = self.env.role_refusal(agent.role.as_deref()) {
-            return Err(OrchError::Refused(m));
-        }
-        let queued = self.queue_ids(&agent_id)?.into_iter().map(|(i, _)| i).collect::<Vec<_>>();
-        let rest: Vec<String> = queued.iter().filter(|q| **q != to).cloned().collect();
-        if !queued.contains(&to) && rest.len() >= self.env.queue_max() {
-            return Err(OrchError::Refused(format!("agent {}'s queue is full (limits.agentTasks.queueMax = {})", agent.name, self.env.queue_max())));
-        }
-        let next: Vec<String> = std::iter::once(to.clone()).chain(rest).collect();
-        let aid = agent_id.clone();
-        let also = move |s: &mut rules::Snapshot| -> rules::Rule<()> {
-            for r in s.rows.values_mut().filter(|r| r.queued_agent.as_deref() == Some(aid.as_str()) && !next.contains(&r.id)) {
-                r.queued_agent = None;
-                r.queue_rank = None;
-            }
-            for (i, tid) in next.iter().enumerate() {
-                let r = s.rows.get_mut(tid).ok_or("a queued ticket is gone")?;
-                r.agent_id = Some(aid.clone());
-                r.queued_agent = Some(aid.clone());
-                r.queue_rank = Some(i as i32 + 1);
-            }
-            Ok(())
-        };
-        self.unassign_with(&TicketUnassign { id: current, now: req.now, note: None }, Some(&also))?;
-        let mut answer = TicketAnswer { ticket: self.board.get(&to)?, pushed: false };
-        answer.ticket.start = Some(TicketStart { ok: true, reason: "deferred".into(), detail: Some(format!("worker ends after its turn; {to} starts on exit")) });
-        Ok(answer)
-    }
-
-    fn unassign_with(&self, req: &TicketUnassign, also: Option<&dyn Fn(&mut rules::Snapshot) -> rules::Rule<()>>) -> Result<TicketAnswer, OrchError> {
         let id = rules::check_id(&req.id).map_err(OrchError::Refused)?;
         let (rows, _, _) = self.board.rows()?;
         let row = rows.get(&id).cloned().ok_or_else(|| OrchError::Refused(format!("no ticket '{}'", take(&id, 80))))?;
@@ -831,9 +778,6 @@ impl Dispatcher {
                 s.named.insert(tid.clone());
                 if let Some(sid) = &s2 {
                     store::finish_run(conn, &tid, sid, s.now, "KILLED_GRACEFUL", "unassigned").map_err(|e| e.to_string())?;
-                }
-                if let Some(f) = also {
-                    f(s)?;
                 }
                 Ok(())
             },

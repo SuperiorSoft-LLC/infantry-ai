@@ -2,8 +2,8 @@
 // Copyright (c) SuperiorSoft LLC
 //! RUST-MIGRATE-1: the projects and agent profiles in `<stateDir>/infantry.db`, read-only, for `project_list`,
 //! `project_get` and `agent_list`. The db is the one the Kotlin daemon keeps (the same schema, PLAN §4), so a state
-//! dir migrated with `infantry-migrate` lists the same projects. Projects are read only here; agent profiles are also
-//! written (`save_agent`, `delete_agent`), the same rows the Kotlin daemon keeps.
+//! dir migrated with `infantry-migrate` lists the same projects. Nothing here writes: saving a project stays with
+//! the Kotlin daemon until the board is ported.
 //!
 //! A connection is opened per request (a listing is rare and the file is small); no file = no projects.
 
@@ -100,40 +100,6 @@ impl Board {
 
     pub fn project(&self, id: &str) -> Result<Option<Project>, String> {
         Ok(self.projects()?.into_iter().find(|p| p.id == id))
-    }
-
-    /// One agent profile by id.
-    pub fn agent(&self, id: &str) -> Result<Option<AgentProfile>, String> {
-        Ok(self.agents(None)?.into_iter().find(|a| a.id.as_deref() == Some(id)))
-    }
-
-    /// Creates or overwrites the profile `p` (its id is set); `created_at` of a known profile is kept.
-    pub fn save_agent(&self, p: &AgentProfile, now_ms: i64) -> Result<(), String> {
-        let Some(c) = self.open()? else { return Err("this state dir has no database yet".into()) };
-        if !Self::has_table(&c, "agents") {
-            return Err("the database has no agents table".into());
-        }
-        let list = |v: &Option<Vec<String>>| serde_json::to_string(&v.clone().unwrap_or_default()).unwrap_or_else(|_| "[]".into());
-        c.execute(
-            "INSERT INTO agents (id, name, role, provider, model, instructions, created_at, updated_at, project_id, effort, trait_ids, skill_ids, runner)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11, ?12)
-             ON CONFLICT(id) DO UPDATE SET name = ?2, role = ?3, provider = ?4, model = ?5, instructions = ?6, updated_at = ?7,
-               project_id = ?8, effort = ?9, trait_ids = ?10, skill_ids = ?11, runner = ?12",
-            rusqlite::params![
-                p.id, p.name, p.role, p.provider, p.model, p.instructions, now_ms, p.project_id, p.effort, list(&p.trait_ids), list(&p.skill_ids), p.runner
-            ],
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    /// Deletes the profile; false = there was none.
-    pub fn delete_agent(&self, id: &str) -> Result<bool, String> {
-        let Some(c) = self.open()? else { return Ok(false) };
-        if !Self::has_table(&c, "agents") {
-            return Ok(false);
-        }
-        Ok(c.execute("DELETE FROM agents WHERE id = ?1", [id]).map_err(|e| e.to_string())? > 0)
     }
 
     /// Agent profiles, optionally of one project, by name.
