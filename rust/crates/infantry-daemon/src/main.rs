@@ -42,6 +42,10 @@ fn fail(msg: String) -> ! {
 fn main() {
     let a: Vec<String> = std::env::args().skip(1).collect();
     let arg = |k: &str| a.iter().position(|x| x == k).and_then(|i| a.get(i + 1)).cloned();
+    if a.iter().any(|x| x == "--build-id") {
+        println!("{}", infantry_daemon::server::build_id());
+        return;
+    }
     if a.iter().any(|x| x == "--help" || x == "-h") {
         println!("infantry-daemon [--port N] [--host H] [--mode both|runner|orchestrator] [--state-dir DIR] [--provider NAME] [--legacy-backend CMD] [--legacy-port N] [--gateway-routes JSON]");
         return;

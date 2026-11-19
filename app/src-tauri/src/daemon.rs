@@ -69,6 +69,30 @@ pub fn stale_note(state: &Path, bin: Option<&Path>) -> Option<String> {
     })
 }
 
+/// The build id of a daemon binary (`--build-id`), None when it cannot be asked.
+pub fn bundled_build_id(bin: &Path) -> Option<String> {
+    let mut c = Command::new(bin);
+    c.arg("--build-id");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(0x0800_0000);
+    }
+    let out = c.output().ok().filter(|o| o.status.success())?;
+    Some(String::from_utf8_lossy(&out.stdout).trim().to_string()).filter(|s| !s.is_empty())
+}
+
+/// The `buildId` a daemon on `port` reports in `/health` (None = an older daemon that reports none, or no answer).
+pub fn running_build_id(port: u16) -> Option<String> {
+    let mut s = TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_millis(HEALTH_TIMEOUT_MS)).ok()?;
+    let _ = s.set_read_timeout(Some(Duration::from_millis(HEALTH_TIMEOUT_MS)));
+    s.write_all(format!("GET /health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").as_bytes()).ok()?;
+    let mut body = String::new();
+    let _ = s.read_to_string(&mut body);
+    let json: serde_json::Value = serde_json::from_str(body.split("\r\n\r\n").nth(1)?.trim()).ok()?;
+    json["buildId"].as_str().map(str::to_string)
+}
+
 /// `GET /health` on loopback answered `ok`.
 pub fn healthy(port: u16) -> bool {
     let Ok(mut s) = TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_millis(HEALTH_TIMEOUT_MS)) else {
@@ -197,8 +221,18 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch) -> Result<Si
     }
     std::fs::create_dir_all(state).map_err(|e| format!("state dir {}: {e}", state.display()))?;
     if let Some(p) = read_port(state).filter(|p| !FOREIGN_PORTS.contains(p) && healthy(*p)) {
-        let note = stale_note(state, binary().ok().as_deref());
-        return Ok(Sidecar { url: format!("ws://127.0.0.1:{p}/ws"), child: None, note });
+        let bin = binary().ok();
+        let wanted = bin.as_deref().and_then(bundled_build_id);
+        // Same build (or the bundled build cannot be told): reuse it. A different or unreported build is replaced,
+        // but only a daemon our own health record names (this state dir); anything else is never killed.
+        if wanted.is_none() || running_build_id(p) == wanted {
+            let note = stale_note(state, bin.as_deref()).filter(|_| wanted.is_none());
+            return Ok(Sidecar { url: format!("ws://127.0.0.1:{p}/ws"), child: None, note });
+        }
+        if running_pid(state).is_none() {
+            return Err(format!("port {p} is held by a daemon that is not this app's (no health record in {} names it); not stopping it", state.display()));
+        }
+        stop(state)?;
     }
     let _ = std::fs::remove_file(port_file(state));
     let bin = binary()?;
@@ -256,6 +290,45 @@ mod tests {
         std::fs::write(dir.join("health").join("status.json"), r#"{"startedAt": 99999999999999}"#).unwrap();
         assert!(stale_note(&dir, Some(&bin)).is_none());
         assert!(stale_note(&dir, None).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Two daemon builds on a free test port: an older one is replaced by the bundled one; a foreign one is refused.
+    /// Needs the release daemon build (returns early when it is absent).
+    #[test]
+    fn a_stale_daemon_is_replaced_and_a_foreign_one_refused() {
+        let Ok(bin) = binary() else { return };
+        let Some(id) = bundled_build_id(&bin) else { return };
+        let dir = std::env::temp_dir().join(format!("infantry-swap-{}", uuid::Uuid::new_v4().simple()));
+        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        // "Older" daemon: a copy of the binary with one byte appended has a different build id.
+        let old = dir.join("old").join(EXE);
+        std::fs::create_dir_all(old.parent().unwrap()).unwrap();
+        std::fs::copy(&bin, &old).unwrap();
+        std::fs::OpenOptions::new().append(true).open(&old).unwrap().write_all(b"x").unwrap();
+        let state = dir.join("state");
+        std::fs::create_dir_all(&state).unwrap();
+        let mut old_child = Command::new(&old).args(["--port", &port.to_string(), "--state-dir"]).arg(&state).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
+        let t = Instant::now();
+        while !healthy(port) && t.elapsed() < Duration::from_secs(15) {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert_ne!(running_build_id(port).as_deref(), Some(id.as_str()));
+        std::fs::write(port_file(&state), port.to_string()).unwrap();
+        // Foreign: the health record names another port, so the daemon is not ours and must survive.
+        let status = state.join("health").join("status.json");
+        let real = std::fs::read_to_string(&status).unwrap();
+        let mut v: serde_json::Value = serde_json::from_str(&real).unwrap();
+        v["port"] = serde_json::json!(1);
+        std::fs::write(&status, v.to_string()).unwrap();
+        assert!(ensure(&state, port, &dir, &Launch::default()).is_err());
+        assert!(healthy(port), "a foreign daemon must not be killed");
+        std::fs::write(&status, real).unwrap();
+        let sc = ensure(&state, port, &dir, &Launch::default()).unwrap();
+        assert_eq!(running_build_id(port).as_deref(), Some(id.as_str()), "the bundled daemon replaced the old one");
+        let _ = old_child.wait();
+        let _ = stop(&state);
+        drop(sc);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
