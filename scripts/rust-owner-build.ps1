@@ -15,6 +15,16 @@ if (-not (Test-Path $index)) { throw "shell dist missing: $index" }
 cargo build --profile owner-test --manifest-path (Join-Path $repo 'rust\Cargo.toml') -p infantry-daemon
 cargo build --profile owner-test --features custom-protocol --manifest-path (Join-Path $repo 'app\src-tauri\Cargo.toml')
 $out = Join-Path $env:CARGO_TARGET_DIR 'owner-test'
+# RUST-BUG dd10c3bb: stage every official daemon plugin (WASM) into $out\plugins. Without this the package has no
+# plugins folder and every plugin frame (Triggers, Notes, image_upload) answers "does not serve that frame yet".
+$stagedPlugins = Join-Path $out 'plugins'
+if (Test-Path $stagedPlugins) { Remove-Item $stagedPlugins -Recurse -Force }
+bash (Join-Path $repo 'rust/plugins/stage.sh') $stagedPlugins release
+if ($LASTEXITCODE -ne 0) { throw 'BUILD REFUSED: plugin staging failed' }
+$nWasm = @(Get-ChildItem $stagedPlugins -Recurse -Filter *.wasm -ErrorAction SilentlyContinue).Count
+$nMods = @(Get-ChildItem (Join-Path $repo 'rust\plugins\official') -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'module.json') }).Count
+if ($nWasm -lt 1) { throw 'BUILD REFUSED: no daemon plugin was staged (no .wasm under plugins)' }
+Write-Output "staged $nWasm daemon plugin component(s) of $nMods module(s)"
 # STATIC CHECK: a dev-mode exe has no embedded assets; an embedded one carries the dist asset paths.
 $asset = (Get-ChildItem (Join-Path $repo 'app\shell\dist\assets') -Filter '*.js' | Select-Object -First 1).Name
 $bytes = [IO.File]::ReadAllBytes((Join-Path $out 'infantry-tauri.exe'))
@@ -24,7 +34,7 @@ $dest = Join-Path $DistRoot ("builds\{0}-rust-{1}" -f (Get-Date -Format 'yyyyMMd
 New-Item -ItemType Directory -Force $dest | Out-Null
 Copy-Item (Join-Path $out 'infantry-tauri.exe') (Join-Path $dest 'InfantryAI-Rust.exe')
 foreach ($f in 'infantry-daemon.exe','infantry-migrate.exe','infantry.exe') { Copy-Item (Join-Path $out $f) $dest }
-if (Test-Path (Join-Path $out 'plugins')) { Copy-Item (Join-Path $out 'plugins') $dest -Recurse }
+Copy-Item $stagedPlugins $dest -Recurse
 Set-Content (Join-Path $dest 'start.cmd') "@echo off`r`nrem Rust app, default port 18990, own state dir (%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust)`r`nset INFANTRY_PORT=18990`r`nset INFANTRY_PLUGINS_DIR=%~dp0plugins`r`nstart `"`" `"%~dp0InfantryAI-Rust.exe`""
 if ($SwitchScriptFrom) { Copy-Item $SwitchScriptFrom (Join-Path $dest 'switch-to-rust.ps1') }
 $min = [math]::Round(((Get-Date) - $t0).TotalMinutes, 1)
