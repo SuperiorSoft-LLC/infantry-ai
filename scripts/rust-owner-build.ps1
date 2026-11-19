@@ -19,9 +19,12 @@ $out = Join-Path $env:CARGO_TARGET_DIR 'owner-test'
 # plugins folder and every plugin frame (Triggers, Notes, image_upload) answers "does not serve that frame yet".
 $stagedPlugins = Join-Path $out 'plugins'
 if (Test-Path $stagedPlugins) { Remove-Item $stagedPlugins -Recurse -Force }
-bash (Join-Path $repo 'rust/plugins/stage.sh') $stagedPlugins release
+# Git Bash, never C:\Windows\system32\bash.exe (that is WSL: no cargo, no python on its PATH).
+$gitBash = Join-Path (Split-Path (Split-Path (Get-Command git).Source -Parent) -Parent) 'bin\bash.exe'
+if (-not (Test-Path $gitBash)) { throw "BUILD REFUSED: Git Bash not found at $gitBash" }
+& $gitBash (Join-Path $repo 'rust/plugins/stage.sh') $stagedPlugins release
 if ($LASTEXITCODE -ne 0) { throw 'BUILD REFUSED: plugin staging failed' }
-$nWasm = @(Get-ChildItem $stagedPlugins -Recurse -Filter *.wasm -ErrorAction SilentlyContinue).Count
+$nWasm = @(Get-ChildItem $stagedPlugins -Recurse -Include *.wasm,*.component -ErrorAction SilentlyContinue).Count
 $nMods = @(Get-ChildItem (Join-Path $repo 'rust\plugins\official') -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'module.json') }).Count
 if ($nWasm -lt 1) { throw 'BUILD REFUSED: no daemon plugin was staged (no .wasm under plugins)' }
 Write-Output "staged $nWasm daemon plugin component(s) of $nMods module(s)"
