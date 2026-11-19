@@ -256,21 +256,14 @@ All *(fixed today)*: before this sweep no window-wide key worked, and the hints 
 
 ## Counts
 
-Graded rows, excluding the 2 n/a rows and the out-of-scope table: **92 done, 21 partial, 46 missing** (159 rows). RUST-UI-8 had 87 / 20 / 52; RUST-PARITY-1 had 81 / 16 / 61.
+Graded rows, excluding the 2 n/a rows and the out-of-scope table: **96 done, 24 partial, 39 missing** (159 rows). RUST-UI-9 had 92 / 21 / 46; RUST-UI-8 had 87 / 20 / 52; RUST-PARITY-1 had 81 / 16 / 61.
 This sweep changed 38 rows:
 
 - 27 now work: markdown and code Copy, keyboard shortcuts, real counts, the real New ticket dialog, delete session,
   Stats, the Prompts and Skills panels, and the version.
 - 11 had sample data or dead buttons removed. They now read as missing instead of looking finished.
 
-Most missing rows are **UI only**: the Rust daemon already handles the frames. RUST-UI-8 found that some frames named in the protocol have no handler (`image_upload`, `command_catalog`, `command_result`, `session_project`, `pipeline_*`, `tool_approval_set`, `harness_install`, `cli_locations`, `timeline_list`); those rows now say "Daemon". Only six rows need new daemon frames:
-
-- ticket comments;
-- `notify_push` / `notify_sounds`;
-- `run_branches`;
-- calendar;
-- an automation count;
-- (with a TTS plugin) spoken alerts.
+Most missing rows are **UI only**: the Rust daemon already handles the frames. RUST-FRAMES-3 added the handlers RUST-UI-8 found missing for `image_upload` / `image_fetch`, `command_catalog`, `session_project`, `notify_push`, `run_branches`, ticket comment lines and `timeline_list`; RUST-UI-10 built their UI. Still without a handler: `command_result`, `pipeline_*`, `tool_approval_set`, `harness_install`, `cli_locations`, calendar, and (with a TTS plugin) spoken alerts.
 
 The biggest UI gaps, in the order the owner will feel them:
 
