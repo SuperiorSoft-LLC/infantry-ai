@@ -273,13 +273,16 @@ pub struct WorktreesUnit {
     pub manager: Arc<WorktreeManager>,
     /// The repository session worktrees are cut from (`repo` frame sets it).
     pub repo: Mutex<Option<PathBuf>>,
+    /// Answers `worktrees` with data `stale`: the read-only report of every ticket worktree, as a JSON array.
+    /// The host sets it (it knows the board and the sessions); this crate does not.
+    pub stale: Mutex<Option<Arc<dyn Fn() -> String + Send + Sync>>>,
 }
 
 const WORKTREE_FRAMES: &[&str] = &[f::WORKTREES, f::WORKTREE_REMOVE, f::REPO];
 
 impl WorktreesUnit {
     pub fn new(manager: Arc<WorktreeManager>, repo: Option<PathBuf>) -> Self {
-        WorktreesUnit { manager, repo: Mutex::new(repo) }
+        WorktreesUnit { manager, repo: Mutex::new(repo), stale: Mutex::new(None) }
     }
 
     pub fn repo(&self) -> Option<PathBuf> {
@@ -309,6 +312,14 @@ impl FrameUnit for WorktreesUnit {
             }
             f::WORKTREES => {
                 let sid = env.data.trim();
+                if sid == "stale" {
+                    let report = self.stale.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                    let Some(report) = report else { return Err(Refusal::new(t, "no worktree report on this host")) };
+                    // Answered as `worktree` (the hello pushes an unsolicited `worktrees`, which a waiting client would take for it).
+                    let mut e = Envelope::new(f::WORKTREE, report());
+                    e.request_id = env.request_id.clone();
+                    return Ok(vec![e]);
+                }
                 if sid.is_empty() {
                     return Ok(vec![reply(env, f::WORKTREES, &self.manager.statuses())]);
                 }

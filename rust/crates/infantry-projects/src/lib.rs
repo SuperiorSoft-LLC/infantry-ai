@@ -13,6 +13,7 @@ pub mod changes;
 pub mod git;
 pub mod paths;
 pub mod service;
+pub mod stale;
 pub mod store;
 pub mod ticket_branches;
 pub mod units;

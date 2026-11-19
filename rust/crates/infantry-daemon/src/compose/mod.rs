@@ -22,6 +22,7 @@ mod settings;
 pub mod scope;
 mod tools;
 mod watch;
+pub mod worktree_sweep;
 
 use crate::sessions::{Daemon, FrameUnits};
 use crate::wire;
@@ -425,6 +426,14 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     let mut registry = Registry::new();
     // The board family (tickets, pipeline, pods, mail, knowledge records) lives on the orchestrator.
     let board_side = |u: Arc<dyn FrameUnit>| -> Arc<dyn FrameUnit> { if mode.has_board() { u } else { Arc::new(crate::mode::ModeGated { inner: u }) } };
+    let sweep = Arc::new(worktree_sweep::WorktreeSweep::new(board.clone(), projects.clone(), daemon.clone(), settings::SettingsUnit { db: db.clone() }, repo.clone()));
+    {
+        let s = sweep.clone();
+        *worktrees_unit.stale.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(move || s.report_json()));
+    }
+    if mode.has_board() {
+        sweep.clone().spawn();
+    }
     let mut units: Vec<Arc<dyn FrameUnit>> = vec![
         Arc::new(projects_unit),
         Arc::new(git_unit),
