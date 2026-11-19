@@ -86,6 +86,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: pnpm, cache-dependency-path: app/pnpm-lock.yaml }
       - uses: dtolnay/rust-toolchain@stable
+        with: { targets: wasm32-wasip2 }   # rust/plugins/stage.sh builds the daemon plugins for this target
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -199,6 +200,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: pnpm, cache-dependency-path: app/pnpm-lock.yaml }
       - uses: dtolnay/rust-toolchain@stable
+        with: { targets: wasm32-wasip2 }   # rust/plugins/stage.sh builds the daemon plugins for this target
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -242,6 +244,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: pnpm, cache-dependency-path: app/pnpm-lock.yaml }
       - uses: dtolnay/rust-toolchain@stable
+        with: { targets: wasm32-wasip2 }   # rust/plugins/stage.sh builds the daemon plugins for this target
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
