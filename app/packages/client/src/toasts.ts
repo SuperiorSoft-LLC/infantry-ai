@@ -55,6 +55,34 @@ export function createToasts(timer: (fn: () => void, ms: number) => unknown = se
 
 const TONES: Record<string, ToastTone> = { error: "error", warn: "warn", warning: "warn", success: "ok", ok: "ok" };
 
+/** A device notification (`notify_push`, Kotlin NOTIFY-1) as this device shows it. */
+export interface DevicePush {
+  id: string;
+  toast: { tone: ToastTone; text: string; detail?: string };
+  /** A `data:` URL of the sound to play; absent when the daemon sent none (notify.* settings, quiet hours, size). */
+  sound?: string;
+}
+
+const PUSH_TONES: Record<string, ToastTone> = { milestone: "ok", urgent: "error", info: "info" };
+
+/**
+ * The `notify_push` [env] for [device] ("desktop", "web", "android"), or null when it is not one or targets another
+ * device. The daemon applies the notify.* settings (off, quiet hours, sound size) before it sends, so a push that
+ * carries sound bytes plays them.
+ */
+export function devicePushOf(env: Envelope, device: string): DevicePush | null {
+  if (env.type !== "notify_push") return null;
+  try {
+    const n = JSON.parse(env.data) as { id?: string; title?: string; body?: string; level?: string; target?: string; soundType?: string; soundData?: string };
+    if (!n?.id || !n.title) return null;
+    if (n.target && n.target !== "all" && n.target !== device) return null;
+    const sound = n.soundData ? `data:${n.soundType || "audio/wav"};base64,${n.soundData}` : undefined;
+    return { id: n.id, toast: { tone: PUSH_TONES[n.level ?? ""] ?? "info", text: n.title, detail: n.body || undefined }, sound };
+  } catch {
+    return null;
+  }
+}
+
 /** The toast a daemon frame should raise, or null. */
 export function toastOfFrame(env: Envelope): { tone: ToastTone; text: string; detail?: string } | null {
   if (env.type === "error") {

@@ -2,12 +2,17 @@
 // Copyright (c) SuperiorSoft LLC
 // The window's toast stack (@infantry/client createToasts), bottom right. It raises a toast for each daemon frame
 // toastOfFrame maps (a refused UI request with no inline view, a pushed notification); `toast()` posts one from code.
+// A device notification (`notify_push`) toasts, plays the sound the daemon sent (it applied the notify.* settings)
+// and is acked for this device (`notify_ack` {id, device}).
 import { useEffect } from "react";
 import { useStore } from "zustand";
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
-import { createToasts, toastOfFrame, type ToastTone } from "@infantry/client";
+import { createToasts, toastOfFrame, type ToastTone, devicePushOf } from "@infantry/client";
 import { cn } from "@infantry/ui";
 import { daemonStore } from "@/daemon/daemon";
+
+/** This window's device name for `notify_push` targets and acks. */
+const DEVICE = "desktop";
 
 const toasts = createToasts();
 
@@ -27,6 +32,18 @@ export function ToastHost() {
       daemonStore().getState().onFrame((env) => {
         const t = toastOfFrame(env);
         if (t) toasts.getState().push(t);
+        const p = devicePushOf(env, DEVICE);
+        if (p) {
+          toasts.getState().push(p.toast);
+          if (p.sound) {
+            try {
+              void new Audio(p.sound).play().catch(() => undefined);
+            } catch {
+              // no audio device: the toast is enough
+            }
+          }
+          daemonStore().getState().sendFrame({ type: "notify_ack", data: JSON.stringify({ id: p.id, device: DEVICE }) });
+        }
       }),
     [],
   );

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 import { describe, expect, it } from "vitest";
-import { TOASTS_SHOWN, createToasts, toastOfFrame } from "../src";
+import { devicePushOf, TOASTS_SHOWN, createToasts, toastOfFrame } from "../src";
 
 describe("toasts", () => {
   it("stacks newest first, bumps a repeat, caps the stack and expires", () => {
@@ -22,5 +22,12 @@ describe("toasts", () => {
     expect(toastOfFrame({ type: "error", data: "x", requestId: "attn:1" })).toBeNull();
     expect(toastOfFrame({ type: "error", data: "x" })).toBeNull();
     expect(toastOfFrame({ type: "notification_push", data: '{"id":"n","title":"Built","level":"success"}' })).toEqual({ tone: "ok", text: "Built", detail: undefined });
+  });
+  it("reads a device push for this device only", () => {
+    const env = (o: object) => ({ type: "notify_push", data: JSON.stringify({ id: "n1", title: "Done", body: "", level: "milestone", target: "all", at: 1, ...o }) });
+    expect(devicePushOf(env({}), "desktop")).toEqual({ id: "n1", toast: { tone: "ok", text: "Done", detail: undefined }, sound: undefined });
+    expect(devicePushOf(env({ target: "android" }), "desktop")).toBeNull();
+    expect(devicePushOf(env({ soundType: "audio/ogg", soundData: "AAA=" }), "desktop")?.sound).toBe("data:audio/ogg;base64,AAA=");
+    expect(devicePushOf({ type: "notify", data: "{}" }, "desktop")).toBeNull();
   });
 });

@@ -155,7 +155,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Clear stale, Open agent per item | yes | missing | UI only. |
 | Watchdog list (stalled / quiet / unreported agents) | yes | missing | UI only. |
 | Toast stack (bottom right), prompt toasts | yes | partial | *(RUST-UI-9)* Toast stack bottom right (newest first, repeats counted, auto-expire, dismiss): refusals of UI requests with no inline view (card menu, Start next) and pushed notifications. No prompt toasts (approve from a toast). |
-| Desktop OS notifications, sounds | yes | missing | Daemon: `notify_push` / `notify_sounds` (the Rust protocol has only `notify`). Tauri notification plugin. |
+| Desktop OS notifications, sounds | yes | partial | *(RUST-UI-10)* `notify_push` toasts (milestone ok, urgent red), plays the sound the daemon carried (it applies notify.enabled, quiet hours, max sound size), acks with `notify_ack` {id, device: desktop}; pushes for another device are skipped. No OS notification (Tauri notification plugin) yet. |
 | Spoken alerts | yes | missing | `spoken` frame exists. Needs a TTS presenter. |
 | "Update available" notice | yes | done | Added by RUST-UPD-1. *(fixed today)* The status-bar pill was fixed text; it now shows only for a real update. |
 
