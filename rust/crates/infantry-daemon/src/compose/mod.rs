@@ -372,9 +372,15 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             ..HooksConfig::default()
         },
     ));
+    // Plugin settings (`scripting.exec.*`, `scripting.hooks.*`) are app-scope rows of the SAME settings table Kotlin wrote,
+    // so the owner's effective behaviour survives the migration. A string is read raw, any other JSON as its text.
+    let script_config: Arc<dyn Fn(&str) -> Option<String> + Send + Sync> = {
+        let s = settings::SettingsUnit { db: db.clone() };
+        Arc::new(move |k: &str| s.app(k).map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string())))
+    };
     let exec = {
         let p = projects.clone();
-        Arc::new(ExecTools::new(Arc::new(|_: &str| None), Arc::new(move |id: &str| project_dir(&p, id)), Some(bus.clone()), Arc::new(log_line)))
+        Arc::new(ExecTools::new(script_config.clone(), Arc::new(move |id: &str| project_dir(&p, id)), Some(bus.clone()), Arc::new(log_line)))
     };
     timeline::wire(&run_log, &bus);
     daemon.observe(Arc::new(timeline::WakeObserver { run_log: run_log.clone() }));
@@ -387,7 +393,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         run_log: run_log.clone(),
         exec: exec.clone(),
         limits: Arc::new(ScriptLimits::default),
-        config: Arc::new(|_: &str| None),
+        config: script_config.clone(),
     });
     {
         let h = hooks.clone();

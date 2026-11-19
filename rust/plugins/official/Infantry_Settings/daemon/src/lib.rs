@@ -101,8 +101,14 @@ fn ask(ty: &str, data: &str, want: &str) -> Result<String, String> {
 }
 
 impl Plugin for Settings {
-    fn call_tool(name: String, args: String, _ctx: CallContext) -> Result<String, String> {
-        let a: Value = serde_json::from_str(if args.trim().is_empty() { "{}" } else { &args }).map_err(|e| format!("{name}: arguments are not JSON: {e}"))?;
+    fn call_tool(name: String, args: String, ctx: CallContext) -> Result<String, String> {
+        let mut a: Value = serde_json::from_str(if args.trim().is_empty() { "{}" } else { &args }).map_err(|e| format!("{name}: arguments are not JSON: {e}"))?;
+        // Kotlin defaulted the project to the caller's (a script's or ticket session's) own project.
+        if name.starts_with("infantry_project_config_") && s(&a, "projectId").is_none() {
+            if let (Some(p), Some(o)) = (ctx.client_project_id.as_deref().map(str::trim).filter(|p| !p.is_empty()), a.as_object_mut()) {
+                o.insert("projectId".into(), p.into());
+            }
+        }
         match name.as_str() {
             "infantry_project_config_get" => {
                 let p = s(&a, "projectId").ok_or("infantry_project_config_get needs a projectId")?;

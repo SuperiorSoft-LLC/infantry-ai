@@ -18,6 +18,8 @@ pub const NAMES: &[&str] = &[
     "infantry_secret_find",
     "infantry_secret_render",
     "infantry_run_stop",
+    "infantry_processes",
+    "infantry_processes_reap",
 ];
 
 fn schema(props: Value, required: &[&str]) -> Value {
@@ -91,6 +93,18 @@ pub fn catalog() -> Vec<ToolInfo> {
             false,
         ),
         t(
+            "infantry_processes",
+            "List rogue background processes (left by ended sessions) and free RAM. all=true adds the healthy tracked ones.",
+            schema(json!({"all": {"type": "boolean"}}), &[]),
+            true,
+        ),
+        t(
+            "infantry_processes_reap",
+            "Kill one rogue process (pid) or all of them (all=true); only processes a session of this daemon started.",
+            schema(json!({"pid": {"type": "integer"}, "all": {"type": "boolean"}}), &[]),
+            false,
+        ),
+        t(
             "infantry_run_stop",
             "Stop a run: Ctrl+C then the process tree after its grace; force kills now.",
             schema(json!({"runId": {"type": "string"}, "force": {"type": "boolean"}}), &["runId"]),
@@ -128,6 +142,22 @@ pub fn invoke(m: &Arc<RunManager>, name: &str, a: &Map<String, Value>, inv: &Too
         return None;
     }
     let r: Result<String, String> = (|| match name {
+        "infantry_processes" => Ok(processes_text(&m.report(), &[], None, b(a, "all"))),
+        "infantry_processes_reap" => {
+            let (reaped, refused) = if b(a, "all") {
+                m.reap_rogue()
+            } else {
+                match a.get("pid").and_then(|v| v.as_i64().or_else(|| v.as_str()?.trim().parse().ok())) {
+                    Some(pid) => match m.reap(pid) {
+                        Ok(r) => (r, None),
+                        Err(e) => (Vec::new(), Some(e)),
+                    },
+                    None if a.contains_key("pid") => return Err("infantry_processes_reap: pid must be a number".into()),
+                    None => return Err("infantry_processes_reap needs exactly one of pid or all=true".into()),
+                }
+            };
+            Ok(processes_text(&m.report(), &reaped, refused.as_deref(), false))
+        }
         "infantry_run_commands" => Ok(m.commands_json(project(a, inv)?.as_deref())),
         "infantry_run_command_save" => {
             let id = s(a, "id").ok_or("id is required")?.to_string();
@@ -221,4 +251,50 @@ pub fn invoke(m: &Arc<RunManager>, name: &str, a: &Map<String, Value>, inv: &Too
         Ok(t) => ToolResult::ok(t),
         Err(e) => ToolResult::err(format!("{name} refused: {e}")),
     })
+}
+
+/// The plain text of a `processes` answer (Kotlin `ProcessesText.render`): what `infantry_processes` and `_reap` return.
+fn processes_text(report: &Value, reaped: &[i64], refused: Option<&str>, show_all: bool) -> String {
+    let mut out = String::new();
+    if let Some(r) = refused {
+        out.push_str(&format!("refused: {r}
+"));
+    }
+    for pid in reaped {
+        out.push_str(&format!("reaped pid {pid}
+"));
+    }
+    let free = report["freeMb"].as_i64().map(|f| format!("{f} MB free")).unwrap_or_else(|| "free RAM unknown".into());
+    let total = report["totalMb"].as_i64().map(|t| format!(" of {t} MB")).unwrap_or_default();
+    let pressure = if report["underPressure"].as_bool() == Some(true) { format!(" - UNDER the {} MB floor", report["floorMb"]) } else { String::new() };
+    out.push_str(&format!("memory: {free}{total}{pressure}; auto-reap {}
+", if report["autoReap"].as_bool() == Some(true) { "on" } else { "off" }));
+    let tracked: Vec<&Value> = report["tracked"].as_array().map(|a| a.iter().collect()).unwrap_or_default();
+    let line = |p: &Value| {
+        let mem = p["memoryMb"].as_i64().map(|m| format!("{m} MB")).unwrap_or_else(|| "? MB".into());
+        let sess = p["sessionId"].as_str().map(|s| s.chars().take(8).collect::<String>()).unwrap_or_else(|| "none".into());
+        let reason = p["reason"].as_str().map(|r| format!(" | {r}")).unwrap_or_default();
+        format!("  pid {} | {mem} | session {sess} | {}{reason}
+", p["pid"], p["command"].as_str().unwrap_or_default())
+    };
+    let rogue: Vec<&&Value> = tracked.iter().filter(|p| p["rogue"].as_bool() == Some(true)).collect();
+    out.push_str(&format!("rogue ({}):{}
+", rogue.len(), if rogue.is_empty() { " none" } else { "" }));
+    rogue.iter().for_each(|p| out.push_str(&line(p)));
+    if !rogue.is_empty() {
+        out.push_str("  reap: infantry processes reap <pid>   or all: infantry processes reap --all
+");
+    }
+    let healthy: Vec<&&Value> = tracked.iter().filter(|p| p["rogue"].as_bool() != Some(true)).collect();
+    if show_all {
+        out.push_str(&format!("tracked, healthy ({}):{}
+", healthy.len(), if healthy.is_empty() { " none" } else { "" }));
+        healthy.iter().for_each(|p| out.push_str(&line(p)));
+        out.push_str("not ours, never reaped (0): none
+");
+    } else {
+        out.push_str(&format!("({} healthy tracked, 0 unattributed: infantry processes --all)
+", healthy.len()));
+    }
+    out
 }
