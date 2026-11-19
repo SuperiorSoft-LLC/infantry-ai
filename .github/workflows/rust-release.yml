@@ -133,15 +133,23 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: pnpm, cache-dependency-path: app/pnpm-lock.yaml }
       - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '21' }
-      - uses: android-actions/setup-android@v3
+        with: { distribution: temurin, java-version: '17' }   # Tauri's and AGP 9's documented JDK
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: aarch64-linux-android }
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: app/src-tauri }
-      - name: Android NDK
+      # The ubuntu runner already ships an Android SDK (ANDROID_HOME). setup-android@v3 is dropped: its default `tools`
+      # package no longer exists in cmdline-tools 16 ("Failed to find package 'tools'"). Accept the licences, then install
+      # only what Tauri and gen/android/app/build.gradle.kts need: compileSdk 36, build-tools 36.0.0 (zipalign, apksigner), the NDK.
+      - name: Android SDK (runner's own) and NDK
+        shell: bash
         run: |
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+          set -euo pipefail
+          : "${ANDROID_HOME:?the ubuntu runner should ship an Android SDK}"
+          sdkm="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$sdkm" || { echo "::error::no sdkmanager at $sdkm"; exit 1; }
+          yes | "$sdkm" --licenses >/dev/null || true
+          "$sdkm" --install "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018"
           echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
         working-directory: app
@@ -152,8 +160,9 @@ jobs:
       - name: Sign the APK (release keystore, else a throwaway test key)
         run: |
           set -euo pipefail
-          apk="$(find app/src-tauri/gen/android -name '*.apk' -path '*release*' | head -n1)"
-          bt="$ANDROID_HOME/build-tools/35.0.0"
+          apk="$(find app/src-tauri/gen/android -path '*outputs/apk*' -name '*release*.apk' | head -n1)"
+          test -n "$apk" || { echo "::error::no release APK was built"; exit 1; }
+          bt="$ANDROID_HOME/build-tools/36.0.0"
           if [ -n "$ANDROID_KEYSTORE_B64" ]; then
             printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
             ks="$RUNNER_TEMP/release.keystore"; pass="$ANDROID_KEYSTORE_PASSWORD"; alias="$ANDROID_KEY_ALIAS"; kpass="$ANDROID_KEY_PASSWORD"; kind=real
