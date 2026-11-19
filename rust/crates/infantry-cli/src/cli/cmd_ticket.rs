@@ -407,13 +407,19 @@ fn csv(p: &Parsed, flag: &str) -> Vec<String> {
 /// board plugin's `infantry_ticket_update` (the notify list lives in its tables). A created ticket always lists its
 /// creator's session (INFANTRY_SESSION_ID). Err = printed, exit code.
 fn save_notify(ctx: &mut Ctx, p: &Parsed, ticket_id: &str, created: bool) -> Result<Option<String>, i32> {
-    let (set, mut add, remove) = (csv(p, "notify"), csv(p, "add-notify"), csv(p, "remove-notify"));
-    if created {
-        if let Some(me) = ctx.env("INFANTRY_SESSION_ID").map(|v| v.trim().to_string()).filter(|v| !v.is_empty()) {
-            add.push(me);
+    let (set, add, remove) = (csv(p, "notify"), csv(p, "add-notify"), csv(p, "remove-notify"));
+    let me = ctx.env("INFANTRY_SESSION_ID").map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+    let creator = |ctx: &mut Ctx| {
+        // Best effort: a session this daemon does not know cannot be listed, and that never fails the create.
+        if let (true, Some(me)) = (created, me.clone()) {
+            let mut a = Map::new();
+            a.insert("ticketId".into(), Value::String(ticket_id.to_string()));
+            a.insert("addNotify".into(), Value::Array(vec![Value::String(me)]));
+            let _ = plugin_tool_call(ctx, "infantry_ticket_update", a);
         }
-    }
+    };
     if set.is_empty() && add.is_empty() && remove.is_empty() {
+        creator(ctx);
         return Ok(None);
     }
     let arr = |v: &[String]| Value::Array(v.iter().map(|x| Value::String(x.clone())).collect());
@@ -428,7 +434,9 @@ fn save_notify(ctx: &mut Ctx, p: &Parsed, ticket_id: &str, created: bool) -> Res
     if !remove.is_empty() {
         a.insert("removeNotify".into(), arr(&remove));
     }
-    match plugin_tool_call(ctx, "infantry_ticket_update", a) {
+    let done = plugin_tool_call(ctx, "infantry_ticket_update", a);
+    creator(ctx);
+    match done {
         Ok((text, false)) => Ok(Some(text)),
         Ok((text, true)) => {
             ctx.err(format!("error: notify list not saved: {text}"));
