@@ -12,10 +12,11 @@ Setup lives in `scripts/rust-build-env.ps1` (dot-source it). All values are sett
 
 ## Owner builds (the app and the daemon)
 ```
-. scripts/rust-build-env.ps1 -Owner
-cargo build --profile owner-test --manifest-path rust/Cargo.toml -p infantry-daemon
-cargo build --profile owner-test --manifest-path app/src-tauri/Cargo.toml
+pwsh scripts/rust-owner-build.ps1 -SwitchScriptFrom <path to switch-to-rust.ps1>
 ```
+The script builds the UI (`pnpm build`), builds the shell with `--features custom-protocol`, and REFUSES to package an
+exe that does not embed the UI. A plain `cargo build` of the shell is a dev build: its window loads devUrl
+`http://localhost:1420` and shows "localhost refused to connect" (RUST-BUG, build 4625fff6). Never package one.
 Binaries land in `<root>\rust-target\owner-test\`. The daemon and the app are separate workspaces but share the
 target dir, so common dependencies (tokio, sqlite, wasmtime) compile once. Use `--release` only for a real release.
 `owner-test` = release without LTO, 16 codegen units, incremental, opt-level 2.
