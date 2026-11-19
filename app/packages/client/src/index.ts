@@ -25,6 +25,7 @@ export * from "./stores/health";
 export * from "./stores/triggers";
 export * from "./stores/query";
 export * from "./stores/panels";
+export * from "./stores/timeline";
 export * from "./layout";
 export * from "./pairing";
 export * from "./update";

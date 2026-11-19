@@ -66,7 +66,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Switch agent (provider/model) | yes | done | |
 | Interrupt, restart (with force) | yes | done | |
 | Session stats | yes | done | |
-| Automation stats line ("turns saved") | yes | missing | *(fixed today)* A sample line was removed. Needs a per-session automation count: daemon work. |
+| Automation stats line ("turns saved") | yes | done | *(RUST-UI-10)* Session header chip "turns saved N · wakes M" (hover: wakes by reason) from `timeline_item` stats pushes and `timeline_list`. |
 | Status line: agent count, session state | yes | done | *(fixed today)* It was sample text ("allowAll · 14 agents"). It now shows real counts and "not connected". The permission mode is not shown: UI only. |
 | Centre tab bar from the plugin list | yes | done | |
 | Ended-session bar with Resume | yes | partial | Composer Resume opens the resume dialog. No inline bar: UI only. |
