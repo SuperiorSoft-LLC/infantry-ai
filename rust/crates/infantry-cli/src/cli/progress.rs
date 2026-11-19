@@ -679,13 +679,8 @@ pub fn run(args: &[String], io: &mut dyn Io, getenv: Getenv) -> i32 {
         ));
         return 2;
     }
-    let mut cmd = std::process::Command::new(&opts.command[0]);
+    let mut cmd = infantry_proc::command(&opts.command[0]);
     cmd.args(&opts.command[1..]).env(PIPE_ENV, "1").stdin(std::process::Stdio::inherit()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000);
-    }
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {

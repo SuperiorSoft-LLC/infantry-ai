@@ -9,7 +9,7 @@
 //! - `GIT_TERMINAL_PROMPT=0`: there is no terminal to answer a credential prompt.
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -114,7 +114,7 @@ fn drain<R: Read + Send + 'static>(r: Option<R>) -> std::thread::JoinHandle<Vec<
 
 impl GitCli for SystemGit {
     fn run(&self, cwd: &Path, args: &[&str]) -> std::io::Result<GitResult> {
-        let mut cmd = Command::new(&self.executable);
+        let mut cmd = infantry_proc::command(&self.executable);
         cmd.args(args).current_dir(cwd).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
         for k in SCRUBBED_ENV {
             cmd.env_remove(k);
@@ -123,12 +123,7 @@ impl GitCli for SystemGit {
         for (k, v) in &self.extra_env {
             cmd.env(k, v);
         }
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            cmd.creation_flags(CREATE_NO_WINDOW);
-        }
+        infantry_proc::NoWindow::no_window(&mut cmd);
         let mut child = cmd.spawn()?;
         let out = drain(child.stdout.take());
         let err = drain(child.stderr.take());

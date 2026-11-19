@@ -14,7 +14,7 @@ use crate::{manifest, now_ms, snapshot};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 pub const PLAN_FILE: &str = "cutover-plan.json";
 pub const RECORD_FILE: &str = "cutover.json";
@@ -102,7 +102,7 @@ fn infantry_cli(o: &Options) -> PathBuf {
 
 /// Call MCP tools through `infantry mcp serve --port <port>` as the owner (no session identity). One answer per call.
 pub fn mcp_calls(cli: &Path, port: u16, calls: &[(String, Value)]) -> Result<Vec<(bool, String)>, String> {
-    let mut child = Command::new(cli)
+    let mut child = infantry_proc::command(cli)
         .args(["mcp", "serve", "--port", &port.to_string()])
         .env_remove("INFANTRY_URL")
         .env_remove("INFANTRY_SESSION_ID")

@@ -134,7 +134,7 @@ mod unix {
     use std::process::{Command, Stdio};
 
     fn run(argv: &[&str], stdin: Option<&str>) -> Option<String> {
-        let mut child = Command::new(argv[0]).args(&argv[1..]).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
+        let mut child = infantry_proc::command(argv[0]).args(&argv[1..]).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
         if let Some(mut si) = child.stdin.take() {
             if let Some(s) = stdin {
                 let _ = si.write_all(s.as_bytes());
@@ -174,7 +174,7 @@ mod unix {
             Ok(run(&["secret-tool", "lookup", "service", "infantry-keystore"], None))
         }
         fn store(&self, value_b64: &str) -> bool {
-            let Ok(mut child) = Command::new("secret-tool")
+            let Ok(mut child) = infantry_proc::command("secret-tool")
                 .args(["store", "--label=Infantry AI keystore", "service", "infantry-keystore"])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::null())

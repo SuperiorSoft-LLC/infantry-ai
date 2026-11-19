@@ -17,6 +17,7 @@ name = "infantry-daemon"
 path = "src/main.rs"
 
 [dependencies]
+infantry-proc = { path = "../infantry-proc" }
 infantry-protocol = { path = "../infantry-protocol" }
 infantry-harness = { path = "../infantry-harness" }
 infantry-harness-claude = { path = "../infantry-harness-claude" }

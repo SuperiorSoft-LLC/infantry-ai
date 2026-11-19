@@ -7,9 +7,6 @@ use crate::env::Getenv;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-#[cfg(windows)]
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-
 fn launcher_in(dir: &Path) -> Option<PathBuf> {
     let names: &[&str] = if cfg!(windows) { &["infantry.cmd", "infantry.bat"] } else { &["infantry"] };
     names.iter().map(|n| dir.join(n)).find(|p| p.is_file())
@@ -52,7 +49,7 @@ fn wait_bounded(getenv: Getenv, mut child: std::process::Child) -> Result<std::p
         if std::time::Instant::now() >= deadline {
             #[cfg(windows)]
             {
-                let _ = Command::new("taskkill").args(["/PID", &child.id().to_string(), "/T", "/F"]).output();
+                let _ = infantry_proc::command("taskkill").args(["/PID", &child.id().to_string(), "/T", "/F"]).output();
             }
             let _ = child.kill();
             let _ = child.wait();
@@ -66,16 +63,14 @@ fn command(getenv: Getenv, args: &[String]) -> Command {
     let program = launcher(getenv).map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "infantry".into());
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
-        let mut c = Command::new("cmd");
+        let mut c = infantry_proc::command("cmd");
         c.arg("/c").arg(program).args(args);
-        c.creation_flags(CREATE_NO_WINDOW);
         c.env(DEPTH_ENV, "1");
         c
     }
     #[cfg(not(windows))]
     {
-        let mut c = Command::new(program);
+        let mut c = infantry_proc::command(program);
         c.args(args);
         c.env(DEPTH_ENV, "1");
         c

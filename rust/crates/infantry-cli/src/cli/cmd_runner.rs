@@ -1310,7 +1310,7 @@ fn start_and_connect(ctx: &mut Ctx, ep: &Endpoint) -> Option<FrameStream> {
             return None;
         }
     };
-    let mut cmd = std::process::Command::new(daemon_program());
+    let mut cmd = infantry_proc::command(daemon_program());
     cmd.arg("--state-dir").arg(&state_dir);
     if let Some(port) = url_port(&ep.target.url).filter(|p| *p > 0) {
         cmd.arg("--port").arg(port.to_string()).env("INFANTRY_PORT", port.to_string());
@@ -1319,9 +1319,8 @@ fn start_and_connect(ctx: &mut Ctx, ep: &Endpoint) -> Option<FrameStream> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-        cmd.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP);
+        cmd.creation_flags(infantry_proc::with_no_window(CREATE_NEW_PROCESS_GROUP));
     }
     let mut child = match cmd.spawn() {
         Ok(c) => c,

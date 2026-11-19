@@ -516,7 +516,7 @@ pub fn render(tickets: &[Value], sessions: &[Value], now: i64, commit_of: &dyn F
 /// `BoardSummary.gitCommit`: `git -C <dir> rev-parse --short <branch>`, first non-blank line; None when git cannot answer.
 pub fn git_commit(branch: Option<&str>, dir: Option<&str>) -> Option<String> {
     let (branch, dir) = (branch?, dir?);
-    let mut child = std::process::Command::new("git")
+    let mut child = infantry_proc::command("git")
         .args(["-C", dir, "rev-parse", "--short", branch])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())

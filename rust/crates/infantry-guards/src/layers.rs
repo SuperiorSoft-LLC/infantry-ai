@@ -57,6 +57,8 @@ impl Layer {
 /// tier (e.g. runner-local on runner-api); equal tiers in one layer may not depend on each other.
 pub const LAYERS: &[(&str, Layer, u8)] = &[
     ("infantry-protocol", Layer::Wire, 0),
+    // the one windowless child-process spawn seam (CREATE_NO_WINDOW); std only, no workspace deps.
+    ("infantry-proc", Layer::Wire, 0),
     ("infantry-core", Layer::Core, 0),
     ("infantry-scripting", Layer::Core, 1),
     ("infantry-plugin-wit", Layer::Core, 0),

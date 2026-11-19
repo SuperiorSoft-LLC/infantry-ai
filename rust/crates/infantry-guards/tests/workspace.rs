@@ -62,3 +62,49 @@ fn walk(dir: &Path, f: &mut dyn FnMut(&Path)) {
         }
     }
 }
+
+/// NoSpawnWindowGuard: a child process on Windows gets its own visible console window unless it is created with
+/// CREATE_NO_WINDOW. Every `Command::new` in non-test source must go through `infantry_proc::command` / `NoWindow`.
+/// Allow-listed: this tooling crate (runs `cargo metadata` at test time, never in a user session), the infantry-proc seam
+/// itself, and the conformance/mcp_conformance test binaries.
+#[test]
+fn no_spawn_bypasses_the_windowless_helper() {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        for e in rd.flatten() {
+            let p = e.path();
+            let name = e.file_name().to_string_lossy().to_string();
+            if p.is_dir() {
+                if !matches!(name.as_str(), "target" | "tests" | "node_modules" | ".git") {
+                    walk(&p, out);
+                }
+            } else if name.ends_with(".rs") {
+                out.push(p);
+            }
+        }
+    }
+    const ALLOW: &[&str] = &["crates/infantry-guards/", "crates/infantry-proc/", "crates/conformance/", "crates/infantry-cli/src/bin/mcp_conformance.rs"];
+    let root = rust_dir();
+    let mut files = Vec::new();
+    walk(&root, &mut files);
+    let mut bad = Vec::new();
+    for f in files {
+        let rel = f.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/");
+        if ALLOW.iter().any(|a| rel.starts_with(a) || rel == *a) {
+            continue;
+        }
+        let src = std::fs::read_to_string(&f).unwrap_or_default();
+        // Skip the in-file `#[cfg(test)]` module: test code may spawn plain helpers.
+        let body = src.split("#[cfg(test)]").next().and_then(|s| s.split("#[cfg(all(test").next()).unwrap_or("");
+        for (i, line) in body.lines().enumerate() {
+            let t = line.trim_start();
+            if t.starts_with("//") {
+                continue;
+            }
+            if line.contains("Command::new(") && !line.contains("HarnessCommand::new(") && !line.contains("infantry_proc") {
+                bad.push(format!("{rel}:{}: {}", i + 1, t.chars().take(100).collect::<String>()));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "spawn bypasses infantry_proc::command (console window pops up on Windows):\n  {}", bad.join("\n  "));
+}

@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
@@ -59,7 +59,7 @@ impl SidecarPlugin {
     /// `env` names the variables the manifest's `daemon.env` lets the sidecar read; each is passed from the daemon's
     /// own environment when set there (an `INFANTRY_<X>` name falls back to the old `AGENTHQ_<X>`). Nothing else is.
     pub fn spawn(exe: &Path, args: &[String], dir: &Path, env: &[String], imports: Arc<PluginImports>, hello_ms: u64) -> Result<SidecarPlugin, String> {
-        let mut cmd = Command::new(exe);
+        let mut cmd = infantry_proc::command(exe);
         cmd.args(args).current_dir(dir).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).env_clear();
         for k in KEPT_ENV {
             if let Ok(v) = std::env::var(k) {
@@ -69,12 +69,7 @@ impl SidecarPlugin {
         for (k, v) in declared_env(env, |k| std::env::var(k).ok()) {
             cmd.env(k, v);
         }
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            cmd.creation_flags(CREATE_NO_WINDOW);
-        }
+        infantry_proc::NoWindow::no_window(&mut cmd);
         let mut child = cmd.spawn().map_err(|e| format!("sidecar {} did not start: {e}", exe.display()))?;
         let stdin = Arc::new(Mutex::new(child.stdin.take().ok_or("sidecar stdin")?));
         let stdout = child.stdout.take().ok_or("sidecar stdout")?;

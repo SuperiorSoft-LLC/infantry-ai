@@ -22,7 +22,6 @@ pub const NEW_TERMINAL_NOTE: &str = "Open a NEW terminal: a terminal that is alr
 const PATHS_ADD_CLI: &str = "paths.addCli";
 const MARK_START: &str = "# >>> Infantry AI CLI (infantry install-cli) >>>";
 const MARK_END: &str = "# <<< Infantry AI CLI <<<";
-const NO_WINDOW: u32 = 0x0800_0000;
 
 fn windows() -> bool {
     cfg!(windows)
@@ -144,13 +143,8 @@ impl PathStore for FileStore {
 pub struct RegistryStore;
 
 fn reg(args: &[&str]) -> Option<String> {
-    let mut c = std::process::Command::new("reg");
+    let mut c = infantry_proc::command("reg");
     c.args(args);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        c.creation_flags(NO_WINDOW);
-    }
     let o = c.output().ok()?;
     o.status.success().then(|| String::from_utf8_lossy(&o.stdout).to_string())
 }

@@ -424,8 +424,7 @@ fn os_name() -> String {
 #[cfg(windows)]
 fn os_version() -> Option<String> {
     // `ver` prints "Microsoft Windows [Version 10.0.26100.1234]"; no window (CREATE_NO_WINDOW).
-    use std::os::windows::process::CommandExt;
-    let out = std::process::Command::new("cmd").args(["/C", "ver"]).creation_flags(0x0800_0000).output().ok()?;
+    let out = infantry_proc::command("cmd").args(["/C", "ver"]).output().ok()?;
     let t = String::from_utf8_lossy(&out.stdout);
     let v = t.split("Version").nth(1)?.trim().trim_end_matches(']').trim().to_string();
     (!v.is_empty()).then_some(v)
