@@ -134,6 +134,21 @@ impl BoardEnv for DaemonBoardEnv {
             .map(|r| r.id)
             .collect()
     }
+    fn live_role_sessions(&self, role: &str, project_id: Option<&str>) -> Vec<String> {
+        self.daemon
+            .records()
+            .into_iter()
+            .filter(|r| r.role.as_deref() == Some(role) && !ended(r))
+            .filter(|r| project_id.is_none() || r.project_id.as_deref() == project_id)
+            .map(|r| r.id)
+            .collect()
+    }
+    fn is_role(&self, role: &str) -> bool {
+        self.agents().iter().any(|a| a.role.as_deref() == Some(role)) || self.daemon.records().iter().any(|r| r.role.as_deref() == Some(role))
+    }
+    fn is_live_session(&self, id: &str) -> bool {
+        self.daemon.record(id).is_some_and(|r| !ended(&r))
+    }
     fn notify_session(&self, session_id: &str, subject: &str, line: &str) -> bool {
         self.daemon.deliver(session_id, &format!("{subject}\n{line}")).is_ok()
     }

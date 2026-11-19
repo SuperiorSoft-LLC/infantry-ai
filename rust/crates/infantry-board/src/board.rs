@@ -886,6 +886,6 @@ impl Board {
     pub fn notify_edit(&self, req: NotifyEdit) -> Result<Vec<String>, OrchError> {
         let store = self.comment_store()?;
         let t = self.find(&req.ticket_id)?;
-        store.edit_notify(&t.id, req.set.as_deref(), &req.add, &req.remove)
+        store.edit_notify(&t.id, t.project_id.as_deref(), req.set.as_deref(), &req.add, &req.remove)
     }
 }

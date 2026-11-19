@@ -35,7 +35,7 @@
      "items": {
       "type": "string"
      },
-     "description": "Agents to notify on every comment (agent ids). Default: you plus the project's default list."
+     "description": "Who to notify on every comment: agent ids, session ids, or role:<name> (resolved at send time). Default: you plus the project's default list."
     },
     "verbose": {
      "type": "boolean",
@@ -177,21 +177,21 @@
      "items": {
       "type": "string"
      },
-     "description": "Replace the ticket's notify list (agent ids)."
+     "description": "Replace the ticket notify list (agent ids, session ids, role:<name>)."
     },
     "addNotify": {
      "type": "array",
      "items": {
       "type": "string"
      },
-     "description": "Agent ids to ADD to the notify list."
+     "description": "Agent ids, session ids or role:<name> to ADD to the notify list."
     },
     "removeNotify": {
      "type": "array",
      "items": {
       "type": "string"
      },
-     "description": "Agent ids to REMOVE from the notify list."
+     "description": "Entries (agent id, session id or role:<name>) to REMOVE from the notify list."
     },
     "verbose": {
      "type": "boolean",

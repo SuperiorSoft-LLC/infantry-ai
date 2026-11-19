@@ -566,6 +566,7 @@ impl Dispatcher {
         let (orig_status, orig_session) = (row.status.clone(), row.session_id.clone());
         let tid = id.to_string();
         let starter = started_by.map(str::to_string);
+        let starter_session = starter.clone();
         let seat_agent = seat.agent_id.clone();
         let committed = self.board.apply(
             id,
@@ -609,6 +610,10 @@ impl Dispatcher {
             }
         };
         self.flight().running.insert(launched.session_id.clone(), seat.clone());
+        // The starter hears every comment without anyone remembering (a session id, so it is skipped when it authors).
+        if let (Some(st), Ok(store)) = (starter_session.as_deref(), self.board.comment_store()) {
+            let _ = store.edit_notify(id, p, None, &[st.to_string()], &[]);
+        }
         self.hook(
             hooks::TICKET_STARTED,
             id,

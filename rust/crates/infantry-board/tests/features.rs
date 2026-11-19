@@ -124,3 +124,31 @@ fn comments_notify_resolve_and_read() {
     assert!(matches!(refused, Err(OrchError::Refused(_))));
     let _ = block_on(f.orch.tickets(TicketListQuery::default())).unwrap();
 }
+
+#[test]
+fn notify_list_takes_roles_and_sessions() {
+    let mut env = kotlin_daemon_env();
+    env.live_roles = vec![("pm".into(), "sess-pm-1".into()), ("pm".into(), "sess-pm-2".into()), ("qa".into(), "sess-w".into())];
+    let f = fixture("notifyroles", env);
+    three(&f);
+    let owner = CommentAuthor::owner();
+    block_on(f.orch.record_creator("ticket-00000001".into(), owner.clone(), Some(vec!["role:pm".into(), "role:qa".into(), "sess-w".into()]))).unwrap();
+    let c = block_on(f.orch.comment_add(CommentAdd {
+        ticket_id: "00000001".into(),
+        body: "hello team".into(),
+        kind: None,
+        state: None,
+        author: owner,
+    }))
+    .unwrap();
+    // pm resolves to both holders, qa to its one holder, and the session listed too is mailed once, not twice.
+    let got = f.env.notified.lock().unwrap().clone();
+    assert_eq!(got.len(), 3, "{got:?}");
+    assert!(c.undelivered.is_empty(), "{:?}", c.undelivered);
+    assert!(got.iter().all(|l| l.contains("[TICKET COMMENT]") && l.contains("hello team")));
+    // A role nobody holds is recorded undelivered; a plain unknown word is refused.
+    let n = block_on(f.orch.notify_edit(NotifyEdit { ticket_id: "ticket-00000001".into(), add: vec!["role:ghost".into()], ..Default::default() })).unwrap();
+    assert!(n.contains(&"role:ghost".to_string()));
+    let refused = block_on(f.orch.notify_edit(NotifyEdit { ticket_id: "ticket-00000001".into(), add: vec!["ghost".into()], ..Default::default() }));
+    assert!(matches!(refused, Err(OrchError::Refused(_))));
+}

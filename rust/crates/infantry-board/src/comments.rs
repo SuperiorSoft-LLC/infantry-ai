@@ -121,17 +121,16 @@ impl Comments {
             if id.is_empty() {
                 return Err(refused("a notify target is a non-blank agent id"));
             }
-            let ok = if self.env.is_registry_agent(id) {
+            let ok = if self.env.is_registry_agent(id) || self.env.is_session(id) {
                 id.to_string()
-            } else if self.env.is_registry_agent(&format!("role:{id}")) {
+            } else if let Some(role) = id.strip_prefix("role:").map(str::trim).filter(|r| !r.is_empty()) {
+                // A role is resolved at send time to whoever holds it then, so it needs no holder now.
+                format!("role:{role}")
+            } else if self.env.is_role(id) || self.env.is_registry_agent(&format!("role:{id}")) {
                 format!("role:{id}")
-            } else if self.env.is_session(id) {
-                return Err(refused(format!(
-                    "'{id}' is a session, not an agent: only user-created agents (infantry agent-def list) can be notified, not invoked ticket workers"
-                )));
             } else {
                 return Err(refused(format!(
-                    "'{id}' is not a user-created agent (infantry agent-def list shows them); notify takes agent ids"
+                    "'{id}' is not an agent id, a session id or a role; notify takes agent ids, session ids and `role:<name>`"
                 )));
             };
             if !out.contains(&ok) {
@@ -198,15 +197,22 @@ impl Comments {
     }
 
     /// Replace (`set`), add and remove, validated. A ticket with no meta row gets one (creator `unknown`).
-    pub fn edit_notify(&self, ticket_id: &str, set: Option<&[String]>, add: &[String], remove: &[String]) -> Result<Vec<String>, OrchError> {
+    pub fn edit_notify(
+        &self,
+        ticket_id: &str,
+        project_id: Option<&str>,
+        set: Option<&[String]>,
+        add: &[String],
+        remove: &[String],
+    ) -> Result<Vec<String>, OrchError> {
         let _g = self.guard();
         let current = self.meta(ticket_id)?;
         let base = match set {
             Some(s) => self.validate_targets(s)?,
-            None => current.as_ref().map(|m| m.notify.clone()).unwrap_or_default(),
+            // A ticket saved over the wire has no row yet: it starts from the project's default list.
+            None => current.as_ref().map(|m| m.notify.clone()).unwrap_or_else(|| self.project_defaults(project_id)),
         };
-        let gone: Vec<String> = remove.iter().map(|r| r.trim()).flat_map(|r| [r.to_string(), format!("role:{r}")]).collect();
-        let mut next: Vec<String> = Vec::new();
+        let gone: Vec<String> = remove.iter().map(|r| r.trim()).flat_map(|r| [r.to_string(), format!("role:{r}")]).collect();        let mut next: Vec<String> = Vec::new();
         for id in base.into_iter().chain(self.validate_targets(add)?) {
             if !next.contains(&id) && !gone.contains(&id) {
                 next.push(id);
@@ -294,10 +300,13 @@ impl Comments {
         state: &str,
         body: &str,
     ) -> Result<Vec<String>, OrchError> {
-        let agents = self.meta(ticket_id)?.map(|m| m.notify).unwrap_or_default();
+        let agents = match self.meta(ticket_id)? {
+            Some(m) => m.notify,
+            None => self.project_defaults(project_id),
+        };
         let short = last_chars(ticket_id, 8);
         let flat: String = body.split_whitespace().collect::<Vec<_>>().join(" ");
-        let preview: String = flat.chars().take(200).collect();
+        let preview: String = flat.chars().take(150).collect();
         let line = format!(
             "[TICKET COMMENT] {short} {title}: {kind}/{state} comment {} by {}: {preview}. Read: infantry_ticket_comments {short}",
             comment_id.chars().take(8).collect::<String>(),
@@ -305,15 +314,31 @@ impl Comments {
         );
         let subject = format!("ticket comment {short}");
         let mut missed = Vec::new();
-        for agent in agents {
-            if author.agent_id.as_deref() == Some(agent.as_str()) {
+        let mut sent: Vec<String> = Vec::new();
+        for entry in agents {
+            if author.agent_id.as_deref() == Some(entry.as_str()) || author.session_id.as_deref() == Some(entry.as_str()) {
                 continue;
             }
-            let sessions: Vec<String> =
-                self.env.live_sessions(&agent, project_id).into_iter().filter(|s| Some(s.as_str()) != author.session_id.as_deref()).collect();
-            let delivered = sessions.iter().filter(|s| self.env.notify_session(s, &subject, &line)).count();
+            // An entry is a role (resolved now), a live session, or an agent's live sessions.
+            let targets: Vec<String> = if let Some(role) = entry.strip_prefix("role:") {
+                self.env.live_role_sessions(role, project_id)
+            } else if self.env.is_session(&entry) {
+                if self.env.is_live_session(&entry) { vec![entry.clone()] } else { Vec::new() }
+            } else {
+                self.env.live_sessions(&entry, project_id)
+            };
+            let sessions: Vec<String> = targets.into_iter().filter(|s| Some(s.as_str()) != author.session_id.as_deref()).collect();
+            let mut delivered = 0;
+            for s in &sessions {
+                if sent.contains(s) {
+                    delivered += 1; // already got this comment through another entry
+                } else if self.env.notify_session(s, &subject, &line) {
+                    sent.push(s.clone());
+                    delivered += 1;
+                }
+            }
             if delivered == 0 {
-                missed.push(agent);
+                missed.push(entry);
             }
         }
         Ok(missed)

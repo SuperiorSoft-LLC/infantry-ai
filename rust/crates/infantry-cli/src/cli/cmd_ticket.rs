@@ -151,7 +151,7 @@ pub fn usage_error(p: &Parsed) -> Option<String> {
                 && p.description.is_none()
                 && ["role", "provider", "model", "context-limit", "effort", "runner", "epic"].iter().all(|f| p.val(f).is_none())
                 && p.weight.is_none()
-                && ["mcp", "image", "remove-image", "related-to"].iter().all(|f| p.vals(f).is_empty());
+                && ["mcp", "image", "remove-image", "related-to", "notify", "add-notify", "remove-notify"].iter().all(|f| p.vals(f).is_empty());
             if nothing {
                 return Some("ticket update needs something to change: --title, --desc, --role, --provider, --model, --weight, --context-limit, --effort, --runner, --mcp, --epic, --image, --remove-image or --related-to".into());
             }
@@ -398,6 +398,49 @@ fn epic_for(ctx: &mut Ctx, p: &Parsed, project: Option<&str>) -> Result<Result<O
     }
 }
 
+/// Comma and repeat separated values of a flag.
+fn csv(p: &Parsed, flag: &str) -> Vec<String> {
+    p.vals(flag).iter().flat_map(|v| v.split(',').map(|x| x.trim().to_string()).collect::<Vec<_>>()).filter(|x| !x.is_empty()).collect()
+}
+
+/// `--notify` / `--add-notify` / `--remove-notify`: agent ids, session ids and `role:<name>`, saved through the
+/// board plugin's `infantry_ticket_update` (the notify list lives in its tables). A created ticket always lists its
+/// creator's session (INFANTRY_SESSION_ID). Err = printed, exit code.
+fn save_notify(ctx: &mut Ctx, p: &Parsed, ticket_id: &str, created: bool) -> Result<Option<String>, i32> {
+    let (set, mut add, remove) = (csv(p, "notify"), csv(p, "add-notify"), csv(p, "remove-notify"));
+    if created {
+        if let Some(me) = ctx.env("INFANTRY_SESSION_ID").map(|v| v.trim().to_string()).filter(|v| !v.is_empty()) {
+            add.push(me);
+        }
+    }
+    if set.is_empty() && add.is_empty() && remove.is_empty() {
+        return Ok(None);
+    }
+    let arr = |v: &[String]| Value::Array(v.iter().map(|x| Value::String(x.clone())).collect());
+    let mut a = Map::new();
+    a.insert("ticketId".into(), Value::String(ticket_id.to_string()));
+    if !set.is_empty() {
+        a.insert("notify".into(), arr(&set));
+    }
+    if !add.is_empty() {
+        a.insert("addNotify".into(), arr(&add));
+    }
+    if !remove.is_empty() {
+        a.insert("removeNotify".into(), arr(&remove));
+    }
+    match plugin_tool_call(ctx, "infantry_ticket_update", a) {
+        Ok((text, false)) => Ok(Some(text)),
+        Ok((text, true)) => {
+            ctx.err(format!("error: notify list not saved: {text}"));
+            Err(1)
+        }
+        Err(e) => {
+            ctx.err(format!("error: notify list not saved: {e}"));
+            Err(1)
+        }
+    }
+}
+
 /// `createTicket`.
 fn create(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
     check_contract(ctx)?;
@@ -438,6 +481,11 @@ fn create(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
     let count = ticket.get("images").and_then(|i| i.as_array()).map_or(0, |i| i.len());
     let id = s(&ticket, "id").unwrap_or_default();
     ctx.out(format!("created {}{}", short_id(&id), if had_images { format!(" ({count} image(s))") } else { String::new() }));
+    match save_notify(ctx, p, &id, true) {
+        Ok(Some(t)) => ctx.out(t),
+        Ok(None) => {}
+        Err(code) => return Ok(code),
+    }
     let Some(linked) = link_related_to(ctx, ticket, &p.vals("related-to"), project.as_deref().unwrap_or(""))? else { return Ok(1) };
     for l in related_note(&linked) {
         ctx.out(l);
@@ -523,6 +571,11 @@ fn update(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
     }
     let related_to = p.vals("related-to");
     let id = s(&ticket, "id").unwrap_or_default();
+    match save_notify(ctx, p, &id, false) {
+        Ok(Some(_)) => saved.push("notify".into()),
+        Ok(None) => {}
+        Err(code) => return Ok(code),
+    }
     let Some(linked) = link_related_to(ctx, ticket, &related_to, project.as_deref().unwrap_or(""))? else { return Ok(1) };
     if !related_to.is_empty() {
         saved.push(format!("related {}", related_to.len()));

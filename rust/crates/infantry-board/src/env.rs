@@ -168,6 +168,18 @@ pub trait BoardEnv: Send + Sync {
     fn live_sessions(&self, _agent_id: &str, _project_id: Option<&str>) -> Vec<String> {
         Vec::new()
     }
+    /// The live session ids holding `role` (in `project_id` when given): `role:<name>` resolved at send time.
+    fn live_role_sessions(&self, _role: &str, _project_id: Option<&str>) -> Vec<String> {
+        Vec::new()
+    }
+    /// Is `role` a role some agent or live session holds?
+    fn is_role(&self, _role: &str) -> bool {
+        false
+    }
+    /// Is `id` a session that is still live?
+    fn is_live_session(&self, _id: &str) -> bool {
+        false
+    }
     /// AUTO-REPORT-1: the git facts of a finished ticket for the starter's mail: its branch tip and whether the
     /// merge target already holds it. None when the host has no repository.
     fn branch_facts(&self, _project_id: Option<&str>, _branch: Option<&str>, _base: Option<&str>) -> Option<String> {
@@ -277,6 +289,8 @@ pub struct StaticEnv {
     pub live: Vec<(String, String)>,
     /// Every delivered notify line, as "<session> <line>".
     pub notified: Mutex<Vec<String>>,
+    /// Live sessions as (role, session id).
+    pub live_roles: Vec<(String, String)>,
     /// Lane cap per role (0 = the default 1).
     pub lane_cap: u32,
     pub rules: Vec<infantry_orchestrator_api::RoutingRule>,
@@ -339,6 +353,18 @@ impl BoardEnv for StaticEnv {
     }
     fn live_sessions(&self, agent_id: &str, _project_id: Option<&str>) -> Vec<String> {
         self.live.iter().filter(|(a, _)| a == agent_id).map(|(_, s)| s.clone()).collect()
+    }
+    fn live_role_sessions(&self, role: &str, _project_id: Option<&str>) -> Vec<String> {
+        self.live_roles.iter().filter(|(r, _)| r == role).map(|(_, s)| s.clone()).collect()
+    }
+    fn is_role(&self, role: &str) -> bool {
+        self.live_roles.iter().any(|(r, _)| r == role) || self.agents.iter().any(|a| a.role.as_deref() == Some(role))
+    }
+    fn is_session(&self, id: &str) -> bool {
+        self.is_live_session(id)
+    }
+    fn is_live_session(&self, id: &str) -> bool {
+        self.live.iter().any(|(_, s)| s == id) || self.live_roles.iter().any(|(_, s)| s == id)
     }
     fn notify_session(&self, session_id: &str, _subject: &str, line: &str) -> bool {
         self.notified.lock().unwrap_or_else(|p| p.into_inner()).push(format!("{session_id} {line}"));
