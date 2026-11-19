@@ -21,6 +21,8 @@ interface UiState {
   leftOpen: boolean;
   rightOpen: boolean;
   dialog: DialogId;
+  /** Chat maximized: the header and tab bar step aside so the transcript and composer fill the column. */
+  chatMax: boolean;
 }
 
 interface UiActions {
@@ -51,6 +53,7 @@ export function UiProvider({ children }: { children: ReactNode }) {
     leftOpen: !narrow,
     rightOpen: !narrow,
     dialog: null,
+    chatMax: false,
   });
 
   useEffect(() => {
