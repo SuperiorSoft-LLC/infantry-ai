@@ -27,6 +27,8 @@ struct Endpoint {
     mode: &'static str,
     /// Daemon mode: why the sidecar could not start (the UI shows it; the URL is then unreachable).
     error: Option<String>,
+    /// Daemon mode: the sidecar found running is older than the daemon binary (restart it).
+    note: Option<String>,
     /// INFANTRY_PERF_SCENARIO: the perf harness's scenario (`agents=5;stream=1;...`), run in-page (perf-scenario.ts).
     perf: Option<String>,
 }
@@ -175,6 +177,7 @@ async fn endpoint(state: State<'_, AppState>) -> Result<Endpoint, String> {
         .filter(|t| !t.is_empty())
         .or_else(|| env("TOKEN"));
     let perf = env("PERF_SCENARIO");
+    let mut note: Option<String> = None;
     let (url, token, error, mode) = match state.mode {
         Mode::Connect => {
             let url = connect_target().expect("connect mode has a target");
@@ -188,19 +191,22 @@ async fn endpoint(state: State<'_, AppState>) -> Result<Endpoint, String> {
                 let (m, cv) = &*cell;
                 let g = cv.wait_while(m.lock().unwrap(), |s| s.is_none()).unwrap();
                 match g.as_ref().unwrap() {
-                    Ok(s) => Ok(s.url.clone()),
+                    Ok(s) => Ok((s.url.clone(), s.note.clone())),
                     Err(e) => Err(e.clone()),
                 }
             })
             .await
             .map_err(|e| e.to_string())?;
             match r {
-                Ok(url) => (url, state.remote_token(), None, "daemon"),
+                Ok((url, n)) => {
+                    note = n;
+                    (url, state.remote_token(), None, "daemon")
+                }
                 Err(e) => ("ws://127.0.0.1:0/ws".into(), None, Some(e), "daemon"),
             }
         }
     };
-    Ok(Endpoint { url, token, stress, local: mode == "embedded", mode, error, perf })
+    Ok(Endpoint { url, token, stress, local: mode == "embedded", mode, error, note, perf })
 }
 
 /// The `runner` setting (`embedded` | `daemon`); applies on the next start.

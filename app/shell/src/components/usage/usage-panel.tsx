@@ -1,18 +1,36 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // Usage tab: the pacing rule, then one card per plan account (live from the daemon's usage_report).
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Gauge, RefreshCw, X } from "lucide-react";
 import { ruleLine, updatedLine } from "@infantry/client";
 import { EmptyState, IconButton, SectionLabel, cn } from "@infantry/ui";
 import { PacingCard } from "./pacing-card";
+import { daemonNote } from "@/daemon/daemon";
 import { useNow, useUsage } from "./use-usage";
+
+/** How long the first usage report may take before the panel says the daemon is not answering. */
+const USAGE_WAIT_MS = 8_000;
 
 export function UsageMeters({ grid }: { grid?: boolean }) {
   const report = useUsage((s) => s.report);
   const ensureLoaded = useUsage((s) => s.ensureLoaded);
   const now = useNow();
   useEffect(() => ensureLoaded(), [ensureLoaded]);
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    if (report) return;
+    const id = setTimeout(() => setWaited(true), USAGE_WAIT_MS);
+    return () => clearTimeout(id);
+  }, [report]);
+  if (!report && waited)
+    return (
+      <EmptyState
+        icon={<Gauge className="size-5" />}
+        title="No usage report from the daemon"
+        hint={daemonNote ?? "The daemon did not answer usage_get. It may be older than this app (restart it), or this build does not serve usage yet."}
+      />
+    );
   if (!report) return <EmptyState icon={<Gauge className="size-5" />} title="Reading usage" hint="Waiting for the daemon's first usage report." />;
   if (report.meters.length === 0) return <EmptyState icon={<Gauge className="size-5" />} title="No plan accounts" hint="No live usage source answered and no ticket worker is running." />;
   return (

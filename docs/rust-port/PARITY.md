@@ -66,6 +66,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Switch agent (provider/model) | yes | done | |
 | Interrupt, restart (with force) | yes | done | |
 | Session stats | yes | done | |
+| Per-session token totals in the header (in / out across past runs) | yes | not yet | *(RUST-BUG ca5eb72f, GAPS-1)* The header shows live `usage` frames only; with none seen it says "tokens: not in the Rust version yet" in place of 0 / 0. `session_stats` has billed tokens, not the in/out split. |
 | Automation stats line ("turns saved") | yes | done | *(RUST-UI-10)* Session header chip "turns saved N · wakes M" (hover: wakes by reason) from `timeline_item` stats pushes and `timeline_list`. |
 | Status line: agent count, session state | yes | done | *(fixed today)* It was sample text ("allowAll · 14 agents"). It now shows real counts and "not connected". The permission mode is not shown: UI only. |
 | Centre tab bar from the plugin list | yes | done | |
@@ -238,7 +239,7 @@ All *(fixed today)*: before this sweep no window-wide key worked, and the hints 
 | Feature | Kotlin | Rust | Notes |
 |---|---|---|---|
 | Attention (^6) | yes | done | |
-| Usage (^7): meters, pacing, override | yes | done | |
+| Usage (^7): meters, pacing, override | yes | done | *(RUST-BUG ca5eb72f)* Served by the current daemon (UsageUnit). A stale daemon never answers `usage_get`: the panel now says so after 8 s, and the app warns when the running daemon is older than the binary on disk (`stale_note`). |
 | Changes (^3): staged / unstaged, worktree, branch diff, history | yes | done | |
 | Diff modal with previous / next file | yes | partial | Inline diff view. No modal stepping: UI only. |
 | Review (^4) | yes | done | Read-only queue. No Open agent: UI only. |

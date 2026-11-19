@@ -25,6 +25,8 @@ interface Endpoint {
   mode?: string;
   /** Daemon mode: why the sidecar did not start; remote mode: why the token could not be read. */
   error?: string | null;
+  /** Daemon mode: the running sidecar is older than the daemon binary on disk (restart it). */
+  note?: string | null;
   /** Remote mode: the paired daemon's display name. */
   name?: string | null;
 }
@@ -41,6 +43,8 @@ export let perfScenario: string | null = null;
 export let runnerMode = "browser";
 /** Daemon mode: why the sidecar did not start (null = it is up). */
 export let daemonError: string | null = null;
+/** Daemon mode: a plain warning that the running daemon is stale (it may refuse newer frames). */
+export let daemonNote: string | null = null;
 /** A phone build (Tauri mobile): it connects to a remote daemon and runs none. */
 export let isMobile = false;
 /** A phone that is not paired with a daemon yet: main.tsx shows the connect screen. */
@@ -75,6 +79,8 @@ export async function initDaemon(): Promise<DaemonStore> {
   perfScenario = e.perf ?? null;
   runnerMode = e.mode ?? (isTauri ? (localMode ? "embedded" : "connect") : "browser");
   daemonError = e.error ?? null;
+  daemonNote = e.note ?? null;
+  if (daemonNote) console.warn(`[infantry] ${daemonNote}`);
   if (daemonError) console.error(`[infantry] ${runnerMode} mode: ${daemonError}`);
   isMobile = runnerMode === "remote";
   needsPairing = isMobile && !e.url;

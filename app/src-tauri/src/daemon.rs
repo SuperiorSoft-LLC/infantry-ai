@@ -54,6 +54,19 @@ pub struct Sidecar {
     pub url: String,
     /// The process, when this app started it (None = it was already running).
     pub child: Option<Child>,
+    /// Set when the daemon found running is older than the daemon binary on disk (it may refuse newer frames).
+    pub note: Option<String>,
+}
+
+/// Why a running daemon is stale: its start time (`health/status.json` `startedAt`, ms) is before the binary's
+/// modification time. None when it is current or either time is unknown.
+pub fn stale_note(state: &Path, bin: Option<&Path>) -> Option<String> {
+    let st: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(state.join("health").join("status.json")).ok()?).ok()?;
+    let started = st["startedAt"].as_i64()?;
+    let built = bin?.metadata().ok()?.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as i64;
+    (built > started + 1_000).then(|| {
+        "The running daemon is older than the daemon binary on disk, so it may refuse newer requests (\"this daemon does not serve that frame yet\"). Restart the daemon (Settings > Daemon) to load the new build.".to_string()
+    })
 }
 
 /// `GET /health` on loopback answered `ok`.
@@ -184,7 +197,8 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch) -> Result<Si
     }
     std::fs::create_dir_all(state).map_err(|e| format!("state dir {}: {e}", state.display()))?;
     if let Some(p) = read_port(state).filter(|p| !FOREIGN_PORTS.contains(p) && healthy(*p)) {
-        return Ok(Sidecar { url: format!("ws://127.0.0.1:{p}/ws"), child: None });
+        let note = stale_note(state, binary().ok().as_deref());
+        return Ok(Sidecar { url: format!("ws://127.0.0.1:{p}/ws"), child: None, note });
     }
     let _ = std::fs::remove_file(port_file(state));
     let bin = binary()?;
@@ -219,7 +233,7 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch) -> Result<Si
             return Err(format!("{} exited at start ({status}); see {}", bin.display(), state.join("daemon.log").display()));
         }
         if let Some(p) = read_port(state).filter(|p| !FOREIGN_PORTS.contains(p)) {
-            return Ok(Sidecar { url: format!("ws://127.0.0.1:{p}/ws"), child: Some(child) });
+            return Ok(Sidecar { url: format!("ws://127.0.0.1:{p}/ws"), child: Some(child), note: None });
         }
         std::thread::sleep(Duration::from_millis(20));
     }
@@ -230,6 +244,20 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch) -> Result<Si
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_daemon_older_than_the_binary_is_called_stale() {
+        let dir = std::env::temp_dir().join(format!("infantry-stale-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("health")).unwrap();
+        let bin = dir.join("bin.exe");
+        std::fs::write(&bin, b"x").unwrap();
+        std::fs::write(dir.join("health").join("status.json"), r#"{"startedAt": 1000}"#).unwrap();
+        assert!(stale_note(&dir, Some(&bin)).is_some_and(|n| n.contains("older")));
+        std::fs::write(dir.join("health").join("status.json"), r#"{"startedAt": 99999999999999}"#).unwrap();
+        assert!(stale_note(&dir, Some(&bin)).is_none());
+        assert!(stale_note(&dir, None).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn the_health_record_names_a_pid_only_for_the_live_port() {
