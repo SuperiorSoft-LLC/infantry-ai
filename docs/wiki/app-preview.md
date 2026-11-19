@@ -1,5 +1,10 @@
 # App preview of a branch
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Legacy (Kotlin) reference
+
+
 PREVIEW-BRANCH-1. Glance at a branch's app without making a build. In the Run tab, pick the **Preview app** command and press
 **Start on branch...**, then pick a branch (or a ticket's branch). The app of that branch opens in its own window, through a
 Gradle run with no packaging, against the live endpoints.

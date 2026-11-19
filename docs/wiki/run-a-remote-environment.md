@@ -2,6 +2,15 @@
 
 # Run a remote environment
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust (current)
+
+Start a runner-only daemon with `infantry-daemon --mode runner` and pair it from the board machine (see [Runner quickstart](runner-quickstart.md)). The repo's `docker/Dockerfile` builds the Kotlin daemon on a JRE image. A Rust Docker image is not verified to exist.
+
+## Legacy (Kotlin) reference
+
+
 A remote environment is a second machine (a server, a container) that runs your agents while the board stays on your PC.
 One build and one image serve every role; a startup **mode** picks what a daemon does. Design record:
 [RUNNER-POOL.md](../RUNNER-POOL.md).

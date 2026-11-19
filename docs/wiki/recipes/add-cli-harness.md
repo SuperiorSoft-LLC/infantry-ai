@@ -2,6 +2,17 @@
 
 # Recipe: add a CLI harness
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](../Architecture.md).
+
+## Rust: add a CLI harness (current)
+
+In the Rust framework a harness is a crate that implements `Harness` from `infantry-harness` (`id`, `capabilities`, `models`, `sign_in_problem`, `launch`) plus a `Translator`. `launch` returns a launch plan (the process to run and the translator). Copy the smallest one, `infantry-harness-codex`, and add the crate's id to `REGISTERED` in `rust/crates/infantry-daemon/src/harness/mod.rs`. The layer guard (`cargo test -p infantry-guards`) keeps the crate on L3. A JSON-descriptor or plugin route for harnesses is not verified in Rust.
+
+Build and test from `rust/`: `cargo build -p infantry-daemon` and `cargo test -p infantry-harness-<name>`. See [Harnesses](../Harnesses.md).
+
+## Legacy (Kotlin) reference
+
+
 Goal: Infantry AI can run another agent CLI. A **harness** turns "run this prompt in this session" into the argv and
 environment of that CLI and turns the CLI's output lines into events. The daemon launches, sandboxes, gates and
 kills the process. Core carries no concrete harness (`HarnessCoreGuardTest`); every harness is a descriptor or a

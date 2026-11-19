@@ -1,5 +1,14 @@
 # Script Arsenal (global scripts)
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust (current)
+
+The store exists in Rust. `infantry-scripting` resolves a script by name as the project copy first (`<project>/.infantry/scripts`), then global (`<state>/global-scripts`), then a script shipped by a plugin or bundled with the crate. How the React app shows the Arsenal is not verified.
+
+## Legacy (Kotlin) reference
+
+
 The Script Arsenal is the app-wide library of Lua scripts: stored once, usable from every project, refined per project by copying. It belongs to the Scripting plugin (`plugins/official/Infantry_Scripting`); core knows nothing about it. See [Scripting](Scripting.md) for the language, hooks and tools.
 
 ## Scopes and resolution order

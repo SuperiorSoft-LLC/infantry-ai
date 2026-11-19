@@ -2,6 +2,13 @@
 
 # Compatibility and deprecation policy
 
+> **Rust daemon plugins:** the ABI rule on main is in the WIT file's header (`rust/crates/infantry-plugin-wit/wit/daemon-plugin.wit`): additive changes only, and records and variants are never changed in place.
+
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Legacy (Kotlin) reference
+
+
 > **DRAFT. Not yet a promise.** The owner makes this official at the public launch. Numbers marked *proposed* are for
 > the owner to decide (see the end of this page). The mechanisms in the table are in the code today.
 

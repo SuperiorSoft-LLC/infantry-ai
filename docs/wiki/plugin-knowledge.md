@@ -1,5 +1,23 @@
 # Plugin knowledge
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Plugin knowledge in the Rust framework
+
+Not verified in Rust. I searched the Rust crates for the `knowledge` field and the PLUGIN TOOLS briefing:
+
+- The module manifest the Rust host reads (`ModuleManifest` and `DaemonDecl` in
+  `rust/crates/infantry-plugin-host/src/manifest.rs`) has no `knowledge` field.
+- The string "PLUGIN TOOLS" appears nowhere under `rust/crates`.
+- The start brief is built in `rust/crates/infantry-board/src/brief.rs`; it has named sections for instructions,
+  knowledge and skills, but I found nothing there that reads a plugin's `module.json`.
+
+What a Rust plugin does have to tell agents about its tools: each tool in `daemon.tools` carries a `description` and an
+`inputSchema`, which the MCP bridge lists to the agent (`plugin_tools`). So write a clear description. Whether the Rust
+daemon will add a per-plugin briefing is not verified.
+
+## Legacy (Kotlin) reference
+
 A plugin tells agents what its tools are for. Any role, any plugin (community tier included), no host edit per plugin.
 The plan is CAL-PLAN-2 section 2 (ticket cc8207de); this page describes what is built.
 

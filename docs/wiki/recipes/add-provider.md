@@ -2,6 +2,15 @@
 
 # Recipe: add a provider (a model group)
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](../Architecture.md).
+
+## Rust: providers (current)
+
+Not verified: a separate provider or model-group registry in Rust. A harness reports the models it offers through `Harness::models`, so a new model group is code in that harness crate (see [Harnesses](../Harnesses.md)). The routes below are the Kotlin ones.
+
+## Legacy (Kotlin) reference
+
+
 A provider is a group of models in a harness's picker. It is data on a harness; there is no separate provider
 registry to edit. Pick the route that matches how the harness was added.
 

@@ -1,5 +1,10 @@
 # Kotlin notes for the UI core
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Legacy (Kotlin) reference
+
+
 This page is for an agent that edits Kotlin code in `superiorSoftLibrary/infantryUiCore` or the build files. The
 toolchain is newer than most model training data, so check the versions here and the catalog before you use an API
 from memory. Where this page and the code disagree, the code wins.

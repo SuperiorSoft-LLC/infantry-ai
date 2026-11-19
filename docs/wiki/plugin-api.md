@@ -2,6 +2,28 @@
 
 # UI plugin API
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## UI plugins in the Rust framework
+
+There is no UI plugin API in Rust. This page describes the Kotlin `infantryPlugins` and `infantryUiCore` types, which
+only exist on the `legacy-java` branch.
+
+What the Rust app does instead, checked in `app/`:
+
+- The UI is a React app (`app/packages/ui`, `app/packages/client`, shell in `app/shell`).
+- I grepped `app/packages` and `app/shell` for a plugin loader. There is none: the app never loads UI code from a plugin
+  folder or a `module.json`'s jar.
+- The daemon's plugin list carries each module's declared `tabs`, `panels`, `fills` and `slots`. The client store
+  (`app/packages/client/src/stores/plugins.ts`) turns them into a slot registry, and the shell
+  (`app/shell/src/plugins/catalog.tsx`) maps a declared tab id to a view the shell ships. A declared tab with no view
+  gets a generic plugin view. A disabled plugin's tab disappears.
+
+So a Rust plugin can declare a tab, but the view for it lives in the app source. Whether a drop-in UI mechanism is
+planned is not verified. For the daemon half see [Daemon plugin API](daemon-plugin-api.md) and [Plugins](Plugins.md).
+
+## Legacy (Kotlin) reference
+
 This page lists every type and function a UI plugin uses. It is written for a developer who has never seen the code.
 For a step-by-step tutorial, read [Make a plugin](make-a-plugin.md). For the daemon half, read
 [Daemon plugin API](daemon-plugin-api.md).

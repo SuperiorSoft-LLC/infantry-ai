@@ -1,5 +1,14 @@
 # Browser for agents (Infantry_Browser)
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust (current)
+
+Not verified: an `Infantry_Browser` plugin. It is not among the folders in `rust/plugins/official`. Kotlin-only.
+
+## Legacy (Kotlin) reference
+
+
 The official plugin `Infantry_Browser` gives an agent a real browser, and only when you grant it. It declares one MCP server named
 `browser` (capability `browser`) that runs [Playwright MCP](https://github.com/microsoft/playwright-mcp):
 `npx -y @playwright/mcp@0.0.85 --isolated --browser chromium`.

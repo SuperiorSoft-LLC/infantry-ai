@@ -1,5 +1,14 @@
 # Vault: the OS master key, reveal, copy and backup
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust (current)
+
+`infantry-vault` has a keystore that reads Kotlin v1/v2 files, OS master-key protection (`os_vault.rs`), verification (`verify.rs`; the Windows Hello step is stated in the crate summary and not re-verified here), encrypted backup (`backup.rs`) and an audit log. Limit keys: `limits.secrets.backupKdfIterations`, `backupMinPassphrase`, `revealSeconds`, `clipboardClearSeconds`, `verifyCacheSeconds`.
+
+## Legacy (Kotlin) reference
+
+
 Infantry AI keeps your secrets in the daemon's keystore, so no value has to live in a plain file. This page says how the
 keystore is protected, how you read a value back (only you, only after Windows checks it is you), and how a passphrase
 backup keeps your secrets safe if the PC is lost.

@@ -2,6 +2,25 @@
 
 # Recipe: add a setting with scopes
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](../Architecture.md).
+
+## In the Rust framework
+
+What I could verify:
+
+- A plugin's own setting: ask for the `settings` grant and call `settings.get/set/remove`. The host stores the key
+  as `<ModuleName>.key` in `plugin-settings.json` in the state dir
+  (`rust/crates/infantry-daemon/src/compose/plugins.rs`).
+- A declared setting: `daemon.config` in `module.json` with a `key`, a `scope` and a `default`. A field with
+  `"scope": "daemon"` is read by the plugin with `config.get(key)`. `rust/plugins/official/Infantry_Notes/module.json` declares
+  `knowledge.globalWriteRoles` this way.
+- Core code reads settings through the read-only `Settings` trait (`rust/crates/infantry-core/src/settings.rs`).
+
+Not verified: the project, role and session scopes of a core setting in Rust, and a `SettingScopes` equivalent.
+The `Infantry_Settings` plugin serves project config and scoped settings tools; I did not trace its scope rules.
+
+## Legacy (Kotlin) reference
+
 A value can live at four scopes; the most specific one that holds a value wins:
 **session > role (in a project) > project > app > built-in default** (`SettingScope` in
 `superiorSoftLibrary/infantryCore/src/main/kotlin/com/superiorsoftllc/infantry/settings/ScopedSettings.kt`). There are

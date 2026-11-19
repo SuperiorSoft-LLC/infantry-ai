@@ -2,6 +2,19 @@
 
 # Settings
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Settings in Rust (current)
+
+- **Daemon settings** are key/value rows in the daemon's `settings` table. Use the `settings_get` / `settings_set` frames, the tools `infantry_settings_get` / `infantry_settings_set`, or `infantry settings`.
+- **Scopes:** a scoped value is the row `@scope/<scope>/<target>/<key>`. Resolution is session, then role (target `<project>/<role>`), then project, then app, then the default. Not ported yet: the per-key allowed-scope table and value validation, so every key accepts every scope.
+- **The app's own file** is `<state>/ui.json`, read by the desktop shell at start (a change applies on the next start). Keys seen in code: `runner` (`embedded` or `daemon`), `daemonStateDir`, `daemonPort`, `updater`, `remoteAccess`, `paths.addCli`.
+- **Limits:** named `limits.*` keys, for example `limits.concurrency.maxDepth`, `limits.pacing.maxWorkersCeiling`, `limits.mail.*`, `limits.secrets.*`, `limits.usage.*`, `limits.runners.*`, `limits.mcp.*`, `limits.tools.*`.
+- Not verified in Rust: the cost-saving defaults and every default number below.
+
+## Legacy (Kotlin) reference
+
+
 Settings are durable key/value pairs kept by the daemon. Read and write them in the Settings tab, with the CLI, or
 with the MCP tools `infantry_settings_get` / `infantry_settings_set`.
 

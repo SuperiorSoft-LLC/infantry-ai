@@ -1,5 +1,14 @@
 # Progress and downloads
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust (current)
+
+The CLI has native `progress` and `run` commands (`cli/progress.rs`). The unified progress and download seams described below belong to the Kotlin app and are not verified in Rust.
+
+## Legacy (Kotlin) reference
+
+
 CORE-PROGRESS-DOWNLOAD-1. The app has ONE progress/loader system and ONE downloader. Every feature and plugin uses them;
 a plugin may replace how progress is drawn and where the bytes come from, never the mechanism. Do not write a progress
 bar or a download loop of your own: `DownloadProgressGuardTest` fails the build on a new one.

@@ -2,6 +2,17 @@
 
 # Recipe: add your service to the Services hub
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](../Architecture.md).
+
+## In the Rust framework
+
+Not verified. The Services hub, its sign-in and billing-link contract, and the Kotlin Services plugin API are Kotlin
+history here. In the Rust tree, `rust/plugins/official/Infantry_Sites` is a host contract only (it has no daemon
+component, and the closed-source sidecar that implements it is not in the repository). I did not trace how the Rust
+shell shows a service, so this recipe has no verified Rust steps. See [Plugins](../Plugins.md).
+
+## Legacy (Kotlin) reference
+
 The **Services** tab (module `Infantry_Account`) is a generic provider layer. A company plugs a service into it with
 its own bridge plugin plus its own web API; the hub signs the user in, shows their plan and permissions, and gives the
 service's plugin a short-lived token. The hub names no product and no permission. The app's own **Infantry AI Hosting**

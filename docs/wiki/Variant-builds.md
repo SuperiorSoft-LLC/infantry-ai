@@ -1,5 +1,10 @@
 # Variant builds (feature branches such as feature-calendar)
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Legacy (Kotlin) reference
+
+
 A variant build packages a feature branch for the owner to try. It never touches the owner's app, daemon or database,
 and it never goes out through the nightly (never push a variant branch to origin: a push triggers the nightly).
 

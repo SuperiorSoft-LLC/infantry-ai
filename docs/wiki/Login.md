@@ -1,5 +1,14 @@
 # CLI login
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust (current)
+
+`login` is not in the native CLI command table, so it is handed to the JVM launcher. Kotlin-only today.
+
+## Legacy (Kotlin) reference
+
+
 `infantry login` saves the daemon connection the CLI uses by default. It is **not** Claude's `/login`: that signs the
 Claude harness in to an Anthropic account; this one tells the `infantry` CLI which Infantry AI daemon to talk to.
 

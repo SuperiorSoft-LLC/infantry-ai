@@ -2,6 +2,15 @@
 
 # Recipe: add a Lua hook
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](../Architecture.md).
+
+## Rust: add a Lua hook (current)
+
+The recipe is the same idea and needs no build. Scripts and hooks are data, run by the `infantry-scripting` crate. A hook lives in `<project>/.infantry/scripts/hooks.json` (app-wide ones in `global-hooks.json`). `on` is `lane enter <lane>`, `lane exit <lane>`, an event name (`ticket.commented`, a prefix such as `ticket.*`, or `*`) or `every <N>s`. Lanes are `backlog`, `todo`, `in_progress`, `pending`, `done`. Save with the `infantry_script_save` and `infantry_script_hook` tools. See [Scripting](../Scripting.md). Kotlin tooling mentioned below no longer applies.
+
+## Legacy (Kotlin) reference
+
+
 Goal: when a ticket enters a lane, a script runs and does something with the tools an agent has (here: comment on
 the ticket). No Kotlin and no rebuild: a script and a hook are data in the daemon and the project.
 

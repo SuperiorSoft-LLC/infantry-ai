@@ -5,75 +5,54 @@
 > **Beta.** <!-- shared:beta_line -->Infantry AI is in Beta. It works and we use it every day, but not every part is fully tested yet: you are an early tester. Please report anything that breaks on GitHub.<!-- /shared:beta_line -->  
 > [Report a problem](https://github.com/SuperiorSoft-LLC/infantry-ai/issues)
 
-Every page of this wiki is listed here, one line each. The pages are written from the code; where they disagree with it, the code wins.
+Every page of this wiki is listed here, one line each. The pages are written from the Rust code on `main`. Where a page
+and the code disagree, the code wins. Pages that describe the Kotlin app carry a `legacy-java` banner and keep their old
+text under a legacy heading.
 
 ## Start here
 
-- [Home](Home.md): the wiki front page, how the pages were checked, how to support the project.
-- [Architecture](Architecture.md): the three layers, the daemon, the protocol, a request from click to daemon and back, slots, scripting.
-- [Variant builds](Variant-builds.md): packaging a feature branch such as feature-calendar as its own variant build, never through the nightly.
-- [App preview of a branch](app-preview.md): the Run tab's Preview app, a Gradle run of any branch's app (branch commands, `{worktree}` / `{branch}` / `{root}`), no build.
-- [Command line](CommandLine.md): `infantry` on your PATH after an install, `install-cli` / `uninstall-cli`, what each OS writes.
+- [Architecture](Architecture.md): the Rust framework: the daemon, the layers, the wire, plugins, scripting, clients.
+- [Install](Install.md): the Windows installer, the headless daemon, the `infantry` command on PATH, building from source.
+- [Android](Android.md): the Android app, pairing a phone to a daemon, building the APK.
+- [Updates](Updates.md): the update channels, the feed, the signing keys, the release pipeline.
+- [Command line](CommandLine.md): the native `infantry` command and what it hands to the Kotlin launcher.
+- [Home](Home.md): the wiki front page, the support and reporting pages.
 
 ## Build plugins
 
-- [Plugins](Plugins.md): `module.json`, the UI and daemon halves, config fields, building, installing, signing, a hello plugin.
-- [Plugin knowledge](plugin-knowledge.md): module.json `knowledge`, the PLUGIN TOOLS briefing every role session gets.
-- [Plugin lifecycle](Plugin-lifecycle.md): live swap of one plugin (install, update, enable, disable, remove), `PluginScope`, the leak check, and the do and don't for authors.
-- [Make a plugin](make-a-plugin.md): step by step from the template to a built UI + daemon example.
-- [Publish a plugin](publish-a-plugin.md): package a plugin from its own repo as an `.ihq` and list it in the community registry.
-- [Run a remote environment](run-a-remote-environment.md): start a runner-only daemon (`--mode runner`, Docker) and pair it.
-- [Runners](runner-quickstart.md): concepts (orchestrator, runner, placement), pair a server, update, troubleshooting.
-- [Runner pairing design](RunnerPairing-design.md): RUNNER-PAIR-UX-1 (2026-11-08): today's 12 pairing steps and the one-link flow that replaces them (design record, tickets in backlog).
-- [Agent avatar mascot design](Agent-avatar-mascot-design.md): MASCOT-1 (2026-11-08): where agent avatars are drawn today, a pluggable avatar-renderer seam in UI core, and the material-mascot plugin on top of it (design record, tickets not filed).
-- [UI verify design](UI-verify-design.md): UI-VERIFY-1 (2026-11-08): offscreen shots, test-scoped input, real-clock frame bench, headless web check and an Android CI smoke so workers check the UI without the owner's desktop (design record, tickets not filed).
-- [UI driver](UI-driver.md): UI-DRIVER-1: drive the real desktop app offscreen on a test instance through a local API (query, click, type, scroll, wait, shot), with no window and no OS input; `scripts/ui-driver.sh`.
-- [UI plugin API](plugin-api.md): every public type and function of the UI plugin API.
-- [Daemon plugin API](daemon-plugin-api.md): tools, routes, hooks, events, services, storage, lifecycle.
-- [Progress and downloads](Progress.md): the one progress/loader system and the one downloader; a plugin presenter, renderer or transport.
-- [Bridges](Bridges.md): plugin capabilities and events, callable from scripts, agents (MCP) and other plugins.
-- [Harnesses and providers](Harnesses.md): the harness API, the built-in harnesses, adding a harness or a provider.
+- [Plugins](Plugins.md): `module.json`, the daemon half (WASM or sidecar), grants, the official plugins, building with `stage.sh`.
+- [Make a plugin](make-a-plugin.md): step by step, from an official plugin to a built daemon half.
+- [Daemon plugin API](daemon-plugin-api.md): the WIT world: exports, imports, tools, frames, routes, hooks, events.
+- [Plugin knowledge](plugin-knowledge.md): module.json `knowledge` and the PLUGIN TOOLS briefing.
+- [Plugin lifecycle](Plugin-lifecycle.md): install, update, enable, disable and remove a plugin.
+- [Publish a plugin](publish-a-plugin.md): package a plugin from its own repo.
+- [UI plugin API](plugin-api.md): the Kotlin UI plugin API (legacy-java).
+- [Compatibility and deprecation](compatibility.md): the ABI promise for daemon plugins, and the Kotlin policy.
+- [Recipes](recipes/README.md): worked how-to-add-X guides, one per page: daemon tool, UI panel, child plugin, setting, Lua hook, harness, provider, avatar style, service.
 
-## Automate
+## Run and automate
 
-- [Scripting](Scripting.md): the Lua API, hooks, the process bridge, chat notes, progress, the session bridge.
-- [Script Arsenal](script-arsenal.md): the app-wide global scripts every project can run and refine, with a bundled starter set.
-- [Add a Lua hook](recipes/add-lua-hook.md): run a script on a lane change, mail, a timer or a named event.
-
-## Configure
-
-- [Board and epics](Board.md): epics, and moving tickets between epics.
-- [Notifications](Notifications.md): the ONE notification bus (in-app toasts, OS notifications), presenters a plugin can override, routing settings, the inventory.
-- [CLI login](Login.md): `infantry login|logout|whoami`, the CLI's saved daemon connection (not Claude's `/login`).
-- [Health](Health.md): `infantry health`, the daemon health and environment report (up/down, restarts and why, MCP bridges, OS/shell/ports).
-- [Usage and worker limits](Usage.md): the meters, the pacing rule, why a ticket start is refused ("FULL"), overrides; explain it to a user who asks why only one worker runs.
-- [Waiting flag](Waiting.md): `infantry waiting on|off`, `infantry_waiting`; the "active but waiting" card state and the idle-nudge watcher.
-- [Browser for agents](Browser.md): the `Infantry_Browser` plugin, a walled Playwright MCP server (isolated profile, headed) given by grant with a purpose.
-- [Memory](Memory.md): project knowledge notes, the project / global / role / session scopes, the `infantry_memory` MCP actions (read and write), who may write global notes.
-- [Secrets](Secrets.md): `infantry secret render`, the `{{secret:NAME}}` placeholder, `infantry_secret_render`; fill any text file from saved secrets.
-- [Vault](Vault.md): the OS master key, Reveal / Copy after Windows Hello (owner only), the passphrase-encrypted backup.
+- [Harnesses](Harnesses.md): the harness contract and the four harness crates (Claude Code, Codex, opencode, pi).
+- [Runners](runner-quickstart.md): local and linked remote runners, placement, setup, troubleshooting.
+- [Run a remote environment](run-a-remote-environment.md): a runner-only daemon (`--mode runner`) and pairing it.
+- [Scripting](Scripting.md): the sandboxed Lua API, hooks, the process bridge, settings that govern scripts.
+- [Script Arsenal](script-arsenal.md): the global scripts, resolution order and the bundled set.
+- [Board](Board.md): tickets, lanes and epics.
+- [Notifications](Notifications.md): the notification bus, attention items and the presenters.
+- [Health](Health.md): the daemon health and environment report.
 - [Settings](Settings.md): scopes (app, project, role, session) and the cost-saving defaults.
-- [Kotlin notes](kotlin-notes.md): toolchain versions, UI core source sets and expect/actual, Compose MP pitfalls, build flags.
-- [Updates](Updates.md): the one update engine for the app and every plugin; per-plugin sources, private and paid ones.
+- [Secrets](Secrets.md): render text with saved secrets (`{{secret:NAME}}`).
+- [Vault](Vault.md): the master key, Reveal and Copy after Windows Hello, the encrypted backup.
+- [Usage](Usage.md): live plan meters, pacing and overrides.
+- [Waiting](Waiting.md), [Memory](Memory.md), [Login](Login.md), [Progress](Progress.md), [Bridges](Bridges.md), [Browser](Browser.md): smaller features, each checked against its Rust crate.
 
-## Recipes
+## Design records and Kotlin-era pages
 
-- [Recipes overview](recipes/README.md): how the how-to-add-X guides are laid out.
-- [Add a UI panel plugin](recipes/add-ui-panel-plugin.md): a new tab, panel or settings card.
-- [Split into a child plugin](recipes/split-into-child-plugin.md): let another plugin extend yours through a slot.
-- [Add a daemon tool](recipes/add-daemon-tool.md): an agent/MCP tool, route or hook on the daemon.
-- [Add a setting with scopes](recipes/add-setting-with-scopes.md): a named setting with app, project, role and session scope.
-- [Add a Lua hook](recipes/add-lua-hook.md): automate a process with a script and a hook line.
-- [Add a CLI harness](recipes/add-cli-harness.md): support another agent CLI.
-- [Add a provider](recipes/add-provider.md): add a model group to the picker.
-- [Add your service to the Services hub](recipes/add-a-service.md): plug a third-party service into the Services tab (hosting is the example).
-- [Add an avatar style](recipes/add-an-avatar-style.md): draw agent avatars with your own renderer, with the portrait as fallback.
-- [Test daemon for runner repros](recipes/test-daemon-for-runner-repros.md): start a PC daemon and a runner daemon from a built dist, pair them, tear them down by PID.
+- [Licensing](licensing.md): MPL-2.0 for the core, Apache-2.0 for the SDKs, apps and plugins.
+- [Kotlin notes](kotlin-notes.md): the Kotlin UI core, its toolchain and build flags (legacy-java).
+- [UI driver](UI-driver.md), [UI verify design](UI-verify-design.md): driving and checking the UI (Kotlin era, legacy-java).
+- [App preview of a branch](app-preview.md), [Variant builds](Variant-builds.md): Gradle-era branch builds (legacy-java).
+- [Agent avatar mascot design](Agent-avatar-mascot-design.md), [Runner pairing design](RunnerPairing-design.md): design records (Kotlin era).
 
-## Project
-
-- [Licensing (draft)](licensing.md): why the core is MPL-2.0 and everything else Apache-2.0.
-- [Compatibility and deprecation policy (draft)](compatibility.md): what backward compatible means, support period, notice.
-- [CONTRIBUTING](https://github.com/SuperiorSoft-LLC/infantry-ai/blob/main/CONTRIBUTING.md): how to contribute.
-- [AGENTS.md](https://github.com/SuperiorSoft-LLC/infantry-ai/blob/main/AGENTS.md): the guide for AI coding agents.
-- [llms.txt](https://github.com/SuperiorSoft-LLC/infantry-ai/blob/main/llms.txt): the same map in the llms.txt format.
+The design records under `docs/rust-port/` (plan, layers, migration, parity, move-over bar) are listed in
+[docs/README.md](../README.md).

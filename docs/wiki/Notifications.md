@@ -1,5 +1,14 @@
 # Notifications
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust (current)
+
+The notification bus lives in `infantry-mail` (`src/notify/`): `hub` (the bus and its presenters), `attention` items, owner `questions`, pending `prompts` and `approvals` (with approval rules), and `push` (device notify with sounds). Scripts post with `ih.notify{title, level, dedupeKey}` (levels info, success, warning, error, urgent). How the React app draws toasts is not verified here.
+
+## Legacy (Kotlin) reference
+
+
 NOTIFY-CORE-1 (2026-11-07). Infantry AI has ONE notification system. Every feature and plugin tells the user something
 through it, and a plugin can take over how notifications are shown. This page is the design, the settings and the
 inventory of the ways the app told the user something before (with what moved and what is still to move).

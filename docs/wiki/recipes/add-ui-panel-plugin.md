@@ -2,6 +2,18 @@
 
 # Recipe: add a UI panel plugin
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](../Architecture.md).
+
+## In the Rust framework
+
+There is no UI half in Rust, so this recipe has no Rust equivalent. The UI is the React app; I found no plugin UI
+loader in `app/`. A plugin can declare a tab in `module.json` (`tabs: [{id, container}]`), and the shell
+(`app/shell/src/plugins/catalog.tsx`) draws a view it ships for that id, or a generic view. To add a real panel today you
+change the app (`app/packages/ui`, `app/shell`), not a plugin folder. Whether a drop-in UI panel is planned is not
+verified. See [Plugins](../Plugins.md).
+
+## Legacy (Kotlin) reference
+
 Goal: a new tab in the center area and a section in the left panel, from a plugin that is not part of the core.
 
 The starting point is `plugins/_template`, which builds with the rest of the repository, so a copy of it is known

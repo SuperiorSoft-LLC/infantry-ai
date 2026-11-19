@@ -1,5 +1,31 @@
 # Plugin lifecycle and live swap
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Plugin lifecycle in the Rust framework
+
+What the Rust daemon does today, from `rust/crates/infantry-plugin-host/src/host.rs` and
+`rust/crates/infantry-daemon/src/compose/plugins.rs`:
+
+- **Load.** At start the daemon loads every installed daemon half under `official` and `core` in the plugins folder,
+  except the ones the owner disabled. Each load ends as `loaded`, `refused: <why>` or `failed: <why>`.
+- **Hot swap.** Loading a module that is already loaded starts the new version, switches calls to it, and lets the old
+  version finish its running calls (the drain window, `limits.plugins.drainMs`) before it stops. Other plugins, agent
+  sessions and the board keep running. This is in the host; I did not verify a trigger that swaps a plugin from a new
+  file on its own.
+- **Disable and enable.** The owner sends the `plugin_admin` frame (`status`, `enable`, `disable`, with a module id).
+  Disable unloads the half (drain, then `stop`) and records the id in `plugins-disabled.json` in the state dir, so it
+  stays off across restarts. Enable loads it again. Both emit the `modules.changed` event with the loaded ids.
+- **Status.** `status` shows each installed half: its load status, the guard's fault and whether it is cooling down.
+- **Faults.** A plugin that keeps failing is stopped by the guard's breaker (strikes, then a cooldown).
+
+**Install, update, remove, rollback and grants are not served.** `plugin_admin` answers any other operation with exit
+code 1 and "not supported by this daemon yet". The daemon serves only bundled modules. Community folders are not loaded
+yet. The React app can enable or disable through the same frame
+(`app/packages/client/src/stores/plugins.ts`).
+
+## Legacy (Kotlin) reference
+
 PLUGIN-HOTSWAP-1. How a plugin half is loaded, unloaded and swapped while the app runs, and what a plugin author does
 (very little) so that a swap is clean. The code wins where this page and the code disagree.
 

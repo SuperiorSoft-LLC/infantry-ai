@@ -2,6 +2,33 @@
 
 # Recipe: add a daemon tool
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](../Architecture.md).
+
+## Add a tool in Rust
+
+A tool is a WIT `call-tool` in a daemon plugin, declared in `module.json`. Agents see it over MCP, and Lua scripts call
+it through the same catalog. Model: `rust/plugins/official/Infantry_Health` (one tool, a small crate on the SDK).
+
+1. **Declare it** in the plugin's `module.json`, under `daemon.tools`:
+   `{ "name": "vendor_thing", "action": "vendor.thing.read", "kind": "read", "description": "...", "inputSchema": {...} }`.
+   The name must match `^[a-z][a-z0-9_]{2,63}$`. `kind` is `read`, `write` or `destructive`; the `action` is what the
+   access policy gates. A tool the manifest does not list is not callable.
+2. **Ask for the grants it needs** in `daemon.needs` (or `daemon.wants`): `frames` to call into the daemon, `storage`
+   for your own tables, `settings`, `events`, `http` (only to addresses listed in `daemon.endpoints`).
+3. **Implement it.** With `infantry-plugin-sdk`, implement `Plugin::call_tool(name, args, ctx)`. `args` is a JSON object
+   string. Return `Ok(text)` for the answer or `Err(text)` for an error result. `ctx` names the calling session, role
+   and project.
+4. **Stage and run it.** `rust/plugins/stage.sh <out-dir>`, then start the daemon with `INFANTRY_PLUGINS_DIR` set to
+   that folder. Full steps: [Make a plugin](../make-a-plugin.md).
+5. **Check.** The daemon log says `daemon half of <Module> (official, wasm) loaded: N tool(s)`. The tool shows in the
+   `plugin_tools` list that MCP bridges read (`rust/crates/infantry-daemon/src/compose/tools.rs`). Add a host test like
+   `rust/plugins/official/Infantry_Docs/daemon/tests/host.rs`.
+
+If the tool should also answer a client request (a button in the app), add a `daemon.frames` entry and implement
+`handle_frame`; `Infantry_Notes` does both (`rust/plugins/official/Infantry_Notes/module.json`).
+
+## Legacy (Kotlin) reference
+
 Goal: a named tool, with a JSON schema, that agents (through `infantry mcp serve`) and clients (`plugin_tools`) can
 call. It runs in the daemon, in your plugin's own class loader, behind the access policy.
 

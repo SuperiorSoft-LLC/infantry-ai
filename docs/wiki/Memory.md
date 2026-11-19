@@ -1,5 +1,14 @@
 # Memory (project knowledge notes)
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust (current)
+
+Not verified: a native Rust memory store. The daemon's gateway routes `memory_save` to the legacy Kotlin backend by default (`gateway/routes.rs`). Treat the text below as Kotlin.
+
+## Legacy (Kotlin) reference
+
+
 The notes live in the Infantry_Notes plugin (`plugins/official/Infantry_Notes/daemon`): `MemoryStore` over the adopted
 `memory_notes` table, `MemoryHandler` for the `memory_*` frames, `MemoryTool` for the MCP tool `infantry_memory`.
 The CLI is `infantry memory show|search|index|save|delete`.

@@ -2,6 +2,11 @@
 
 # Runner pairing: one link from the client (RUNNER-PAIR-UX-1, 2026-11-08)
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Legacy (Kotlin) reference
+
+
 Design record (dated), ticket d723fb7b. Owner 2026-11-08: "what can we do to make pairing a remote runner to client
 easier?? this setup we have is too complicated." No product code ships with this page; the steps are backlog tickets
 (section 6). Builds on [RUNNER-POOL](../RUNNER-POOL.md) (sections 6 and 7) and does not repeat it. Words: the

@@ -2,6 +2,22 @@
 
 # Scripting with Lua
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Scripting in Rust (current)
+
+Scripting is the `infantry-scripting` crate (no model, no tokens).
+
+- **Engine:** a fresh sandboxed Lua 5.2 state per run (mlua). Globals are base, `string`, `table`, `math`, and only `os.time` and `os.clock`. Default limits: 5,000,000 VM steps, 2 s wall clock, 64 MiB heap.
+- **Actions:** a script only queues actions. `ih.call("tool", {...})` or `ih.<alias>{...}` queues a tool call (a plugin capability by dotted id also works). `ih.notify{...}` posts on the notification bus. `ih.exec` / `ih.cli` run a process (off unless `scripting.exec.enabled`; allow-list `scripting.exec.allow`, roles `scripting.exec.roles`). `ih.log("text")` writes the run log. `ih.again()` re-runs the script after its actions ran, with `input.results` and `input.phase` 2 and up. `input.args` and `input.caller` carry the arguments and the caller.
+- **Hooks:** data in `hooks.json`. They fire on `lane enter|exit <lane>`, a named event or prefix, `mail.incoming`, or a timer `every <N>s`. A loop guard limits child depth and runs per window. The setting `scripting.builtins.off` turns off the shipped hooks.
+- **Store and tools:** project, global (`<state>/global-scripts`) and shipped scripts. Tools: `infantry_script_run`, `_api`, `_list`, `_save`, `_delete`, `_hook`, plus `infantry_exec` and `infantry_exec_status`. CLI: `infantry script`.
+
+The text below describes the Kotlin app (LuaJ). The Rust engine is built to run those scripts unchanged.
+
+## Legacy (Kotlin) reference
+
+
 Scripts encode your process: what happens when a ticket is done, when mail arrives, when a build ends. They are
 Lua 5.2 (LuaJ 3.0.1), sandboxed, and live in your project's `.infantry/scripts/` folder. Any agent or role may
 author and run them. The engine is a plugin (`Infantry_Lua`) behind the `Infantry_Scripting` plugin, which owns

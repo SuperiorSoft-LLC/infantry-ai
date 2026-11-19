@@ -1,5 +1,14 @@
 # Secrets: render a text file with your saved secrets
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust (current)
+
+Rendering is in `infantry-vault` (`template.rs`, `scrub.rs`): the `{{secret:...}}` placeholder is replaced when a template is rendered, and an output scrubber hides values. Limits are `limits.secrets.*` (for example `renderMaxBytes`, `maxPerRun`). CLI: `infantry secret`. The per-claim detail below is the Kotlin text.
+
+## Legacy (Kotlin) reference
+
+
 A secret you saved in the app (Configuration > Secrets, or a project's Secrets) can be written into ANY text file:
 `.env`, `.txt`, `.json`, `.jsonc`, `.yaml`, `.toml`, `.ini`, `.conf`, a script. You write a **template** that names the
 secret; the renderer makes a copy with the real value filled in. Nothing is tied to a format, a stack or a tool: the same

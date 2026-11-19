@@ -1,5 +1,14 @@
 # Usage and worker limits
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust (current)
+
+The `infantry-usage` crate has live plan meters, a refresher with backoff, a pacing judge and forecast (`pace.rs`, `pacing.rs`), overrides and the governor's workers-allowed answer. CLI: `infantry usage`. Limits: `limits.usage.*` and `limits.pacing.maxWorkersCeiling`. The numbers below are Kotlin-era and not verified in Rust.
+
+## Legacy (Kotlin) reference
+
+
 Why did my ticket not start? Why does only 1 worker run? This page explains the usage system in plain words. Any agent can read it
 and explain it to a user.
 
