@@ -43,7 +43,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "OWNER-SETS-THE-UPDATER-PUBLIC-KEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZGRUU4MkI5MDM4QjY2MjEKUldRaFpvc0R1WUx1LzJkaXhnbEttSmlHZG03NlQ2bjYrQ3NxdGw0dmFiQnNCb0RiUjN3MW1YSGoK",
       "endpoints": [],
       "windows": {
         "installMode": "passive"
