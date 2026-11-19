@@ -152,12 +152,14 @@ async fn connection(daemon: Arc<Daemon>, mut socket: WebSocket) {
         }
     }
     let mut conn = Conn::default();
+    let mut cause = "connection lost";
     loop {
         tokio::select! {
             m = socket.recv() => {
                 let text = match m {
                     Some(Ok(Message::Text(t))) => t.to_string(),
-                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+                    Some(Ok(Message::Close(_))) => { cause = crate::health::CLEAN_CLOSE; break }
+                    None | Some(Err(_)) => break,
                     Some(Ok(_)) => continue,
                 };
                 // A client that passed the access policy without the gateway is the owner (local, or the token holder).
@@ -181,7 +183,7 @@ async fn connection(daemon: Arc<Daemon>, mut socket: WebSocket) {
             },
         }
     }
-    daemon.health.bridges.closed(&conn.bridges, Some("connection closed"), &daemon.health.journal);
+    daemon.health.bridges.closed(&conn.bridges, Some(cause), &daemon.health.journal);
 }
 
 /// A client of the strangler gateway: the frames a Rust unit owns are answered here, the rest go to the legacy backend;
@@ -196,12 +198,14 @@ async fn gateway_connection(daemon: Arc<Daemon>, gw: Arc<Gateway>, owner: bool, 
         }
     }
     let mut conn = Conn::default();
+    let mut cause = "connection lost";
     loop {
         tokio::select! {
             m = socket.recv() => {
                 let text = match m {
                     Some(Ok(Message::Text(t))) => t.to_string(),
-                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+                    Some(Ok(Message::Close(_))) => { cause = crate::health::CLEAN_CLOSE; break }
+                    None | Some(Err(_)) => break,
                     Some(Ok(_)) => continue,
                 };
                 let replies = match serde_json::from_str::<Envelope>(&text) {
@@ -229,7 +233,7 @@ async fn gateway_connection(daemon: Arc<Daemon>, gw: Arc<Gateway>, owner: bool, 
             },
         }
     }
-    daemon.health.bridges.closed(&conn.bridges, Some("connection closed"), &daemon.health.journal);
+    daemon.health.bridges.closed(&conn.bridges, Some(cause), &daemon.health.journal);
     gw.unregister(id);
 }
 
