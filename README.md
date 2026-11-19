@@ -25,34 +25,32 @@
 
 > **This branch is the Rust framework.** `main` now holds the Rust rewrite of Infantry AI: the daemon and core crates live in `rust/`, the desktop, web and Android app in `app/`. The earlier Java/Kotlin implementation is kept, unchanged, on the [`legacy-java`](https://github.com/SuperiorSoft-LLC/infantry-ai/tree/legacy-java) branch. Parts of the text below still describe the Kotlin version (Gradle builds, `superiorSoftLibrary/`) and are being updated.
 
-### The app as installed
+### The app
 
-This is Infantry AI as installed: the core only, with no extra plugins. Agent cards, the PM's chat and live plan-usage pacing are all part of the core.
+Infantry AI running against a demo project: the agent sidebar, the PM's chat, plan-usage pacing and a worker on its ticket. Dark and light themes. Click a picture to open it full size.
 
-<p align="center"><img src="docs/img/infantry-app-2026-11-06.png" alt="Infantry AI desktop as installed (core only): agent cards, the PM's chat and live plan-usage pacing" width="900"></p>
+<p align="center"><a href="assets/screenshots/rust/rust-01-cli-chat-agent-sidebar-dark.png"><img src="assets/screenshots/rust/rust-01-cli-chat-agent-sidebar-dark.png" alt="Infantry AI desktop, dark theme: agent sidebar, PM chat and plan-usage pacing" width="900"></a></p>
 
-### Plugins
+<p align="center"><a href="assets/screenshots/rust/rust-02-cli-chat-agent-sidebar-light.png"><img src="assets/screenshots/rust/rust-02-cli-chat-agent-sidebar-light.png" alt="Infantry AI desktop, light theme" width="900"></a></p>
 
-Everything in Infantry AI beyond the core is a plugin. Each screenshot below shows one plugin running in the app; click a picture to open it full size. See [Plugins](docs/wiki/Plugins.md) and the [plugin catalog](https://github.com/SuperiorSoft-LLC/infantry-plugins).
+### The board, mail and project tools
 
 <table>
   <tr>
-    <td align="center" valign="top" width="50%">
-      <b><a href="plugins/official/Infantry_Mascot">Mascot: animated agent avatars</a></b><br>
-      <a href="docs/img/plugin-friendly-2026-11-09.png"><img src="docs/img/plugin-friendly-2026-11-09.png" alt="Infantry AI with the Mascot plugin: animated avatars drawn for each agent" width="100%"></a><br>
-      Draws an animated avatar for each agent.
-    </td>
-    <td align="center" valign="top" width="50%">
-      <b><a href="plugins/official/Infantry_News">News: live headline cards, News Agent role</a></b><br>
-      <a href="docs/img/news-agent-plugin-2026-11-13.png"><img src="docs/img/news-agent-plugin-2026-11-13.png" alt="Infantry AI with the News plugin: a News Agent showing BBC headline cards with thumbnails" width="100%"></a><br>
-      A News Agent shows live headline cards with thumbnails.
-    </td>
+    <td align="center" valign="top" width="50%"><b>Board</b><br><a href="assets/screenshots/rust/rust-04-board-dark.png"><img src="assets/screenshots/rust/rust-04-board-dark.png" alt="Board: tickets in every column" width="100%"></a></td>
+    <td align="center" valign="top" width="50%"><b>Mail</b><br><a href="assets/screenshots/rust/rust-06-mail-dark.png"><img src="assets/screenshots/rust/rust-06-mail-dark.png" alt="Mail: agent and owner threads" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td align="center" valign="top" width="50%"><b>A worker on its ticket</b><br><a href="assets/screenshots/rust/rust-03-cli-ticket-worker-dark.png"><img src="assets/screenshots/rust/rust-03-cli-ticket-worker-dark.png" alt="A worker on its own ticket and branch" width="100%"></a></td>
+    <td align="center" valign="top" width="50%"><b>Health</b><br><a href="assets/screenshots/rust/rust-12-health-dark.png"><img src="assets/screenshots/rust/rust-12-health-dark.png" alt="Health: the daemon, plugins and this machine" width="100%"></a></td>
   </tr>
 </table>
 
-<p align="center"><img src="docs/img/infantry-desktop-chat-2026-11-06.png" alt="Infantry AI desktop: PM agent chat with plan-usage limits" width="900"></p>
+More shots: [Settings](assets/screenshots/rust/rust-11-settings-modal-dark.png), [Plugins](assets/screenshots/rust/rust-09-plugins-dark.png), [Triggers](assets/screenshots/rust/rust-07-triggers-dark.png), [Notes](assets/screenshots/rust/rust-08-notes-dark.png), [Board, light theme](assets/screenshots/rust/rust-05-board-light.png).
 
-<p align="center"><img src="docs/img/infantry-android-chat-2026-11-06.jpg" alt="Infantry AI on Android" width="300"></p>
+### On Android
+
+<p align="center"><img src="assets/screenshots/rust/rust-android-1-chat-dark.png" alt="Infantry AI on Android: a worker's chat" width="260"> <img src="assets/screenshots/rust/rust-android-2-mail-dark.png" alt="Infantry AI on Android: mail" width="260"> <img src="assets/screenshots/rust/rust-android-3-agents-dark.png" alt="Infantry AI on Android: the agent list" width="260"></p>
 
 ---
 
