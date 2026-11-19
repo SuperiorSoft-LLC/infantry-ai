@@ -80,6 +80,22 @@ fn plugin_context(inv: &ToolInvoker) -> CallContext {
     }
 }
 
+impl Tools {
+    /// `infantry_capability_list`: every capability the loaded plugins declare, as a JSON array.
+    fn capability_list(&self) -> String {
+        let mut out = Vec::new();
+        if let Some(h) = self.plugins() {
+            for p in h.loaded() {
+                for c in &p.manifest.capabilities {
+                    let available = !p.guard.is_disabled() && (c.runs != "daemon" || p.manifest.capability_tool(&c.id).is_some());
+                    out.push(json!({ "id": c.id, "module": p.id, "runs": c.runs, "action": c.action, "available": available }));
+                }
+            }
+        }
+        Value::Array(out).to_string()
+    }
+}
+
 impl ScriptHost for Tools {
     fn catalog(&self) -> Vec<ToolInfo> {
         let mut out = self.scripting.get().map(|s| s.catalog()).unwrap_or_default();
@@ -164,6 +180,9 @@ impl ScriptHost for Tools {
                     Err(e) => ToolResult::err(e.message().to_string()),
                 };
             }
+        }
+        if name == "infantry_capability_list" {
+            return ToolResult::ok(self.capability_list());
         }
         if let Some(r) = self.agents.get().and_then(|a| a.call(name, args, inv)) {
             return r;

@@ -22,6 +22,8 @@ pub const TAIL_LINES: usize = 5;
 pub const TAIL_LINES_MAX: usize = 200;
 /// One transcript line is cut at this many characters.
 pub const TAIL_LINE_CHARS: usize = 400;
+/// `infantry_attention_raise` detail ceiling.
+pub const ATTENTION_DETAIL_MAX: usize = 2000;
 
 pub struct AgentTools {
     pub daemon: Arc<Daemon>,
@@ -31,6 +33,10 @@ pub struct AgentTools {
     pub mail: Arc<infantry_mail::mail::router::MailRouter>,
     /// The agent registry the `infantry_agent_list|get|enable|disable` tools read.
     pub registry: Arc<super::agent_registry::AgentRegistry>,
+    /// Read by `infantry_pod_state`.
+    pub pods: Arc<crate::pods::Pods>,
+    /// Written by `infantry_attention_raise`.
+    pub attention: Arc<infantry_mail::notify::attention::AttentionStore>,
     pub project_dir: Arc<dyn Fn(&str) -> Option<std::path::PathBuf> + Send + Sync>,
 }
 
@@ -448,6 +454,79 @@ impl AgentTools {
                 let e = self.registry.set_enabled(&id, enable).map_err(|_| format!("no agent '{id}'"))?;
                 Ok(format!("agent '{}' is {}", e["definition"]["id"].as_str().unwrap_or(&id), if e["enabled"].as_bool().unwrap_or(true) { "enabled" } else { "disabled" }))
             })(),
+            "infantry_waiting" => (|| {
+                let session = inv.session_id.clone().ok_or("not running inside an Infantry AI session (no INFANTRY_SESSION_ID): nothing flagged")?;
+                let op = s(a, "mode").map(|m| m.to_lowercase()).filter(|m| matches!(m.as_str(), "on" | "off" | "get")).ok_or("needs mode (on, off, get)")?;
+                let req = infantry_protocol::session::WaitingRequest { op, reason: s(a, "reason"), minutes: n(a, "untilMinutes").map(|m| m.clamp(i32::MIN as i64, i32::MAX as i64) as i32) };
+                let w = self.daemon.waiting(&session, &req)?;
+                Ok(crate::sessions::waiting_line(w.as_ref(), crate::sessions::now_ms()))
+            })(),
+            "infantry_session_restart" => (|| {
+                let r = self.find(&s(a, "sessionId").unwrap_or_default())?;
+                let mine = inv.session_id.is_some() && r.spawner_session_id == inv.session_id;
+                let itself = inv.session_id.as_deref() == Some(r.id.as_str());
+                let same_project = self.caller_project(inv).is_none() || self.caller_project(inv) == r.project_id;
+                if !(mine || itself || (pm(inv) && same_project)) {
+                    return Err("only the pm or the owner (own project), the session's spawner, or the session itself may restart it".to_string());
+                }
+                self.daemon.restart(&r.id, flag(a, "force"))?;
+                Ok(format!("restarted {}: its next turn starts a fresh conversation", r.id))
+            })(),
+            "infantry_attention_raise" => (|| {
+                let need = |k: &str| s(a, k).ok_or(format!("needs a {k}"));
+                let r = infantry_mail::notify::attention::AttentionRaise {
+                    kind: need("kind")?,
+                    outcome: need("outcome")?,
+                    detail: need("detail")?.chars().take(ATTENTION_DETAIL_MAX).collect(),
+                    ticket_id: s(a, "ticketId"),
+                    session_id: s(a, "sessionId"),
+                    ..Default::default()
+                };
+                let i = self.attention.raise(&r)?;
+                Ok(json!({ "id": i.id }).to_string())
+            })(),
+            "infantry_pod_state" => (|| {
+                let scope = match s(a, "projectId").as_deref() {
+                    Some("all") if !pm(inv) => return Err("only the pm or the owner may read every project".to_string()),
+                    Some("all") => None,
+                    Some(p) => Some(p.to_string()),
+                    None => self.caller_project(inv),
+                };
+                let profiles = self.registry.list();
+                let mut by_role: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+                for e in &profiles {
+                    by_role.entry(e["definition"]["role"].as_str().unwrap_or("").to_string()).or_default().push(e["definition"]["id"].as_str().unwrap_or("").to_string());
+                }
+                let rows: Vec<SessionRecord> =
+                    self.daemon.records().into_iter().filter(|r| scope.as_deref().map(|p| r.project_id.as_deref() == Some(p)).unwrap_or(true)).collect();
+                let mut by_state: std::collections::BTreeMap<String, usize> = Default::default();
+                for r in &rows {
+                    *by_state.entry(state_word(&r.state).to_lowercase()).or_default() += 1;
+                }
+                let mut out = json!({
+                    "scope": scope.as_deref().unwrap_or("all projects"),
+                    "agents": { "total": profiles.len(), "byRole": by_role },
+                    "sessions": { "total": rows.len(), "byState": by_state },
+                });
+                if let Some(p) = &scope {
+                    out["projectId"] = json!(p);
+                    let mut roster: Vec<Value> = Vec::new();
+                    for r in rows.iter().filter(|r| r.agent_id.is_some()) {
+                        let status = if !live(r) { "OFFLINE" } else if self.daemon.turn_active(&r.id).unwrap_or(false) { "BUSY" } else { "IDLE" };
+                        // A live session of an agent outranks an older, exited one.
+                        match roster.iter_mut().find(|x| x["agent"] == json!(r.agent_id)) {
+                            Some(x) if x["status"] == "OFFLINE" && status != "OFFLINE" => *x = json!({ "agent": r.agent_id, "role": r.role, "session": r.id, "status": status }),
+                            Some(_) => {}
+                            None => roster.push(json!({ "agent": r.agent_id, "role": r.role, "session": r.id, "status": status })),
+                        }
+                    }
+                    out["roster"] = json!(roster);
+                }
+                if let Some(id) = s(a, "podId") {
+                    out["pod"] = self.pods.status(&id).ok_or_else(|| format!("no pod '{id}'"))?;
+                }
+                Ok(out.to_string())
+            })(),
             "infantry_pace" => Ok(serde_json::to_string(&self.usage.pace_report(&Value::Object(a.clone()).to_string())).unwrap_or_default()),
             _ => return None,
         };
@@ -467,5 +546,14 @@ mod catalog_guard_tests {
         let t = agent_catalog().into_iter().find(|t| t.name == "infantry_usage_override").expect("infantry_usage_override must be declared");
         assert!(!t.read_only);
         assert_eq!(t.input_schema["required"], json!(["meter", "value"]));
+    }
+
+    #[test]
+    fn parity_tools_are_declared() {
+        let cat = agent_catalog();
+        for (name, ro) in [("infantry_waiting", false), ("infantry_pod_state", true), ("infantry_session_restart", false), ("infantry_capability_list", true), ("infantry_attention_raise", false)] {
+            let t = cat.iter().find(|t| t.name == name).unwrap_or_else(|| panic!("{name} must be declared"));
+            assert_eq!(t.read_only, ro, "{name}");
+        }
     }
 }
