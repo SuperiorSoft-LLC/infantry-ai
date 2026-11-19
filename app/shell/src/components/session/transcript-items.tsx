@@ -5,9 +5,10 @@
 import { useState, type ReactNode } from "react";
 import { Brain, ChevronRight, Loader2, Pencil, Mail, Wrench, RotateCw } from "lucide-react";
 import { cn } from "@infantry/ui";
-import type { DiffLine, TranscriptItem } from "@infantry/client";
+import { imageRefs, type DiffLine, type TranscriptItem } from "@infantry/client";
 import type { CommsBody } from "@/mock/types";
 import { Markdown } from "./markdown";
+import { ImageThumbs } from "./chat-images";
 
 export function ThinkingBlock({ count, text }: { count: number; text: string }) {
   const [open, setOpen] = useState(false);
@@ -91,9 +92,15 @@ export function FileEditCard({ path, added, removed, lines, truncated }: { path:
 function CommsText({ body }: { body: CommsBody }) {
   return (
     <div className="space-y-2 text-[13.5px] leading-6 break-words">
-      {body.paragraphs.map((p, i) => (
-        <Markdown key={i} text={p} />
-      ))}
+      {body.paragraphs.map((p, i) => {
+        const { text, refs } = imageRefs(p);
+        return (
+          <div key={i} className="space-y-2">
+            {text && <Markdown text={text} />}
+            <ImageThumbs refs={refs} />
+          </div>
+        );
+      })}
       {body.bullets && (
         <ul className="list-disc space-y-0.5 pl-5">
           {body.bullets.map((b) => (

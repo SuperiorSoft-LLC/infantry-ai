@@ -4,17 +4,20 @@
 // turn; the queued turns are listed above with remove / send-now. No session: Enter starts a new one.
 // Stop interrupts the running turn; Swap agent and Restart session open the session dialogs. The others are still mock.
 // Typing `/` lists the session provider's commands (`command_catalog`, fetched once per session) by prefix: Up/Down
-// move, Tab or Enter completes, Esc closes.
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeftRight, Play, CircleX, Trash2, RotateCw, Square, SendHorizontal, X, Zap } from "lucide-react";
+// move, Tab or Enter completes, Esc closes. Images (paste, or the clip button) upload at once with `image_upload`
+// (purpose chat, the session's project) and ride the prompt as `[image: <path>]` lines (Kotlin IMG-2).
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeftRight, ImagePlus, Play, CircleX, Trash2, RotateCw, Square, SendHorizontal, X, Zap } from "lucide-react";
 import { cn } from "@infantry/ui";
 import { Textarea } from "@infantry/ui";
 import { IconButton } from "@infantry/ui";
-import { matchSlash, slashCatalog, slashPrefix, type QueuedTurnView, type SlashCommand } from "@infantry/client";
+import { imageTag, matchSlash, slashCatalog, slashPrefix, uploadImage, type QueuedTurnView, type SlashCommand } from "@infantry/client";
 import { useShallow } from "zustand/react/shallow";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { useUi } from "@/state/ui-state";
 import { openSessionDialog } from "./session-actions";
+import { readImageFile } from "./chat-images";
+import { useProjects } from "@/components/git/use-projects";
 
 const tools = [
   { label: "Swap agent", icon: ArrowLeftRight },
@@ -45,6 +48,31 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
     useShallow((s) => ({ send: s.send, spawn: s.spawn, interrupt: s.interrupt, unqueue: s.unqueue, forceQueued: s.forceQueued })),
   );
 
+  const [images, setImages] = useState<{ path: string; name: string }[]>([]);
+  const [uploading, setUploading] = useState(0);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const sessionProject = useDaemon((s) => (sessionId ? s.sessions[sessionId]?.record.projectId : undefined));
+  const currentProject = useProjects((p) => p.currentId);
+  const project = sessionProject || currentProject;
+  const attach = async (files: File[]) => {
+    const picked = files.filter((f) => f.type.startsWith("image/"));
+    if (!picked.length) return;
+    if (!project) return setImageError("Pick a project first: images are stored in a project.");
+    setImageError(null);
+    for (const f of picked) {
+      setUploading((n) => n + 1);
+      try {
+        const r = await uploadImage(daemonStore().getState(), project, await readImageFile(f), f.type, f.name);
+        if (r.ok) setImages((cur) => [...cur, { path: r.path, name: f.name || "pasted image" }]);
+        else setImageError(`${f.name || "image"}: ${r.text}`);
+      } catch {
+        setImageError(`${f.name || "image"}: could not be read`);
+      } finally {
+        setUploading((n) => n - 1);
+      }
+    }
+  };
   const [catalog, setCatalog] = useState<SlashCommand[]>([]);
   const [pick, setPick] = useState(0);
   const [hideSlash, setHideSlash] = useState(false);
@@ -63,10 +91,12 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
   const complete = (c: SlashCommand) => (setText(`/${c.name}${c.argument || c.values?.length ? " " : ""}`), setPick(0));
 
   const submit = () => {
-    if (!text.trim() || !online || heldBy) return;
-    if (sessionId) send(sessionId, text);
-    else spawn(text);
+    if ((!text.trim() && !images.length) || !online || heldBy || uploading) return;
+    const full = [text.trim(), ...images.map((i) => imageTag(i.path))].filter(Boolean).join("\n");
+    if (sessionId) send(sessionId, full);
+    else spawn(full);
     setText("");
+    setImages([]);
   };
 
   return (
@@ -104,10 +134,33 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
           ))}
         </ul>
       )}
+      {(images.length > 0 || uploading > 0 || imageError) && (
+        <ul aria-label="Attached images" className="mb-2 flex flex-wrap gap-1">
+          {images.map((im, i) => (
+            <li key={im.path} className="flex items-center gap-1 rounded-lg border bg-card px-2 py-0.5 text-xs" title={im.path}>
+              <ImagePlus className="size-3 text-muted-foreground" />
+              <span className="max-w-40 truncate">{im.name}</span>
+              <IconButton label={`Remove ${im.name}`} className="size-5" onClick={() => setImages((cur) => cur.filter((_, j) => j !== i))}>
+                <X />
+              </IconButton>
+            </li>
+          ))}
+          {uploading > 0 && <li className="px-2 py-0.5 text-xs text-muted-foreground">uploading {uploading}…</li>}
+          {imageError && (
+            <li role="alert" className="px-2 py-0.5 text-xs text-danger">
+              {imageError}
+            </li>
+          )}
+        </ul>
+      )}
       <div className={cn("rounded-xl border-2 bg-card transition-colors", busy ? "border-danger" : "border-border focus-within:border-ring")}>
         <Textarea
           value={text}
           onChange={(e) => (setText(e.target.value), setHideSlash(false))}
+          onPaste={(e) => {
+            const files = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith("image/"));
+            if (files.length) (e.preventDefault(), void attach(files));
+          }}
           onKeyDown={(e) => {
             if (matches.length > 0) {
               if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -158,10 +211,21 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
             ))}
           </div>
           <div className="flex items-center gap-1 rounded-lg border border-danger/60 p-1">
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              multiple
+              hidden
+              onChange={(e) => (void attach(Array.from(e.target.files ?? [])), (e.target.value = ""))}
+            />
+            <IconButton label="Attach image" disabled={!online || !!heldBy} onClick={() => fileInput.current?.click()}>
+              <ImagePlus />
+            </IconButton>
             <IconButton label="Stop" className="text-danger hover:text-danger" disabled={!busy || !sessionId || !online} onClick={() => sessionId && interrupt(sessionId)}>
               <Square className="fill-current" />
             </IconButton>
-            <IconButton label={busy ? "Queue message" : "Send"} className="text-danger hover:text-danger" disabled={!text.trim() || !online || !!heldBy} onClick={submit}>
+            <IconButton label={busy ? "Queue message" : "Send"} className="text-danger hover:text-danger" disabled={(!text.trim() && !images.length) || !online || !!heldBy || uploading > 0} onClick={submit}>
               <SendHorizontal />
             </IconButton>
           </div>

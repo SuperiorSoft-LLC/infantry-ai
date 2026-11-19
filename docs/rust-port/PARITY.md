@@ -85,7 +85,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Tool activity | yes | partial | One summary line per tool burst. No collapsible Activity box: UI only. |
 | File-edit diff boxes | yes | done | |
 | To-do box ("To do 3/7") | yes | missing | UI only, if the harness sends todo events. |
-| Images in the transcript, full-size viewer | yes | missing | UI only (`image`). |
+| Images in the transcript, full-size viewer | yes | done | *(RUST-UI-10)* A message's `[image: <path>]` lines show as thumbnails (`image_fetch`, once per window; a missing one says so); a click opens it full size in the one dialog. |
 | Chat cards (`card:<type>` fences, plugin renderers, folded updates) | yes | partial | *(RUST-UI-8)* Card fences parse like Kotlin (`id`, `op=set/append/replace`), draw through a renderer registry (`registerChatCard`) or a generic card (title, text, link, fields, lists, JSON toggle), and later fences of one id fold into the first. Folding works within one message only (Kotlin: the whole chat). No plugin ships a renderer yet. Card images need daemon `card_image`. |
 | Background-jobs row | yes | done | *(RUST-UI-8)* Label, pid and age from the record's `bgJobs`, above the composer. Stopping them is in the Run tab. |
 | Pending send: sending / sent / retry | yes | done | No "Discard this message": UI only. |
@@ -104,7 +104,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Stop turn, Send | yes | done | |
 | Resume, Swap agent, Restart, Cancel turn | yes | done | |
 | Delete / remove session with confirm | yes | done | *(fixed today)* It was a dead button. It now confirms, then sends `session_delete`. |
-| Attachments: file picker, paste image, drag and drop | yes | missing | *(fixed today)* A dead button was removed. Daemon: an `image_upload` handler (RUST-UI-8 found the frame name only; the Chat plugin notes it as a host need). |
+| Attachments: file picker, paste image, drag and drop | yes | partial | *(RUST-UI-10)* Paste an image or pick one (png/jpeg/gif/webp): it uploads at once (`image_upload`, purpose chat, the session's project), shows as a removable chip, and rides the prompt as `[image: <path>]` (Kotlin IMG-2). No drag and drop, no non-image files (purpose `file`) yet. |
 | Slash commands with autocomplete | yes | partial | *(RUST-UI-10)* Typing `/` lists the session provider's commands from `command_catalog` by prefix (Up/Down, Tab or Enter completes, Esc closes). The command still goes out as prompt text: no `command_result` handling (set model / effort) yet. |
 | Notice strip for command results | yes | missing | Daemon: `command_result` (frame name only). |
 | Stop background processes (Ctrl+Shift+K) | yes | missing | UI only (`processes_reap`). |
