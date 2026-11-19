@@ -394,7 +394,22 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     timeline::wire(&run_log, &bus);
     daemon.observe(Arc::new(timeline::WakeObserver { run_log: run_log.clone() }));
     let timeline_unit = timeline::TimelineUnit { run_log: run_log.clone() };
+    let chat = {
+        let (d, p, w, h) = (daemon.clone(), projects.clone(), daemon.clone(), handle.clone());
+        infantry_scripting::chat::ChatTools::new(
+            run_log.clone(),
+            Arc::new(move |s: &str| d.record(s)?.project_id),
+            Arc::new(move |id: &str| project_dir(&p, id)),
+            Arc::new(move |s: &str, t: &str| {
+                let _rt = h.enter();
+                w.deliver(s, t)
+            }),
+            script_config.clone(),
+            Arc::new(|| now_ms() as u64),
+        )
+    };
     tools.set_scripting(ScriptingTools {
+        chat,
         engines,
         store: scripts,
         hooks: hook_store,

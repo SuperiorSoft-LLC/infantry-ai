@@ -21,6 +21,7 @@
 //! Deliberate differences: the heap cap is on the live heap (LuaJ counted cumulative allocation); `print` writes to the
 //! run log; `pairs` order is Lua 5.2's, so a script that builds text by iterating a table (usage-governor's `enc`)
 //! may order keys differently.
+pub mod chat;
 pub mod dispatcher;
 pub mod engine;
 pub mod exec;

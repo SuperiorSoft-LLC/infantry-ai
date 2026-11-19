@@ -384,6 +384,12 @@ impl ScriptRunLog {
         }
     }
 
+    /// Keeps a chat note for reloads and pushes it to every client as a `timeline_item`.
+    pub fn post_note(&self, item: Value) {
+        self.add_note(item.clone());
+        self.notify_stats(&item);
+    }
+
     /// `project` ties the session to a project (the first sight wins).
     pub fn wake(&self, session: &str, reason: &str, r#ref: Option<&str>, project: Option<&str>) {
         {
