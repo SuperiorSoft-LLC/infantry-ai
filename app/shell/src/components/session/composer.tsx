@@ -7,11 +7,11 @@
 // move, Tab or Enter completes, Esc closes. Images (paste, or the clip button) upload at once with `image_upload`
 // (purpose chat, the session's project) and ride the prompt as `[image: <path>]` lines (Kotlin IMG-2).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, ImagePlus, Play, CircleX, Trash2, RotateCw, Square, SendHorizontal, X, Zap } from "lucide-react";
+import { ArrowLeftRight, ImagePlus, Play, CircleX, Trash2, RotateCw, Square, SendHorizontal, X, Zap, Maximize2, Minimize2, Search, History } from "lucide-react";
 import { cn } from "@infantry/ui";
 import { Textarea } from "@infantry/ui";
 import { IconButton } from "@infantry/ui";
-import { imageTag, matchSlash, slashCatalog, slashPrefix, uploadImage, type QueuedTurnView, type SlashCommand } from "@infantry/client";
+import { CHAT_SEARCH_EVENT, imageTag, matchSlash, slashCatalog, slashPrefix, uploadImage, type QueuedTurnView, type SlashCommand } from "@infantry/client";
 import { useShallow } from "zustand/react/shallow";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { useUi } from "@/state/ui-state";
@@ -44,8 +44,8 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
   // RUST-MIGRATE-1: a session live in the other app is never run here too (the daemon refuses it as well).
   const heldBy = useDaemon((s) => (sessionId ? s.sessions[sessionId]?.record.heldBy : undefined)) ?? undefined;
   // Actions are stable: picking them shallowly keeps the composer out of every streaming flush.
-  const { send, spawn, interrupt, unqueue, forceQueued } = useDaemon(
-    useShallow((s) => ({ send: s.send, spawn: s.spawn, interrupt: s.interrupt, unqueue: s.unqueue, forceQueued: s.forceQueued })),
+  const { send, spawn, interrupt, unqueue, forceQueued, requestHistory } = useDaemon(
+    useShallow((s) => ({ send: s.send, spawn: s.spawn, interrupt: s.interrupt, unqueue: s.unqueue, forceQueued: s.forceQueued, requestHistory: s.requestHistory })),
   );
 
   const [images, setImages] = useState<{ path: string; name: string }[]>([]);
@@ -153,7 +153,23 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
           )}
         </ul>
       )}
-      <div className={cn("rounded-xl border-2 bg-card transition-colors", busy ? "border-danger" : "border-border focus-within:border-ring")}>
+      <div className={cn("relative rounded-xl border-2 bg-card transition-colors", busy ? "border-danger" : "border-border focus-within:border-ring")}>
+        {sessionId && (
+          <div role="toolbar" aria-label="Chat view" className="absolute right-3 bottom-full -mb-0.5 flex items-center gap-1 rounded-t-lg border border-b-0 border-danger/60 bg-card p-1">
+            <IconButton label="Maximize chat" className="rounded-full" disabled={ui.chatMax} onClick={() => ui.set("chatMax", true)}>
+              <Maximize2 />
+            </IconButton>
+            <IconButton label="Minimize chat" className="rounded-full" disabled={!ui.chatMax} onClick={() => ui.set("chatMax", false)}>
+              <Minimize2 />
+            </IconButton>
+            <IconButton label="Search chat" className="rounded-full" onClick={() => window.dispatchEvent(new Event(CHAT_SEARCH_EVENT))}>
+              <Search />
+            </IconButton>
+            <IconButton label="Load history" className="rounded-full" onClick={() => requestHistory(sessionId)}>
+              <History />
+            </IconButton>
+          </div>
+        )}
         <Textarea
           value={text}
           onChange={(e) => (setText(e.target.value), setHideSlash(false))}

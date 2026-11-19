@@ -40,8 +40,8 @@ export function SessionView() {
 
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-background">
-      {agent && <SessionHeader agent={agent} />}
-      <SessionTabBar tabs={tabs} value={ui.sessionTab} onChange={(id) => ui.set("sessionTab", id)} />
+      {agent && !ui.chatMax && <SessionHeader agent={agent} />}
+      {!ui.chatMax && <SessionTabBar tabs={tabs} value={ui.sessionTab} onChange={(id) => ui.set("sessionTab", id)} />}
 
       {ui.sessionTab === "cli" ? (
         <>
