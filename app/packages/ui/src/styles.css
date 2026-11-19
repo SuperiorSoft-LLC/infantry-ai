@@ -138,6 +138,41 @@
   #root {
     @apply h-full;
   }
+  /* Every clickable element shows the hand cursor; disabled ones show not-allowed. */
+  button,
+  a[href],
+  summary,
+  select,
+  label[for],
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="button"],
+  input[type="submit"],
+  input[type="file"],
+  input[type="range"],
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="menuitemcheckbox"],
+  [role="menuitemradio"],
+  [role="option"],
+  [role="switch"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="link"],
+  [role="treeitem"],
+  [data-slot="select-trigger"],
+  [data-clickable] {
+    cursor: pointer;
+  }
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  [aria-disabled="true"],
+  [data-disabled],
+  [data-clickable][data-disabled] {
+    cursor: not-allowed;
+  }
   /* RUST-MOBILE-1: the visible height on a phone (the on-screen keyboard and browser bars shrink it), and no text boost. */
   #root {
     height: 100dvh;

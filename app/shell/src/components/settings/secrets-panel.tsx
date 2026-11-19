@@ -114,7 +114,7 @@ export function SecretsPanel() {
         {st.locked && <span className="ml-1 font-medium text-foreground">Locked by a restricted policy.</span>}
       </div>
       {st.refusal && (
-        <div className="rounded-lg border bg-card p-3 text-xs" onClick={st.clearRefusal}>
+        <div className="cursor-pointer rounded-lg border bg-card p-3 text-xs" onClick={st.clearRefusal}>
           {st.refusal}
         </div>
       )}
