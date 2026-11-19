@@ -5,7 +5,8 @@
 //! relative to that folder and may hold only plain components (no `..`, no root, no drive).
 //!
 //! - `stat` -> `{exists, size?, mtime?, path}`; `get` `{maxBytes?}` -> `{exists, base64?, size?}`;
-//! - `put` `{base64, mtime?}` -> `{path, size}` (parents made); `touch` `{mtime}` -> `{path}`.
+//! - `put` `{base64, mtime?}` -> `{path, size}` (parents made); `touch` `{mtime}` -> `{path}`;
+//! - `list` -> `{files:[{name,size,mtime}]}` (regular files directly in the folder); `delete` -> `{deleted}` (one regular file).
 use base64::Engine;
 use infantry_projects::store::ProjectStore;
 use serde_json::{json, Value};
@@ -85,7 +86,22 @@ pub fn answer(projects: &ProjectStore, data: &str) -> Result<Value, String> {
             set_mtime(&file, ms)?;
             Ok(json!({"path": shown}))
         }
-        other => Err(format!("unknown op '{}' (stat, get, put, touch)", other.chars().take(40).collect::<String>())),
+        // Regular files directly in the folder (a symlink or sub-folder is not listed), for a retention sweep.
+        "list" => {
+            let mut out = Vec::new();
+            if let Ok(rd) = std::fs::read_dir(&file) {
+                for e in rd.flatten() {
+                    if let (Ok(ty), Ok(m)) = (e.file_type(), e.metadata()) {
+                        if ty.is_file() {
+                            out.push(json!({"name": e.file_name().to_string_lossy(), "size": m.len(), "mtime": mtime_ms(&m)}));
+                        }
+                    }
+                }
+            }
+            Ok(json!({"files": out, "path": shown}))
+        }
+        "delete" => Ok(json!({"deleted": std::fs::metadata(&file).map(|m| m.is_file()).unwrap_or(false) && std::fs::remove_file(&file).is_ok(), "path": shown})),
+        other => Err(format!("unknown op '{}' (stat, get, put, touch, list, delete)", other.chars().take(40).collect::<String>())),
     }
 }
 
