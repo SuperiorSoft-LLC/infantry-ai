@@ -4,14 +4,14 @@
 // with tier, version, status and faults, an enable switch (owner, through `plugin_admin`), what it contributes to the
 // shell, and its own settings cards. Filter by all / enabled / faults. Live from the daemon's plugin list.
 import { useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, Puzzle, RefreshCw } from "lucide-react";
+import { AlertTriangle, Puzzle, RefreshCw, Settings } from "lucide-react";
 import { isFault, type PluginRow } from "@infantry/client";
-import { Button, Chip, EmptyState, Input, Switch, cn } from "@infantry/ui";
+import { Button, Chip, EmptyState, IconButton, Input, Switch, cn } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { TabPage } from "@/components/tabs/tab-page";
 import { RefusalBanner, Segmented } from "@/components/knowledge/parts";
 import { pluginsStore, usePlugins } from "@/plugins/use-plugins";
-import { PluginSettings } from "./plugin-settings";
+import { usePluginSettingsDialog } from "./plugin-settings-dialog";
 
 type Filter = "all" | "enabled" | "faults";
 
@@ -22,10 +22,10 @@ function contributes(p: PluginRow): string[] {
 }
 
 function PluginCard({ p, pending }: { p: PluginRow; pending: boolean }) {
-  const [open, setOpen] = useState(false);
   const fault = isFault(p);
   const parts = contributes(p);
   const name = p.ui?.displayName ?? p.id;
+  const hasSettings = !!p.ui && (p.ui.config || p.ui.configNodes.length > 0); // shown even when the plugin is off
   return (
     <article className={cn("flex flex-col gap-3 rounded-lg border bg-card p-4", fault && "border-danger/60")} aria-label={name}>
       <div className="flex items-start gap-3">
@@ -38,6 +38,11 @@ function PluginCard({ p, pending }: { p: PluginRow; pending: boolean }) {
             {p.license ? ` · ${p.license}` : ""}
           </p>
         </div>
+        {hasSettings && (
+          <IconButton label="Settings" className="shrink-0" onClick={() => usePluginSettingsDialog.getState().open(p.id)}>
+            <Settings />
+          </IconButton>
+        )}
         <Switch checked={p.enabled} disabled={pending} onCheckedChange={(v) => pluginsStore().getState().setEnabled(p.id, v)} aria-label={`${p.enabled ? "Disable" : "Enable"} ${name}`} />
       </div>
       {p.ui?.description && <p className="text-[13px] leading-5 text-muted-foreground">{p.ui.description}</p>}
@@ -55,18 +60,6 @@ function PluginCard({ p, pending }: { p: PluginRow; pending: boolean }) {
         <p className="truncate font-mono text-[11px] text-muted-foreground" title={parts.join("\n")}>
           {parts.join(" · ")}
         </p>
-      )}
-      {p.ui?.config && (
-        <div>
-          <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-            {open ? <ChevronDown /> : <ChevronRight />} Settings
-          </Button>
-          {open && (
-            <div className="mt-2">
-              <PluginSettings plugin={p.id} />
-            </div>
-          )}
-        </div>
       )}
     </article>
   );

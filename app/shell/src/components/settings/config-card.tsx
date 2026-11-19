@@ -9,7 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { RotateCcw } from "lucide-react";
 import { z } from "zod";
 import { resolved, settingKey, type ConfigField, type ConfigGroup } from "@infantry/client";
-import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, ToggleGroup, ToggleGroupItem } from "@infantry/ui";
+import { Button, Chip, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, ToggleGroup, ToggleGroupItem } from "@infantry/ui";
 import { SettingRow, SettingsCard } from "./setting-card";
 import { settingsStore, useSettings } from "./use-settings";
 
@@ -80,6 +80,7 @@ export function ConfigCard({ group }: { group: ConfigGroup }) {
         const error = form.formState.errors[slot(i)]?.message as string | undefined;
         return (
           <SettingRow key={f.key} id={id} label={f.label ?? f.key} hint={f.description} error={error}>
+            <Chip mono>{overridden ? (f.scope ?? "app") : "default"}</Chip>
             {overridden && !disabled && (
               <Button variant="ghost" size="icon" className="size-6" aria-label={`Reset ${f.label ?? f.key} to its default`} onClick={() => reset(f)}>
                 <RotateCcw className="size-3" />
