@@ -17,6 +17,7 @@ name = "infantry-migrate"
 path = "src/main.rs"
 
 [dependencies]
+infantry-proc = { path = "../infantry-proc" }
 rusqlite = { version = "0.32", features = ["bundled", "backup"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }

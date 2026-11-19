@@ -39,10 +39,8 @@ pub fn alive(pid: i64) -> bool {
     }
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
-        std::process::Command::new("tasklist")
+        infantry_proc::command("tasklist")
             .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
-            .creation_flags(0x0800_0000)
             .output()
             .map(|o| String::from_utf8_lossy(&o.stdout).contains(&format!("\"{pid}\"")))
             .unwrap_or(false)
@@ -50,7 +48,7 @@ pub fn alive(pid: i64) -> bool {
     #[cfg(not(windows))]
     {
         Path::new(&format!("/proc/{pid}")).exists()
-            || std::process::Command::new("kill").args(["-0", &pid.to_string()]).output().map(|o| o.status.success()).unwrap_or(false)
+            || infantry_proc::command("kill").args(["-0", &pid.to_string()]).output().map(|o| o.status.success()).unwrap_or(false)
     }
 }
 

@@ -13,7 +13,7 @@ use serde_json::{json, Map, Value};
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -335,7 +335,7 @@ impl ExecTools {
         let mut exit: i64 = -1;
         let mut timed_out = false;
         let mut failure: Option<String> = None;
-        let mut cmd = Command::new(&argv[0]);
+        let mut cmd = infantry_proc::command(&argv[0]);
         cmd.args(&argv[1..]).current_dir(cwd).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         if std::env::var_os("INFANTRY_PROGRESS").is_none() {
             cmd.env("INFANTRY_PROGRESS", "1");
@@ -343,11 +343,7 @@ impl ExecTools {
         for (k, v) in env {
             cmd.env(k, v);
         }
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: never a visible console
-        }
+        infantry_proc::NoWindow::no_window(&mut cmd); // never a visible console
         match cmd.spawn() {
             Err(e) => failure = Some(e.to_string().chars().take(200).collect()),
             Ok(mut child) => {
@@ -535,8 +531,7 @@ impl ExecTools {
 fn kill_tree(child: &mut std::process::Child) {
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
-        let _ = Command::new("taskkill").args(["/PID", &child.id().to_string(), "/T", "/F"]).creation_flags(0x0800_0000).stdout(Stdio::null()).stderr(Stdio::null()).status();
+        let _ = infantry_proc::command("taskkill").args(["/PID", &child.id().to_string(), "/T", "/F"]).stdout(Stdio::null()).stderr(Stdio::null()).status();
     }
     let _ = child.kill();
     let _ = child.wait();

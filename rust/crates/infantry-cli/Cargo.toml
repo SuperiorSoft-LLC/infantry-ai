@@ -18,6 +18,7 @@ name = "mcp-conformance"
 path = "src/bin/mcp_conformance.rs"
 
 [dependencies]
+infantry-proc = { path = "../infantry-proc" }
 # preserve_order: key order is kept exactly as the Kotlin bridge keeps it (kotlinx JsonObject is a LinkedHashMap).
 # arbitrary_precision: a number is written back exactly as it was read, as kotlinx's JsonLiteral does.
 serde_json = { version = "1", features = ["preserve_order", "arbitrary_precision"] }

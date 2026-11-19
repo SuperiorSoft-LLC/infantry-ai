@@ -136,14 +136,13 @@ pub fn start(spec: &ProcessSpec, hub: Arc<Hub>, grace: Duration) -> std::io::Res
 fn start_piped(spec: &ProcessSpec, hub: Arc<Hub>, grace: Duration) -> std::io::Result<Proc> {
     use std::process::Stdio;
     let cmd = command(spec);
-    let mut c = std::process::Command::new(&cmd.program);
+    let mut c = infantry_proc::command(&cmd.program);
     c.args(&cmd.args).current_dir(&cmd.cwd).env_clear().envs(environment(&cmd));
     c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
-        c.creation_flags(CREATE_NO_WINDOW | priority_flag(spec.priority));
+        c.creation_flags(infantry_proc::with_no_window(priority_flag(spec.priority)));
     }
     #[cfg(unix)]
     {

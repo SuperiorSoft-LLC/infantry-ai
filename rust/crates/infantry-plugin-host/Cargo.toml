@@ -9,6 +9,7 @@ description = "Infantry AI daemon plugin host: wasmtime components and native si
 publish = false
 
 [dependencies]
+infantry-proc = { path = "../infantry-proc" }
 infantry-core = { path = "../infantry-core" }
 infantry-plugin-wit = { path = "../infantry-plugin-wit" }
 wasmtime = "50"

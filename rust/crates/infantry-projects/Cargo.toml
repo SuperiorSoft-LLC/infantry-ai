@@ -9,6 +9,7 @@ description = "Infantry AI platform (L1): projects, workspaces, the project git 
 publish = false
 
 [dependencies]
+infantry-proc = { path = "../infantry-proc" }
 infantry-protocol = { path = "../infantry-protocol" }
 infantry-core = { path = "../infantry-core" }
 rusqlite = { version = "0.32", features = ["bundled"] }

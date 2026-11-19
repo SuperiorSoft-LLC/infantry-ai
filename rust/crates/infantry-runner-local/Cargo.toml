@@ -7,6 +7,7 @@ description = "Infantry AI local runner: the Runner trait on this machine (pseud
 publish = false
 
 [dependencies]
+infantry-proc = { path = "../infantry-proc" }
 infantry-runner = { path = "../infantry-runner" }
 infantry-runner-api = { path = "../infantry-runner-api" }
 tokio = { version = "1", features = ["rt", "sync", "time", "net", "io-util", "macros"] }

@@ -170,7 +170,7 @@ impl BoardEnv for DaemonBoardEnv {
     }
     fn branch_facts(&self, project_id: Option<&str>, branch: Option<&str>, base: Option<&str>) -> Option<String> {
         let dir = super::project_dir(&self.projects, project_id?)?;
-        let run = |args: &[&str]| std::process::Command::new("git").arg("-C").arg(&dir).args(args).output().ok();
+        let run = |args: &[&str]| infantry_proc::command("git").arg("-C").arg(&dir).args(args).output().ok();
         let out = |args: &[&str]| run(args).filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).filter(|t| !t.is_empty());
         let branch = branch?;
         let short = |r: &str| out(&["rev-parse", "--short=9", "--verify", "--quiet", r]);

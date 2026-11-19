@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-proc"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "The one child-process spawn seam: every Command is created windowless on Windows (CREATE_NO_WINDOW)."
+publish = false
+
+[dependencies]

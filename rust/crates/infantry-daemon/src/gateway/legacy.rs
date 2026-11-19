@@ -10,7 +10,7 @@
 use infantry_runner::job::Job;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -135,7 +135,7 @@ impl Legacy {
     fn start_once(&self) -> Result<String, String> {
         let job = Job::new().map_err(|e| format!("job object: {e}"))?;
         let own = self.prepare_dir()?;
-        let mut cmd = Command::new(&self.command[0]);
+        let mut cmd = infantry_proc::command(&self.command[0]);
         cmd.args(&self.command[1..])
             .env(ENV_PORT, self.port.to_string())
             .env(ENV_STATE_DIR, &own)
@@ -149,12 +149,7 @@ impl Legacy {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            cmd.creation_flags(CREATE_NO_WINDOW);
-        }
+        infantry_proc::NoWindow::no_window(&mut cmd);
         let mut child = cmd.spawn().map_err(|e| format!("{}: {e}", self.command[0]))?;
         if let Err(e) = job.assign(child.id()) {
             eprintln!("[infantry] legacy backend not in a job object ({e}): it may outlive a crashed gateway");

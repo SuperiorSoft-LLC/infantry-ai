@@ -22,3 +22,6 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Cryptography", "Win32_System_Memory"] }
 windows = { version = "0.62", features = ["Foundation", "Security_Credentials_UI", "Win32_Foundation", "Win32_System_WinRT", "Win32_UI_WindowsAndMessaging"] }
 windows-future = "0.3"
+
+[target.'cfg(unix)'.dependencies]
+infantry-proc = { path = "../infantry-proc" }
