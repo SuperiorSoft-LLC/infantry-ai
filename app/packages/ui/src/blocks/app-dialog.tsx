@@ -20,21 +20,32 @@ export function AppDialog({
   description?: string;
   footer?: ReactNode;
   /** true: a roomy form dialog; "fill": grows with the window (min(1100px, 92vw) by min(85vh, 820px)), for settings-like content. */
-  wide?: boolean | "fill";
+  wide?: boolean | "fill" | "image";
   children: ReactNode;
 }) {
   const fill = wide === "fill";
+  const image = wide === "image";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
           "flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0",
-          fill ? "h-[min(85vh,820px)] w-[min(1100px,92vw)] min-w-[min(480px,92vw)] sm:max-w-none" : wide ? "sm:max-w-3xl" : "sm:max-w-md",
+          fill
+            ? "h-[min(85vh,820px)] w-[min(1100px,92vw)] min-w-[min(480px,92vw)] sm:max-w-none"
+            : image
+              ? "h-auto max-h-[88vh] w-fit max-w-[92vw] min-w-[min(480px,92vw)] sm:max-w-[92vw] max-sm:h-dvh max-sm:max-h-none max-sm:w-screen max-sm:max-w-none max-sm:rounded-none"
+              : wide
+                ? "sm:max-w-3xl"
+                : "sm:max-w-md",
         )}
       >
-        <DialogHeader className="border-b p-4">
+        <DialogHeader className="border-b p-4 pr-12">
           <DialogTitle>{title}</DialogTitle>
-          {description && <DialogDescription>{description}</DialogDescription>}
+          {description && (
+            <DialogDescription className="truncate" title={description}>
+              {description}
+            </DialogDescription>
+          )}
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4">{children}</div>
         {footer && <DialogFooter className="m-0 border-t p-3">{footer}</DialogFooter>}

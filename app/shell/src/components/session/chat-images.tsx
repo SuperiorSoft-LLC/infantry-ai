@@ -19,6 +19,25 @@ export function readImageFile(file: Blob): Promise<string> {
   });
 }
 
+/** Fits the image to the modal (sharp, object-contain); a click zooms to 100% inside a scrolling pane, a second click fits again. */
+function ZoomImage({ src }: { src: string }) {
+  const [zoom, setZoom] = useState(false);
+  return (
+    <div className={zoom ? "max-h-[calc(88vh-6rem)] overflow-auto max-sm:max-h-[calc(100dvh-6rem)]" : ""}>
+      <img
+        src={src}
+        alt="Attached image"
+        onClick={() => setZoom((z) => !z)}
+        className={
+          zoom
+            ? "max-w-none cursor-zoom-out"
+            : "mx-auto max-h-[calc(88vh-6rem)] max-w-full cursor-zoom-in object-contain max-sm:max-h-[calc(100dvh-6rem)]"
+        }
+      />
+    </div>
+  );
+}
+
 function Thumb({ image }: { image: ImageRef }) {
   const [url, setUrl] = useState<string | null | undefined>(undefined);
   const [open, setOpen] = useState(false);
@@ -41,8 +60,8 @@ function Thumb({ image }: { image: ImageRef }) {
         {url && <img src={url} alt="Attached image" className="size-full object-cover" />}
       </button>
       {url && (
-        <AppDialog open={open} onOpenChange={setOpen} title="Image" description={image.path}>
-          <img src={url} alt="Attached image" className="max-h-[70vh] w-full object-contain" />
+        <AppDialog open={open} onOpenChange={setOpen} title="Image" description={image.path} wide="image">
+          <ZoomImage src={url} />
         </AppDialog>
       )}
     </>
