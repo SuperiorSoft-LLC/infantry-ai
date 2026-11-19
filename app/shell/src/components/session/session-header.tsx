@@ -42,9 +42,15 @@ export function SessionHeader({ agent }: { agent: Agent }) {
             </Chip>
           </span>
         )}
-        <Chip tone="blue">
-          {agent.tokensIn} / {agent.tokensOut}
-        </Chip>
+        {agent.tokensKnown ? (
+          <Chip tone="blue">
+            {agent.tokensIn} / {agent.tokensOut}
+          </Chip>
+        ) : (
+          <span title="Per-session token totals for past runs are not in the Rust version yet (GAPS-1); this window has seen no usage frame for the session.">
+            <Chip tone="blue">tokens: not in the Rust version yet</Chip>
+          </span>
+        )}
         <SessionActionButtons sessionId={agent.id} busy={agent.status === "working"} />
       </div>
     </div>

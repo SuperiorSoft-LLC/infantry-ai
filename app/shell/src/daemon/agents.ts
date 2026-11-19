@@ -89,6 +89,7 @@ export function toAgent(
     runs: r.runCount ?? 0,
     tokensIn: `${compact(tin)} in`,
     tokensOut: `${compact(tout)} out`,
+    tokensKnown: Object.keys(v.usage).length > 0,
     hue: hueOf(r.id),
     projectName: r.projectId ? (projects.find((p) => p.id === r.projectId)?.name ?? r.projectId) : undefined,
     heldBy: r.heldBy ?? undefined,
