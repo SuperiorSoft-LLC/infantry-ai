@@ -4,9 +4,10 @@
 // a card whose session did not change in a flush keeps the same object and does not re-render.
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { isRunning, type AgentProfile, type ProjectSummary, type SessionView, type TicketSummary } from "@infantry/client";
+import { inProject, isRunning, type AgentProfile, type ProjectSummary, type SessionView, type TicketSummary } from "@infantry/client";
 import type { Agent, AgentStatus } from "@/mock/types";
 import { useDaemon } from "./daemon";
+import { useProjects } from "@/components/git/use-projects";
 
 /** [ticketStatus]: the board lane of the session's ticket; a quiet session whose ticket is Pending is ready to check. */
 function statusOf(v: SessionView, ticketStatus?: string): AgentStatus {
@@ -116,12 +117,13 @@ export function useAgentList(): Agent[] {
   const { sessions, agents, tickets, projects } = useDaemon(
     useShallow((s) => ({ sessions: s.sessions, agents: s.agents, tickets: s.tickets, projects: s.projects })),
   );
+  const projectId = useProjects((s) => s.currentId);
   return useMemo(
     () =>
-      Object.values(sessions)
+      inProject(Object.values(sessions), projectId)
         .sort((a, b) => b.record.spawnedAt - a.record.spawnedAt)
         .map((v) => cachedAgent(v, agents, tickets, projects)),
-    [sessions, agents, tickets, projects],
+    [sessions, agents, tickets, projects, projectId],
   );
 }
 
