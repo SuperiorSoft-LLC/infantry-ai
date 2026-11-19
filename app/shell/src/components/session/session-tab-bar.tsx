@@ -7,7 +7,7 @@ import type { TabEntry } from "@/plugins/catalog";
 
 export function SessionTabBar({ tabs, value, onChange }: { tabs: TabEntry[]; value: string; onChange: (id: string) => void }) {
   return (
-    <nav role="tablist" aria-label="Session views" className="no-scrollbar flex gap-1 overflow-x-auto border-b px-3">
+    <nav role="tablist" aria-label="Session views" className="no-scrollbar flex min-w-0 max-w-full shrink-0 gap-1 overflow-x-auto border-b px-3">
       {tabs.map((t) => {
         const Icon = t.icon;
         const active = t.id === value;

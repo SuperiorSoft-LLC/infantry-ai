@@ -18,7 +18,7 @@ export function SessionHeader({ agent }: { agent: Agent }) {
   const limit = useDaemon((s) => s.sessions[agent.id]?.record.contextLimit);
   const auto = useAutomationStats(agent.id);
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-3 pb-2">
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-3 pb-2 [&_span]:max-w-full [&_span]:break-all">
       <AgentAvatar agent={agent} size="md" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
@@ -29,7 +29,7 @@ export function SessionHeader({ agent }: { agent: Agent }) {
         </div>
         <div className="truncate font-mono text-xs text-muted-foreground">{agent.statusLine}</div>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
         <Chip tone="red">{agent.provider}</Chip>
         <Chip tone="green">{agent.model}</Chip>
         {effort && <Chip>effort {effort}</Chip>}
