@@ -254,6 +254,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         }
     };
     let notify = Arc::new(NotifyService::new(state_dir.to_path_buf(), Arc::new(notify_settings), clock(), Arc::new(adapters::minute_of_day)));
+    env.set_notify(notify.clone());
     {
         let b = bus.clone();
         // Kotlin NOTIFY-1: devices listen for `notify_push` (the request frame `notify` only answers its sender).

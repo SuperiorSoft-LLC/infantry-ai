@@ -20,6 +20,8 @@ use crate::store;
 
 pub const MODULE_ID: &str = "Infantry_Board";
 pub const SCHEMA_VERSION: i64 = 1;
+/// The notify entry for the human user: a notice in the app, not mail.
+pub const OWNER_ENTRY: &str = "owner";
 pub const OPEN: &str = "open";
 pub const RESOLVED: &str = "resolved";
 pub const KINDS: [&str; 4] = ["done", "issue", "note", "handoff"];
@@ -121,7 +123,9 @@ impl Comments {
             if id.is_empty() {
                 return Err(refused("a notify target is a non-blank agent id"));
             }
-            let ok = if self.env.is_registry_agent(id) || self.env.is_session(id) {
+            let ok = if matches!(id.to_ascii_lowercase().as_str(), "owner" | "user") {
+                OWNER_ENTRY.to_string()
+            } else if self.env.is_registry_agent(id) || self.env.is_session(id) {
                 id.to_string()
             } else if let Some(role) = id.strip_prefix("role:").map(str::trim).filter(|r| !r.is_empty()) {
                 // A role is resolved at send time to whoever holds it then, so it needs no holder now.
@@ -165,6 +169,9 @@ impl Comments {
             Some(e) => self.validate_targets(&e)?,
             None => {
                 let mut v: Vec<String> = creator_agent.into_iter().collect();
+                if creator.kind == CommentAuthor::OWNER {
+                    v.push(OWNER_ENTRY.to_string()); // a human creator hears it in the app
+                }
                 for d in self.project_defaults(project_id) {
                     if !v.contains(&d) {
                         v.push(d);
@@ -317,6 +324,14 @@ impl Comments {
         let mut sent: Vec<String> = Vec::new();
         for entry in agents {
             if author.agent_id.as_deref() == Some(entry.as_str()) || author.session_id.as_deref() == Some(entry.as_str()) {
+                continue;
+            }
+            if entry == OWNER_ENTRY {
+                if author.kind != CommentAuthor::OWNER
+                    && !self.env.notify_owner(&format!("Ticket comment {short}"), &format!("{title}: {kind} by {}: {preview}", author.label()), ticket_id, project_id)
+                {
+                    missed.push(entry);
+                }
                 continue;
             }
             // An entry is a role (resolved now), a live session, or an agent's live sessions.

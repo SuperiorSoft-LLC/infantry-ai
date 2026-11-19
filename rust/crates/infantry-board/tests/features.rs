@@ -151,4 +151,18 @@ fn notify_list_takes_roles_and_sessions() {
     assert!(n.contains(&"role:ghost".to_string()));
     let refused = block_on(f.orch.notify_edit(NotifyEdit { ticket_id: "ticket-00000001".into(), add: vec!["ghost".into()], ..Default::default() }));
     assert!(matches!(refused, Err(OrchError::Refused(_))));
+    // The human user: "user" is stored as "owner" and gets an app notice, not mail.
+    let n = block_on(f.orch.notify_edit(NotifyEdit { ticket_id: "ticket-00000001".into(), add: vec!["user".into()], ..Default::default() })).unwrap();
+    assert!(n.contains(&"owner".to_string()));
+    let before = f.env.notified.lock().unwrap().len();
+    block_on(f.orch.comment_add(CommentAdd {
+        ticket_id: "00000001".into(),
+        body: "for the user".into(),
+        kind: None,
+        state: None,
+        author: CommentAuthor::daemon(),
+    }))
+    .unwrap();
+    let got = f.env.notified.lock().unwrap().clone();
+    assert!(got[before..].iter().any(|l| l.starts_with("owner ") && l.contains("for the user")), "{got:?}");
 }

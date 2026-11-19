@@ -69,11 +69,17 @@ pub struct DaemonBoardEnv {
     projects: Arc<Projects>,
     profiles: ProfileBoard,
     usage: Arc<UsageService>,
+    /// The notification service, set once it exists (it is built after the board env).
+    notify: std::sync::OnceLock<Arc<infantry_mail::notify::push::NotifyService>>,
 }
 
 impl DaemonBoardEnv {
     pub fn new(daemon: Arc<Daemon>, projects: Arc<Projects>, state_dir: &Path, usage: Arc<UsageService>) -> DaemonBoardEnv {
-        DaemonBoardEnv { daemon, projects, profiles: ProfileBoard::new(state_dir), usage }
+        DaemonBoardEnv { daemon, projects, profiles: ProfileBoard::new(state_dir), usage, notify: std::sync::OnceLock::new() }
+    }
+
+    pub fn set_notify(&self, n: Arc<infantry_mail::notify::push::NotifyService>) {
+        let _ = self.notify.set(n);
     }
 
     fn project(&self, id: Option<&str>) -> Option<infantry_protocol::projects::Project> {
@@ -133,6 +139,16 @@ impl BoardEnv for DaemonBoardEnv {
             .filter(|r| project_id.is_none() || r.project_id.as_deref() == project_id)
             .map(|r| r.id)
             .collect()
+    }
+    fn notify_owner(&self, title: &str, body: &str, ticket_id: &str, project_id: Option<&str>) -> bool {
+        let Some(n) = self.notify.get() else { return false };
+        let req = infantry_mail::notify::push::NotifyRequest {
+            title: title.chars().take(infantry_mail::notify::push::MAX_TITLE).collect(),
+            body: body.chars().take(infantry_mail::notify::push::MAX_BODY).collect(),
+            ticket_id: Some(ticket_id.to_string()),
+            ..Default::default()
+        };
+        n.notify(&req, project_id).is_ok()
     }
     fn live_role_sessions(&self, role: &str, project_id: Option<&str>) -> Vec<String> {
         self.daemon

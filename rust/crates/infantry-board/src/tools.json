@@ -35,7 +35,7 @@
      "items": {
       "type": "string"
      },
-     "description": "Who to notify on every comment: agent ids, session ids, or role:<name> (resolved at send time). Default: you plus the project's default list."
+     "description": "Who to notify on every comment: agent ids, session ids, role:<name> (resolved at send time) or owner (the human user, an app notice). Default: you plus the project's default list."
     },
     "verbose": {
      "type": "boolean",

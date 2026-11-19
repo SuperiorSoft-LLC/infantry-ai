@@ -168,6 +168,10 @@ pub trait BoardEnv: Send + Sync {
     fn live_sessions(&self, _agent_id: &str, _project_id: Option<&str>) -> Vec<String> {
         Vec::new()
     }
+    /// The human user (`owner` on a notify list): a notice in the app's notifications, not mail. True when posted.
+    fn notify_owner(&self, _title: &str, _body: &str, _ticket_id: &str, _project_id: Option<&str>) -> bool {
+        false
+    }
     /// The live session ids holding `role` (in `project_id` when given): `role:<name>` resolved at send time.
     fn live_role_sessions(&self, _role: &str, _project_id: Option<&str>) -> Vec<String> {
         Vec::new()
@@ -362,6 +366,10 @@ impl BoardEnv for StaticEnv {
     }
     fn is_session(&self, id: &str) -> bool {
         self.is_live_session(id)
+    }
+    fn notify_owner(&self, title: &str, body: &str, _ticket_id: &str, _project_id: Option<&str>) -> bool {
+        self.notified.lock().unwrap_or_else(|p| p.into_inner()).push(format!("owner {title} {body}"));
+        true
     }
     fn is_live_session(&self, id: &str) -> bool {
         self.live.iter().any(|(_, s)| s == id) || self.live_roles.iter().any(|(_, s)| s == id)
