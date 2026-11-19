@@ -236,6 +236,10 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch) -> Result<Si
     }
     let _ = std::fs::remove_file(port_file(state));
     let bin = binary()?;
+    // RUST-BUG e0c433c9: keep the previous run's output (a crash's last words) as daemon.prev.log, never truncate it.
+    if state.join("daemon.log").is_file() {
+        let _ = std::fs::rename(state.join("daemon.log"), state.join("daemon.prev.log"));
+    }
     let log = std::fs::File::create(state.join("daemon.log")).map_err(|e| format!("daemon log: {e}"))?;
     let mut cmd = Command::new(&bin);
     cmd.args(["--host", launch.host(), "--port", &port.to_string(), "--state-dir"])

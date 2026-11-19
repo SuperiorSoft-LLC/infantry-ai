@@ -330,10 +330,8 @@ impl MailRouter {
 
     /// Scheduler tick: pumps every recipient with queued mail, so debounce windows and the hard wake bound apply.
     pub fn tick(&self) {
-        let mut recipients: Vec<String> = self.mailbox.all().into_iter().filter(|m| m.state == super::message::MessageState::Queued).map(|m| m.to).collect();
-        recipients.sort();
-        recipients.dedup();
-        for r in recipients {
+        // Only the recipient ids, never a copy of every message (RUST-BUG e0c433c9: that clone ran out of memory).
+        for r in self.mailbox.queued_recipients() {
             self.pump(&r);
         }
     }
@@ -474,9 +472,11 @@ mod tests {
         // Under "real", automation mail rides until the hard bound.
         r.send(&MailSendRequest { from: "system".into(), to: "pm".into(), subject: "note".into(), body: "x".into(), ..Default::default() }, true);
         assert_eq!(mb.pending_count("pm"), 1);
+        assert_eq!(mb.queued_recipients(), vec!["pm".to_string()]);
         clock.fetch_add(120_000, Ordering::SeqCst);
         r.tick();
         assert_eq!(mb.pending_count("pm"), 0);
+        assert!(mb.queued_recipients().is_empty());
         assert!(mb.all().iter().all(|m| m.state != MessageState::Queued));
     }
 }

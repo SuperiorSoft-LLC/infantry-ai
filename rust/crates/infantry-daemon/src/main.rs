@@ -64,6 +64,8 @@ fn main() {
     if let Err(e) = std::fs::create_dir_all(&state_dir) {
         fail(format!("state dir {}: {e}", state_dir.display()));
     }
+    // RUST-BUG e0c433c9: a panic is written to <state>/health/panics.log, and the next start's health event names it.
+    infantry_daemon::health::install_panic_log(&state_dir);
     let provider = arg("--provider").or_else(|| auth::env("INFANTRY_PROVIDER")).unwrap_or_else(|| harness::DEFAULT_PROVIDER.into());
     let harness: Arc<dyn harness::Harness> = match harness::by_name(provider.trim()) {
         Some(h) => Arc::from(h),
