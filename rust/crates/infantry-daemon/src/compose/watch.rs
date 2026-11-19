@@ -16,6 +16,7 @@ pub struct Ports {
     pub daemon: Arc<Daemon>,
     pub mail: Arc<MailRouter>,
     pub attention: Arc<AttentionStore>,
+    pub settings: super::settings::SettingsUnit,
 }
 
 impl WatchPorts for Ports {
@@ -27,6 +28,11 @@ impl WatchPorts for Ports {
             .filter(|w| w.waiting_on == rec.id)
             .min_by_key(|w| w.since)
             .map(|w| Pending { key: w.message_id.clone(), since: w.since, summary: format!("mail '{}' waits for your reply", w.subject) })
+    }
+
+    fn limits(&self) -> (Option<i64>, Option<i64>) {
+        let mins = |k: &str| self.settings.app(k).and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|x| x.trim().parse().ok()))).filter(|n| *n >= 0).map(|n| n * 60_000);
+        (mins("session.stalledMinutes"), mins("session.hungKillMinutes"))
     }
 
     fn raise(&self, rec: &SessionRecord, outcome: &str, detail: &str) {

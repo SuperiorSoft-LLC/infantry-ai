@@ -118,6 +118,10 @@ pub trait WatchPorts: Send + Sync {
     fn pending(&self, _rec: &SessionRecord, _now: i64) -> Option<Pending> {
         None
     }
+    /// (`session.stalledMinutes`, `session.hungKillMinutes`) in ms when set; None keeps the [`WatchConfig`] value.
+    fn limits(&self) -> (Option<i64>, Option<i64>) {
+        (None, None)
+    }
     /// Raises one attention item for the owner (kind `stalled`).
     fn raise(&self, rec: &SessionRecord, outcome: &str, detail: &str);
     /// Sends the session one nudge; false = it could not be sent.
@@ -139,6 +143,9 @@ pub struct WatchConfig {
     pub poll_ms: u64,
     /// A turn with no output this long is QUIET (attention, never FAILED).
     pub quiet_ms: i64,
+    /// A BUSY turn with no output this long marks its child hung: the next turn kills that child (by pid) and starts a
+    /// fresh one instead of attaching to it. 0 = never.
+    pub hung_kill_ms: i64,
     /// A session at rest with an unanswered item this long is STALLED.
     pub stall_ms: i64,
     /// Between a nudge and the owner's attention item.
@@ -148,7 +155,7 @@ pub struct WatchConfig {
 impl Default for WatchConfig {
     fn default() -> Self {
         const MIN: i64 = 60_000;
-        WatchConfig { poll_ms: 30_000, quiet_ms: 15 * MIN, stall_ms: 5 * MIN, nudge_interval_ms: 5 * MIN }
+        WatchConfig { poll_ms: 30_000, quiet_ms: 15 * MIN, hung_kill_ms: 30 * MIN, stall_ms: 5 * MIN, nudge_interval_ms: 5 * MIN }
     }
 }
 
@@ -463,6 +470,8 @@ impl Daemon {
 
     /// One watchdog pass: `session.watch` on every record whose watch changed, then the nudges and attention items.
     pub fn watch_tick(self: &Arc<Self>, ports: &dyn WatchPorts, cfg: &WatchConfig, now: i64) {
+        let (quiet, hung) = ports.limits();
+        let cfg = &WatchConfig { quiet_ms: quiet.unwrap_or(cfg.quiet_ms), hung_kill_ms: hung.unwrap_or(cfg.hung_kill_ms), ..cfg.clone() };
         let entries: Vec<_> = self.list.lock().unwrap().iter().map(|(_, e)| e.clone()).collect();
         let mut acts = Vec::new();
         for entry in entries {
@@ -476,6 +485,11 @@ impl Daemon {
             } else {
                 (AgentWatch { state: "IDLE".into(), pending_since: None, pending: None, last_activity_at: e.rec.last_heartbeat, nudges: 0 }, None)
             };
+            // A BUSY turn silent past the kill limit: its child is hung, the next turn replaces it.
+            let silent = now - watch.last_activity_at;
+            if e.turn_active && cfg.hung_kill_ms > 0 && silent >= cfg.hung_kill_ms {
+                e.hung = true;
+            }
             match &key {
                 None => e.episode = None,
                 Some(k) if e.episode.as_ref().is_none_or(|ep| &ep.key != k) => e.episode = Some(Episode { key: k.clone(), ..Default::default() }),
@@ -513,8 +527,11 @@ impl Daemon {
                 watch.nudges = ep.nudges;
             }
             e.episode = episode;
-            let changed = e.rec.watch.as_ref().is_none_or(|w| w.state != watch.state || w.pending != watch.pending || w.nudges != watch.nudges);
+            // The card's status line: a BUSY turn silent past `session.stalledMinutes` reads as stalled.
+            let label = (watch.state == "QUIET").then(|| format!("stalled: BUSY, no output for {} min", (now - watch.last_activity_at) / 60_000));
+            let changed = e.rec.watch.as_ref().is_none_or(|w| w.state != watch.state || w.pending != watch.pending || w.nudges != watch.nudges) || e.rec.watch_label != label;
             if changed {
+                e.rec.watch_label = label;
                 e.rec.watch = Some(watch);
                 self.push(&mut e);
             }
