@@ -4,9 +4,9 @@
 // action and last/next firing; Fire, Arm (a tripped one), Disable, Delete and its event log. A module's trigger (it has an
 // `owner`) is read-only. New trigger asks only for a name; kind and interval are pickers with working defaults.
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Lock, Play, Plus, Power, RefreshCw, RotateCcw, Trash2, Zap } from "lucide-react";
+import { ChevronDown, ChevronRight, Lock, Pencil, Play, Plus, Power, RefreshCw, RotateCcw, Trash2, Zap } from "lucide-react";
 import type { TriggerView } from "@infantry/client";
-import { AppDialog, Button, Chip, EmptyState, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, type Tone } from "@infantry/ui";
+import { AppDialog, Button, Chip, EmptyState, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea, type Tone } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { TabPage } from "@/components/tabs/tab-page";
 import { Field, RefusalBanner, ago } from "@/components/knowledge/parts";
@@ -61,7 +61,7 @@ function Events({ id }: { id: string }) {
   );
 }
 
-function TriggerCard({ t }: { t: TriggerView }) {
+function TriggerCard({ t, onEdit }: { t: TriggerView; onEdit: (t: TriggerView) => void }) {
   const [open, setOpen] = useState(false);
   const s = () => triggersStore().getState();
   const owned = !!t.owner;
@@ -109,6 +109,11 @@ function TriggerCard({ t }: { t: TriggerView }) {
           {open ? <ChevronDown /> : <ChevronRight />} Events
         </Button>
         {!owned && (
+          <Button variant="ghost" size="xs" aria-label={`Edit ${t.name}`} onClick={() => onEdit(t)}>
+            <Pencil />
+          </Button>
+        )}
+        {!owned && (
           <Button variant="ghost" size="xs" aria-label={`Delete ${t.name}`} onClick={() => s().remove(t.id)}>
             <Trash2 />
           </Button>
@@ -119,31 +124,52 @@ function TriggerCard({ t }: { t: TriggerView }) {
   );
 }
 
-function NewTriggerDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** New trigger (`edit` unset) or edit of an existing one: every field the save frame carries. */
+function NewTriggerDialog({ open, onClose, edit }: { open: boolean; onClose: () => void; edit?: TriggerView | null }) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<"manual" | "schedule">("manual");
   const [interval, setInterval] = useState(String(INTERVALS[1].ms));
+  const [actionKind, setActionKind] = useState("start_next");
+  const [agentId, setAgentId] = useState("");
+  const [prompt, setPrompt] = useState("");
   useEffect(() => {
-    if (open) (setName(""), setKind("manual"), setInterval(String(INTERVALS[1].ms)));
-  }, [open]);
+    if (!open) return;
+    setName(edit?.name ?? "");
+    setKind(edit?.kind === "schedule" ? "schedule" : "manual");
+    setInterval(String(edit?.intervalMs ?? INTERVALS[1].ms));
+    setActionKind(edit?.action.kind ?? "start_next");
+    setAgentId(edit?.action.agentId ?? "");
+    setPrompt(edit?.action.prompt ?? "");
+  }, [open, edit]);
   const submit = () => {
     if (!name.trim()) return;
-    triggersStore().getState().save({ name, kind, intervalMs: kind === "schedule" ? Number(interval) : undefined });
+    triggersStore().getState().save({
+      id: edit?.id,
+      name,
+      kind,
+      intervalMs: kind === "schedule" ? Number(interval) : undefined,
+      enabled: edit?.enabled,
+      coalesceMs: edit?.coalesceMs,
+      ceilingRuns: edit?.ceilingRuns,
+      ceilingWindowMs: edit?.ceilingWindowMs,
+      projectId: edit?.projectId,
+      action: { kind: actionKind, agentId: agentId.trim() || null, prompt: actionKind === "prompt" ? prompt : null },
+    });
     onClose();
   };
   return (
     <AppDialog
       open={open}
       onOpenChange={(o) => !o && onClose()}
-      title="New trigger"
-      description="Starts the next ready ticket when it fires"
+      title={edit ? "Edit trigger" : "New trigger"}
+      description={edit ? "Change what it fires and when" : "Starts the next ready ticket when it fires"}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
           <Button disabled={!name.trim()} onClick={submit}>
-            Create
+            {edit ? "Save" : "Create"}
           </Button>
         </>
       }
@@ -185,6 +211,25 @@ function NewTriggerDialog({ open, onClose }: { open: boolean; onClose: () => voi
             </Select>
           </Field>
         )}
+        <Field id="trigger-action" label="Action">
+          <Select value={actionKind} onValueChange={setActionKind}>
+            <SelectTrigger id="trigger-action" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="start_next">Start the next ready ticket</SelectItem>
+              <SelectItem value="prompt">Send a prompt to an agent</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field id="trigger-agent" label="Target agent">
+          <Input id="trigger-agent" value={agentId} onChange={(e) => setAgentId(e.target.value)} placeholder="Optional agent id or role" />
+        </Field>
+        {actionKind === "prompt" && (
+          <Field id="trigger-prompt" label="Message">
+            <Textarea id="trigger-prompt" rows={4} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="What the agent is told when it fires" />
+          </Field>
+        )}
       </form>
     </AppDialog>
   );
@@ -196,6 +241,7 @@ export function TriggersTab() {
   const refusal = useTriggers((s) => s.refusal);
   const link = useDaemon((s) => s.connection.state);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<TriggerView | null>(null);
   useEffect(() => {
     if (link === "open") triggersStore().getState().refresh();
   }, [link]);
@@ -222,11 +268,11 @@ export function TriggersTab() {
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
           {triggers.map((t) => (
-            <TriggerCard key={t.id} t={t} />
+            <TriggerCard key={t.id} t={t} onEdit={(x) => (setEditing(x), setCreating(true))} />
           ))}
         </div>
       )}
-      <NewTriggerDialog open={creating} onClose={() => setCreating(false)} />
+      <NewTriggerDialog open={creating} edit={editing} onClose={() => (setCreating(false), setEditing(null))} />
     </TabPage>
   );
 }
