@@ -6,8 +6,8 @@
 //! [`descriptors`] and routes a call here through [`call`]; MCP bridges reach them over `plugin_tool_call`.
 //!
 //! Answers are short text (one line per ticket); `verbose` / `detail=full` add the stored ticket as JSON.
-use infantry_orchestrator_api::dto::{status, CommentAdd, EpicBaseRequest, CommentAuthor, CommentQuery, NotifyEdit, Ticket, TicketMove, TicketSave};
-use infantry_orchestrator_api::{OrchError, StartOrigin};
+use infantry_orchestrator_api::dto::{status, AgentSwitch, CommentAdd, EpicBaseRequest, CommentAuthor, CommentQuery, NotifyEdit, Ticket, TicketMove, TicketSave};
+use infantry_orchestrator_api::{AgentQueueRequest, OrchError, StartOrigin};
 use infantry_protocol::Envelope;
 use serde_json::{Map, Value};
 
@@ -229,6 +229,33 @@ pub fn call(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> Opti
             let _ = board.record_creator(&t.id, &who.author(), list(a, "notify"));
             Ok(saved("created", &t, b(a, "verbose")))
         })(),
+        "infantry_agent_switch" => (|| {
+            let agent = s(a, "agentId").ok_or("infantry_agent_switch needs an agentId")?;
+            let to = board.find(&s(a, "ticketId").ok_or("infantry_agent_switch needs a ticketId")?).map_err(err)?;
+            let moved = ctx.work.switch(&AgentSwitch { agent_id: agent, ticket_id: to.id.clone(), now: b(a, "now") }).map_err(err)?.ticket;
+            let note = moved.start.as_ref().filter(|st| st.reason == "deferred").and_then(|st| st.detail.as_ref()).map(|d| format!(" ({d})")).unwrap_or_default();
+            if b(a, "verbose") {
+                return Ok(serde_json::to_string_pretty(&moved).unwrap_or_default());
+            }
+            Ok(format!("ok {} {}{note}", short(&moved.id), moved.status))
+        })(),
+        "infantry_agent_queue" => (|| {
+            let agent_id = s(a, "agentId").ok_or("infantry_agent_queue needs an agentId")?;
+            let at = match s(a, "at") {
+                Some(x) => Some(x.parse::<i32>().map_err(|_| "infantry_agent_queue: at must be a whole number".to_string())?),
+                None => None,
+            };
+            let ticket_id = match s(a, "ticketId") {
+                Some(r) => Some(board.find(&r).map_err(err)?.id),
+                None => None,
+            };
+            let st = ctx.work.agent_queue(&AgentQueueRequest { agent_id, action: s(a, "action").unwrap_or_else(|| "list".into()), ticket_id, at }).map_err(err)?;
+            let head = format!("queue of {}: {} ticket(s){}", st.name.as_deref().unwrap_or(&st.agent_id), st.tickets.len(), st.message.as_ref().map(|m| format!(" ({m})")).unwrap_or_default());
+            let lines: Vec<String> = st.tickets.iter().map(|q| format!("#{} {} {}", q.rank, short(&q.ticket_id), q.title)).collect();
+            Ok(if lines.is_empty() { head } else { format!("{head}
+{}", lines.join("
+")) })
+        })(),
         "infantry_epic_base" => (|| {
             let epic_id = s(a, "epicId").ok_or("epicId is required")?;
             let req = EpicBaseRequest { epic_id, branch: s(a, "branch"), clear: b(a, "clear") };
@@ -424,7 +451,7 @@ mod tests {
     #[test]
     fn descriptors_name_the_pm_tools() {
         let n = names();
-        for t in ["infantry_ticket_create", "infantry_ticket_get", "infantry_ticket_update", "infantry_ticket_move", "infantry_ticket_start", "infantry_ticket_comment", "infantry_ticket_comments", "infantry_board", "infantry_epic_base"] {
+        for t in ["infantry_agent_switch", "infantry_agent_queue", "infantry_ticket_create", "infantry_ticket_get", "infantry_ticket_update", "infantry_ticket_move", "infantry_ticket_start", "infantry_ticket_comment", "infantry_ticket_comments", "infantry_board", "infantry_epic_base"] {
             assert!(n.iter().any(|x| x == t), "{t}");
         }
         assert_eq!(short("0123456789abcdef"), "89abcdef");
