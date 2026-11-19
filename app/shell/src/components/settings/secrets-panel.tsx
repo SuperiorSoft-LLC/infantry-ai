@@ -43,10 +43,9 @@ function FieldRow({ entry, field, tail }: { entry: SecretEntryRow; field: string
     }
   };
   return (
-    <div className="flex items-center gap-2 text-[13px]">
-      <span className="w-40 truncate font-mono">{field}</span>
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+      <span className="w-40 max-w-full shrink-0 truncate font-mono">{field}</span>
       <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{shown ?? tail}</span>
-      <span className="hidden truncate font-mono text-xs text-muted-foreground sm:inline">{placeholderOf(entry, field)}</span>
       <Button size="sm" variant="ghost" onClick={() => (shown ? setShown(null) : void ask("reveal"))}>
         {shown ? "Hide" : "Reveal"}
       </Button>
@@ -57,6 +56,15 @@ function FieldRow({ entry, field, tail }: { entry: SecretEntryRow; field: string
         Delete
       </Button>
       {note && <span className="text-xs text-muted-foreground">{note}</span>}
+      {/* The reference moves under the name, truncated; a click copies it. */}
+      <button
+        type="button"
+        title="Copy reference"
+        onClick={() => void navigator.clipboard.writeText(placeholderOf(entry, field)).catch(() => {})}
+        className="basis-full truncate text-left font-mono text-xs text-muted-foreground hover:text-foreground"
+      >
+        {placeholderOf(entry, field)}
+      </button>
     </div>
   );
 }
