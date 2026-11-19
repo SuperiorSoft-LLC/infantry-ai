@@ -5,9 +5,10 @@
 //! `mail_send`, `sessions`, `project_list`) on the caller's connection, so the daemon stays the single owner of the
 //! mailbox and every policy gate still applies. WHO I AM is `client_session_id`, else the human handle `user`.
 //!
-//! The `image_upload` / `image_fetch` frames ([`images`]) go through the host's `project_files` frame. Still left: the
-//! chat image retention sweep and `infantry_chat_image`.
+//! The `image_upload` / `image_fetch` frames ([`images`]) go through the host's `project_files` frame. The chat image retention
+//! sweep ([`retention`]) runs on the daemon's `clock.tick`. Still left: `infantry_chat_image`.
 pub mod images;
+pub mod retention;
 
 use infantry_plugin_sdk::types::{CallContext, Caller, Frame};
 use infantry_plugin_sdk::{export_plugin, host, Plugin};
@@ -247,6 +248,15 @@ pub fn announce(a: &Value, session: Option<&str>, project_hint: Option<&str>, al
 }
 
 impl Plugin for Chat {
+    fn start() -> Result<(), String> {
+        host::events::subscribe("clock.tick").map(|_| ())
+    }
+
+    fn on_event(_subscription: u64, _event: infantry_plugin_sdk::types::NamedEvent) {
+        let ask = |ty: &str, data: &str, sess: Option<&str>| host::frames::request(ty, data, sess, TIMEOUT_MS);
+        retention::on_tick(&ask, |k| host::settings::get(k));
+    }
+
     fn call_tool(name: String, args: String, ctx: CallContext) -> Result<String, String> {
         let a: Value = serde_json::from_str(if args.trim().is_empty() { "{}" } else { &args }).map_err(|e| format!("{name}: arguments are not JSON: {e}"))?;
         let session = ctx.client_session_id.as_deref().map(str::trim).filter(|s| !s.is_empty());

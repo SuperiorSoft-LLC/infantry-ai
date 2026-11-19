@@ -11,7 +11,8 @@
     "component": "daemon.component",
     "apiAtLeast": "0.1.0",
     "needs": [
-      "frames"
+      "frames",
+      "events"
     ],
     "frames": [
       { "type": "image_upload", "action": "images.upload", "kind": "write" },
