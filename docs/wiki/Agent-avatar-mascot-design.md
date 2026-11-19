@@ -1,5 +1,10 @@
 # Agent avatars from material-mascot: design (MASCOT-1)
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Legacy (Kotlin) reference
+
+
 Design record, 2026-11-08, ticket 13aed7dc. Nothing here is built yet. Where this page and the code disagree, the code wins.
 
 Owner's request: use the material-mascot characters as agent avatars, maybe as an override for the orchestrator.

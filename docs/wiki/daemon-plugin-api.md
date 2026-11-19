@@ -2,6 +2,85 @@
 
 # Daemon plugin API
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## The Rust daemon plugin API
+
+In the Rust daemon a plugin's daemon half is a WASM component or a native sidecar, both speaking one contract:
+`rust/crates/infantry-plugin-wit/wit/daemon-plugin.wit` (package `infantry:plugin@0.1.0`, world `daemon-plugin`).
+It is a frozen draft: new imports may be added, exports are fixed, existing records never change. The host is
+`rust/crates/infantry-plugin-host`; the SDK a plugin writes against is `rust/crates/infantry-plugin-sdk`; the daemon
+side that wires them is `rust/crates/infantry-daemon/src/compose/plugins.rs`.
+
+### Exports: what the host calls
+
+| Export | When |
+|---|---|
+| `start() -> result` | Once after loading. An error refuses the module ("failed: ..."). |
+| `stop()` | Once before unload, hot swap or daemon stop. |
+| `call-tool(name, args, ctx) -> result<string, string>` | A tool in `daemon.tools`. `args` is a JSON object string; `ok` is the tool's text, `err` an error result. `ctx` carries the caller and the client session, role and project. |
+| `handle-frame(frame, caller) -> result<option<frame>, string>` | A frame in `daemon.frames`. `ok(none)` sends no reply; `err` becomes "<type> refused: <err>". |
+| `handle-route(request) -> result<http-response, string>` | A route in `daemon.routes` or `daemon.publicRoutes`. |
+| `on-hook(kind, payload) -> result<string, string>` | A hook kind in `daemon.hooks`. |
+| `on-event(subscription, event)` | A bus event matching a pattern the plugin subscribed to. |
+
+### Imports: what the plugin can call
+
+| Interface | Linked | Functions |
+|---|---|---|
+| `log` | always | `write(level, line)`; lines go to the daemon log prefixed with the module id. |
+| `config` | always | `module-id`, `tier`, `api-version`, `environment`, `get(key)`, `endpoint(name)`. |
+| `settings` | on grant | `get`, `set`, `remove`. Keys are stored as `<ModuleName>.key`. |
+| `storage` | on grant | key/value (`kv-get`, `kv-set`, `kv-delete`, `kv-keys`) and SQL (`execute`, `query`). SQL may name only tables prefixed `<module_id_lowercase>_`, plus the tables an official module lists in `daemon.storage.adopt`. |
+| `events` | on grant | `publish`, `subscribe(pattern)`, `unsubscribe`, `broadcast(type, data)` (a frame to every client). |
+| `http` | on grant | `send(request)`, only to addresses in `daemon.endpoints`. |
+| `frames` | on grant | `request(type, data, session-id, timeout-ms)`: a frame into the daemon, the reply frame or the reason there is none. |
+
+The grantable ones are `settings`, `storage`, `events`, `http`, `frames`. Name them in `daemon.needs` (the module is
+refused without them) or `daemon.wants` (a refused one becomes a stub that fails with "<interface> not granted").
+A frame a plugin requests is checked against the caller's scope and depth limit in
+`rust/crates/infantry-daemon/src/compose/scope.rs` before it reaches the daemon.
+
+### The model
+
+- **Frames.** A frame is the wire envelope (`type`, `data`, optional `session-id`, `request-id`). A plugin declares
+  the frame types it answers, each with an `action` and a `kind` (`read`, `write`, `destructive`) and an optional
+  `ownerOnly`. The host registers them as one frame unit. A frame type core owns is refused.
+- **Tools.** A tool is declared with a name, action, kind, description and input schema. Tools are listed to agents
+  and scripts through the one tool catalog (`plugin_tools`, `plugin_tool_call`, `plugin_tool_result` frames in
+  `rust/crates/infantry-daemon/src/compose/tools.rs`). A module can also declare `capabilities`, which another
+  plugin calls by id with `capability_call`.
+- **Routes.** The daemon looks up the route owner by method and path and calls `handle-route`. A public route skips
+  the daemon bearer token.
+- **Hooks.** The accepted kinds are `frameGate`, `connected`, `httpGate`, `admission`, `mailGate`, `incomingMail`,
+  `spawnGate`, `ready`, `turns`, `sessions`, `policyProvider`, `orchestratorBinding`, `runnerBinding`, `usageReading`,
+  `runnerLinkTransport`, `seats`, `approvalRules`, `status`. An unknown kind refuses the module. I found no call to
+  `on_hook` in the daemon's composition code, so whether the daemon fires each kind is not verified.
+- **Events.** The daemon forwards every event on its bus to the plugin host, which delivers it to the plugins that
+  subscribed (`attach` in `rust/crates/infantry-daemon/src/compose/plugins.rs`).
+
+### Safety
+
+Every call goes through a guard. A call has a CPU budget (WASM fuel) and a wall-clock limit, WASM memory is capped, and a
+plugin that keeps failing is stopped by a breaker (strikes, then a cooldown, with a bounded queue). The numbers are the
+`limits.plugins.*` settings; a manifest may tune its own in `daemon.limits`. Loading a module that is already loaded is
+a hot swap: the new version starts, takes over, and the old one drains its calls and stops.
+
+### Sidecars and the SDK
+
+A sidecar speaks the JSON-lines form of the same world (`jsonl` in `infantry-plugin-wit`). With `infantry-plugin-sdk`
+you write one `impl Plugin` and `export_plugin!`; on `wasm32-wasip2` that is the component, and on a native target it
+defines `sidecar_main()` for a small `bin`. A sidecar must never print to stdout (use `host::log`).
+Steps: [Make a plugin](make-a-plugin.md).
+
+### Not carried over
+
+The Kotlin `DaemonApi` services described below (Http, Downloads, Progress, scheduled jobs, the board API and so on)
+are not the Rust interface. Only the seven imports above exist in the WIT world. I did not compare each Kotlin service
+to a Rust equivalent.
+
+## Legacy (Kotlin) reference
+
 A daemon plugin is the part of a module that runs inside the Infantry AI daemon. It adds tools (for the CLI and for
 agents over MCP), HTTP routes, client frames, hooks, scheduled jobs, settings and its own database tables. It is
 optional. Most modules have only a UI half.

@@ -1,5 +1,10 @@
 # UI verify design: workers see and check the real UI without the owner's desktop
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Legacy (Kotlin) reference
+
+
 UI-VERIFY-1 (ticket 5c2fd1e4, 2026-11-08). Design record: findings, chosen design, rejected alternatives, ticket
 breakdown, open owner decisions. No code was changed for it. Where this page and the code disagree, the code wins.
 

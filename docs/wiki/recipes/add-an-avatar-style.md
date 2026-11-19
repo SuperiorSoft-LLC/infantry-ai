@@ -2,6 +2,20 @@
 
 # Recipe: add an avatar style
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](../Architecture.md).
+
+## In the Rust framework
+
+Avatars moved to the daemon. `rust/crates/infantry-knowledge/src/avatars.rs` resolves a picture per role and per agent:
+the owner's override file, then the bundled manifest, then a generated one (role colour and initials), and serves the
+bytes at `GET /avatars/<roleId-or-agentId>` so web, desktop and phone show the same image. The React app draws it with
+the `Avatar` component (`app/packages/ui/src/components/avatar.tsx`).
+
+Not verified: any plugin hook for drawing a new avatar style (the Kotlin `agent.avatar.renderers`). I found none in the
+Rust code. To change how avatars look today, change the daemon's generator or the app's component.
+
+## Legacy (Kotlin) reference
+
 Goal: a plugin that draws agent avatars in its own style, chosen by the `agentAvatarStyle` preference, with the built-in
 portrait as the fallback. The registry, the request fields and the fallback rules are in
 [UI plugin API, Agent avatar renderers](../plugin-api.md#agent-avatar-renderers-avatar-docs-1).

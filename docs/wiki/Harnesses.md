@@ -2,6 +2,28 @@
 
 # Harnesses and providers
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust harnesses (current)
+
+A **harness** is a Rust crate on the `infantry-harness` contract (layer L3). The contract describes one agent CLI as a launch plan plus a translator that turns the CLI's output, hook calls, tailed files and screen snapshots into neutral events. A driver runs any harness on any runner (local or remote). The harness never starts a process itself. The crates are compiled into the daemon (`rust/crates/infantry-daemon/src/harness/`). A plugin-based harness loader is not verified to exist.
+
+| Provider id | Crate | How it runs |
+|---|---|---|
+| `claude` | `infantry-harness-claude` | The interactive `claude` in a PTY, one per session. It reads the screen, the hook channel and the transcript tail. Fallback: headless `claude -p --output-format stream-json`, one process per turn. |
+| `codex` | `infantry-harness-codex` | `codex exec --json`, one process per turn; later turns use `codex exec resume <thread>`. |
+| `opencode` | `infantry-harness-opencode` | One persistent `opencode serve` per session, driven over HTTP and server-sent events through the runner. |
+| `pi` | `infantry-harness-pi` | One persistent `pi --mode rpc` per session, driven with JSON lines. |
+
+- Approval modes in the contract: deny, ask, allow-edits, allow-all. A harness that cannot ask falls back to deny. Pi has no approval gate of its own; Infantry stages an extension, and anything short of allow-all refuses to launch if that extension could not be staged.
+- Every agent process gets `INFANTRY_SESSION_ID`, `INFANTRY_PORT`, `INFANTRY_URL`, `INFANTRY_STATE_DIR` (and project, role and token when known), plus an MCP entry that runs `infantry mcp serve`.
+- Gemini is named in the contract's design table only. There is no Gemini harness crate and it is not in the daemon's registered list (claude, codex, opencode, pi).
+- `INFANTRY_PROVIDER=stub` selects a scripted test harness with no process.
+- Each harness reports its models through `Harness::models`. The Kotlin model-picker settings below are not verified in Rust.
+
+## Legacy (Kotlin) reference
+
+
 A **harness** is the adapter between Infantry AI and one agent CLI (Claude Code, pi, opencode, or your own). Its id
 is the **provider** you pin on a ticket or role (`claude`, `pi`, `opencode`). Inside a harness, the model catalog
 groups models by their **upstream provider** (for example pi lists `anthropic/claude-sonnet-5-5`). List both with

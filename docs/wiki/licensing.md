@@ -2,6 +2,8 @@
 
 # Licensing: the foundation and everything on top
 
+> **Rust crates:** the same split holds on main. The core crates (`infantry-core`, `infantry-daemon`, `infantry-protocol`, and the rest of `rust/crates`) are MPL-2.0. The SDK crates (`infantry-plugin-sdk`, `infantry-harness`) and the app (`app/src-tauri`) are Apache-2.0. Each crate's `Cargo.toml` names its licence.
+
 > The split is applied in the repo (license
 > texts in `LICENSES/`, SPDX headers, per-directory `LICENSE` files, `LicenseMapGuardTest`); it is official
 > from the public launch. This page explains the split. The source of truth is `docs/LICENSE-MAP.md`; where this page and the map differ,

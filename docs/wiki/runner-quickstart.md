@@ -1,5 +1,20 @@
 # Runner quickstart: run an agent on your own server
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust runners (current)
+
+- `infantry-runner-local` runs agents on this machine (pseudo-terminals, Job Objects on Windows).
+- `infantry-runner-link` is the remote link: pairing (one-time codes, a long-lived bearer), the `LinkClient` on the orchestrator and the runner agent on the far side. Contract version 1.11.0, byte-compatible with the Kotlin link.
+- A runner-only daemon: `infantry-daemon --mode runner` (or `INFANTRY_MODE=runner`). It holds no board and refuses orchestration frames. Other modes: `both` (default) and `orchestrator`.
+- CLI: `infantry runner` (subcommands in code include `pair`, `up`, `list`, `check`, `test`, `rotate`, `audit`; exact options not verified, run `infantry runner` for usage).
+- Build from `rust/`: `cargo build -p infantry-daemon`. The default port is 18990.
+
+The setup steps below use the Kotlin app and Gradle.
+
+## Legacy (Kotlin) reference
+
+
 This is the one page for understanding runners: concepts, setup, update and troubleshooting.
 
 ## Concepts

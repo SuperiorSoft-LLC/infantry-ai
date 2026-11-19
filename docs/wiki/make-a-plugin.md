@@ -2,6 +2,108 @@
 
 # Make a plugin
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Make a Rust daemon plugin
+
+This is the Rust path. It builds a daemon half (one WASM component) with one tool. The model is
+`rust/plugins/official/Infantry_Health`: the smallest official plugin, one tool, written on the plugin SDK.
+
+**Is there a Rust template?** No. I looked in `rust/` and `templates/`. The only template (`templates/plugin-repo`)
+is the Kotlin Gradle starter. There is no Rust starter folder, so copy `Infantry_Health`.
+
+### 1. Copy the model
+
+Copy `rust/plugins/official/Infantry_Health` to `rust/plugins/official/Vendor_Module` and rename. It holds:
+
+- `module.json`: the manifest.
+- `daemon/Cargo.toml` and `daemon/src/lib.rs`: the crate.
+- `daemon/src/bin/sidecar.rs`: optional, a four-line `main` that runs the same code as a native sidecar.
+
+### 2. Write module.json
+
+Keep it small. The tool is declared here, and the host refuses a tool the manifest does not list.
+
+```
+{
+  "name": "Vendor_Module",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "You",
+  "description": "What it does.",
+  "tier": "official",
+  "daemon": {
+    "component": "daemon/Vendor_Module.wasm",
+    "apiAtLeast": "0.1.0",
+    "needs": ["frames"],
+    "tools": [
+      { "name": "vendor_hello", "action": "vendor.hello.read", "kind": "read",
+        "description": "Say hello.",
+        "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false } }
+    ]
+  }
+}
+```
+
+Grants: ask only for what you use (`settings`, `storage`, `events`, `http`, `frames`). Put an optional one in `wants`.
+`log` and `config` are always there. The tool name must match `^[a-z][a-z0-9_]{2,63}$`.
+
+### 3. Write the crate
+
+`daemon/Cargo.toml` makes a `cdylib`, depends on `infantry-plugin-sdk` (path to `rust/crates/infantry-plugin-sdk`),
+and its package name is what `stage.sh` reads. The code implements the SDK's `Plugin` trait. Every method has a
+default, so you write only what you declare (`start`, `stop`, `call_tool`, `handle_frame`, `handle_route`, `on_hook`,
+`on_event`: the seven WIT exports, see [Daemon plugin API](daemon-plugin-api.md)).
+
+```
+use infantry_plugin_sdk::types::CallContext;
+use infantry_plugin_sdk::{export_plugin, host, Plugin};
+
+pub struct Hello;
+impl Plugin for Hello {
+    fn call_tool(name: String, _args: String, _ctx: CallContext) -> Result<String, String> {
+        if name != "vendor_hello" { return Err(format!("unknown tool {name}")); }
+        host::log::info("hello called");
+        Ok("hello".into())
+    }
+}
+export_plugin!(Hello);
+```
+
+`Ok(text)` is the tool's answer; `Err(text)` is an error result. Imports (`host::frames::request`, storage, settings)
+only work if you were granted them.
+
+### 4. Add it to the workspace
+
+`rust/Cargo.toml` lists each plugin crate in `members`. Add `plugins/official/Vendor_Module/daemon`.
+
+### 5. Build and stage
+
+One time: `rustup target add wasm32-wasip2`. From `rust/`:
+
+```
+cargo build -p vendor-module-daemon --lib --target wasm32-wasip2
+plugins/stage.sh ../stage
+```
+
+`stage.sh` builds each official plugin it finds and copies `module.json` plus the component to
+`<out>/official/Vendor_Module/`. It reads the crate name from `daemon/Cargo.toml` and the component path from
+`daemon.component`. Start the daemon with `INFANTRY_PLUGINS_DIR` pointing at the out folder. The daemon log line
+`daemon half of Vendor_Module (official, wasm) loaded: 1 tool(s)` means it worked. A refusal or a failed `start` is
+logged and shown by `plugin_admin status`.
+
+### 6. Test
+
+`cargo test -p vendor-module-daemon`. The official plugins keep a host test in `daemon/tests/host.rs` (for example
+`rust/plugins/official/Infantry_Docs/daemon/tests/host.rs`) that loads the built component in the plugin host.
+
+### What this page does not cover
+
+A UI half, a child plugin that fills a slot, and publishing an installable package: I could not verify a Rust path for
+any of them. See [Plugins](Plugins.md) and [Publish a plugin](publish-a-plugin.md).
+
+## Legacy (Kotlin) reference
+
 This page takes you from an empty folder to a working plugin with a UI half and a daemon half, then shows a child
 plugin that fills the first one's slot. An outside developer who has never seen the code can follow it.
 The example at the end was compiled with Gradle on the dev head to prove it builds.

@@ -2,6 +2,18 @@
 
 # Recipe: split a section of a plugin into a child plugin through a slot
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](../Architecture.md).
+
+## In the Rust framework
+
+Not verified as a working Rust recipe. The pieces I could find: the client store reads a module's declared `slots` and
+`fills` and builds a slot registry (`app/packages/client/src/stores/plugins.ts`), and `core` slots named
+`infantry.shell.*` work with no declaring plugin. A child plugin is a daemon half only in Rust, and the view a fill draws
+lives in the app. I did not find a Rust plugin that splits a section this way, so the steps below are Kotlin history.
+See [Plugins](../Plugins.md).
+
+## Legacy (Kotlin) reference
+
 Goal: a section that lives inside a host plugin's tab moves into its own plugin. The host keeps an empty named
 place (a **slot**); the new plugin (the **child**) fills it. The host works without the child, and the Plugins tab
 shows the child under the host.

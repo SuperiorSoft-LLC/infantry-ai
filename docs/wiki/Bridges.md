@@ -1,5 +1,14 @@
 # Bridges: plugin capabilities and events
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust (current)
+
+Plugin capabilities exist: scripts call a dotted capability id with `ih.call`, and the `infantry_capability_list` tool lists them. The rest of this page is the Kotlin description and is not verified in Rust.
+
+## Legacy (Kotlin) reference
+
+
 A plugin can offer **capabilities**: named functions with a params schema and a result schema. Any installed capability can be
 called, under the same gates, by:
 

@@ -2,6 +2,105 @@
 
 # Plugins
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Plugins in the Rust framework
+
+Infantry AI on main is a Rust daemon plus a React app. Plugins are still modules: a folder named `Vendor_Module` with a
+`module.json`. What changed is what a plugin can be. In Rust a plugin has a **daemon half** only. There is no UI half
+(see "Where the UI half went" below).
+
+### The daemon half: two kinds
+
+- **A WASM component.** Built for `wasm32-wasip2` and run by wasmtime inside the daemon. `module.json` names it in
+  `daemon.component`.
+- **A native sidecar.** A separate program that speaks the same plugin contract as JSON lines over stdio. `module.json`
+  names it in `daemon.sidecar` (`exe`, `args`). Set exactly one of the two; setting both is refused.
+
+Callers cannot tell the two apart. The contract is the WIT file
+`rust/crates/infantry-plugin-wit/wit/daemon-plugin.wit` (package `infantry:plugin@0.1.0`, a frozen draft: changes are
+additive only). Details are in [Daemon plugin API](daemon-plugin-api.md).
+
+### module.json
+
+A real example is `rust/plugins/official/Infantry_Notes/module.json`. The fields the Rust host reads:
+
+| Field | Meaning |
+|---|---|
+| `name`, `version`, `tier` | The module id (same as the folder), its version, and `official` for the bundled ones. The host decides the tier from the install folder, not from this field. |
+| `tabs` | `[{id, container}]`. Declared for the app: the React shell shows a tab for each enabled plugin that declares one. |
+| `actions` | `[{id, label, kind, frames}]`. `kind` is `read`, `write` or `destructive`. |
+| `daemon.component` / `daemon.sidecar` | The daemon half (path inside the module folder). |
+| `daemon.needs`, `daemon.wants` | The grants (below). |
+| `daemon.apiAtLeast` | The plugin ABI the module needs. A 0.x requirement above the host's version (0.1.0) is refused. |
+| `daemon.tools` | `[{name, action, kind, description, inputSchema}]`. Agent and script tools. The name must match `^[a-z][a-z0-9_]{2,63}$`. |
+| `daemon.frames` | `[{type, action, kind, ownerOnly}]`. Client frames the plugin answers. A frame core owns (`plugin_tools`, `plugin_tool_call`, `plugin_tool_result`, `replay_request`, `ready`, `error`) is refused. |
+| `daemon.hooks`, `daemon.routes`, `daemon.publicRoutes` | Hook kinds, HTTP routes (public ones skip the daemon bearer token). |
+| `daemon.endpoints`, `daemon.env`, `daemon.secrets`, `daemon.limits`, `daemon.config`, `daemon.storage.adopt` | Outbound addresses, env vars, secrets, per-call limits, settings, and existing tables an official module may use. |
+
+### Grants: needs and wants
+
+`log` and `config` are always linked. `settings`, `storage`, `events`, `http` and `frames` are linked only when the
+manifest names them in `daemon.needs` or `daemon.wants`.
+
+- **needs**: the plugin cannot run without it. A missing grant refuses the module.
+- **wants**: nice to have. If the owner refuses it, the import is a stub that fails with "<interface> not granted".
+- A **community** module also needs a `daemon.import.<name>` grant in `modules.json`, and `daemon.native` to run a sidecar.
+
+### Tabs and actions
+
+A tab id is a name the React shell knows. The shell keeps a catalog from tab id to view
+(`app/shell/src/plugins/catalog.tsx`). A declared tab with no view there gets a generic plugin view. Actions name the
+frames a click may send, with a read, write or destructive kind the policy can gate.
+
+### Where the UI half went
+
+The Kotlin plugin UI half (a jar of Compose code loaded into the app) has no Rust equivalent. I grepped `app/`: the
+React app has no loader for plugin UI code. It reads the daemon's plugin list and each module's declared `tabs`,
+`panels`, `fills` and `slots` (`app/packages/client/src/stores/plugins.ts`) and draws the views the shell itself ships.
+So a new tab with its own look needs a change in the app, not a drop-in plugin. Whether a drop-in UI loader is planned
+is not verified.
+
+### Build, install, enable
+
+```
+rust/plugins/stage.sh <out-dir> [release]
+```
+
+builds every official daemon plugin for `wasm32-wasip2` (needs `cargo`, `python` and that target) and lays out
+`<out>/official/<Module>/module.json` plus the component. Point the daemon at the folder with `INFANTRY_PLUGINS_DIR`
+(default: a `plugins` folder beside the daemon). The owner build, `scripts/rust-owner-build.ps1`, stages the plugins too.
+
+The daemon loads `official` and `core` folders only. Loading community modules from a folder is not wired yet
+(`TIERS` in `rust/crates/infantry-daemon/src/compose/plugins.rs`). The owner turns a loaded plugin off and on with the
+`plugin_admin` frame (`status`, `enable`, `disable`). Install, update and remove are not served: see
+[Plugin lifecycle](Plugin-lifecycle.md).
+
+### The official plugins
+
+Each lives in `rust/plugins/official/<folder>`.
+
+| Folder | What it does |
+|---|---|
+| `Infantry_Cards` | The chat card directory and the safe card image proxy. |
+| `Infantry_Chat` | The COMMS mail tools. |
+| `Infantry_Docs` | In-app docs lookup; the wiki pages ship inside the component. |
+| `Infantry_Git` | Registers nothing today. |
+| `Infantry_Health` | The `infantry_health` tool. |
+| `Infantry_JobFeed` | Two pull routes over a session's watched jobs (the Job Feed box). |
+| `Infantry_Mcp` | The `infantry_mcp` tool: the agent face of the MCP registry. |
+| `Infantry_News` | News headlines for agents (Google News RSS, no key). |
+| `Infantry_Notes` | Memory notes, the decisions log and the issues log. |
+| `Infantry_Plugins` | Agent tools over the plugin manager (list, search, show, status, owner-approved install request). |
+| `Infantry_Settings` | Project config tools and scoped settings tools. |
+| `Infantry_Sites` | Host contract only; it has no daemon component. |
+| `Infantry_Triggers` | Triggers that start work on an event. |
+
+The board, mail, knowledge, usage, scripting and run features are core crates, not plugins
+(`docs/rust-port/PARITY-GAPS.md`). The one-line descriptions come from each `module.json`.
+
+## Legacy (Kotlin) reference
+
 Infantry AI works like a small operating system: the app is the OS, plugins are the programs. Every tab, panel
 section, board card and daemon tool comes from a plugin (also called a module). A plugin is a folder named
 `Vendor_Module` holding a `module.json` and, usually, one or two jars.

@@ -2,6 +2,15 @@
 
 # Board and epics
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust (current)
+
+The board is the `infantry-board` crate (layer L4), in process in the daemon; it is not a plugin folder. A ticket's status is one of five columns: `backlog`, `todo`, `in_progress`, `pending`, `done`. The crate holds tickets, links, reorder, epics, comments, lane caps, routing rules and the start brief. CLI: `infantry board`, `tickets`, `ticket`.
+
+## Legacy (Kotlin) reference
+
+
 The board (the Infantry_Board plugin) holds a project's tickets in columns: Backlog, To do, In progress, Done. An
 **epic** groups tickets inside one project (for example "Launch" and "Post-launch"); the Epics tab lists them, with
 each epic's ticket counts, and the board's Epic filter shows one epic's tickets at a time.

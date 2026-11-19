@@ -1,45 +1,47 @@
 # Infantry AI
 
-> Infantry AI is a command post for coding agents: a daemon with a ticket board, agents on their own git branches, mail, shared project knowledge, Lua scripts and hooks, plus desktop, web, Android and CLI clients. The core is small and generic; every feature is a plugin (a module with a `module.json`). Core is MPL-2.0, everything else Apache-2.0.
+> Infantry AI is a command post for coding agents: a daemon with a ticket board, agents on their own git branches, mail, shared project knowledge, Lua scripts and hooks, plus a desktop app (Tauri 2 with a React front end), an Android app and the `infantry` CLI. The main branch is the Rust framework: the daemon is a Rust binary, every feature is a plugin (a module with a `module.json` and a WASM or sidecar daemon half). Core is MPL-2.0, everything else Apache-2.0.
 
-Read AGENTS.md first. Facts in these docs come from the code; where an older design record disagrees, the code wins.
+Read AGENTS.md first. Facts in these docs come from the code; where an older design record disagrees, the code wins. The Kotlin version is on the `legacy-java` branch.
 
 ## Start here
 
 - [AGENTS.md](AGENTS.md): the guide for AI coding agents: rules, repo layout, build and test commands, where each change goes.
-- [Architecture](docs/wiki/Architecture.md): the three layers, the daemon, the protocol, the request flow from a click to the daemon and back, slots and child plugins, scripting.
-- [Recipes](docs/wiki/recipes/README.md): worked "how to add X" guides with the exact files to touch.
-- [Command line](docs/wiki/CommandLine.md): `infantry` from any terminal after an install (`install-cli` / `uninstall-cli`, what each OS writes).
-- [Runners](docs/wiki/runner-quickstart.md): local and remote runners, placement, setup, update, troubleshooting.
+- [Architecture](docs/wiki/Architecture.md): the daemon, the layers, the wire, plugins, a request from the app to the daemon and back, scripting.
+- [Install](docs/wiki/Install.md): the Windows installer, the headless daemon, `infantry` on PATH, building from source.
+- [Android](docs/wiki/Android.md): the Android app, pairing a phone to a daemon, building the APK.
+- [Updates](docs/wiki/Updates.md): the stable and nightly channels, the feed, signing, the release pipeline.
+- [Command line](docs/wiki/CommandLine.md): the native `infantry` command.
+- [Recipes](docs/wiki/recipes/README.md): worked "how to add X" guides with the files to touch.
 
 ## Build plugins
 
-- [Make a plugin](docs/wiki/make-a-plugin.md): from the template to a built UI + daemon example; every `module.json` field.
-- [Plugins](docs/wiki/Plugins.md): module tiers, panels and slots, config, building, installing, signing.
-- [UI plugin API](docs/wiki/plugin-api.md): every public type of the UI plugin API.
-- [Daemon plugin API](docs/wiki/daemon-plugin-api.md): tools, routes, hooks, events, services, storage, the guard.
-- [Plugin knowledge](docs/wiki/plugin-knowledge.md): module.json `knowledge` and the PLUGIN TOOLS briefing every role session gets.
-- [Harnesses and providers](docs/wiki/Harnesses.md): adding an agent CLI and a model group.
-- [Kotlin notes](docs/wiki/kotlin-notes.md): toolchain versions, UI core source sets and expect/actual, Compose MP pitfalls, why incremental is off.
+- [Plugins](docs/wiki/Plugins.md): `module.json`, the daemon half (WASM component or sidecar), grants, the official plugins, building with `rust/plugins/stage.sh`.
+- [Make a plugin](docs/wiki/make-a-plugin.md): from an official plugin to a built daemon half.
+- [Daemon plugin API](docs/wiki/daemon-plugin-api.md): the WIT world: exports, imports, frames, tools, routes, hooks, events.
+- [Plugin knowledge](docs/wiki/plugin-knowledge.md): module.json `knowledge` and the PLUGIN TOOLS briefing.
+- [Plugin lifecycle](docs/wiki/Plugin-lifecycle.md): install, update, enable, disable, remove.
+- [Publish a plugin](docs/wiki/publish-a-plugin.md): package a plugin from its own repo.
 
-## Automate and configure
+## Run and automate
 
-- [Scripting](docs/wiki/Scripting.md): the Lua API, hooks, the process bridge, settings that govern scripts.
-- [Script Arsenal](docs/wiki/script-arsenal.md): the app-wide global scripts, resolution order, refine-by-copy, the bundled set.
-- [Board and epics](docs/wiki/Board.md): epics, and moving tickets between epics.
-- [Secrets](docs/wiki/Secrets.md): render any text file with saved secrets (`{{secret:NAME}}`, `infantry secret render`).
+- [Harnesses](docs/wiki/Harnesses.md): the harness contract and the four harness crates (Claude Code, Codex, opencode, pi).
+- [Runners](docs/wiki/runner-quickstart.md): local and linked remote runners, setup, troubleshooting.
+- [Scripting](docs/wiki/Scripting.md): the sandboxed Lua API, hooks, the process bridge.
 - [Settings](docs/wiki/Settings.md): scopes (app, project, role, session) and cost-saving defaults.
+- [Health](docs/wiki/Health.md): the daemon health and environment report.
+- [Notifications](docs/wiki/Notifications.md): the notification bus and its presenters.
+- [Board](docs/wiki/Board.md): tickets, lanes and epics.
+- [Secrets](docs/wiki/Secrets.md) and [Vault](docs/wiki/Vault.md): saved secrets and the encrypted vault.
 
 ## Project
 
-- [README](README.md): install and first run.
+- [README](README.md): what Infantry AI is and how to get it running.
 - [CONTRIBUTING](CONTRIBUTING.md): building, branches, testing.
-- [Licensing](docs/wiki/licensing.md): what is MPL-2.0 and what is Apache-2.0, per module.
+- [Licensing](docs/wiki/licensing.md): what is MPL-2.0 and what is Apache-2.0, per crate and module.
+- [Rust port records](docs/rust-port/PLAN.md): the plan, the layer table, migration, parity and the move-over bar.
 
 ## Optional
 
-- [docs index](docs/README.md): every docs/*.md file marked current reference, design record (dated) or history, with its replacement wiki page.
-
-- [DAEMON-CORE](docs/DAEMON-CORE.md): the design record of the daemon core split (dated).
-- [AGENT-QUICKREF](superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md): the CLI for agents.
-- [MCP](superiorSoftLibrary/infantry/docs/MCP.md): the MCP server and its tools.
+- [docs index](docs/README.md): every docs file marked current reference, design record (dated) or history, with its replacement wiki page.
+- [Legacy Kotlin pages](docs/wiki/index.md): the pages marked `legacy-java` describe the Kotlin app on the `legacy-java` branch.

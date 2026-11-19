@@ -2,6 +2,17 @@
 
 # The `infantry` command from any terminal
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## The Rust `infantry` CLI (current)
+
+The native binary (`rust/crates/infantry-cli`) serves `infantry mcp serve` and these commands itself: `board`, `tickets`, `ticket`, `send`, `inbox`, `read`, `threads`, `thread`, `waiting`, `agents`, `session`, `kill`, `script`, `secret`, `run-cmd`, `usage`, `settings`, `health`, `worktrees`, `install-cli`, `uninstall-cli`, `remote`, `issue`, `runner`, plus `progress` and `run`. Exit codes: 0 success, 1 runtime failure, 2 usage error. A command the native CLI does not have is handed to the full JVM launcher (`INFANTRY_BIN`, else `infantry.cmd` or `infantry.bat` beside the binary, else `infantry` on PATH), so those commands (for example `login`) still need the Kotlin launcher installed. By default it talks to the Rust daemon on port 18990 and the state dir `%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust`. `INFANTRY_CLI_ASCII=1` gives ASCII output.
+
+`install-cli` and `uninstall-cli` exist natively (`--dir`, `--dry-run`).
+
+## Legacy (Kotlin) reference
+
+
 <!-- shared:pitch -->Infantry AI is a command post for coding agents: a ticket board, agents on their own git branches, mail, shared project knowledge, Lua scripts that automate your process, and plugins that build the app itself.<!-- /shared:pitch -->
 
 CLI-PATH-1. After a normal install, typing `infantry` in a **new** terminal works from any folder: no `cd` into the

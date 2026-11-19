@@ -7,31 +7,25 @@
 > **Beta.** <!-- shared:beta_line -->Infantry AI is in Beta. It works and we use it every day, but not every part is fully tested yet: you are an early tester. Please report anything that breaks on GitHub.<!-- /shared:beta_line -->  
 > [Report a problem](https://github.com/SuperiorSoft-LLC/infantry-ai/issues)
 
-These pages are written from the code on the dev head. Where an older document disagrees with the code, the code
-wins, and the page says so.
+These pages are written from the Rust code on `main`. Where an older document disagrees with the code, the code
+wins, and the page says so. The full list is in the [wiki index](index.md).
 
-- [Architecture](Architecture.md): the three layers, why the framework stays generic, the daemon, the protocol, a request from click to daemon and back, slots, scripting.
-- [Command line](CommandLine.md): `infantry` from any terminal after an install (`install-cli` / `uninstall-cli`, what each OS writes).
-- [Recipes](recipes/README.md): worked how-to-add-X guides (UI plugin, child plugin, daemon tool, setting, Lua hook, harness, provider).
-- [Add your service to the Services hub](recipes/add-a-service.md): how a third party plugs its own service (sign-in, account, resources, agent tools, billing) into the Services tab.
-- [Plugins](Plugins.md): `module.json`, the UI and daemon halves, block types, panels and slots, config fields, building, installing, signing, and a hello plugin step by step.
-- [Plugin lifecycle](Plugin-lifecycle.md): live swap of one plugin (install, update, enable, disable, remove), `PluginScope`, the leak check, and the do and don't for authors.
-- [Make a plugin](make-a-plugin.md): step by step from the template to a built UI + daemon example, every `module.json` field, slots and child plugins.
-- [UI plugin API](plugin-api.md): every public type and function of the UI plugin API, with examples.
-- [Daemon plugin API](daemon-plugin-api.md): tools, routes, hooks, events, services, storage, lifecycle, the guard.
-- [Scripting](Scripting.md): the Lua API, hooks, `ih.again` phases, the process bridge (`exec`), chat notes, progress, the session bridge, settings.
-- [Harnesses and providers](Harnesses.md): the harness API, its contributions, how the three built-in harnesses use it, adding a harness and a provider.
-- [Board and epics](Board.md): the ticket board, epics, and moving tickets between epics (board, MCP, CLI).
-- [Secrets](Secrets.md): render any text file with your saved secrets (`{{secret:NAME}}`).
-- [Vault](Vault.md): the OS master key, Reveal / Copy after Windows Hello, and the encrypted vault backup.
-- [Settings](Settings.md): scopes (app, project, role, session), cost-saving defaults and what each opt-in costs.
-- [Known failures](../KNOWN-FAILURES.md): the test classes that fail on dev too; a scoped run that hits one is not your bug.
-- [Licensing (DRAFT)](licensing.md): why the core is MPL-2.0 and everything else Apache-2.0, per module, the compatibility promise as implemented.
+- [Install](Install.md): the Windows installer, the headless daemon, `infantry` on your PATH.
+- [Android](Android.md): pair the phone to a daemon. The phone runs no agents.
+- [Updates](Updates.md): the stable and nightly channels, how an update is installed.
+- [Architecture](Architecture.md): the daemon, the layers, the wire, plugins, a request from the app to the daemon and back.
+- [Command line](CommandLine.md): the `infantry` command.
+- [Plugins](Plugins.md) and [Make a plugin](make-a-plugin.md): the module manifest, the daemon half, building it.
+- [Scripting](Scripting.md): the Lua API, hooks, the process bridge.
+- [Harnesses](Harnesses.md): the agent CLIs the daemon drives.
+- [Settings](Settings.md): scopes and the cost-saving defaults.
+- [Known failures](../KNOWN-FAILURES.md): the test classes that fail on dev too.
+- [Licensing](licensing.md): why the core is MPL-2.0 and everything else Apache-2.0.
 
-Start with the `README.md` for install and first run.
+Start with the [README](../../README.md) for what Infantry AI is and how to get it running.
 
-Commands in these pages were checked against `infantry --help` (`agenthq` is a deprecated alias of `infantry`) and the CLI
-source. Screenshots are listed in `docs/img/README.md`.
+Commands in these pages were checked against the code (`rust/crates/infantry-cli`, the daemon's `main.rs`, the app's
+`tauri.conf.json` and the release workflows).
 
 ## Support Infantry AI
 

@@ -1,5 +1,19 @@
 # Publish a plugin
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Publishing in the Rust framework
+
+Not verified in Rust. I searched `rust/` and `app/` for the `.ihq` package format and a publish or install path and
+found none. The daemon serves only bundled modules, and `plugin_admin` does not install or update
+(see [Plugin lifecycle](Plugin-lifecycle.md)). The Kotlin flow below needs the Gradle template and the `legacy-java`
+branch.
+
+What exists today for a Rust plugin: build the component and stage the folder with `rust/plugins/stage.sh`
+([Make a plugin](make-a-plugin.md)). A packaged, installable, signed form is not verified.
+
+## Legacy (Kotlin) reference
+
 Plugins have a public home: the catalog repo https://github.com/SuperiorSoft-LLC/infantry-plugins (the app's default
 sources `infantry-official` and `infantry-community`, bundled data `plugins/default-sources.json`) and the starter
 https://github.com/SuperiorSoft-LLC/infantry-plugin-template. Design: [PLUGIN-REPO-DESIGN](../PLUGIN-REPO-DESIGN.md).

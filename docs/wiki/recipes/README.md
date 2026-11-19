@@ -18,10 +18,14 @@ touch, and says how to check the result. Read [Architecture](../Architecture.md)
 | [Add an avatar style](add-an-avatar-style.md) | An agent avatar drawn by your own renderer, chosen by the `agentAvatarStyle` preference. |
 | [Start a test daemon for runner repros](test-daemon-for-runner-repros.md) | Two scrubbed test daemons (PC and runner) from a built dist, paired and torn down by PID. |
 
+**Rust status.** The framework on main is Rust. [Add a daemon tool](add-daemon-tool.md) is rewritten for it. The UI-panel,
+child-plugin, setting-scope, avatar and Services recipes have a Rust note at the top and keep the Kotlin steps under a
+legacy heading. Where a Rust path is not verified, the note says so.
+
 Conventions in every recipe:
 
 - `Acme_Something` is a made-up vendor and module name. Use your own `Vendor_Module` (letters, digits, one underscore).
 - A path in a code block is a file you create. A path in running text exists in the repository today.
-- Build one project at a time: `./gradlew <project> --console=plain`.
+- Build one project at a time. Rust: `cargo build -p <crate>` from `rust/`, and `rust/plugins/stage.sh <out-dir>` for plugins. The Gradle commands inside the older recipes are Kotlin history.
 - A community module is off until `plugins/modules.json` enables it and grants what it uses (the file already has an
   example entry).

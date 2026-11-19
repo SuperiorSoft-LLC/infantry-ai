@@ -2,6 +2,13 @@
 
 # Start a test daemon (and a second runner daemon) for live repros
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](../Architecture.md).
+
+> **Rust daemon:** on main, start a throwaway daemon with `cargo run -p infantry-daemon -- --port <free port> --state-dir <scratch dir>` from `rust/`. Use a free port, never 8787, 8788, 8797 or 8798. The Gradle steps below are the Kotlin ones.
+
+## Legacy (Kotlin) reference
+
+
 There is no `infantry daemon` command: the CLI only talks to a daemon. The daemon is the main class
 `com.superiorsoftllc.infantry.daemon.DaemonMainKt` (`--mode both|runner|orchestrator`, also `INFANTRY_MODE`).
 `scripts/testdaemon.sh` starts it from a built dist the safe way. Nothing is proven until it ran live on a test daemon.

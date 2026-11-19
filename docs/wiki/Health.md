@@ -1,5 +1,16 @@
 # Daemon health and environment (DAEMON-HEALTH-1)
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust (current)
+
+The Rust daemon answers the `health` frame natively (`rust/crates/infantry-daemon/src/health.rs`) with the same report shape as Kotlin: `daemon` (up, pid, port, build, uptime, last restart and cause), `plugins`, `mcp` bridges per session, `hooks`, `freeMemoryMb`, `freeDiskMb`, `environment` (OS, arch, shells, project and worktree path, git branch, owner ports 8787, 8788, 8797, 8798, test range 18900-18999, harnesses, state dir, CLI path) and a tail of restart events. The JDK field reads "none (Rust daemon)". The journal is `<state>/health/status.json` plus `events.jsonl`; panics go to `<state>/health/panics.log`.
+
+Doors: `infantry health [--json]` (a native command), the `infantry_health` tool of the `Infantry_Health` plugin, and the daemon's `/health` route. The default port is 18990.
+
+## Legacy (Kotlin) reference
+
+
 One report answers "is the daemon up, what restarted it, which MCP bridge dropped, and what machine am I on" so nobody
 guesses or probes ports. It is the same report from three doors:
 

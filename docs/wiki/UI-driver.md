@@ -1,5 +1,10 @@
 # UI driver: check the real app window on a test instance, with no desktop input
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Legacy (Kotlin) reference
+
+
 UI-DRIVER-1 (2026-11-18). A worker starts a TEST instance of the desktop app and drives it through a local API: it
 finds nodes in the semantics tree, clicks, types, scrolls, waits and takes screenshots. No window appears on the
 desktop, and no OS mouse, keyboard or focus event is ever sent. It builds on the offscreen seam that the tab shots use,

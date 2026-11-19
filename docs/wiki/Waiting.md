@@ -1,5 +1,14 @@
 # Waiting flag: "active but waiting" (WAITING-FLAG-1)
 
+> **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](Architecture.md).
+
+## Rust (current)
+
+`infantry waiting on|off|show` is a native CLI command (`cmd_mail.rs`). Limit keys `limits.waiting.*` exist in the Rust code. The idle-nudge watcher is not verified in Rust.
+
+## Legacy (Kotlin) reference
+
+
 An agent whose turn is about to end while it waits on a process (a build, a long test, a background job) looks exactly like an
 agent that quit. The waiting flag lets the agent say so itself. A flagged ticket stays In Progress; its card shows that the
 worker is active but waiting, why, and for how long. A watcher script nudges the idle sessions that are NOT flagged.
