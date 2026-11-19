@@ -22,7 +22,7 @@ pub const DELETE: &str = "infantry_script_delete";
 pub const HOOK: &str = "infantry_script_hook";
 
 /// Every tool name this crate answers.
-pub const NAMES: &[&str] = &[RUN, API, LIST, SAVE, DELETE, HOOK, STATS, EXEC, STATUS];
+pub const NAMES: &[&str] = &[RUN, API, LIST, SAVE, DELETE, HOOK, STATS, EXEC, STATUS, crate::chat::NOTE, crate::chat::IMAGE];
 
 /// The self-describing API, generated from the live registry at each call. With `tool`: that tool in full.
 pub fn describe(host: &dyn ScriptHost, aliases: &BTreeMap<String, String>, bindings: &[(String, String)], tool: Option<&str>) -> String {
@@ -89,6 +89,7 @@ pub struct ScriptingTools {
     pub exec: Arc<ExecTools>,
     pub limits: Arc<dyn Fn() -> ScriptLimits + Send + Sync>,
     pub config: Arc<dyn Fn(&str) -> Option<String> + Send + Sync>,
+    pub chat: crate::chat::ChatTools,
 }
 
 fn arg<'a>(a: &'a Map<String, Value>, k: &str) -> Option<&'a str> {
@@ -118,7 +119,8 @@ impl ScriptingTools {
     pub fn catalog(&self) -> Vec<ToolInfo> {
         let schema = |s: &str| serde_json::from_str::<Value>(s).unwrap_or(json!({"type": "object"}));
         let t = |name: &str, desc: &str, sch: &str, ro: bool| ToolInfo { name: name.into(), description: desc.into(), input_schema: schema(sch), read_only: ro };
-        vec![
+        let mut tools = crate::chat::ChatTools::catalog();
+        tools.extend(vec![
             t(RUN, "Run a named script of this project as you: the daemon runs the script and the tool calls it queues, no model, no tokens. Output: the actions taken (or planned with dryRun) with each result, and the script's log.",
               r#"{"type":"object","properties":{"name":{"type":"string"},"args":{"type":"string","description":"JSON object given to the script as input.args"},"dryRun":{"type":"boolean"},"project":{"type":"string"}},"required":["name"]}"#, false),
             t(API, "Everything a script can call: every tool in the live registry, the alias table and how the script language binds them.", r#"{"type":"object","properties":{"tool":{"type":"string"}}}"#, true),
@@ -132,11 +134,15 @@ impl ScriptingTools {
             t(EXEC, "Run a command line as you and get {exitCode, durationMs, stdoutTail, stderrTail, timedOut}. Off by default (scripting.exec.enabled).",
               r#"{"type":"object","properties":{"command":{"description":"argv array, or one command-line string"},"cwd":{"type":"string"},"env":{"type":"object"},"timeoutSec":{"type":"integer"},"stdin":{"type":"string"},"background":{"type":"boolean"},"script":{"type":"string"},"project":{"type":"string"},"serial":{"type":"string"}},"required":["command"]}"#, false),
             t(STATUS, "State of a background infantry_exec run; no id lists the jobs.", r#"{"type":"object","properties":{"id":{"type":"string"},"state":{"type":"object"}}}"#, true),
-        ]
+        ]);
+        tools
     }
 
     /// Answers one call, or `None` when the name is not a scripting tool.
     pub fn handle(&self, name: &str, a: &Map<String, Value>, inv: &ToolInvoker) -> Option<ToolResult> {
+        if let Some(r) = self.chat.handle(name, a, inv) {
+            return Some(r);
+        }
         Some(match name {
             RUN => self.run(a, inv),
             API => {

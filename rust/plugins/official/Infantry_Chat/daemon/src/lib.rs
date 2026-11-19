@@ -6,7 +6,7 @@
 //! mailbox and every policy gate still applies. WHO I AM is `client_session_id`, else the human handle `user`.
 //!
 //! The `image_upload` / `image_fetch` frames ([`images`]) go through the host's `project_files` frame. The chat image retention
-//! sweep ([`retention`]) runs on the daemon's `clock.tick`. Still left: `infantry_chat_image`.
+//! sweep ([`retention`]) runs on the daemon's `clock.tick`. `infantry_chat_note` / `infantry_chat_image` are served by `infantry-scripting` (`chat.rs`), next to the timeline they post to.
 pub mod images;
 pub mod retention;
 
