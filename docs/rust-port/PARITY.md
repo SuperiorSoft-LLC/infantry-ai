@@ -141,7 +141,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Assign / switch / queue / unassign from a card | yes | missing | UI only (`ticket_assign`, `agent_switch`, `agent_queue`, `ticket_unassign`). |
 | Multi-select and move to epic | yes | missing | UI only (`ticket_save`). |
 | Card badges: epic, runner, waiting, has work, queued | yes | partial | Role, assignee and branch only. UI only. |
-| Ticket comments, resolve, notify list, handoff | yes | missing | Daemon: ticket comment frames (none in the Rust protocol). |
+| Ticket comments, resolve, notify list, handoff | yes | partial | *(RUST-UI-10)* The ticket dialog lists comments (kind/state, author, local stamp; Kotlin line format) and adds one, through `plugin_tool_call` (`infantry_ticket_comments` / `infantry_ticket_comment`). No resolve (the list gives short ids; resolve needs the full id), notify list or handoff. |
 | Related tickets | yes | missing | UI only (`ticket_link`). |
 | Archive view: search, restore | yes | missing | UI only (`archive_query`, `archive_apply`). |
 

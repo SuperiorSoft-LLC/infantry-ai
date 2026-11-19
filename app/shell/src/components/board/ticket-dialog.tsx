@@ -12,6 +12,7 @@ import { AdvancedSection } from "@/components/dialogs/advanced-section";
 import { INHERIT, PickerField } from "@/components/dialogs/picker-field";
 import { shortId } from "./ticket-card";
 import { useBoard } from "./use-board";
+import { TicketComments } from "./ticket-comments";
 import { epicsStore, useQuery, useQueryOnOpen } from "@/components/panels/use-panels";
 import { useProjects } from "@/components/git/use-projects";
 
@@ -100,6 +101,7 @@ export function TicketDialog({ ticketId, creating, onClose }: { ticketId: string
           <Label htmlFor="ticket-desc">Description</Label>
           <Textarea id="ticket-desc" rows={6} {...form.register("description")} />
         </div>
+        {ticket && <TicketComments ticketId={ticket.id} />}
         <AdvancedSection>
           <PickerField
             id="ticket-type"
