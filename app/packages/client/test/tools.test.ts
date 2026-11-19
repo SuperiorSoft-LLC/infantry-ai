@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 import { describe, expect, it } from "vitest";
-import { callTool, commentsOf, type Envelope } from "../src";
+import { callTool, commentsOf, matchSlash, slashCatalog, slashPrefix, type Envelope } from "../src";
 
 describe("ticket comments", () => {
   it("reads the Kotlin comment lines, multi-line bodies included", () => {
@@ -22,5 +22,23 @@ describe("ticket comments", () => {
     taps.forEach((t) => t({ type: "plugin_tool_result", requestId: sent[0].requestId, data: '{"text":"no comments","isError":false}' }));
     expect(await p).toEqual({ text: "no comments", isError: false });
     expect(taps.size).toBe(0);
+  });
+});
+
+describe("slash commands", () => {
+  it("completes by prefix from the session's catalog", async () => {
+    expect(slashPrefix("/mo")).toBe("mo");
+    expect(slashPrefix("/")).toBe("");
+    expect(slashPrefix("/model x")).toBeNull();
+    expect(slashPrefix("hi /mo")).toBeNull();
+    const taps = new Set<(e: Envelope) => void>();
+    const sent: Envelope[] = [];
+    const link = { sendFrame: (e: Envelope) => (sent.push(e), true), onFrame: (l: (e: Envelope) => void) => (taps.add(l), () => void taps.delete(l)) };
+    const p = slashCatalog(link, "s1");
+    expect(sent[0]).toMatchObject({ type: "command_catalog", sessionId: "s1" });
+    const commands = [{ name: "model", action: "SET_MODEL" }, { name: "effort", action: "SET_EFFORT" }, { name: "Mcp", action: "NATIVE" }];
+    taps.forEach((t) => t({ type: "command_catalog", requestId: sent[0].requestId, data: JSON.stringify({ provider: "claude", prefix: "", commands }) }));
+    const got = await p;
+    expect(matchSlash(got, "m").map((c) => c.name)).toEqual(["model", "Mcp"]);
   });
 });

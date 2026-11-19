@@ -105,7 +105,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Resume, Swap agent, Restart, Cancel turn | yes | done | |
 | Delete / remove session with confirm | yes | done | *(fixed today)* It was a dead button. It now confirms, then sends `session_delete`. |
 | Attachments: file picker, paste image, drag and drop | yes | missing | *(fixed today)* A dead button was removed. Daemon: an `image_upload` handler (RUST-UI-8 found the frame name only; the Chat plugin notes it as a host need). |
-| Slash commands with autocomplete | yes | missing | Daemon: a `command_catalog` handler (frame name only, no handler). |
+| Slash commands with autocomplete | yes | partial | *(RUST-UI-10)* Typing `/` lists the session provider's commands from `command_catalog` by prefix (Up/Down, Tab or Enter completes, Esc closes). The command still goes out as prompt text: no `command_result` handling (set model / effort) yet. |
 | Notice strip for command results | yes | missing | Daemon: `command_result` (frame name only). |
 | Stop background processes (Ctrl+Shift+K) | yes | missing | UI only (`processes_reap`). |
 | End session (Ctrl+Alt+K) | yes | done | *(RUST-UI-8)* Graceful `kill`, so the session can be resumed. |

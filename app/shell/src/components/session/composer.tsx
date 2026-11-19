@@ -3,14 +3,16 @@
 // Prompt composer. Idle session: Enter sends the prompt. Busy session: red border, Enter queues the text as its next
 // turn; the queued turns are listed above with remove / send-now. No session: Enter starts a new one.
 // Stop interrupts the running turn; Swap agent and Restart session open the session dialogs. The others are still mock.
-import { useState } from "react";
+// Typing `/` lists the session provider's commands (`command_catalog`, fetched once per session) by prefix: Up/Down
+// move, Tab or Enter completes, Esc closes.
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeftRight, Play, CircleX, Trash2, RotateCw, Square, SendHorizontal, X, Zap } from "lucide-react";
 import { cn } from "@infantry/ui";
 import { Textarea } from "@infantry/ui";
 import { IconButton } from "@infantry/ui";
-import type { QueuedTurnView } from "@infantry/client";
+import { matchSlash, slashCatalog, slashPrefix, type QueuedTurnView, type SlashCommand } from "@infantry/client";
 import { useShallow } from "zustand/react/shallow";
-import { useDaemon } from "@/daemon/daemon";
+import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { useUi } from "@/state/ui-state";
 import { openSessionDialog } from "./session-actions";
 
@@ -43,6 +45,23 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
     useShallow((s) => ({ send: s.send, spawn: s.spawn, interrupt: s.interrupt, unqueue: s.unqueue, forceQueued: s.forceQueued })),
   );
 
+  const [catalog, setCatalog] = useState<SlashCommand[]>([]);
+  const [pick, setPick] = useState(0);
+  const [hideSlash, setHideSlash] = useState(false);
+  useEffect(() => {
+    setCatalog([]);
+    if (!sessionId || !online) return;
+    let live = true;
+    void slashCatalog(daemonStore().getState(), sessionId).then((c) => live && setCatalog(c));
+    return () => {
+      live = false;
+    };
+  }, [sessionId, online]);
+  const prefix = slashPrefix(text);
+  const matches = useMemo(() => (prefix === null || hideSlash ? [] : matchSlash(catalog, prefix)), [catalog, prefix, hideSlash]);
+  const at = Math.min(pick, Math.max(0, matches.length - 1));
+  const complete = (c: SlashCommand) => (setText(`/${c.name}${c.argument || c.values?.length ? " " : ""}`), setPick(0));
+
   const submit = () => {
     if (!text.trim() || !online || heldBy) return;
     if (sessionId) send(sessionId, text);
@@ -68,11 +87,45 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
           ))}
         </ul>
       )}
+      {matches.length > 0 && (
+        <ul aria-label="Commands" role="listbox" className="mb-2 max-h-48 space-y-1 overflow-auto">
+          {matches.map((c, i) => (
+            <li
+              key={c.name}
+              role="option"
+              aria-selected={i === at}
+              onMouseDown={(e) => (e.preventDefault(), complete(c))}
+              className={cn("flex cursor-pointer items-center gap-2 rounded-lg border bg-card px-3 py-1 text-xs", i === at && "border-ring")}
+            >
+              <span className="shrink-0 font-mono">/{c.name}</span>
+              {c.argument && <span className="shrink-0 text-muted-foreground">{c.argument}</span>}
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">{c.description}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className={cn("rounded-xl border-2 bg-card transition-colors", busy ? "border-danger" : "border-border focus-within:border-ring")}>
         <Textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => (setText(e.target.value), setHideSlash(false))}
           onKeyDown={(e) => {
+            if (matches.length > 0) {
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                setPick((at + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
+                return;
+              }
+              if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && prefix !== matches[at].name)) {
+                e.preventDefault();
+                complete(matches[at]);
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setHideSlash(true);
+                return;
+              }
+            }
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               submit();
