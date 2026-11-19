@@ -77,6 +77,38 @@
   }
  },
  {
+  "name": "infantry_agent_switch",
+  "readOnly": false,
+  "description": "Switch an agent from its in-progress ticket A to ticket B: A goes back to todo (top) with a handoff and its branch kept, B heads the agent's queue, the worker ends like unassign (now = at once) and B starts for the same agent on exit (deferred: the worker ends after its turn). With no current ticket it is an assign. Same as `infantry agent switch <agent> <ticketId> [--now]`.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "agentId": {"type": "string", "description": "Agent profile id, or its unique name."},
+    "ticketId": {"type": "string", "description": "The ticket to switch to: full id, or its 8-char suffix."},
+    "now": {"type": "boolean", "description": "End the worker at once instead of after its current turn."},
+    "verbose": {"type": "boolean", "description": "Return the full ticket instead of one line."}
+   },
+   "required": ["agentId", "ticketId"],
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_agent_queue",
+  "readOnly": false,
+  "description": "List or change ONE agent's persistent ticket queue. action list (default), add (ticketId, optional at = 1-based place), remove (ticketId), move (ticketId, at) or clear. agentId is a profile id or a unique agent name. Only todo tickets can be queued, a ticket is in one queue, and a queue holds at most limits.agentTasks.queueMax tickets. When the agent's worker ends, the lowest-place ticket starts on that agent; `startNext` never picks a queued ticket. Same as `infantry agent queue <agent> [add <id> [--at n] | rm <id> | mv <id> <n> | clear]`.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "agentId": {"type": "string", "description": "Agent profile id, or its unique name."},
+    "action": {"type": "string", "description": "list (default), add, remove, move or clear."},
+    "ticketId": {"type": "string", "description": "Full ticket id, or its 8-char suffix (add, remove, move)."},
+    "at": {"type": "string", "description": "1-based place in the queue (add: default the end; move: required)."}
+   },
+   "required": ["agentId"],
+   "additionalProperties": false
+  }
+ },
+ {
   "name": "infantry_epic_base",
   "readOnly": false,
   "description": "Read, set or clear ONE epic's base branch: new tickets in the epic cut their branch from it, overriding the project's base. A branch that does not resolve where tickets are cut is refused with the reason. Tickets already started keep their recorded base.",

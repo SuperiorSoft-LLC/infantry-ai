@@ -15,11 +15,10 @@
 //!   nothing.
 use crate::sessions::Daemon;
 use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Refusal};
-use infantry_knowledge::roles::RoleService;
 use infantry_mail::notify::questions::{Asker, OwnerQuestions};
 use infantry_plugin_host::PluginHost;
 use infantry_protocol::prompts::{PromptOption, QuestionAsk};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -50,7 +49,8 @@ pub struct HostFrames {
     pub daemon: Arc<Daemon>,
     pub plugins: Option<Arc<PluginHost>>,
     pub plugins_dir: Option<PathBuf>,
-    pub roles: Arc<RoleService>,
+    /// The agent registry (`agent_registry` and the `infantry_agent_*` tools share it).
+    pub registry: Arc<super::agent_registry::AgentRegistry>,
     pub questions: Arc<OwnerQuestions>,
     pub state_dir: PathBuf,
     /// For `project_files` (a plugin's files under `<project>/.infantry/`).
@@ -58,14 +58,36 @@ pub struct HostFrames {
 }
 
 /// One module.json found in the plugins folder.
-struct Module {
-    id: String,
-    tier: String,
-    dir: PathBuf,
-    manifest: Value,
+pub(super) struct Module {
+    pub(super) id: String,
+    pub(super) tier: String,
+    pub(super) dir: PathBuf,
+    pub(super) manifest: Value,
 }
 
-fn s<'a>(v: &'a Value, k: &str) -> &'a str {
+/// Every module.json in the plugins folder, tiers in precedence order (the first id wins).
+pub(super) fn scan_modules(plugins_dir: &Option<PathBuf>) -> Vec<Module> {
+    let Some(root) = plugins_dir else { return vec![] };
+    let mut out: Vec<Module> = vec![];
+    for tier in TIERS {
+        let Ok(rd) = std::fs::read_dir(root.join(tier)) else { continue };
+        let mut dirs: Vec<PathBuf> = rd.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.join("module.json").is_file()).collect();
+        dirs.sort();
+        for dir in dirs {
+            let Some(manifest) = std::fs::read_to_string(dir.join("module.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else { continue };
+            let id = Some(s(&manifest, "name")).filter(|n| !n.is_empty()).map(String::from).or_else(|| dir.file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_default();
+            if out.iter().any(|m| m.id == id) {
+                continue;
+            }
+            out.push(Module { id, tier: tier.to_string(), dir, manifest });
+        }
+    }
+    out
+}
+
+
+
+pub(super) fn s<'a>(v: &'a Value, k: &str) -> &'a str {
     v.get(k).and_then(Value::as_str).map(str::trim).unwrap_or("")
 }
 
@@ -95,22 +117,7 @@ fn reply(ty: &str, env: &Envelope, data: String) -> Vec<Envelope> {
 
 impl HostFrames {
     fn modules(&self) -> Vec<Module> {
-        let Some(root) = &self.plugins_dir else { return vec![] };
-        let mut out: Vec<Module> = vec![];
-        for tier in TIERS {
-            let Ok(rd) = std::fs::read_dir(root.join(tier)) else { continue };
-            let mut dirs: Vec<PathBuf> = rd.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.join("module.json").is_file()).collect();
-            dirs.sort();
-            for dir in dirs {
-                let Some(manifest) = std::fs::read_to_string(dir.join("module.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else { continue };
-                let id = Some(s(&manifest, "name")).filter(|n| !n.is_empty()).map(String::from).or_else(|| dir.file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_default();
-                if out.iter().any(|m| m.id == id) {
-                    continue;
-                }
-                out.push(Module { id, tier: tier.to_string(), dir, manifest });
-            }
-        }
-        out
+        scan_modules(&self.plugins_dir)
     }
 
     // ---- sessions --------------------------------------------------------------------------------------------
@@ -177,58 +184,10 @@ impl HostFrames {
         reply("cards", env, Value::Array(out).to_string())
     }
 
-    // ---- agent registry --------------------------------------------------------------------------------------
-
-    fn overrides(&self) -> Map<String, Value> {
-        std::fs::read_to_string(self.state_dir.join(AGENT_OVERRIDES_FILE)).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
-    }
-
-    fn agents(&self) -> Vec<Value> {
-        let off = self.overrides();
-        let enabled = |id: &str| off.get(id).and_then(Value::as_bool).unwrap_or(true);
-        let mut out: Vec<Value> = vec![];
-        for r in self.roles.all() {
-            let def = json!({ "id": r.id, "name": r.name, "role": r.id });
-            out.push(json!({ "definition": def, "contributor": "roles", "source": "roles", "enabled": enabled(&r.id), "effectiveInstructions": r.persona }));
-        }
-        let mut mods = self.modules();
-        mods.sort_by(|a, b| a.id.cmp(&b.id));
-        for m in mods {
-            for a in m.manifest.get("agents").and_then(Value::as_array).into_iter().flatten() {
-                let id = s(a, "id");
-                if id.is_empty() || out.iter().any(|o| o["definition"]["id"] == id) {
-                    continue;
-                }
-                let own = s(a, "instructions").to_string();
-                let effective = if own.is_empty() { a.get("role").and_then(Value::as_str).and_then(|r| self.roles.persona(r)).unwrap_or_default() } else { own };
-                out.push(json!({ "definition": a, "contributor": m.id, "source": "manifest", "enabled": enabled(id), "effectiveInstructions": effective }));
-            }
-        }
-        out
-    }
+    // ---- agent registry ------------------------------------------------------------------------------------
 
     fn agent_registry(&self, env: &Envelope, d: &Value, ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
-        let id = s(d, "id");
-        let found = |all: Vec<Value>| all.into_iter().find(|a| a["definition"]["id"] == id).ok_or_else(|| Refusal::new(AGENT_REGISTRY, format!("no agent has the id '{id}'")));
-        let data = match s(d, "op") {
-            "" | "list" => Value::Array(self.agents()),
-            "get" => found(self.agents())?,
-            op @ ("enable" | "disable") => {
-                if !ctx.owner {
-                    return Err(Refusal::new(AGENT_REGISTRY, "owner only"));
-                }
-                found(self.agents())?;
-                let mut off = self.overrides();
-                if op == "enable" {
-                    off.remove(id);
-                } else {
-                    off.insert(id.into(), false.into());
-                }
-                write_json(&self.state_dir.join(AGENT_OVERRIDES_FILE), &Value::Object(off)).map_err(|e| Refusal::new(AGENT_REGISTRY, e))?;
-                found(self.agents())?
-            }
-            other => return Err(Refusal::new(AGENT_REGISTRY, format!("unknown op '{other}' (list, get, enable, disable)"))),
-        };
+        let data = self.registry.op(s(d, "op"), s(d, "id"), ctx.owner).map_err(|m| Refusal::new(AGENT_REGISTRY, m))?;
         Ok(reply(AGENT_REGISTRY, env, data.to_string()))
     }
 
@@ -375,7 +334,7 @@ pub fn read_chunk(path: &Path, from: u64, max: u64) -> Result<(String, u64, u64,
     Ok((String::from_utf8_lossy(&buf[..cut]).into_owned(), start + cut as u64, size, reset))
 }
 
-fn write_json(path: &Path, v: &Value) -> Result<(), String> {
+pub(super) fn write_json(path: &Path, v: &Value) -> Result<(), String> {
     let tmp = path.with_extension("tmp");
     std::fs::write(&tmp, serde_json::to_vec_pretty(v).unwrap_or_default()).map_err(|e| e.to_string())?;
     std::fs::rename(&tmp, path).map_err(|e| e.to_string())

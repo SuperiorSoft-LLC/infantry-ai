@@ -182,7 +182,10 @@
      "description": "How long the override lasts, in hours (default: until the meter resets)"
     }
    },
-   "required": ["meter", "value"],
+   "required": [
+    "meter",
+    "value"
+   ],
    "additionalProperties": false
   }
  },
@@ -302,6 +305,71 @@
    "required": [
     "sessionId"
    ]
+  }
+ },
+ {
+  "name": "infantry_agent_list",
+  "readOnly": true,
+  "description": "Every agent the daemon's agent registry holds (built-in roles and plugin-contributed agents): id, name, whether it is enabled, who contributed it.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {},
+   "required": [],
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_agent_get",
+  "readOnly": true,
+  "description": "One agent of the registry in full: its definition (instructions or role, default harness/model/context limit, tools, schedule, ui hints), contributor and enabled state.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "id": {
+     "type": "string",
+     "description": "the agent id (see infantry_agent_list)"
+    }
+   },
+   "required": [
+    "id"
+   ],
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_agent_enable",
+  "readOnly": false,
+  "description": "Re-enable a disabled agent (non-agent caller only).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "id": {
+     "type": "string",
+     "description": "the agent id (see infantry_agent_list)"
+    }
+   },
+   "required": [
+    "id"
+   ],
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_agent_disable",
+  "readOnly": false,
+  "description": "Disable an agent: new sessions of it are refused, running ones carry on (non-agent caller only).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "id": {
+     "type": "string",
+     "description": "the agent id (see infantry_agent_list)"
+    }
+   },
+   "required": [
+    "id"
+   ],
+   "additionalProperties": false
   }
  }
 ]
