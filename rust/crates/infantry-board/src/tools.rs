@@ -6,7 +6,7 @@
 //! [`descriptors`] and routes a call here through [`call`]; MCP bridges reach them over `plugin_tool_call`.
 //!
 //! Answers are short text (one line per ticket); `verbose` / `detail=full` add the stored ticket as JSON.
-use infantry_orchestrator_api::dto::{status, CommentAdd, CommentAuthor, CommentQuery, NotifyEdit, Ticket, TicketMove, TicketSave};
+use infantry_orchestrator_api::dto::{status, CommentAdd, EpicBaseRequest, CommentAuthor, CommentQuery, NotifyEdit, Ticket, TicketMove, TicketSave};
 use infantry_orchestrator_api::{OrchError, StartOrigin};
 use infantry_protocol::Envelope;
 use serde_json::{Map, Value};
@@ -229,6 +229,12 @@ pub fn call(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> Opti
             let _ = board.record_creator(&t.id, &who.author(), list(a, "notify"));
             Ok(saved("created", &t, b(a, "verbose")))
         })(),
+        "infantry_epic_base" => (|| {
+            let epic_id = s(a, "epicId").ok_or("epicId is required")?;
+            let req = EpicBaseRequest { epic_id, branch: s(a, "branch"), clear: b(a, "clear") };
+            let e = board.epic_base(req).map_err(err)?;
+            Ok(serde_json::json!({"epicId": e.id, "name": e.name, "projectId": e.project_id, "baseBranch": e.base_branch}).to_string())
+        })(),
         "infantry_ticket_get" => (|| {
             let t = board.find(&s(a, "ticketId").ok_or("ticketId is required")?).map_err(err)?;
             if s(a, "detail").as_deref() == Some("full") {
@@ -418,7 +424,7 @@ mod tests {
     #[test]
     fn descriptors_name_the_pm_tools() {
         let n = names();
-        for t in ["infantry_ticket_create", "infantry_ticket_get", "infantry_ticket_update", "infantry_ticket_move", "infantry_ticket_start", "infantry_ticket_comment", "infantry_ticket_comments", "infantry_board"] {
+        for t in ["infantry_ticket_create", "infantry_ticket_get", "infantry_ticket_update", "infantry_ticket_move", "infantry_ticket_start", "infantry_ticket_comment", "infantry_ticket_comments", "infantry_board", "infantry_epic_base"] {
             assert!(n.iter().any(|x| x == t), "{t}");
         }
         assert_eq!(short("0123456789abcdef"), "89abcdef");
