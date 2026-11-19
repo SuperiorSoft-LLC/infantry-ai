@@ -23,6 +23,8 @@
 > **Beta.** <!-- shared:beta_line -->Infantry AI is in Beta. It works and we use it every day, but not every part is fully tested yet: you are an early tester. Please report anything that breaks on GitHub.<!-- /shared:beta_line -->  
 > [Report a problem](https://github.com/SuperiorSoft-LLC/infantry-ai/issues)
 
+> **This branch is the Rust framework.** `main` now holds the Rust rewrite of Infantry AI: the daemon and core crates live in `rust/`, the desktop, web and Android app in `app/`. The earlier Java/Kotlin implementation is kept, unchanged, on the [`legacy-java`](https://github.com/SuperiorSoft-LLC/infantry-ai/tree/legacy-java) branch. Parts of the text below still describe the Kotlin version (Gradle builds, `superiorSoftLibrary/`) and are being updated.
+
 ### The app as installed
 
 This is Infantry AI as installed: the core only, with no extra plugins. Agent cards, the PM's chat and live plan-usage pacing are all part of the core.
