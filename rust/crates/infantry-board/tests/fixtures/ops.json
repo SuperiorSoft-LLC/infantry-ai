@@ -1,0 +1,21 @@
+[
+  {"type":"ticket_save","data":"{\"title\":\"First\",\"description\":\"  body  \",\"ticketType\":\"bug\",\"projectId\":\"p1\",\"epicId\":\"e1\"}"},
+  {"type":"ticket_save","data":"{\"title\":\"Second\",\"weight\":3,\"contextLimit\":200000,\"effort\":\"HIGH\",\"runner\":\"Local\",\"provider\":\"claude\"}"},
+  {"type":"ticket_save","data":"{\"title\":\"Parked\",\"status\":\"backlog\",\"useWorktree\":false,\"includeLinkedTasksContext\":false}"},
+  {"type":"ticket_save","data":"{\"title\":\"Needs mcp\",\"mcp\":{\"require\":[{\"server\":\"github\",\"purpose\":\"open PRs\"}]},\"skillsMode\":\"replace\"}"},
+  {"type":"ticket_save","data":"{\"id\":\"$1\",\"title\":\"First, edited\"}"},
+  {"type":"ticket_move","data":"{\"id\":\"$2\",\"status\":\"done\",\"wontFix\":true}"},
+  {"type":"ticket_move","data":"{\"id\":\"$3\",\"status\":\"todo\",\"position\":0}"},
+  {"type":"ticket_move","data":"{\"id\":\"$4\",\"status\":\"todo\"}"},
+  {"type":"ticket_get","data":"$3"},
+  {"type":"ticket_list","data":"p1"},
+  {"type":"ticket_save","data":"{\"title\":\"P\",\"status\":\"pending\"}"},
+  {"type":"ticket_save","data":"{\"id\":\"$1\",\"title\":\"x\",\"position\":0}"},
+  {"type":"ticket_move","data":"{\"id\":\"$1\",\"status\":\"in_review\"}"},
+  {"type":"ticket_save","data":"{\"title\":\"\"}"},
+  {"type":"ticket_save","data":"{\"title\":\"x\",\"bogus\":1}"},
+  {"type":"ticket_move","data":"{\"id\":\"ticket-nope\",\"status\":\"done\"}"},
+  {"type":"ticket_get","data":"ticket-nope"},
+  {"type":"ticket_delete","data":"$2"},
+  {"type":"ticket_list","data":""}
+]

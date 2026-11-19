@@ -20,8 +20,10 @@ fn start() -> (u16, std::path::PathBuf) {
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
-            let cfg = Config::new(d2.clone(), d2);
+            let cfg = Config::new(d2.clone(), d2.clone());
             let daemon = Daemon::new(Arc::new(Stub::default()), cfg).unwrap();
+            // RUST-WIRE-1: the hello `worktrees` frame comes from the worktrees unit; compose like main.
+            infantry_daemon::compose::build(&daemon, &d2).unwrap();
             let policy = Arc::new(AccessPolicy::new("127.0.0.1", Some(TOKEN)).unwrap());
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             tx.send(listener.local_addr().unwrap().port()).unwrap();

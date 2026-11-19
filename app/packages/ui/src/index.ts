@@ -24,6 +24,7 @@ export * from "./blocks/empty-state";
 export * from "./blocks/icon-button";
 export * from "./blocks/key-hint";
 export * from "./blocks/list-row";
+export * from "./blocks/meter-bar";
 export * from "./blocks/panel-card";
 export * from "./blocks/progress-line";
 export * from "./blocks/segmented-bar";

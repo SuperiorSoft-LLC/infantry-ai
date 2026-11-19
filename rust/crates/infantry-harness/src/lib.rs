@@ -22,11 +22,12 @@
 //! Nothing here knows orchestration (boards, tickets): an agent runs with no orchestrator.
 
 pub mod driver;
+pub mod shim;
 
 pub use driver::{DriverError, HarnessDriver};
 /// The runner contract (RUST-RUN-1), re-exported so a harness crate needs only this one.
 pub use infantry_runner_api as runner;
-pub use infantry_runner_api::{ProcessSpec, Runner, Size};
+pub use infantry_runner_api::{HttpRequest, ProcessSpec, Runner, Size, TailFrom, TailSpec};
 
 use std::path::{Path, PathBuf};
 
@@ -116,6 +117,8 @@ pub struct LaunchRequest {
     pub cwd: PathBuf,
     pub model: Option<String>,
     pub effort: Option<String>,
+    /// The context window (tokens) the CLI compacts at; None = its own default. A harness without one ignores it.
+    pub context_limit: Option<u64>,
     pub approval: ApprovalMode,
     /// A [`HarnessEvent::ProviderSession`] token to continue; None = a new conversation.
     pub resume: Option<String>,
@@ -125,9 +128,96 @@ pub struct LaunchRequest {
     pub env: Vec<(String, String)>,
     /// Environment names or prefixes (ending in `*`) removed from the inherited environment.
     pub env_remove: Vec<String>,
+    /// The harness's [`Asset`]s the driver staged on the runner's host: (asset name, absolute path there). An asset that
+    /// could not be staged is missing; the harness decides whether it can launch without it.
+    pub staged: Vec<(String, String)>,
     /// The hook channel the driver opened on the runner ([`Capabilities::hook_channel`]); the harness wires its CLI's
     /// hooks to it.
     pub hooks: Option<HookTarget>,
+    /// The MCP servers the session gets (Kotlin `HarnessHost.mcpServers`): the harness delivers [`McpPlan::delivered`]
+    /// through its CLI's own config and turns [`McpPlan::deny`] off where the CLI loads the user's servers itself.
+    pub mcp: McpPlan,
+    /// The watched-runner launcher a harness hook rewrites shell commands to (Kotlin `HarnessHost.watchLauncher`);
+    /// None = the watch is off for this session.
+    pub watch_launcher: Option<String>,
+}
+
+/// The name of the daemon's own MCP server (`infantry mcp`), the infantry entry of every [`McpPlan`].
+pub const INFANTRY_MCP_SERVER: &str = "infantry";
+
+/// How an MCP server is reached. Secret values ([`McpTransport::Stdio::env`], [`McpTransport::Http::headers`]) are
+/// never logged: `Debug` prints their keys only.
+#[derive(Clone, PartialEq, Eq)]
+pub enum McpTransport {
+    /// A child process speaking MCP on stdin/stdout.
+    Stdio { command: Vec<String>, env: Vec<(String, String)>, working_dir: Option<String> },
+    /// A remote server over streamable HTTP.
+    Http { url: String, headers: Vec<(String, String)> },
+}
+
+impl std::fmt::Debug for McpTransport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let keys = |kv: &[(String, String)]| kv.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>();
+        match self {
+            McpTransport::Stdio { command, env, working_dir } => {
+                f.debug_struct("Stdio").field("command", command).field("env", &keys(env)).field("working_dir", working_dir).finish()
+            }
+            McpTransport::Http { url, headers } => f.debug_struct("Http").field("url", url).field("headers", &keys(headers)).finish(),
+        }
+    }
+}
+
+/// One MCP server, harness-neutral (Kotlin `McpServerSpec`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct McpServerSpec {
+    /// The key the agent sees: `mcp__<name>__*` / `<name>_*`.
+    pub name: String,
+    pub transport: McpTransport,
+    /// Where it came from (shown to the owner): `infantry`, a plugin id, `user`.
+    pub source: String,
+    /// The command or paths exist only on this machine: never sent to a remote runner.
+    pub local_only: bool,
+}
+
+/// The MCP servers one session gets: [`McpPlan::add`] the host delivers, [`McpPlan::deny`] the names turned off. A name
+/// in both is denied.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct McpPlan {
+    pub add: Vec<McpServerSpec>,
+    pub deny: Vec<String>,
+}
+
+impl McpPlan {
+    /// [`McpPlan::add`] without the denied names.
+    pub fn delivered(&self) -> impl Iterator<Item = &McpServerSpec> {
+        self.add.iter().filter(|s| !self.deny.contains(&s.name))
+    }
+
+    /// The delivered infantry entry, when it is a stdio server: (command, env).
+    pub fn infantry_stdio(&self) -> Option<(&[String], &[(String, String)])> {
+        self.delivered().find(|s| s.name == INFANTRY_MCP_SERVER).and_then(|s| match &s.transport {
+            McpTransport::Stdio { command, env, .. } if !command.is_empty() => Some((command.as_slice(), env.as_slice())),
+            _ => None,
+        })
+    }
+
+    /// The delivered servers in the common `mcpServers` JSON shape (claude `--mcp-config`):
+    /// `{"mcpServers": {name: {"command","args","env"} | {"type":"http","url","headers"}}}`.
+    pub fn mcp_servers_json(&self) -> serde_json::Value {
+        let mut servers = serde_json::Map::new();
+        for s in self.delivered() {
+            let obj = |kv: &[(String, String)]| kv.iter().map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone()))).collect::<serde_json::Map<_, _>>();
+            let v = match &s.transport {
+                McpTransport::Stdio { command, env, .. } if !command.is_empty() => {
+                    serde_json::json!({ "command": command[0], "args": &command[1..], "env": obj(env) })
+                }
+                McpTransport::Stdio { .. } => continue,
+                McpTransport::Http { url, headers } => serde_json::json!({ "type": "http", "url": url, "headers": obj(headers) }),
+            };
+            servers.insert(s.name.clone(), v);
+        }
+        serde_json::json!({ "mcpServers": servers })
+    }
 }
 
 /// Where a CLI's hooks report, on the runner's host.
@@ -145,14 +235,32 @@ impl LaunchRequest {
             cwd,
             model: None,
             effort: None,
+            context_limit: None,
             approval: ApprovalMode::Deny,
             resume: None,
             prompt: None,
             env: Vec::new(),
             env_remove: Vec::new(),
+            staged: Vec::new(),
             hooks: None,
+            mcp: McpPlan::default(),
+            watch_launcher: None,
         }
     }
+
+    /// The runner-host path of staged asset [name].
+    pub fn staged_path(&self, name: &str) -> Option<&str> {
+        self.staged.iter().find(|(n, _)| n == name).map(|(_, p)| p.as_str())
+    }
+}
+
+/// A file a CLI loads by path (a plugin, an extension) that the harness ships; the driver stages it on the runner's host
+/// ([`Runner::stage_file`]) before each launch and passes its path in [`LaunchRequest::staged`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Asset {
+    /// A plain file name, unique per harness.
+    pub name: String,
+    pub contents: Vec<u8>,
 }
 
 /// Why a harness cannot launch.
@@ -172,8 +280,9 @@ pub struct LaunchPlan {
     /// None = stdin stays open for [`Outbound::Stdin`].
     pub stdin: Option<Vec<u8>>,
     pub translator: Box<dyn Translator>,
-    /// Files on the runner's host the driver tails for the translator ([`Capabilities::file_tail`]).
-    pub tail: Vec<String>,
+    /// Files on the runner's host the driver tails for the translator ([`Capabilities::file_tail`]); [`TailFrom::End`]
+    /// skips what a resumed file already holds.
+    pub tail: Vec<TailSpec>,
 }
 
 /// What a translator is fed.
@@ -195,6 +304,15 @@ pub enum TranslatorInput {
     Tail { path: String, line: String },
     /// The PTY screen's visible rows, [now] ms after spawn.
     Screen { rows: Vec<String>, now: u64 },
+    /// The whole answer to [`Outbound::Http`] [id] (`stream: false`). `status` None = the request failed; `body` is then why.
+    HttpResponse { id: u64, status: Option<u16>, body: String },
+    /// A streamed [`Outbound::Http`] [id] (`stream: true`) answered with this status; its body follows as
+    /// [`TranslatorInput::HttpLine`]s.
+    HttpOpened { id: u64, status: u16 },
+    /// One body line of streamed request [id] (line ending trimmed; a server-sent events stream gives `data: ...` lines).
+    HttpLine { id: u64, line: String },
+    /// Streamed request [id] ended (the server closed it: `error` None) or failed (it never opened, or broke).
+    HttpClosed { id: u64, error: Option<String> },
 }
 
 /// Traffic a translator asks the driver to deliver.
@@ -202,8 +320,10 @@ pub enum TranslatorInput {
 pub enum Outbound {
     /// Bytes to the process's stdin or PTY.
     Stdin(Vec<u8>),
-    /// A request to the harness's own server ([`Capabilities::http`]).
-    Http { method: String, path: String, body: String },
+    /// A request to the harness's own server ([`Capabilities::http`]), made by the runner on its host
+    /// ([`Runner::http`]). The answer comes back as [`TranslatorInput::HttpResponse`] [id], or, with [stream], as
+    /// [`TranslatorInput::HttpOpened`], `HttpLine`s and `HttpClosed`. [id] is the translator's own, unique per process.
+    Http { id: u64, request: HttpRequest, stream: bool },
     /// The response body (JSON) to the blocking hook call [id] ([`TranslatorInput::Hook`]).
     HookReply { id: u64, body: String },
 }
@@ -224,6 +344,27 @@ pub enum TurnEnd {
     Failed,
 }
 
+/// One question a CLI puts to the owner (a choice menu).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct HarnessQuestion {
+    pub text: String,
+    /// (label, description).
+    pub options: Vec<(String, String)>,
+    pub multi_select: bool,
+    /// The owner may type an answer of their own.
+    pub allow_other: bool,
+    /// The label the CLI marked as its recommendation.
+    pub recommended: Option<String>,
+}
+
+/// The owner's answer to one [`HarnessQuestion`]; `answered = false` = no answer (timeout, session end).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct HarnessAnswer {
+    pub answered: bool,
+    pub answers: Vec<String>,
+    pub other_text: Option<String>,
+}
+
 /// What a harness reports, in neutral terms.
 #[derive(Debug, Clone, PartialEq)]
 pub enum HarnessEvent {
@@ -240,6 +381,9 @@ pub enum HarnessEvent {
     ToolFinished { id: String, output: String, exit_code: Option<i32>, ok: bool },
     /// The CLI wants permission; the host answers with [`HarnessDriver::answer`] (same [id]).
     ApprovalRequested { id: String, tool: String, input: String },
+    /// The CLI asks the owner one or more questions (a choice menu); the host answers every one, in order, with
+    /// [`HarnessDriver::answer_questions`] (same [id]).
+    QuestionAsked { id: String, questions: Vec<HarnessQuestion> },
     Usage(Usage),
     /// A non-fatal problem the CLI reported.
     Warning(String),
@@ -252,6 +396,9 @@ pub enum HarnessEvent {
     TurnEnded { end: TurnEnd, reason: Option<String> },
     /// The process ended.
     Exited { code: Option<i32> },
+    /// The state of the session's own MCP server in the CLI (`connected`, `failed`, `needs_auth`, `disabled`, ...) and
+    /// of every server it reports, sent when it changes (Kotlin `SessionOutput.mcpState` / `mcpServers`).
+    McpState { state: String, servers: Vec<(String, String)> },
 }
 
 /// Reads one launched process.
@@ -265,6 +412,23 @@ pub trait Translator: Send {
     }
     /// The host's answer to [`HarnessEvent::ApprovalRequested`] [id] (typically queued as an [`Outbound::HookReply`]).
     fn answer(&mut self, _id: &str, _allow: bool) {}
+    /// The host's answers to [`HarnessEvent::QuestionAsked`] [id], one per question in order.
+    fn answer_questions(&mut self, _id: &str, _answers: Vec<HarnessAnswer>) {}
+    /// Types [text] into the running turn (the CLI takes it at its next step without stopping). False = it cannot now.
+    fn inject(&mut self, _text: &str) -> bool {
+        false
+    }
+    /// Called on every driver poll with the time (ms since the epoch): a translator that watches something by asking
+    /// (a status endpoint) queues its request here, throttled by itself.
+    fn on_timer(&mut self, _now_ms: u64) {}
+    /// Reconnects the session's own MCP server inside the CLI. False = the CLI cannot.
+    fn reconnect_mcp(&mut self) -> bool {
+        false
+    }
+    /// Starts the CLI's own exit (keys, a command). False = it has none; the driver kills the process.
+    fn close(&mut self) -> bool {
+        false
+    }
     /// Drains the traffic to deliver.
     fn take_outbound(&mut self) -> Vec<Outbound> {
         Vec::new()
@@ -280,5 +444,107 @@ pub trait Harness: Send + Sync {
     fn models(&self, probe: &dyn Probe) -> Vec<ModelInfo>;
     /// Why the CLI cannot run there (not installed, not signed in); None = fine as far as files and env tell.
     fn sign_in_problem(&self, probe: &dyn Probe) -> Option<String>;
+    /// The files this launch needs on the runner's host (staged by the driver before [`Harness::launch`]).
+    fn assets(&self, _req: &LaunchRequest) -> Vec<Asset> {
+        Vec::new()
+    }
     fn launch(&self, req: &LaunchRequest) -> Result<LaunchPlan, LaunchError>;
+    /// The `/` commands a client offers while the user types (CP-4); none by default.
+    fn commands(&self) -> Vec<HarnessCommand> {
+        Vec::new()
+    }
+}
+
+/// What a `/` command does: the daemon knows these three, never a vendor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandAction {
+    SetModel,
+    SetEffort,
+    Native,
+}
+
+impl CommandAction {
+    pub fn wire(self) -> &'static str {
+        match self {
+            CommandAction::SetModel => "SET_MODEL",
+            CommandAction::SetEffort => "SET_EFFORT",
+            CommandAction::Native => "NATIVE",
+        }
+    }
+}
+
+/// One `/` command: `name` a bare word, `argument` a hint, `values` the accepted (effort) or suggested (model) values,
+/// `native` the text the harness gets for [`CommandAction::Native`] only.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HarnessCommand {
+    pub name: String,
+    pub description: String,
+    pub action: CommandAction,
+    pub argument: Option<String>,
+    pub values: Vec<String>,
+    pub native: Option<String>,
+}
+
+impl HarnessCommand {
+    pub fn new(name: &str, description: &str, action: CommandAction) -> Self {
+        HarnessCommand { name: name.into(), description: description.into(), action, argument: None, values: Vec::new(), native: None }
+    }
+    pub fn argument(mut self, a: &str) -> Self {
+        self.argument = Some(a.into());
+        self
+    }
+    pub fn values(mut self, v: &[&str]) -> Self {
+        self.values = v.iter().map(|s| s.to_string()).collect();
+        self
+    }
+    pub fn native(mut self, n: &str) -> Self {
+        self.native = Some(n.into());
+        self
+    }
+    /// The wire shape (Kotlin `HarnessCommand`).
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "name": self.name, "description": self.description, "action": self.action.wire(),
+            "argument": self.argument, "values": self.values, "native": self.native,
+        })
+    }
+}
+
+/// More values than this are never sent in one answer: a picker narrows them with the typed prefix.
+pub const MAX_COMMAND_VALUES: usize = 50;
+
+/// The catalog entries matching `typed` (the text after the slash; a leading `/` is tolerated). Without a space it is a
+/// name prefix and the matches carry no values; with one it names ONE command and the rest narrows its values (a model
+/// by any part of its id, others by prefix). Case is ignored.
+pub fn complete_commands(catalog: &[HarnessCommand], typed: &str) -> Vec<HarnessCommand> {
+    let body = typed.trim_start();
+    let body = body.strip_prefix('/').unwrap_or(body);
+    let Some(i) = body.find(char::is_whitespace) else {
+        let p = body.to_lowercase();
+        return catalog.iter().filter(|c| c.name.to_lowercase().starts_with(&p)).map(|c| HarnessCommand { values: Vec::new(), ..c.clone() }).collect();
+    };
+    let (name, args) = (&body[..i], body[i..].trim().to_lowercase());
+    let Some(c) = catalog.iter().find(|c| c.name.eq_ignore_ascii_case(name)) else { return Vec::new() };
+    let model = c.action == CommandAction::SetModel;
+    let values = c.values.iter().filter(|v| if model { v.to_lowercase().contains(&args) } else { v.to_lowercase().starts_with(&args) }).take(MAX_COMMAND_VALUES).cloned().collect();
+    vec![HarnessCommand { values, ..c.clone() }]
+}
+
+#[cfg(test)]
+mod command_tests {
+    use super::*;
+
+    #[test]
+    fn names_complete_without_values_and_a_named_command_narrows_its_values() {
+        let cat = vec![
+            HarnessCommand::new("model", "m", CommandAction::SetModel).values(&["claude-opus-5-5", "claude-sonnet-5-5"]),
+            HarnessCommand::new("effort", "e", CommandAction::SetEffort).values(&["low", "medium", "max"]),
+        ];
+        let names = complete_commands(&cat, "/M");
+        assert_eq!((names.len(), names[0].values.len()), (1, 0));
+        assert_eq!(complete_commands(&cat, "model son")[0].values, vec!["claude-sonnet-5-5"]);
+        assert_eq!(complete_commands(&cat, "effort m")[0].values, vec!["medium", "max"]);
+        assert!(complete_commands(&cat, "nope x").is_empty());
+        assert_eq!(cat[1].to_json()["action"], "SET_EFFORT");
+    }
 }

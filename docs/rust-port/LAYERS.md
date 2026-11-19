@@ -8,10 +8,10 @@ Dependencies point DOWN only. `cargo test -p infantry-guards` enforces this page
 | Layer | Crates (tier) | What lives here |
 |---|---|---|
 | L0 wire | infantry-protocol (0) | `Envelope`, DTOs, frame names. Byte-compatible with Kotlin `infantryProtocol`. |
-| L1 platform core | infantry-core (0), infantry-plugin-wit (0), infantry-plugin-host (1), infantry-plugin-sdk (1) | Generic mechanisms: the `FrameUnit` registry, event bus, db handle, settings; the plugin contract and host. |
+| L1 platform core | infantry-core (0), infantry-plugin-wit (0), infantry-plugin-host (1), infantry-plugin-sdk (1), infantry-usage (1), infantry-projects (1), infantry-knowledge (1) | Generic mechanisms: the `FrameUnit` registry, event bus, db handle, settings; the plugin contract and host; usage, limits and pacing (infantry-usage); projects, workspaces, the project git view, worktrees and ticket branches (infantry-projects); roles, traits, skills, prompts and avatars (infantry-knowledge). |
 | L2 runner | infantry-runner-api (0), infantry-runner (1), infantry-runner-local (2), infantry-runner-link (2) | Running processes, locally or on a linked runner. |
-| L3 agents / harnesses | infantry-harness (0), infantry-harness-codex (1) | One agent CLI each. Agents work with no orchestrator. |
-| L4 orchestration | infantry-orchestrator-api (0) | Board, tickets, pipeline seams. |
+| L3 agents / harnesses | infantry-harness (0), infantry-harness-codex (1), infantry-harness-claude (1), infantry-harness-opencode (1), infantry-harness-pi (1) | One agent CLI each. Agents work with no orchestrator. |
+| L4 orchestration | infantry-orchestrator-api (0), infantry-board (1) | Board, tickets, pipeline seams. |
 | Plugin | anything under `plugins/official/*` (e.g. the Board daemon in `plugins/official/Infantry_Board`), infantry-board-daemon, infantry-news-daemon, infantry-health-daemon | A feature. Talks to the platform only through plugin-wit / plugin-sdk. |
 | Top (composition roots) | infantry-daemon, infantry-cli, infantry-migrate, app/src-tauri (`infantry-tauri`) | Wires everything together. May depend on anything. |
 | Tooling | infantry-conformance (wire only), infantry-guards (nothing) | Test and tooling crates with an explicit dependency list. |
@@ -36,7 +36,7 @@ its tests).
 
 | Crate | Path | Why tolerated | Removed by |
 |---|---|---|---|
-| infantry-runner | `src/claude` | The Claude driver is harness code (L3) in the runner (L2). It predates the layer map. | A follow-up that moves it into infantry-harness (or infantry-harness-claude). |
+| (none) | | The last entry, infantry-runner `src/claude`, was removed by RUST-HARN-CLAUDE-1: the daemon and the Tauri app both run infantry-harness-claude. | |
 
 Adding to the allowlist needs a reason and the follow-up that removes it.
 

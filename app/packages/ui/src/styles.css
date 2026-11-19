@@ -138,6 +138,34 @@
   #root {
     @apply h-full;
   }
+  /* RUST-MOBILE-1: the visible height on a phone (the on-screen keyboard and browser bars shrink it), and no text boost. */
+  #root {
+    height: 100dvh;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  /* Touch: tap targets of at least 40px (layout.ts `tapTarget`), no double-tap zoom delay, inputs at 16px (no zoom). */
+  @media (pointer: coarse) {
+    button,
+    [role="button"],
+    [role="tab"],
+    [role="menuitem"],
+    [role="option"],
+    [data-slot="select-trigger"] {
+      min-height: 40px;
+      touch-action: manipulation;
+    }
+    button:has(> svg:only-child) {
+      min-width: 40px;
+    }
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
+  }
   html {
     @apply font-sans;
     font-size: 14px;
@@ -208,7 +236,52 @@
       transform: scale(0.8);
     }
   }
+  /* Pixel avatar motion (compositor only: transform and opacity). */
+  .px-bob {
+    animation: px-bob 0.9s steps(2, jump-none) infinite;
+  }
+  .px-shake {
+    animation: px-shake 0.5s steps(2, jump-none) infinite;
+  }
+  .px-blink {
+    transform-origin: center;
+    transform-box: fill-box;
+    animation: px-blink 4.2s infinite;
+  }
+  .px-float {
+    animation: px-float 2.8s ease-in-out infinite;
+  }
+  @keyframes px-bob {
+    50% {
+      transform: translateY(-6%);
+    }
+  }
+  @keyframes px-shake {
+    50% {
+      transform: translateX(6%);
+    }
+  }
+  @keyframes px-blink {
+    0%,
+    92%,
+    100% {
+      transform: scaleY(1);
+    }
+    95% {
+      transform: scaleY(0.1);
+    }
+  }
+  @keyframes px-float {
+    50% {
+      transform: translateY(-8%);
+      opacity: 0.55;
+    }
+  }
   @media (prefers-reduced-motion: reduce) {
+    .px-bob,
+    .px-shake,
+    .px-blink,
+    .px-float,
     .selected-stripes,
     .stripes-info,
     .busy-pulse,

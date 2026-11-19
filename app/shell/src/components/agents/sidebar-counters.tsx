@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// Needs input / To review / Working counters and the Board button.
+// Needs input / To review / Working counters and the Board button. To review = tickets in the Pending lane; the Board
+// badge = tickets in To Do and In Progress (the board loads once the link is open).
+import { useEffect } from "react";
 import { LayoutGrid } from "lucide-react";
-import { cn } from "@infantry/ui";
-import { counters } from "@/mock/data";
+import { cn, KeyHint } from "@infantry/ui";
 import type { Agent } from "@/mock/types";
-import { KeyHint } from "@infantry/ui";
+import { useDaemon } from "@/daemon/daemon";
+import { boardStore, useBoard } from "@/components/board/use-board";
 
 function Counter({ value, label, tone }: { value: number; label: string; tone: "muted" | "info" | "ok" }) {
   return (
@@ -17,13 +19,19 @@ function Counter({ value, label, tone }: { value: number; label: string; tone: "
 }
 
 export function SidebarCounters({ agents, onBoard }: { agents: Agent[]; onBoard: () => void }) {
+  const link = useDaemon((s) => s.connection.state);
+  useEffect(() => {
+    if (link === "open") boardStore().getState().ensureLoaded();
+  }, [link]);
+  const toReview = useBoard((s) => Object.values(s.tickets).filter((t) => t.status === "pending").length);
+  const open = useBoard((s) => Object.values(s.tickets).filter((t) => t.status === "todo" || t.status === "in_progress").length);
   const needsInput = agents.filter((a) => a.status === "needs-input").length;
   const working = agents.filter((a) => a.status === "working").length;
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 px-1">
         <Counter value={needsInput} label="Needs input" tone="muted" />
-        <Counter value={counters.toReview} label="To review" tone="info" />
+        <Counter value={toReview} label="To review" tone="info" />
         <Counter value={working} label="Working" tone="ok" />
       </div>
       <button
@@ -33,10 +41,8 @@ export function SidebarCounters({ agents, onBoard }: { agents: Agent[]; onBoard:
       >
         <LayoutGrid className="size-4 text-muted-foreground" />
         <span className="flex-1 text-left">Board</span>
-        <span className="grid h-5 min-w-5 place-items-center rounded border border-danger/70 px-1 text-[11px] text-danger">
-          {counters.boardBadge}
-        </span>
-        <KeyHint>{counters.boardShortcut}</KeyHint>
+        {open > 0 && <span className="grid h-5 min-w-5 place-items-center rounded border border-danger/70 px-1 text-[11px] text-danger">{open}</span>}
+        <KeyHint>^8</KeyHint>
       </button>
     </div>
   );

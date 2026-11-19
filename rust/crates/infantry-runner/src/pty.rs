@@ -96,7 +96,7 @@ mod win {
     use std::fs::File;
     use std::os::windows::io::{FromRawHandle, RawHandle};
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0};
-    use windows_sys::Win32::System::Console::{ClosePseudoConsole, CreatePseudoConsole, COORD, HPCON};
+    use windows_sys::Win32::System::Console::{ClosePseudoConsole, CreatePseudoConsole, ResizePseudoConsole, COORD, HPCON};
     use windows_sys::Win32::System::Pipes::CreatePipe;
     use windows_sys::Win32::System::Threading::{
         CreateProcessW, DeleteProcThreadAttributeList, GetExitCodeProcess, InitializeProcThreadAttributeList, TerminateProcess,
@@ -112,6 +112,17 @@ mod win {
     impl Drop for Console {
         fn drop(&mut self) {
             unsafe { ClosePseudoConsole(self.0) };
+        }
+    }
+
+    impl Console {
+        /// Resizes the pseudo-console (the child sees the new size at once).
+        pub fn resize(&self, rows: u16, cols: u16) -> std::io::Result<()> {
+            let hr = unsafe { ResizePseudoConsole(self.0, COORD { X: cols as i16, Y: rows as i16 }) };
+            if hr != 0 {
+                return Err(std::io::Error::other(format!("ResizePseudoConsole failed: HRESULT {hr:#x}")));
+            }
+            Ok(())
         }
     }
 
@@ -262,7 +273,14 @@ mod unix {
     use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
     use std::sync::Mutex;
 
-    pub struct Console(#[allow(dead_code)] Box<dyn MasterPty + Send>);
+    pub struct Console(Box<dyn MasterPty + Send>);
+
+    impl Console {
+        /// Resizes the terminal (the child gets SIGWINCH).
+        pub fn resize(&self, rows: u16, cols: u16) -> std::io::Result<()> {
+            self.0.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }).map_err(|e| std::io::Error::other(e.to_string()))
+        }
+    }
 
     pub struct Process(Mutex<Box<dyn Child + Send + Sync>>);
 

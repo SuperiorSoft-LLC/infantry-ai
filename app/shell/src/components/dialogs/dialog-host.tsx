@@ -6,41 +6,42 @@ import { useUi } from "@/state/ui-state";
 import { Button } from "@infantry/ui";
 import { AppDialog } from "@infantry/ui";
 import { daemonStore, localMode } from "@/daemon/daemon";
-import { EMPTY_AGENT, NewAgentBody, NewTicketBody, type NewAgentForm } from "./create-bodies";
-import { INHERIT } from "./picker-field";
+import { TicketDialog } from "@/components/board/ticket-dialog";
+import { EMPTY_DRAFT, NewAgentBody, addAgent, addBlockedReason, type NewAgentDraft } from "./new-agent-dialog";
 import { ResumeBody } from "./resume-body";
 import { SettingsBody } from "./settings-body";
 
 const config = {
   settings: { title: "Settings", description: "Appearance, daemon and notifications", primary: "Done", wide: true },
-  "new-agent": { title: "New agent", description: "Only a name is needed. Everything else inherits.", primary: "Create agent", wide: false },
-  "new-ticket": { title: "New ticket", description: "Only a title is needed. Everything else inherits.", primary: "Create ticket", wide: false },
+  "new-agent": { title: "New agent", description: "Pick a role, check the model, say what it should do first.", primary: "Add", wide: true },
   resume: { title: "Resume session", description: "Pick a project folder, then one of its Claude sessions.", primary: "Resume", wide: true },
 } as const;
 
 export function DialogHost() {
   const ui = useUi();
-  const [agent, setAgent] = useState<NewAgentForm>(EMPTY_AGENT);
+  const [agent, setAgent] = useState<NewAgentDraft>(EMPTY_DRAFT);
   const [folder, setFolder] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   useEffect(() => {
-    if (ui.dialog === "new-agent") setAgent(EMPTY_AGENT);
+    if (ui.dialog === "new-agent") setAgent(EMPTY_DRAFT);
     if (ui.dialog === "resume") setPicked(null);
   }, [ui.dialog]);
   if (!ui.dialog) return null;
+  if (ui.dialog === "new-ticket") return <TicketDialog ticketId={null} creating onClose={() => ui.set("dialog", null)} />;
   const c = config[ui.dialog];
   const close = () => ui.set("dialog", null);
+  const blocked = ui.dialog === "new-agent" ? addBlockedReason(agent) : null;
   const primary = () => {
-    const store = daemonStore().getState();
     if (ui.dialog === "new-agent") {
-      store.spawnWith({ name: agent.name.trim() || undefined, model: agent.model === INHERIT ? undefined : agent.model });
+      if (blocked) return;
+      addAgent(agent);
     } else if (ui.dialog === "resume" && picked) {
-      store.spawnWith({ resume: picked, cwd: folder ?? undefined });
+      daemonStore().getState().spawnWith({ resume: picked, cwd: folder ?? undefined });
       ui.set("selectedAgentId", picked);
     }
     close();
   };
-  const disabled = ui.dialog === "resume" && (!localMode || !picked);
+  const disabled = (ui.dialog === "resume" && (!localMode || !picked)) || blocked !== null;
   return (
     <AppDialog
       open
@@ -50,6 +51,7 @@ export function DialogHost() {
       wide={c.wide}
       footer={
         <>
+          {blocked && <span className="mr-auto self-center text-xs text-info">↓ {blocked}</span>}
           <Button variant="ghost" onClick={close}>
             Cancel
           </Button>
@@ -60,8 +62,7 @@ export function DialogHost() {
       }
     >
       {ui.dialog === "settings" && <SettingsBody />}
-      {ui.dialog === "new-agent" && <NewAgentBody form={agent} onChange={setAgent} onSubmit={primary} />}
-      {ui.dialog === "new-ticket" && <NewTicketBody />}
+      {ui.dialog === "new-agent" && <NewAgentBody draft={agent} onChange={setAgent} onSubmit={primary} />}
       {ui.dialog === "resume" &&
         (localMode ? (
           <ResumeBody folder={folder} onFolder={setFolder} picked={picked} onPick={setPicked} />
