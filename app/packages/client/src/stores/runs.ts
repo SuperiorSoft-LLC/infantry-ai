@@ -3,7 +3,8 @@
 // The Run tab's store (RUST-SESS-2): saved run commands (`command_list` -> `commands`, pushed after every save/delete),
 // the runs (`run_list` -> `runs`, refreshed on `run` / `run_finished`), the processes report (`processes`) and the
 // console byte stream (`run_bytes`). Bytes never enter the store: a console subscribes with `onBytes` and writes them
-// to its terminal. `runFeed` is the pure replay/live ordering rule the console applies.
+// to its terminal. `runFeed` is the pure replay/live ordering rule the console applies. A branch command picks its
+// branch from `run_branches` {project} -> {project, branches: [{name, worktree?}]}, kept per project.
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { json, type Envelope } from "../wire";
 import type { FrameLink } from "./link";
@@ -48,6 +49,12 @@ export interface RunSummary {
   branch?: string | null;
   pid?: number | null;
   lastSequence?: number;
+}
+
+/** One branch a branch command can start on (`run_branches`). */
+export interface RunBranch {
+  name: string;
+  worktree?: string | null;
 }
 
 export interface RunFinished {
@@ -97,6 +104,8 @@ export interface RunsState {
   processes: ProcessesAnswer | null;
   loaded: boolean;
   refusal: string | null;
+  /** Branches by project id (`run_branches`). */
+  branches: Record<string, RunBranch[]>;
 }
 
 export interface RunsActions {
@@ -105,6 +114,8 @@ export interface RunsActions {
   deleteCommand(id: string): void;
   /** [branch] is required for a branch command and refused for any other. */
   start(commandId: string, branch?: string): void;
+  /** Asks `run_branches` for [project]'s branches. */
+  listBranches(project: string): void;
   stop(runId: string, force?: boolean): void;
   attach(runId: string): void;
   input(runId: string, text: string): void;
@@ -203,6 +214,11 @@ export function createRunsStore(link: FrameLink): RunsStore {
           if (Array.isArray(list)) set({ commands: list, loaded: true });
           return;
         }
+        case "run_branches": {
+          const b = json<{ project?: string; branches?: RunBranch[] }>(env.data);
+          if (b?.project && Array.isArray(b.branches)) set({ branches: { ...get().branches, [b.project]: b.branches } });
+          return;
+        }
         case "runs": {
           const list = json<RunSummary[]>(env.data);
           if (Array.isArray(list)) set({ runs: list });
@@ -241,6 +257,7 @@ export function createRunsStore(link: FrameLink): RunsStore {
       processes: null,
       loaded: false,
       refusal: null,
+      branches: {},
 
       refresh() {
         send("command_list", "");
@@ -255,6 +272,7 @@ export function createRunsStore(link: FrameLink): RunsStore {
         send("command_save", body);
       },
       deleteCommand: (id) => send("command_delete", { id }),
+      listBranches: (project) => send("run_branches", { project }),
       start: (commandId, branch) => send("run_start", branch ? { commandId, branch } : { commandId }),
       stop: (runId, force) => send("run_stop", force ? `${runId} force` : runId),
       attach: (runId) => send("run_attach", { runId }),

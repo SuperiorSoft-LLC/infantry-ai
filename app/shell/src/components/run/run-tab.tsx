@@ -2,11 +2,15 @@
 // Copyright (c) SuperiorSoft LLC
 // Run: the saved run commands (add / edit / delete / start), the runs as pills (newest first), the selected run's
 // console (xterm.js) with Stop / Force stop, and the processes panel (tracked + unattributed, reap one, reap rogue).
-// Editing goes through the one modal; refusals show in the shared banner.
+// Editing goes through the one modal; refusals show in the shared banner. A branch command starts on a branch picked
+// from `run_branches` (the command's project, else the current one).
 import { useEffect, useMemo, useState } from "react";
 import { Cpu, Pencil, Play, Plus, RefreshCw, Square, SquareTerminal, Trash2, Zap } from "lucide-react";
 import { isRunActive, type RunCommand, type RunSummary, type TrackedProcess } from "@infantry/client";
-import { AppDialog, Button, Chip, EmptyState, Input, PanelCard, Switch, Label, cn, type Tone } from "@infantry/ui";
+import {
+  AppDialog, Button, Chip, EmptyState, Input, PanelCard, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Label, cn, type Tone,
+} from "@infantry/ui";
+import { useProjects } from "@/components/git/use-projects";
 import { TabPage } from "../tabs/tab-page";
 import { Field, RefusalBanner, Segmented, ago } from "../knowledge/parts";
 import { RunConsole } from "./run-console";
@@ -55,6 +59,13 @@ export function RunTab() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [branches, setBranches] = useState<Record<string, string>>({});
   const s = runsStore().getState;
+  const current = useProjects((p) => p.currentId);
+  const known = useRuns((x) => x.branches);
+  const projectOf = (c: RunCommand) => c.project || current || "";
+  const branchProjects = useMemo(() => [...new Set(commands.filter((c) => c.branch).map((c) => c.project || current || ""))].filter(Boolean), [commands, current]);
+  useEffect(() => {
+    for (const p of branchProjects) runsStore().getState().listBranches(p);
+  }, [branchProjects]);
 
   // Keep a selection: the picked run while it is listed, else the newest active one, else the newest.
   useEffect(() => {
@@ -116,13 +127,19 @@ export function RunTab() {
                     <Pencil />
                   </Button>
                   {c.branch && (
-                    <Input
-                      className="h-7 w-28 font-mono text-xs"
-                      placeholder="branch"
-                      aria-label={`Branch for ${c.name || c.id}`}
-                      value={branches[c.id] ?? ""}
-                      onChange={(e) => setBranches((b) => ({ ...b, [c.id]: e.target.value }))}
-                    />
+                    <Select value={branches[c.id] ?? ""} onValueChange={(v) => setBranches((b) => ({ ...b, [c.id]: v }))}>
+                      <SelectTrigger size="sm" className="h-7 w-36 font-mono text-xs" aria-label={`Branch for ${c.name || c.id}`}>
+                        <SelectValue placeholder={(known[projectOf(c)] ?? []).length ? "branch" : "no branches"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(known[projectOf(c)] ?? []).map((b) => (
+                          <SelectItem key={b.name} value={b.name} className="font-mono text-xs">
+                            {b.name}
+                            {b.worktree && <span className="ml-1 text-muted-foreground">(worktree)</span>}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
                   <Button
                     size="sm"

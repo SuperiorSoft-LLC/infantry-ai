@@ -51,6 +51,15 @@ describe("runs store", () => {
     l.push({ type: "error", data: "command_save refused: no argv" });
     expect(s.getState().refusal).toBe("command_save refused: no argv");
   });
+
+  it("asks and keeps a project's branches", () => {
+    const l = link();
+    const s = createRunsStore(l);
+    s.getState().listBranches("p1");
+    expect(l.sent[0]).toMatchObject({ type: "run_branches", data: '{"project":"p1"}' });
+    l.push({ type: "run_branches", data: JSON.stringify({ project: "p1", branches: [{ name: "main", worktree: null }, { name: "ticket/x", worktree: "/w/x" }] }) });
+    expect(s.getState().branches.p1.map((b) => b.name)).toEqual(["main", "ticket/x"]);
+  });
 });
 
 describe("session actions", () => {

@@ -221,7 +221,7 @@ All *(fixed today)*: before this sweep no window-wide key worked, and the hints 
 | Epics: list, create | yes | partial | No add-task-to-epic or move tasks: UI only (`ticket_save`, `ticket_move`). |
 | Notes / memory: scopes, search, edit, delete, decisions, issues | yes | done | |
 | Run: commands, console, stop | yes | done | |
-| Run: start on branch | yes | missing | Daemon: `run_branches` (not in the Rust protocol). |
+| Run: start on branch | yes | done | *(RUST-UI-10)* A branch command picks its branch from `run_branches` (the command's project, else the current one; worktree branches marked). |
 | Git: working tree, diff, history, branches | yes | done | |
 | Git: base branch picker, project folder, verification pipeline | yes | missing | Base branch and folder: UI only (`project_base`, `project_save`). Pipeline: daemon (`pipeline_config` / `pipeline_show` have no handler). |
 | Processes | yes | done | No auto-reap toggle: UI only (`settings_set`). |
