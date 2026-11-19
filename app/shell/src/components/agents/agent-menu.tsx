@@ -3,9 +3,10 @@
 // The agent card's "⋯" menu (also on right-click), after the Kotlin Sidebar card menu: Open, Resume session (dormant),
 // the current ticket with Change / Assign ticket… and Unassign, Remove (confirm). The ticket picker searches To Do
 // tickets and assigns now or adds to the agent's queue (`ticket_assign` {id, agentId, queue}). Tickets go to an agent
-// profile, so a session with no profile says so instead.
+// profile, so a session with no profile says so instead. Move to project lists the daemon's projects and sends
+// `session_project` {sessionId, projectId}; the session push moves the card, a refusal toasts.
 import { useEffect, useMemo, useState } from "react";
-import { ListPlus, MoreHorizontal, Play, SquareArrowOutUpRight, Ticket, Trash2, Unlink } from "lucide-react";
+import { FolderInput, ListPlus, MoreHorizontal, Play, SquareArrowOutUpRight, Ticket, Trash2, Unlink } from "lucide-react";
 import {
   AppDialog,
   Button,
@@ -14,6 +15,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   Input,
   cn,
@@ -23,6 +27,7 @@ import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { boardStore, useBoard } from "@/components/board/use-board";
 import { openSessionDialog } from "@/components/session/session-actions";
 import { useUi } from "@/state/ui-state";
+import { useProjects } from "@/components/git/use-projects";
 
 const DORMANT = new Set(["EXITED", "ORPHANED", "FAILED"]);
 let counter = 0;
@@ -38,6 +43,7 @@ export function AgentMenu({ sessionId, open, onOpenChange }: { sessionId: string
   const r = useDaemon((s) => s.sessions[sessionId]?.record);
   const ticket = useBoard((s) => (r?.ticketId ? s.tickets[r.ticketId] : undefined));
   const [picking, setPicking] = useState(false);
+  const projects = useProjects((s) => s.projects);
   if (!r) return null;
   const dormant = DORMANT.has(r.state);
   return (
@@ -77,6 +83,19 @@ export function AgentMenu({ sessionId, open, onOpenChange }: { sessionId: string
               <Unlink /> Unassign
             </DropdownMenuItem>
           )}
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={projects.length === 0}>
+              <FolderInput /> Move to project
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="max-h-72 w-52 overflow-auto">
+              {projects.map((p) => (
+                <DropdownMenuItem key={p.id} disabled={p.id === r.projectId} onSelect={() => send("session_project", { sessionId, projectId: p.id })}>
+                  <span className="truncate">{p.name || p.id}</span>
+                  {p.id === r.projectId && <span className="ml-auto text-[11px] text-muted-foreground">current</span>}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={() => openSessionDialog("delete", sessionId)}>
             <Trash2 /> Remove

@@ -50,7 +50,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Card: avatar, state dot, role, last line, age, ticket | yes | done | |
 | Card badges: AUTO, report-back, watchdog, progress bar, runner | yes | partial | Progress line and ticket only. The rest is UI only (fields are on the session/agent frames). |
 | Pulsing border while busy, selected stripes | yes | partial | Live ring only. Cosmetic. |
-| Card "⋯" menu: Open, Resume, Assign to project, Remove | yes | partial | *(RUST-UI-8)* "⋯" or right-click: Open, Resume (ended sessions), ticket actions, Remove with confirm. No "Assign to project": daemon (`session_project` has no handler). |
+| Card "⋯" menu: Open, Resume, Assign to project, Remove | yes | done | *(RUST-UI-8, RUST-UI-10)* "⋯" or right-click: Open, Resume (ended sessions), ticket actions, Move to project (`session_project`; a refusal toasts), Remove with confirm. |
 | Card ticket block: change / unassign ticket, ticket picker | yes | done | *(RUST-UI-8)* In the card menu: a searchable To Do picker (Assign / Queue, held tickets behind a toggle) and Unassign. Needs an agent profile on the session. |
 | Card queue (running + queued tickets, move up/down, remove) | yes | partial | *(RUST-UI-8)* The picker can queue a ticket. No queue list with move / remove: UI only (`agent_queue`). |
 | Drag a ticket onto an agent card to assign it | yes | missing | UI only (`ticket_assign`). |
