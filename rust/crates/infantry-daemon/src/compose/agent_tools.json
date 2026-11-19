@@ -188,5 +188,96 @@
    },
    "additionalProperties": false
   }
+ },
+ {
+  "name": "infantry_message",
+  "description": "Send a message (COMMS mail) to another agent by session id, agent id or role, or to the owner. Replies go in the same thread with replyTo. Returns the message id.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "to": {
+     "type": "string",
+     "description": "Recipient: session id, agent profile id, role id, or owner."
+    },
+    "body": {
+     "type": "string",
+     "description": "The message text."
+    },
+    "subject": {
+     "type": "string",
+     "description": "Optional subject line."
+    },
+    "replyTo": {
+     "type": "string",
+     "description": "Message id (or 8-char prefix) this answers; keeps the thread."
+    },
+    "needsInput": {
+     "type": "boolean",
+     "description": "The recipient must answer."
+    },
+    "allowCrossProject": {
+     "type": "boolean",
+     "description": "Allow a recipient in another project."
+    }
+   },
+   "required": [
+    "to",
+    "body"
+   ]
+  }
+ },
+ {
+  "name": "infantry_inbox",
+  "readOnly": true,
+  "description": "List the messages addressed to you (id, from, subject, state). unreadOnly limits it to the ones you have not read.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "unreadOnly": {
+     "type": "boolean",
+     "description": "Only unread messages."
+    },
+    "limit": {
+     "type": "integer",
+     "description": "At most this many, newest first."
+    }
+   }
+  }
+ },
+ {
+  "name": "infantry_read",
+  "description": "Read one message in full by id (8-char prefix works) and mark it read.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "id": {
+     "type": "string",
+     "description": "The message id from infantry_inbox."
+    }
+   },
+   "required": [
+    "id"
+   ]
+  }
+ },
+ {
+  "name": "infantry_session_remove",
+  "description": "Remove a session from the list. A live session is refused unless force=true, which ends it first. Only the pm or the owner (own project), or the session's spawner, may remove one.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "sessionId": {
+     "type": "string",
+     "description": "Session id or unique prefix."
+    },
+    "force": {
+     "type": "boolean",
+     "description": "End a live session and remove it in one step."
+    }
+   },
+   "required": [
+    "sessionId"
+   ]
+  }
  }
 ]

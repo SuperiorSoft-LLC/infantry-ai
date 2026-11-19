@@ -1236,6 +1236,11 @@ impl Daemon {
         Ok(())
     }
 
+    /// Removes a session (ends its process first); the `session_delete` frame and `infantry_session_remove` share it.
+    pub fn delete_session(&self, sid: &str) -> Result<(), String> {
+        self.delete(sid)
+    }
+
     fn delete(&self, sid: &str) -> Result<(), String> {
         let entry = {
             let mut list = self.list.lock().unwrap();

@@ -318,6 +318,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             work: dispatcher.clone(),
             bus: bus.clone(),
             usage: usage.clone(),
+            mail: mail.clone(),
             project_dir: Arc::new(move |id: &str| project_dir(&p, id)),
         }));
     }
