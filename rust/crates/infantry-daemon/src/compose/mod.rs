@@ -178,7 +178,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     };
 
     // ---- the board + its work half -------------------------------------------------------------------------
-    let env = Arc::new(adapters::DaemonBoardEnv::new(daemon.clone(), projects.clone(), state_dir, usage.clone()));
+    let env = Arc::new(adapters::DaemonBoardEnv::new(daemon.clone(), projects.clone(), state_dir, usage.clone(), db.clone()));
     let board = Arc::new(TicketBoard::new(db.clone(), env.clone()));
     let workspaces = Arc::new(adapters::DaemonWorkspaces { projects: projects.clone(), repo: repo.clone() });
     let launcher = Arc::new(adapters::DaemonLauncher { daemon: daemon.clone(), handle: handle.clone(), worktrees: projects.worktrees.clone() });
@@ -365,6 +365,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         ScriptDispatcher::new(host, Arc::new(aliases), Arc::new(|| 3))
     };
     let hook_store = Arc::new(HookStore::new(project_dirs, Some(state_dir.join("global-hooks.json"))));
+    env.set_hooks(hook_store.clone());
     let run_log = Arc::new(ScriptRunLog::default());
     let project_ids: Arc<dyn Fn() -> Vec<String> + Send + Sync> = {
         let p = projects.clone();

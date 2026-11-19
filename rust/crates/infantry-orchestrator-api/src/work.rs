@@ -301,6 +301,8 @@ pub struct DoneAnswer {
 pub mod hooks {
     /// A worker was launched and the ticket is in_progress: `sessionId`, `agentId`, `role`, `provider`, `model`, `branch`.
     pub const TICKET_STARTED: &str = "ticket.started";
+    /// The board started a ticket by itself (the lane drained after a done or a failed run): `reason`, `afterSession`, `role`.
+    pub const TICKET_AUTO_STARTED: &str = "ticket.auto_started";
     /// A start was refused: `reason`, `detail`.
     pub const TICKET_START_REFUSED: &str = "ticket.start_refused";
     /// A start found its lane full and the ticket waits in it: `lane`.

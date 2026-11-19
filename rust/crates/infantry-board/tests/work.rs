@@ -172,3 +172,40 @@ fn the_starter_is_mailed_on_done_on_a_clean_end_and_on_an_end_without_a_report()
     block_on(o.done(TicketDone { ticket_id: "ticket-00000004".into(), session_id: "s4".into(), summary: "x".into(), stop_worker: true })).unwrap();
     assert_eq!(notes(&f).len(), before, "autoReport off must stay silent");
 }
+
+/// `lanes.maxInProgress` (default 1) holds even with a wide lane cap, and a FAILED run leaves its ticket in_progress,
+/// which keeps the slot: the lane's next ticket does not start beside it.
+#[test]
+fn max_in_progress_holds_and_a_failed_run_keeps_its_slot() {
+    use infantry_orchestrator_api::DoneReport;
+    let env = StaticEnv { lane_cap: 10, max_in_progress: 1, ..kotlin_daemon_env() };
+    let (f, _l, _d, o) = setup("work-maxinprog", env, Duration::ZERO);
+    let ids = tickets(&f, 3);
+    start(&o, &ids[0]);
+    for id in &ids[1..] {
+        let b = start(&o, id);
+        assert_eq!(b.ticket.start.as_ref().map(|s| s.reason.as_str()), Some(reason::QUEUED), "{:?}", b.ticket.start);
+    }
+    // The worker's run fails (no done comment): the ticket stays in_progress and nothing else starts.
+    block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "FAILED".into(), detail: None })).unwrap();
+    assert_eq!(block_on(o.get(ids[0].clone())).unwrap().status, "in_progress");
+    for id in &ids[1..] {
+        assert_eq!(block_on(o.get(id.clone())).unwrap().status, "todo", "a failed run must not free its slot");
+    }
+    // A restart of the failed ticket itself is still allowed.
+    let r = start(&o, &ids[0]);
+    assert_eq!(r.ticket.start.as_ref().map(|s| s.reason.as_str()), Some(reason::STARTED), "{:?}", r.ticket.start);
+}
+
+/// hooks.json autoStart=false: a done starts no next ticket.
+#[test]
+fn auto_start_off_starts_nothing_after_a_done() {
+    let env = StaticEnv { auto_start_off: true, ..kotlin_daemon_env() };
+    let (f, _l, _d, o) = setup("work-autostart-off", env, Duration::ZERO);
+    let ids = tickets(&f, 2);
+    start(&o, &ids[0]);
+    start(&o, &ids[1]);
+    let done = block_on(o.done(TicketDone { ticket_id: ids[0].clone(), session_id: "s1".into(), summary: "commit abc: x".into(), stop_worker: true })).unwrap();
+    assert!(done.next.is_none());
+    assert_eq!(block_on(o.get(ids[1].clone())).unwrap().status, "todo");
+}
