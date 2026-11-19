@@ -168,6 +168,11 @@ pub trait BoardEnv: Send + Sync {
     fn live_sessions(&self, _agent_id: &str, _project_id: Option<&str>) -> Vec<String> {
         Vec::new()
     }
+    /// AUTO-REPORT-1: the git facts of a finished ticket for the starter's mail: its branch tip and whether the
+    /// merge target already holds it. None when the host has no repository.
+    fn branch_facts(&self, _project_id: Option<&str>, _branch: Option<&str>, _base: Option<&str>) -> Option<String> {
+        None
+    }
     /// Wakes one session with a short mail line; true when delivered.
     fn notify_session(&self, _session_id: &str, _subject: &str, _line: &str) -> bool {
         false
