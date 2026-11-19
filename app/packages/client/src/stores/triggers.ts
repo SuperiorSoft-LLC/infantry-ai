@@ -51,6 +51,11 @@ export interface TriggerDraft {
   intervalMs?: number;
   action?: TriggerAction;
   enabled?: boolean;
+  /** Kept on an edit so saving a trigger back does not reset them to the defaults. */
+  coalesceMs?: number;
+  ceilingRuns?: number;
+  ceilingWindowMs?: number;
+  projectId?: string | null;
 }
 
 export interface TriggersState {
@@ -123,6 +128,10 @@ export function createTriggersStore(link: FrameLink): TriggersStore {
       save(d) {
         const body: Record<string, unknown> = { name: d.name.trim(), kind: d.kind ?? "manual", enabled: d.enabled ?? true, action: d.action ?? { kind: "start_next" } };
         if (d.id) body.id = d.id;
+        if (d.coalesceMs != null) body.coalesceMs = d.coalesceMs;
+        if (d.ceilingRuns != null) body.ceilingRuns = d.ceilingRuns;
+        if (d.ceilingWindowMs != null) body.ceilingWindowMs = d.ceilingWindowMs;
+        if (d.projectId) body.projectId = d.projectId;
         if (d.kind === "schedule" && d.intervalMs) body.intervalMs = d.intervalMs;
         req.send("trigger_save", JSON.stringify(body));
       },
