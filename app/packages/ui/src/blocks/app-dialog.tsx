@@ -19,17 +19,24 @@ export function AppDialog({
   title: string;
   description?: string;
   footer?: ReactNode;
-  wide?: boolean;
+  /** true: a roomy form dialog; "fill": grows with the window (min(1100px, 92vw) by min(85vh, 820px)), for settings-like content. */
+  wide?: boolean | "fill";
   children: ReactNode;
 }) {
+  const fill = wide === "fill";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn("max-h-[85vh] gap-0 overflow-hidden p-0", wide ? "sm:max-w-3xl" : "sm:max-w-md")}>
+      <DialogContent
+        className={cn(
+          "flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0",
+          fill ? "h-[min(85vh,820px)] w-[min(1100px,92vw)] min-w-[min(480px,92vw)] sm:max-w-none" : wide ? "sm:max-w-3xl" : "sm:max-w-md",
+        )}
+      >
         <DialogHeader className="border-b p-4">
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
-        <div className="max-h-[60vh] overflow-y-auto p-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4">{children}</div>
         {footer && <DialogFooter className="m-0 border-t p-3">{footer}</DialogFooter>}
       </DialogContent>
     </Dialog>

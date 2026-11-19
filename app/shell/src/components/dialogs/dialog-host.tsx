@@ -13,7 +13,7 @@ import { PluginSettingsDialog } from "@/components/plugins/plugin-settings-dialo
 import { SettingsBody } from "./settings-body";
 
 const config = {
-  settings: { title: "Settings", description: "Appearance, daemon and notifications", primary: "Done", wide: true },
+  settings: { title: "Settings", description: "Appearance, daemon and notifications", primary: "Done", wide: "fill" },
   "new-agent": { title: "New agent", description: "Pick a role, check the model, say what it should do first.", primary: "Add", wide: true },
   resume: { title: "Resume session", description: "Pick a project folder, then one of its Claude sessions.", primary: "Resume", wide: true },
 } as const;

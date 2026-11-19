@@ -71,6 +71,30 @@ fn mid_turn_prompts_are_refused_typed_queued_and_acknowledged_once() {
     c.close();
 }
 
+/// "Send now" on a harness that cannot take input mid-turn is refused loudly and the message stays queued, then runs as
+/// the next turn: it is never dropped silently.
+#[test]
+fn queue_force_refused_mid_turn_keeps_the_message_queued() {
+    let port = start();
+    let mut c = Client::connect(&format!("ws://127.0.0.1:{port}"), None).unwrap();
+    let t = Duration::from_secs(20);
+    c.wait_for(t, |e| e.r#type == "ready").unwrap();
+    c.send_frame("prompt", "first", None).unwrap();
+    let sid = c.wait_for(t, |e| e.r#type == "session").unwrap().session_id.unwrap();
+    c.send(&frame("queue_add", "held", &sid, None)).unwrap();
+    let held = c.wait_for(t, |e| e.r#type == "session" && e.data.contains("\"queued\"")).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&held.data).unwrap();
+    let qid = v["queued"][0]["id"].as_str().unwrap().to_string();
+
+    c.send(&frame("queue_force", &qid, &sid, None)).unwrap();
+    let err = c.wait_for(t, |e| e.r#type == "error").unwrap();
+    assert!(err.data.contains("queue_force refused"), "{}", err.data);
+    c.wait_for(t, |e| e.r#type == "finished").unwrap();
+    let turn = c.wait_for(t, |e| e.r#type == "turn").unwrap();
+    assert_eq!(turn.data, "held", "the refused message still runs as the next turn");
+    c.close();
+}
+
 #[test]
 fn a_json_new_binds_a_session_at_rest_and_replay_rebuilds_its_stream() {
     let port = start();

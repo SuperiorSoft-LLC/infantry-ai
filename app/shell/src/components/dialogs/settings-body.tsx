@@ -59,8 +59,8 @@ export function SettingsBody() {
   const declared = useDeclaredTabs().filter((t) => !(sections as readonly string[]).includes(t));
   const searching = query.trim() !== "";
   return (
-    <div className="grid gap-4 sm:grid-cols-[160px_1fr]">
-      <nav aria-label="Settings sections" className="flex gap-1 overflow-x-auto sm:flex-col">
+    <div className="grid gap-4 sm:grid-cols-[160px_minmax(0,1fr)]">
+      <nav aria-label="Settings sections" className="flex gap-1 overflow-x-auto sm:sticky sm:top-0 sm:flex-col sm:self-start">
         {[...sections, ...declared].map((s) => (
           <button
             key={s}
@@ -75,7 +75,7 @@ export function SettingsBody() {
           </button>
         ))}
       </nav>
-      <div className="space-y-2">
+      <div className="min-w-0 space-y-2">
         <SettingsSearch query={query} onQuery={setQuery} />
         {(searching || declared.includes(section)) && <DeclaredSettings tab={section} query={query} />}
         {!searching && section === "Appearance" && (

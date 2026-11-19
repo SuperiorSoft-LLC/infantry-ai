@@ -861,10 +861,13 @@ impl Daemon {
         let item = e.rec.queued.remove(i);
         self.push(&mut e);
         drop(e);
-        if inject(item.text.clone()) {
+        let delivered = inject(item.text.clone());
+        let mut e = entry.lock().unwrap();
+        if delivered {
+            // The message is in the running turn: it must show in the chat as the user's turn, never vanish from the queue unseen.
+            self.emit(&mut e, wire::TURN, item.text);
             return Ok(());
         }
-        let mut e = entry.lock().unwrap();
         let at = i.min(e.rec.queued.len());
         let provider = e.rec.provider.clone();
         e.rec.queued.insert(at, item);
