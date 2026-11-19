@@ -41,6 +41,37 @@ pub const BUILTIN_ALIASES: &[(&str, &str)] = &[
     ("prompt_answer", "infantry_prompt_answer"),
 ];
 
+/// The shipped alias table (short name to tool name), used while the `scripting.aliases` setting is unset. Equal to the default the
+/// Infantry_Scripting `module.json` declares. Without it `ih.board{}` / `ih.move{}` fail with "unknown tool or alias" (MOVE-1).
+pub const DEFAULT_ALIASES: &[(&str, &str)] = &[
+    ("move", "infantry_ticket_move"),
+    ("comment", "infantry_ticket_comment"),
+    ("message", "infantry_message"),
+    ("start", "infantry_ticket_start"),
+    ("close_session", "infantry_session_remove"),
+    ("kill", "infantry_kill"),
+    ("prompt", "infantry_prompt"),
+    ("ask", "infantry_ask"),
+    ("ticket_get", "infantry_ticket_get"),
+    ("ticket_update", "infantry_ticket_update"),
+    ("ticket_create", "infantry_ticket_create"),
+    ("board", "infantry_board"),
+    ("emit", "infantry_event_emit"),
+    ("secret_render", "infantry_secret_render"),
+];
+
+/// The table a run uses: the stored setting's JSON object when one is set (a stored `{}` means none), else [`DEFAULT_ALIASES`].
+pub fn effective_aliases(setting: Option<&str>) -> BTreeMap<String, String> {
+    match setting.map(str::trim).filter(|t| !t.is_empty()) {
+        None => DEFAULT_ALIASES.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+        Some(t) => serde_json::from_str::<Value>(t)
+            .ok()
+            .and_then(|v| v.as_object().cloned())
+            .map(|o| o.into_iter().filter_map(|(k, v)| v.as_str().map(str::trim).filter(|s| !s.is_empty()).map(|s| (k, s.to_string()))).collect())
+            .unwrap_or_default(),
+    }
+}
+
 fn capability_id() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
     R.get_or_init(|| Regex::new(r"^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)+$").unwrap())

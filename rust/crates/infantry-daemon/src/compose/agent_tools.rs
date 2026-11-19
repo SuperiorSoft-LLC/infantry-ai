@@ -28,6 +28,7 @@ pub struct AgentTools {
     pub work: Arc<Dispatcher>,
     pub bus: EventBus,
     pub usage: Arc<UsageService>,
+    pub mail: Arc<infantry_mail::mail::router::MailRouter>,
     pub project_dir: Arc<dyn Fn(&str) -> Option<std::path::PathBuf> + Send + Sync>,
 }
 
@@ -274,6 +275,85 @@ impl AgentTools {
                 let by = inv.session_id.clone().unwrap_or_else(|| "owner".into());
                 self.daemon.stop_session(&r.id, &format!("infantry_kill by {by}"))?;
                 Ok(format!("killed {}", r.id))
+            })(),
+            "infantry_message" => (|| {
+                use infantry_mail::mail::mailbox::MailResult;
+                let from = inv.active_session.clone().or_else(|| inv.session_id.clone()).unwrap_or_else(|| if inv.owner { "system".into() } else { String::new() });
+                if from.is_empty() {
+                    return Err("no sender: call it from a session".to_string());
+                }
+                let req = infantry_mail::mail::message::MailSendRequest {
+                    from: from.clone(),
+                    to: s(a, "to").ok_or("to is required")?,
+                    subject: s(a, "subject").unwrap_or_default(),
+                    body: a.get("body").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    thread_id: s(a, "threadId"),
+                    reply_to: s(a, "replyTo"),
+                    checkpoint: None,
+                    needs_input: flag(a, "needsInput"),
+                    allow_cross_project: flag(a, "allowCrossProject"),
+                };
+                if req.body.trim().is_empty() {
+                    return Err("body is required".to_string());
+                }
+                // A hook (no session, so no project of its own) mails a role of ITS project, never one with the same role elsewhere.
+                let mut req = req;
+                if infantry_mail::mail::message::is_automation(&from) && !req.to.contains('@') {
+                    if let Some(p) = self.caller_project(inv) {
+                        let scoped = format!("{}@{p}", req.to);
+                        if self.mail.resolve(&from, &scoped, true).is_ok() {
+                            req.to = scoped;
+                        }
+                    }
+                }
+                match self.mail.send(&req, infantry_mail::mail::message::is_automation(&from)) {
+                    MailResult::Sent(m) => Ok(format!("sent {} to {} (thread {})", m.short_id(), m.to, m.thread_id)),
+                    MailResult::Refused(why) => Err(why),
+                }
+            })(),
+            "infantry_inbox" => (|| {
+                let me = inv.active_session.clone().or_else(|| inv.session_id.clone()).unwrap_or_else(|| "owner".into());
+                let only_unread = flag(a, "unreadOnly");
+                let limit = n(a, "limit").filter(|x| *x > 0).map(|x| x as usize).unwrap_or(LIST_LIMIT);
+                let mut list = self.mail.mailbox().inbox(&me);
+                list.retain(|m| !only_unread || !m.read());
+                list.sort_by_key(|m| std::cmp::Reverse(m.sent_at));
+                if list.is_empty() {
+                    return Ok("no messages".to_string());
+                }
+                Ok(list
+                    .iter()
+                    .take(limit)
+                    .map(|m| format!("{} | from {} | {} | {:?}{}", m.short_id(), m.from, if m.subject.is_empty() { "(no subject)" } else { &m.subject }, m.state, if m.read() { "" } else { " | unread" }))
+                    .collect::<Vec<_>>()
+                    .join("\n"))
+            })(),
+            "infantry_read" => (|| {
+                let id = s(a, "id").ok_or("id is required")?;
+                let mb = self.mail.mailbox();
+                let m = mb.find(&id)?.ok_or_else(|| format!("unknown message '{id}'"))?;
+                let me = inv.active_session.clone().or_else(|| inv.session_id.clone());
+                if let Some(me) = &me {
+                    if &m.to != me && &m.from != me && !inv.owner {
+                        return Err(format!("message '{id}' is not yours"));
+                    }
+                }
+                let read = if me.as_deref() == Some(m.to.as_str()) || me.is_none() { mb.mark_read(&m.id).unwrap_or(m) } else { m };
+                Ok(format!("id: {}\nfrom: {}\nto: {}\nthread: {}\nsubject: {}\n\n{}", read.id, read.from, read.to, read.thread_id, read.subject, read.body))
+            })(),
+            "infantry_session_remove" => (|| {
+                let r = self.find(&s(a, "sessionId").unwrap_or_default())?;
+                let mine = inv.session_id.is_some() && r.spawner_session_id == inv.session_id;
+                let same_project = self.caller_project(inv).is_none() || self.caller_project(inv) == r.project_id;
+                if !(mine || inv.owner || (pm(inv) && same_project)) {
+                    return Err("only the pm or the owner (own project), or the session's spawner, may remove it".to_string());
+                }
+                let live = !matches!(r.state, SessionState::Exited | SessionState::Orphaned | SessionState::Failed);
+                if live && !flag(a, "force") {
+                    return Err(format!("session {} is still running; pass force=true to end and remove it", r.id));
+                }
+                self.daemon.delete_session(&r.id)?;
+                Ok(format!("removed {}", r.id))
             })(),
             "infantry_list_harnesses" => {
                 let probe = infantry_harness::LocalProbe;

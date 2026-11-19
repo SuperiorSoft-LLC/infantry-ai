@@ -186,6 +186,19 @@ impl Dispatcher {
         }
     }
 
+    /// The `ticket.moved` payload: the lane change plus what a lane hook (on-ticket-done) names: the ticket's branch and title and its
+    /// worker session (hook args `branch`, `title`, `workerSession`).
+    fn moved(row: &store::TicketRow, from: &str, to: &str, branch: Option<&str>) -> Value {
+        let mut v = json!({ "from": from, "to": to, "title": row.title });
+        if let Some(b) = branch.or(row.branch.as_deref()) {
+            v["branch"] = json!(b);
+        }
+        if let Some(w) = row.session_id.as_deref() {
+            v["workerSession"] = json!(w);
+        }
+        v
+    }
+
     fn hook(&self, name: &str, ticket_id: &str, project_id: Option<&str>, extra: Value) {
         let mut payload = json!({ "ticketId": ticket_id, "projectId": project_id });
         if let (Some(p), Value::Object(e)) = (payload.as_object_mut(), extra) {
@@ -672,7 +685,7 @@ impl Dispatcher {
         }
         let a = self.board.move_lane(req, &self.publish())?;
         if a.ticket.status != before.status {
-            self.hook(hooks::TICKET_MOVED, &id, before.project_id.as_deref(), json!({ "from": before.status, "to": a.ticket.status }));
+            self.hook(hooks::TICKET_MOVED, &id, before.project_id.as_deref(), Self::moved(&before, &before.status, &a.ticket.status, a.ticket.branch.as_deref()));
         }
         if before.status == status::IN_PROGRESS && a.ticket.status != status::IN_PROGRESS {
             if let Some(sid) = before.session_id.as_deref() {
@@ -1035,7 +1048,7 @@ impl Dispatcher {
             &self.publish(),
         )?;
         let p = row.project_id.as_deref();
-        self.hook(hooks::TICKET_MOVED, &row.id, p, json!({ "from": status::IN_PROGRESS, "to": status::DONE }));
+        self.hook(hooks::TICKET_MOVED, &row.id, p, Self::moved(&row, status::IN_PROGRESS, status::DONE, None));
         self.hook(hooks::TICKET_DONE, &row.id, p, json!({ "sessionId": req.session_id, "commentId": comment.id }));
         if let Some(starter) = &row.started_by {
             let first = req.summary.lines().next().unwrap_or("");
@@ -1087,7 +1100,7 @@ impl Dispatcher {
                         },
                         &self.publish(),
                     )?;
-                    self.hook(hooks::TICKET_MOVED, &row.id, p, json!({ "from": status::IN_PROGRESS, "to": status::DONE }));
+                    self.hook(hooks::TICKET_MOVED, &row.id, p, Self::moved(&row, status::IN_PROGRESS, status::DONE, None));
                     self.hook(hooks::TICKET_DONE, &row.id, p, json!({ "sessionId": report.session_id, "commentId": c.id }));
                 }
                 (true, None) => self.failure(&row, report, "the worker ended cleanly without a done comment, so the ticket stays in_progress"),

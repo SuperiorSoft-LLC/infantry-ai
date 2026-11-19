@@ -318,6 +318,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             work: dispatcher.clone(),
             bus: bus.clone(),
             usage: usage.clone(),
+            mail: mail.clone(),
             project_dir: Arc::new(move |id: &str| project_dir(&p, id)),
         }));
     }
@@ -337,7 +338,15 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         }
     }
     let host: Arc<dyn infantry_scripting::host::ScriptHost> = tools.clone();
-    let script_dispatcher = ScriptDispatcher::new(host, Arc::new(std::collections::BTreeMap::new), Arc::new(|| 3));
+    let script_dispatcher = {
+        let s = settings::SettingsUnit { db: db.clone() };
+        // `scripting.aliases` is data, read on every run; unset means the shipped table (MOVE-1).
+        let aliases = move || {
+            let stored = s.app("scripting.aliases").map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string()));
+            infantry_scripting::dispatcher::effective_aliases(stored.as_deref())
+        };
+        ScriptDispatcher::new(host, Arc::new(aliases), Arc::new(|| 3))
+    };
     let hook_store = Arc::new(HookStore::new(project_dirs, Some(state_dir.join("global-hooks.json"))));
     let run_log = Arc::new(ScriptRunLog::default());
     let project_ids: Arc<dyn Fn() -> Vec<String> + Send + Sync> = {
