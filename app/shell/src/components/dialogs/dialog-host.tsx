@@ -9,6 +9,7 @@ import { daemonStore, localMode } from "@/daemon/daemon";
 import { TicketDialog } from "@/components/board/ticket-dialog";
 import { EMPTY_DRAFT, NewAgentBody, addAgent, addBlockedReason, type NewAgentDraft } from "./new-agent-dialog";
 import { ResumeBody } from "./resume-body";
+import { PluginSettingsDialog } from "@/components/plugins/plugin-settings-dialog";
 import { SettingsBody } from "./settings-body";
 
 const config = {
@@ -26,7 +27,7 @@ export function DialogHost() {
     if (ui.dialog === "new-agent") setAgent(EMPTY_DRAFT);
     if (ui.dialog === "resume") setPicked(null);
   }, [ui.dialog]);
-  if (!ui.dialog) return null;
+  if (!ui.dialog) return <PluginSettingsDialog />;
   if (ui.dialog === "new-ticket") return <TicketDialog ticketId={null} creating onClose={() => ui.set("dialog", null)} />;
   const c = config[ui.dialog];
   const close = () => ui.set("dialog", null);
