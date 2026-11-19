@@ -200,7 +200,14 @@ pub struct McpBridgeRow {
     pub connected_at: i64,
     pub last_seen: i64,
     pub reconnects: i32,
+    /// The last connection ended with a normal close frame (the bridge opens one short connection per tool call and says
+    /// "bye"), so the next connection is a new call, not a reconnect.
+    #[serde(skip)]
+    pub clean_close: bool,
 }
+
+/// The cause `closed` is given when the bridge closed its connection itself with a normal close frame.
+pub const CLEAN_CLOSE: &str = "client closed";
 
 /// Tracks MCP bridge connections (Kotlin `McpBridgeTracker`): a `plugin_tool_call` carrying a session id is that
 /// session's bridge alive on that connection; the connection closing drops it.
@@ -225,10 +232,17 @@ impl Bridges {
             return;
         }
         conn.push(id.into());
-        let prev = rows.get(id).map(|r| r.reconnects);
-        rows.insert(id.into(), McpBridgeRow { session_id: id.into(), connected: true, connected_at: t, last_seen: t, reconnects: prev.map(|n| n + 1).unwrap_or(0) });
+        // A new connection after a clean "bye" is the next tool call; only a drop (or a second live socket) is a reconnect.
+        let prev = rows.get(id).map(|r| (r.reconnects, r.clean_close && !r.connected));
+        let reconnects = match prev {
+            Some((n, true)) => n,
+            Some((n, false)) => n + 1,
+            None => 0,
+        };
+        rows.insert(id.into(), McpBridgeRow { session_id: id.into(), connected: true, connected_at: t, last_seen: t, reconnects, clean_close: false });
         drop(rows);
-        journal.record("mcp_connect", prev.map(|_| "reconnect"), Some(&format!("session {id}")));
+        let reconnect = matches!(prev, Some((_, false)));
+        journal.record("mcp_connect", reconnect.then_some("reconnect"), Some(&format!("session {id}")));
     }
 
     pub fn closed(&self, conn: &[String], cause: Option<&str>, journal: &HealthJournal) {
@@ -238,6 +252,7 @@ impl Bridges {
                 let mut rows = self.rows.lock().unwrap();
                 rows.get_mut(id).map(|r| {
                     r.connected = false;
+                    r.clean_close = cause == Some(CLEAN_CLOSE);
                     r.last_seen = t;
                 })
             };
@@ -576,6 +591,26 @@ mod tests {
         b.seen("s1", &mut c2, &j);
         assert_eq!(b.rows()[0].reconnects, 1);
         assert!(b.rows()[0].connected);
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    /// A bridge that opens a short connection per tool call, with idle gaps, and closes each cleanly never reconnects.
+    #[test]
+    fn clean_per_call_connections_are_not_reconnects() {
+        let d = std::env::temp_dir().join(format!("health-{}", uuid::Uuid::new_v4()));
+        let j = HealthJournal::new(&d);
+        let b = Bridges::default();
+        for _ in 0..30 {
+            let mut c = Vec::new();
+            b.seen("pm", &mut c, &j);
+            b.closed(&c, Some(CLEAN_CLOSE), &j);
+        }
+        assert_eq!(b.rows()[0].reconnects, 0);
+        let mut c = Vec::new();
+        b.seen("pm", &mut c, &j);
+        b.closed(&c, Some("connection lost"), &j);
+        b.seen("pm", &mut Vec::new(), &j);
+        assert_eq!(b.rows()[0].reconnects, 1);
         let _ = std::fs::remove_dir_all(d);
     }
 
