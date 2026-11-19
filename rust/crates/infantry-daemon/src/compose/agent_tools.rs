@@ -296,6 +296,16 @@ impl AgentTools {
                 if req.body.trim().is_empty() {
                     return Err("body is required".to_string());
                 }
+                // A hook (no session, so no project of its own) mails a role of ITS project, never one with the same role elsewhere.
+                let mut req = req;
+                if infantry_mail::mail::message::is_automation(&from) && !req.to.contains('@') {
+                    if let Some(p) = self.caller_project(inv) {
+                        let scoped = format!("{}@{p}", req.to);
+                        if self.mail.resolve(&from, &scoped, true).is_ok() {
+                            req.to = scoped;
+                        }
+                    }
+                }
                 match self.mail.send(&req, infantry_mail::mail::message::is_automation(&from)) {
                     MailResult::Sent(m) => Ok(format!("sent {} to {} (thread {})", m.short_id(), m.to, m.thread_id)),
                     MailResult::Refused(why) => Err(why),
