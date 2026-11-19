@@ -238,6 +238,15 @@ impl Mailbox {
         Self::by_time(self.inner.lock().unwrap().all().cloned().collect())
     }
 
+    /// The distinct recipients that have QUEUED mail, sorted. Reads under the lock and copies only the ids: the
+    /// scheduler tick calls this every few seconds, and cloning the whole mailbox there (RUST-BUG e0c433c9) made a
+    /// large allocation each tick, so the daemon was the first process to abort when the machine ran out of commit.
+    pub fn queued_recipients(&self) -> Vec<String> {
+        let g = self.inner.lock().unwrap();
+        let set: std::collections::BTreeSet<&str> = g.messages.values().filter(|m| m.state == MessageState::Queued).map(|m| m.to.as_str()).collect();
+        set.into_iter().map(str::to_string).collect()
+    }
+
     /// All threads, most recently active first.
     pub fn threads(&self) -> Vec<ThreadSummary> {
         let limit = (self.limits)().max_per_thread;

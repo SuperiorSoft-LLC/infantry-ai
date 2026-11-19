@@ -32,6 +32,58 @@ pub const OWNER_PORTS_ENV: &str = "INFANTRY_OWNER_PORTS";
 pub const OWN_URL_ONLY_ENV: &str = "INFANTRY_OWN_URL_ONLY";
 pub const TEST_PORT_RANGE: &str = "18900-18999";
 const MB: u64 = 1_048_576;
+/// Every panic of this daemon, one line each, under `<state>/health/` (RUST-BUG e0c433c9: the launcher rewrites
+/// `daemon.log` on each start, so a crash's own output was gone by the time anyone looked).
+pub const PANICS: &str = "panics.log";
+/// `limits.health.panicLogBytes` default: past this size `panics.log` is moved to `panics.prev.log` and restarted.
+pub const PANIC_LOG_MAX_BYTES: u64 = 256 * 1024;
+/// Where Windows Error Reporting writes a crashed process's dump by default (`%LOCALAPPDATA%\CrashDumps`).
+pub const CRASH_DUMPS_SUBDIR: &str = "CrashDumps";
+
+/// Installs a panic hook that appends the panic (thread, message, location) to `<state>/health/panics.log`, then runs
+/// the previous hook (stderr). A panic that aborts the process, or a later out-of-memory abort, is thereby on disk.
+pub fn install_panic_log(state_dir: &Path) {
+    let dir = state_dir.join(DIR);
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let thread = std::thread::current().name().unwrap_or("unnamed").to_string();
+        append_panic_line(&dir, &format!("{} pid {} thread '{thread}' panicked: {info}", now_ms(), std::process::id()));
+        previous(info);
+    }));
+}
+
+fn append_panic_line(dir: &Path, line: &str) {
+    let _ = std::fs::create_dir_all(dir);
+    let path = dir.join(PANICS);
+    if std::fs::metadata(&path).map(|m| m.len() > PANIC_LOG_MAX_BYTES).unwrap_or(false) {
+        let _ = std::fs::rename(&path, dir.join("panics.prev.log"));
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(f, "{}", line.replace(['\r', '\n'], " "));
+    }
+}
+
+/// The default WER dump folder, if the platform has one.
+pub fn default_crash_dump_dir() -> Option<PathBuf> {
+    std::env::var_os("LOCALAPPDATA").filter(|v| !v.is_empty()).map(|l| PathBuf::from(l).join(CRASH_DUMPS_SUBDIR))
+}
+
+/// What is known about how `pid` died: its last panic line and its crash dump, when they exist.
+fn crash_evidence(health_dir: &Path, pid: i64, dumps: Option<&Path>) -> Vec<String> {
+    let mut out = Vec::new();
+    let tag = format!(" pid {pid} ");
+    if let Some(line) = std::fs::read_to_string(health_dir.join(PANICS)).ok().and_then(|t| t.lines().rev().find(|l| l.contains(&tag)).map(str::to_string)) {
+        out.push(format!("last panic: {}", line.split_once("panicked: ").map(|(_, m)| m).unwrap_or(&line)));
+    }
+    if let Some(dir) = dumps {
+        let exe = std::env::current_exe().ok().and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_else(|| "infantry-daemon.exe".into());
+        let dump = dir.join(format!("{exe}.{pid}.dmp"));
+        if dump.is_file() {
+            out.push(format!("crash dump: {}", dump.display()));
+        }
+    }
+    out
+}
 
 fn now_ms() -> i64 {
     crate::sessions::now_ms()
@@ -93,12 +145,19 @@ impl HealthJournal {
 
     /// A daemon start: why the previous one ended (clean stop, crash, or a live record), journaled.
     pub fn begin(&self, pid: i64, port: i32, build: &str) -> HealthStatus {
+        self.begin_with_dumps(pid, port, build, default_crash_dump_dir().as_deref())
+    }
+
+    /// [`begin`](Self::begin) with the crash dump folder given; a crash restart names the dead pid's panic and dump.
+    pub fn begin_with_dumps(&self, pid: i64, port: i32, build: &str, dumps: Option<&Path>) -> HealthStatus {
         let _g = self.lock.lock().unwrap();
         let previous = self.status();
+        let mut evidence = Vec::new();
         let cause = previous.as_ref().map(|p| {
             if !p.running {
                 p.stop_reason.clone().unwrap_or_else(|| "clean stop".into())
             } else if p.pid != pid && !pid_alive(p.pid) {
+                evidence = crash_evidence(&self.dir, p.pid, dumps);
                 "crash or kill (no clean stop recorded)".into()
             } else {
                 format!("restart over a live record (pid {})", p.pid)
@@ -117,7 +176,11 @@ impl HealthJournal {
             stop_reason: None,
         };
         self.write(&s);
-        self.append(&HealthEvent { at: t, kind: "daemon_start".into(), cause, detail: Some(format!("pid {pid} port {port} build {build}")) });
+        let mut detail = format!("pid {pid} port {port} build {build}");
+        if let Some(p) = previous.as_ref().filter(|_| !evidence.is_empty()) {
+            detail.push_str(&format!("; previous pid {}: {}", p.pid, evidence.join("; ")));
+        }
+        self.append(&HealthEvent { at: t, kind: "daemon_start".into(), cause, detail: Some(detail) });
         s
     }
 
@@ -574,6 +637,39 @@ mod tests {
         // A record still marked running whose pid is gone: a crash.
         assert_eq!(j.begin(i32::MAX as i64, 18901, "b").last_restart_cause.as_deref(), Some("crash or kill (no clean stop recorded)"));
         assert_eq!(j.tail(10).len(), 4);
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    /// RUST-BUG e0c433c9: a crash restart names the dead pid's last panic and its WER crash dump.
+    #[test]
+    fn crash_restart_names_the_panic_and_the_dump() {
+        let d = std::env::temp_dir().join(format!("health-{}", uuid::Uuid::new_v4()));
+        let dumps = d.join("dumps");
+        std::fs::create_dir_all(&dumps).unwrap();
+        let j = HealthJournal::new(&d);
+        let dead = i32::MAX as i64;
+        j.begin_with_dumps(dead, 18901, "b", Some(&dumps));
+        append_panic_line(&d.join(DIR), &format!("1 pid {dead} thread 'main' panicked: boom at x.rs:1:1"));
+        append_panic_line(&d.join(DIR), "2 pid 7 thread 'main' panicked: someone else");
+        let exe = std::env::current_exe().unwrap().file_name().unwrap().to_string_lossy().into_owned();
+        std::fs::write(dumps.join(format!("{exe}.{dead}.dmp")), b"MDMP").unwrap();
+        j.begin_with_dumps(dead - 1, 18901, "b", Some(&dumps));
+        let detail = j.tail(1)[0].detail.clone().unwrap();
+        assert!(detail.contains(&format!("previous pid {dead}")), "{detail}");
+        assert!(detail.contains("last panic: boom at x.rs:1:1"), "{detail}");
+        assert!(!detail.contains("someone else"), "{detail}");
+        assert!(detail.contains("crash dump: ") && detail.contains(".dmp"), "{detail}");
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn panic_log_rolls_over_past_its_limit() {
+        let d = std::env::temp_dir().join(format!("health-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join(PANICS), vec![b'x'; PANIC_LOG_MAX_BYTES as usize + 1]).unwrap();
+        append_panic_line(&d, "1 pid 1 thread 'main' panicked: new");
+        assert!(d.join("panics.prev.log").is_file());
+        assert_eq!(std::fs::read_to_string(d.join(PANICS)).unwrap().trim(), "1 pid 1 thread 'main' panicked: new");
         let _ = std::fs::remove_dir_all(d);
     }
 
