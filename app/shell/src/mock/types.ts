@@ -36,6 +36,8 @@ export interface Agent {
   /** 0-100, or null when indeterminate (striped bar) */
   progress?: number | null;
   age: string;
+  /** When the agent last made any event (ms); the card shows it live. */
+  activityAt: number;
   lastLine: string;
   group: "running" | "quiet";
   provider: string;

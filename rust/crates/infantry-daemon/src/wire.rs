@@ -75,7 +75,7 @@ pub fn status_activity(tool: &str, activity: &str) -> String {
 pub fn status_run(state: &str, activity: &str, started_at: i64, turn_started_at: i64) -> String {
     json!({
         "state": state, "detail": "",
-        "runActivity": {"state": activity, "startedAt": started_at, "turnStartedAt": turn_started_at, "lastEventAt": started_at}
+        "runActivity": {"state": activity, "startedAt": started_at, "turnStartedAt": turn_started_at, "lastEventAt": crate::sessions::now_ms()}
     })
     .to_string()
 }

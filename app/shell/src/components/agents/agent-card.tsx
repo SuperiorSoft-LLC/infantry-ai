@@ -6,6 +6,7 @@ import { cn } from "@infantry/ui";
 import type { Agent } from "@/mock/types";
 import { AgentAvatar } from "./agent-avatar";
 import { AgentMenu } from "./agent-menu";
+import { ActivityAgo } from "./activity-ago";
 import { ProgressLine, SelectedStripes } from "@infantry/ui";
 
 const chipTone: Record<Agent["status"], string> = {
@@ -39,13 +40,14 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
       <SelectedStripes active={selected} />
       <div className="relative flex items-start gap-3">
         <AgentAvatar agent={agent} size="lg" live={!compact} className="mt-3" />
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
           <div className="flex items-baseline justify-between gap-2">
             <span className="truncate text-[15px] font-semibold">{agent.name}</span>
-            <span className="shrink-0 text-xs text-muted-foreground">{agent.age}</span>
+            <span className="shrink-0 text-xs text-muted-foreground" title="Last activity"><ActivityAgo at={agent.activityAt} />
+          </span>
           </div>
 
-          {agent.ticketId && !compact && (
+          {agent.ticketId && (
             <div className="truncate font-mono text-[11px] text-info">
               {agent.ticketId} <span className="font-sans">{agent.ticketTitle}</span>
             </div>
@@ -60,15 +62,15 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
           )}
           {agent.progress !== undefined && !compact && <ProgressLine value={agent.progress} className="my-1.5" />}
 
-          <div className="flex min-w-0 items-center gap-2 text-xs">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 overflow-hidden text-xs">
             <span className={cn("shrink-0 font-medium", agent.roleId === "pm" ? "text-warn" : "text-info")}>{agent.roleId}</span>
             <span className={cn("shrink-0 rounded-full border px-1.5 text-[10px] leading-4", chipTone[agent.status])}>{agent.status}</span>
             <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{agent.sessionId}</span>
             {agent.projectName && <span className="shrink-0 truncate text-foreground/80">{agent.projectName}</span>}
-            <span className="truncate text-muted-foreground">{agent.lastLine}</span>
+            <span className="min-w-0 max-w-full truncate text-muted-foreground">{agent.lastLine}</span>
           </div>
 
-          {agent.ticketTitle && !compact && (
+          {agent.ticketTitle && (
             <div className="truncate pt-1 text-xs">
               <span className="text-muted-foreground">on: </span>
               {agent.ticketTitle}

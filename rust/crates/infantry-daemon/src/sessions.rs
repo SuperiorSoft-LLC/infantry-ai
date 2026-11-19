@@ -504,6 +504,13 @@ impl Daemon {
     }
 
     fn emit(&self, e: &mut Entry, ty: &str, data: String) {
+        // Every frame of a session is activity: stamp the record and the cached copy the session list serves, so a
+        // client that connects later still knows when the agent last moved.
+        let now = now_ms();
+        e.rec.last_event_at = Some(now);
+        if let Some(r) = self.cache.lock().unwrap().iter_mut().find(|r| r.id == e.rec.id) {
+            r.last_event_at = Some(now);
+        }
         e.seq += 1;
         let f = encode(ty, data, Some(&e.rec.id), Some(e.seq));
         e.history.push_back((e.seq, f.clone()));

@@ -26,6 +26,7 @@ import type { BoardTicket } from "@infantry/client";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { boardStore, useBoard } from "@/components/board/use-board";
 import { openSessionDialog } from "@/components/session/session-actions";
+import { TicketDialog } from "@/components/board/ticket-dialog";
 import { useUi } from "@/state/ui-state";
 import { useProjects } from "@/components/git/use-projects";
 
@@ -43,11 +44,13 @@ export function AgentMenu({ sessionId, open, onOpenChange }: { sessionId: string
   const r = useDaemon((s) => s.sessions[sessionId]?.record);
   const ticket = useBoard((s) => (r?.ticketId ? s.tickets[r.ticketId] : undefined));
   const [picking, setPicking] = useState(false);
+  const [viewing, setViewing] = useState(false);
   const projects = useProjects((s) => s.projects);
   if (!r) return null;
   const dormant = DORMANT.has(r.state);
   return (
     <>
+      {viewing && r.ticketId && <TicketDialog ticketId={r.ticketId} creating={false} onClose={() => setViewing(false)} />}
       <DropdownMenu open={open} onOpenChange={onOpenChange}>
         <DropdownMenuTrigger asChild>
           <button
@@ -74,6 +77,11 @@ export function AgentMenu({ sessionId, open, onOpenChange }: { sessionId: string
           <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
             {r.ticketId ? `Ticket: ${ticket?.title ?? r.ticketId}` : "No ticket"}
           </DropdownMenuLabel>
+          {r.ticketId && (
+            <DropdownMenuItem onSelect={() => setViewing(true)}>
+              <Ticket /> View task
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem disabled={!r.agentId} onSelect={() => setPicking(true)}>
             <Ticket /> {r.ticketId ? "Change ticket…" : "Assign ticket…"}
           </DropdownMenuItem>

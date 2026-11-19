@@ -39,6 +39,17 @@ export interface PendingSend {
   reason?: string;
 }
 
+export interface ActivityEntry {
+  at: number;
+  label: string;
+}
+
+/** How many Activity box lines a session keeps. */
+export const MAX_ACTIVITY_LOG = 200;
+/** Frames arriving this soon after a history request are replay, not live activity (ms). */
+const REPLAY_WINDOW_MS = 2000;
+const replayUntil = new Map<string, number>();
+
 export interface SessionView {
   record: SessionRecord;
   items: TranscriptItem[];
@@ -48,6 +59,10 @@ export interface SessionView {
   usage: Record<string, RunUsage>;
   /** The last line of output, for the sidebar card. */
   lastLine: string;
+  /** When the agent last made any event (ms): the daemon's lastEventAt, bumped by every live frame. */
+  activityAt: number;
+  /** Tool activity lines, oldest first, for the Activity box. */
+  activityLog: ActivityEntry[];
   /** History was asked from this daemon instance. */
   historyAsked: boolean;
 }
@@ -157,6 +172,7 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
         cursors.clear();
       };
       const askHistory = (sid: string, from: number) => {
+        replayUntil.set(sid, Date.now() + REPLAY_WINDOW_MS);
         out({ type: Frame.REPLAY_REQUEST, data: JSON.stringify({ lastSequence: from }), sessionId: sid });
       };
 
@@ -441,15 +457,19 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
 }
 
 function newView(record: SessionRecord, historyAsked: boolean): SessionView {
-  return { record, items: [], cursor: 0, status: null, usage: {}, lastLine: "", historyAsked };
+  return { record, items: [], cursor: 0, status: null, usage: {}, lastLine: "", activityAt: record.lastEventAt ?? record.lastHeartbeat, activityLog: [], historyAsked };
 }
 
 /** Apply in-order frames to one session view (items, record, status, usage, last line). */
 export function applyToView(v: SessionView, frames: readonly Envelope[]): SessionView {
   let record = v.record, status = v.status, usage = v.usage, lastLine = v.lastLine;
+  let activityAt = v.activityAt ?? record.lastEventAt ?? record.lastHeartbeat, activityLog = v.activityLog ?? [];
+  const now = Date.now();
+  const live = now > (replayUntil.get(record.id) ?? 0);
   let cursor = v.cursor;
   for (const f of frames) {
     if (f.sequence != null && f.sequence > cursor) cursor = f.sequence;
+    if (live && f.type !== Frame.SESSION) activityAt = now;
     switch (f.type) {
       case Frame.SESSION: {
         const r = json<SessionRecord>(f.data);
@@ -460,6 +480,9 @@ export function applyToView(v: SessionView, frames: readonly Envelope[]): Sessio
         const s = json<StatusPayload>(f.data);
         if (s) {
           status = s;
+          if (live && s.tool && s.activity) {
+            activityLog = [...activityLog, { at: now, label: `${s.tool}: ${s.activity}` }].slice(-MAX_ACTIVITY_LOG);
+          }
           if (record.state !== s.state) record = { ...record, state: s.state };
         }
         break;
@@ -483,5 +506,5 @@ export function applyToView(v: SessionView, frames: readonly Envelope[]): Sessio
       }
     }
   }
-  return { ...v, record, status, usage, lastLine, cursor, items: applyFrames(v.items, frames) };
+  return { ...v, record, status, usage, lastLine, activityAt, activityLog, cursor, items: applyFrames(v.items, frames) };
 }
