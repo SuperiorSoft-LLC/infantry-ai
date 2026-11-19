@@ -12,6 +12,8 @@
 //! (`plugin_tools` / `plugin_tool_call`) over one tool catalog.
 
 mod adapters;
+mod agent_frames;
+mod agent_registry;
 mod agent_tools;
 pub mod host_frames;
 pub mod project_files;
@@ -305,6 +307,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     daemon.observe(Arc::new(crate::pods::PodObserver::new(pods.clone())));
 
     // ---- the tool catalog + scripting ---------------------------------------------------------------------
+    let agent_registry = Arc::new(agent_registry::AgentRegistry { plugins_dir: plugins_dir(), roles: knowledge.roles.clone(), state_dir: state_dir.to_path_buf() });
     let tools = Arc::new(Tools::new(daemon.clone()));
     let runs = {
         let p = projects.clone();
@@ -320,6 +323,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             bus: bus.clone(),
             usage: usage.clone(),
             mail: mail.clone(),
+            registry: agent_registry.clone(),
             project_dir: Arc::new(move |id: &str| project_dir(&p, id)),
         }));
     }
@@ -460,11 +464,22 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         units.extend(plugins::frame_units(p));
     }
     units.push(Arc::new(health_unit(daemon, &projects, plugin_host.clone(), hooks.store().clone())));
+    units.push(board_side(Arc::new(agent_frames::AgentFrames::new(
+        daemon.clone(),
+        crate::board::Board::new(state_dir),
+        mail.mailbox().clone(),
+        dispatcher.clone(),
+        projects.store.clone(),
+        {
+            let p = projects.clone();
+            Arc::new(move |id: &str| project_dir(&p, id))
+        },
+    ))));
     units.push(Arc::new(host_frames::HostFrames {
         daemon: daemon.clone(),
         plugins: plugin_host.clone(),
         plugins_dir: plugins_dir(),
-        roles: knowledge.roles.clone(),
+        registry: agent_registry.clone(),
         questions,
         state_dir: state_dir.to_path_buf(),
         projects: projects.store.clone(),

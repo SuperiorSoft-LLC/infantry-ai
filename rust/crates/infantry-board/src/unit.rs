@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use infantry_core::frames::{FrameCtx, FrameUnit, Refusal};
 use infantry_orchestrator_api::dto::{
-    decode_strict, Epic, EpicBaseRequest, EpicSave, TicketLinkRequest, TicketListQuery, TicketMove, TicketReorder, TicketSave,
+    decode_strict, AgentSwitch, Epic, EpicBaseRequest, EpicSave, TicketLinkRequest, TicketListQuery, TicketMove, TicketReorder, TicketSave,
 };
 use infantry_orchestrator_api::{
     AgentQueueRequest, OrchError, StartNextRequest, StartOrigin, TicketAssign, TicketDone, TicketStartRequest, TicketUnassign,
@@ -54,6 +54,7 @@ pub const ALL_FRAMES: &[&str] = &[
     "ticket_assign",
     "ticket_unassign",
     "agent_queue",
+    "agent_switch",
     "ticket_done",
 ];
 
@@ -137,7 +138,7 @@ impl FrameUnit for BoardUnit {
                 .map_err(r)?;
                 Ok(answer(a.pushed, ticket_envelope(&a.ticket)))
             }
-            "ticket_start" | "ticket_start_next" | "ticket_assign" | "ticket_unassign" | "agent_queue" | "ticket_done" => {
+            "ticket_start" | "ticket_start_next" | "ticket_assign" | "ticket_unassign" | "agent_queue" | "agent_switch" | "ticket_done" => {
                 let Some(w) = &self.work else { return Err(r(OrchError::Unsupported(format!("{frame} needs the work half")))) };
                 let bad = |m: String| r(OrchError::Refused(m));
                 let what = format!("{frame} payload");
@@ -149,6 +150,7 @@ impl FrameUnit for BoardUnit {
                     "ticket_start_next" => w.start_next(&decode_strict::<StartNextRequest>(&env.data, &what).map_err(bad)?).map_err(r)?,
                     "ticket_assign" => w.assign(&decode_strict::<TicketAssign>(&env.data, &what).map_err(bad)?).map_err(r)?,
                     "ticket_unassign" => w.unassign(&decode_strict::<TicketUnassign>(&env.data, &what).map_err(bad)?).map_err(r)?,
+                    "agent_switch" => w.switch(&decode_strict::<AgentSwitch>(&env.data, &what).map_err(bad)?).map_err(r)?,
                     "agent_queue" => {
                         let s = w.agent_queue(&decode_strict::<AgentQueueRequest>(&env.data, &what).map_err(bad)?).map_err(r)?;
                         return Ok(answer(false, Envelope::new("agent_queue_state", serde_json::to_string(&s).expect("queue json"))));
