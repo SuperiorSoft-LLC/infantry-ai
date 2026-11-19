@@ -215,6 +215,7 @@ impl Agent {
                     self.emit("status", json!({"state": "BUSY", "write": w}).to_string());
                 }
             }
+            Ev::McpState { .. } => {} // not surfaced by the embedded runner yet
             Ev::Usage(u) => self.usage(&u),
             Ev::Warning(w) => self.emit("stderr", format!("[runner] {w}")),
             Ev::Error(err) => {
