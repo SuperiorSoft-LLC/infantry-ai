@@ -292,6 +292,14 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         Arc::new(crate::mcp::Registry::new(state_dir, secret, plugin_servers, session))
     };
     daemon.set_mcp(mcp.clone());
+    // One shared cargo target for every agent (a worktree must not build its own multi-GB `target`): setting `cargo.targetDir`.
+    {
+        let (st, sd) = (settings::SettingsUnit { db: db.clone() }, state_dir.to_path_buf());
+        daemon.set_env_extra(Arc::new(move || {
+            let v = st.app(crate::harness::launch::CARGO_TARGET_SETTING).and_then(|v| v.as_str().map(String::from));
+            crate::harness::launch::cargo_target_env(v.as_deref(), &sd).into_iter().collect()
+        }));
+    }
 
     // ---- the account hub: providers modules declare, device sign-in, refresh tokens in the vault ----------
     let account = crate::account::Account::new(
@@ -482,7 +490,11 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     if let Some(p) = &plugin_set {
         units.extend(plugins::frame_units(p));
     }
-    units.push(Arc::new(health_unit(daemon, &projects, plugin_host.clone(), hooks.store().clone())));
+    let min_disk_db = db.clone();
+    units.push(Arc::new(health_unit(daemon, &projects, plugin_host.clone(), hooks.store().clone(), Box::new(move || {
+        let v = settings::SettingsUnit { db: min_disk_db.clone() }.app(crate::health::MIN_DISK_SETTING);
+        v.and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok())))
+    }))));
     units.push(board_side(Arc::new(agent_frames::AgentFrames::new(
         daemon.clone(),
         crate::board::Board::new(state_dir),
@@ -598,6 +610,7 @@ fn health_unit(
     projects: &Arc<Projects>,
     plugins: Option<Arc<infantry_plugin_host::PluginHost>>,
     hook_store: Arc<HookStore>,
+    min_disk_mb: Box<dyn Fn() -> Option<u64> + Send + Sync>,
 ) -> crate::health::HealthUnit {
     use crate::health::{current_branch, HealthSources, HealthUnit};
     let hook_projects = projects.clone();
@@ -616,6 +629,7 @@ fn health_unit(
                 }
                 Some(ids.len())
             }),
+            min_disk_mb,
             harnesses: Box::new(move || d.providers()),
             paths: Box::new(move |session, project| {
                 let dir = |p: &Path| Some(p.to_string_lossy().into_owned());

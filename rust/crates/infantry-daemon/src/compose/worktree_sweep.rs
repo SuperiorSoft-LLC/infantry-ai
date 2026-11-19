@@ -19,6 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 pub const REMOVE_AFTER_MERGE: &str = "worktrees.removeAfterMerge";
+pub const REMOVE_BUILD_DIRS: &str = "worktrees.removeBuildDirs";
 pub const SWEEP_SECONDS: &str = "worktrees.sweepSeconds";
 /// Default gap between sweeps; a setting, so the owner can slow it.
 pub const DEFAULT_SWEEP_SECONDS: u64 = 300;
@@ -59,6 +60,11 @@ impl WorktreeSweep {
 
     pub fn interval(&self) -> Duration {
         Duration::from_secs(number(self.settings.app(SWEEP_SECONDS)).filter(|n| *n > 0).unwrap_or(DEFAULT_SWEEP_SECONDS))
+    }
+
+    /// `worktrees.removeBuildDirs` (default on): a done ticket's `rust/target` etc. are deleted by the sweep.
+    fn removes_build_dirs(&self) -> bool {
+        flag(self.settings.app(REMOVE_BUILD_DIRS), true)
     }
 
     fn batch(&self) -> usize {
@@ -133,21 +139,28 @@ impl WorktreeSweep {
 
     /// One pass: remove (at most a batch of) done tickets' merged worktrees. Returns how many were removed.
     pub fn sweep(&self) -> usize {
-        if !self.enabled() {
-            return 0;
-        }
         let tickets: Vec<_> = self.board.list(None, None).unwrap_or_default().into_iter().filter(|t| t.status == "done" && t.worktree_branch.is_some()).collect();
         let live = self.live_dirs();
-        let (mut removed, batch) = (0usize, self.batch());
+        let (mut removed, batch, enabled, clean_builds) = (0usize, self.batch(), self.enabled(), self.removes_build_dirs());
         for (root, base) in self.roots() {
             let listed = stale::list(&self.projects.git, &root);
             for t in &tickets {
-                if removed >= batch {
-                    return removed;
-                }
                 let Some(branch) = t.worktree_branch.as_deref() else { continue };
                 let Some(l) = listed.iter().find(|l| l.branch.as_deref() == Some(branch)) else { continue };
                 let is_live = live.iter().any(|d| paths::contains(&l.path, d));
+                // A done ticket's cargo target folders are build output: freed even when the worktree is kept.
+                if clean_builds && !is_live {
+                    let freed = stale::remove_build_dirs(&l.path);
+                    if freed > 0 {
+                        self.note(&t.id, &format!("[AUTOMATIC] build output removed from {} ({} MB freed)", l.path.display(), freed / (1024 * 1024)));
+                    }
+                }
+                if !enabled {
+                    continue;
+                }
+                if removed >= batch {
+                    return removed;
+                }
                 match stale::remove_if_merged(&self.projects.git, &root, &l.path, branch, &base, is_live) {
                     Removal::Removed => {
                         removed += 1;

@@ -92,6 +92,27 @@ pub fn dir_size(path: &Path) -> u64 {
     total
 }
 
+/// The cargo target folders a worktree can hold (relative to its root). They are build output, never source.
+pub const BUILD_DIRS: [&str; 3] = ["rust/target", "app/src-tauri/target", "target"];
+
+/// Delete the cargo target folders under the worktree `path` (the worktree and its branch stay). Returns the bytes freed.
+/// Only a real folder named in [`BUILD_DIRS`] is removed; a symlink (a shared target) is left alone.
+pub fn remove_build_dirs(path: &Path) -> u64 {
+    let mut freed = 0u64;
+    for rel in BUILD_DIRS {
+        let d = path.join(rel);
+        let Ok(meta) = std::fs::symlink_metadata(&d) else { continue };
+        if !meta.is_dir() {
+            continue;
+        }
+        let size = dir_size(&d);
+        if std::fs::remove_dir_all(&d).is_ok() {
+            freed += size;
+        }
+    }
+    freed
+}
+
 /// Report one worktree (git facts and size). `live` and the ticket are the caller's to fill.
 pub fn inspect(git: &SharedGit, root: &Path, base: &str, l: &Listed, with_size: bool) -> StaleEntry {
     let exists = l.path.join(".git").exists();
@@ -131,6 +152,22 @@ pub fn remove_if_merged(git: &SharedGit, root: &Path, path: &Path, branch: &str,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn build_dirs_are_deleted_and_source_is_kept() {
+        let root = std::env::temp_dir().join(format!("inf-bd-{}", std::process::id()));
+        for d in ["rust/target/debug", "app/src-tauri/target/x", "rust/src"] {
+            std::fs::create_dir_all(root.join(d)).unwrap();
+        }
+        std::fs::write(root.join("rust/target/debug/a.bin"), vec![0u8; 1000]).unwrap();
+        std::fs::write(root.join("rust/src/lib.rs"), "x").unwrap();
+        assert!(remove_build_dirs(&root) >= 1000);
+        assert!(!root.join("rust/target").exists() && !root.join("app/src-tauri/target").exists());
+        assert!(root.join("rust/src/lib.rs").exists());
+        assert_eq!(remove_build_dirs(&root), 0);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     use crate::git::{GitCli, SystemGit};
     use std::sync::Arc;
 

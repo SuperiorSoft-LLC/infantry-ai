@@ -248,6 +248,7 @@ pub struct Daemon {
     pub health: Arc<crate::health::Health>,
     /// What every agent process is told about this daemon (set once the port is bound).
     launch: Mutex<crate::harness::launch::LaunchBase>,
+    env_extra: std::sync::OnceLock<Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>>,
     /// Whether a role exists (`session_swap` to a role); unset = any well-formed role.
     role_known: std::sync::OnceLock<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
     /// Where tool approvals and questions go (the owner's prompt cards); unset = sessions run with allow-all.
@@ -329,6 +330,7 @@ impl Daemon {
             units: std::sync::OnceLock::new(),
             health: Arc::new(crate::health::Health::new(&cfg_dir)),
             launch: Mutex::new(Default::default()),
+            env_extra: std::sync::OnceLock::new(),
             role_known: std::sync::OnceLock::new(),
             prompter: std::sync::OnceLock::new(),
             mcp: std::sync::OnceLock::new(),
@@ -1049,6 +1051,11 @@ impl Daemon {
         let _ = self.mcp.set(m);
     }
 
+    /// Env added to every agent process, read at each start (so a setting change applies to the next start).
+    pub fn set_env_extra(&self, f: Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>) {
+        let _ = self.env_extra.set(f);
+    }
+
     /// Sets what every agent process started from now on is told about this daemon.
     pub fn set_launch(&self, base: crate::harness::launch::LaunchBase) {
         *self.launch.lock().unwrap() = base;
@@ -1056,7 +1063,11 @@ impl Daemon {
 
     fn open(self: &Arc<Self>, e: &Entry) -> Result<Box<dyn HarnessSession>, String> {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let (env, mut mcp) = self.launch.lock().unwrap().session(&e.rec.id, e.rec.project_id.as_deref(), e.rec.role.as_deref());
+        let (mut env, mut mcp) = self.launch.lock().unwrap().session(&e.rec.id, e.rec.project_id.as_deref(), e.rec.role.as_deref());
+        if let Some(extra) = self.env_extra.get() {
+            env.retain(|(k, _)| !extra().iter().any(|(ek, _)| ek == k));
+            env.extend(extra());
+        }
         if let Some(m) = self.mcp.get() {
             m.select(&e.rec, &mut mcp);
         }
