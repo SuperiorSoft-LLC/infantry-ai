@@ -230,7 +230,7 @@ jobs:
   macos:
     needs: plan
     if: needs.plan.outputs.build == 'true'
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 90
     continue-on-error: true   # unsigned and not notarized until the owner supplies an Apple Developer ID
     env:
