@@ -2,6 +2,8 @@
 
 # Settings
 
+![The Settings modal](../../assets/screenshots/rust/rust-11-settings-modal-dark.png)
+
 Settings are durable key/value pairs kept by the daemon. Read and write them in the Settings tab, with the CLI, or
 with the MCP tools `infantry_settings_get` / `infantry_settings_set`.
 

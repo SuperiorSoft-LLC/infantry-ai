@@ -2,6 +2,8 @@
 
 # Board and epics
 
+![The board](../../assets/screenshots/rust/rust-04-board-dark.png)
+
 The board (the Infantry_Board plugin) holds a project's tickets in columns: Backlog, To do, In progress, Done. An
 **epic** groups tickets inside one project (for example "Launch" and "Post-launch"); the Epics tab lists them, with
 each epic's ticket counts, and the board's Epic filter shows one epic's tickets at a time.

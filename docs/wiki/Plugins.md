@@ -2,6 +2,8 @@
 
 # Plugins
 
+![The Plugins tab](../../assets/screenshots/rust/rust-09-plugins-dark.png)
+
 Infantry AI works like a small operating system: the app is the OS, plugins are the programs. Every tab, panel
 section, board card and daemon tool comes from a plugin (also called a module). A plugin is a folder named
 `Vendor_Module` holding a `module.json` and, usually, one or two jars.

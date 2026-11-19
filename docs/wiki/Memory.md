@@ -1,5 +1,7 @@
 # Memory (project knowledge notes)
 
+![The Notes tab](../../assets/screenshots/rust/rust-08-notes-dark.png)
+
 The notes live in the Infantry_Notes plugin (`plugins/official/Infantry_Notes/daemon`): `MemoryStore` over the adopted
 `memory_notes` table, `MemoryHandler` for the `memory_*` frames, `MemoryTool` for the MCP tool `infantry_memory`.
 The CLI is `infantry memory show|search|index|save|delete`.

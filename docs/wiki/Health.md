@@ -1,5 +1,7 @@
 # Daemon health and environment (DAEMON-HEALTH-1)
 
+![The health page](../../assets/screenshots/rust/rust-12-health-dark.png)
+
 One report answers "is the daemon up, what restarted it, which MCP bridge dropped, and what machine am I on" so nobody
 guesses or probes ports. It is the same report from three doors:
 
