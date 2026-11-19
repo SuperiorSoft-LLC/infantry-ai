@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 // Custom title bar: brand, project, new/quick, avatars, attention, host, connection, window controls.
 // Empty areas carry data-tauri-drag-region so the window moves by dragging the bar.
-import { PanelLeft, PanelRight, Plus, Wand2, Moon, Sun, Settings } from "lucide-react";
+import { LifeBuoy, PanelLeft, PanelRight, Plus, Wand2, Moon, Sun, Settings } from "lucide-react";
 import { attentionCount, hostLabel } from "@infantry/client";
 import { useAttention } from "@/components/mail/use-mail";
 import { useDaemon } from "@/daemon/daemon";
@@ -37,6 +37,17 @@ export function TitleBar() {
       <div className="ml-1 hidden min-w-0 lg:block">
         <AvatarStrip />
       </div>
+      <button
+        type="button"
+        aria-label={ui.assistantOpen ? "Close the Assistant" : "Open the Assistant"}
+        aria-pressed={ui.assistantOpen}
+        data-testid="title-bar-assistant"
+        onClick={() => ui.set("assistantOpen", !ui.assistantOpen)}
+        className={`flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2 text-xs whitespace-nowrap hover:bg-accent ${ui.assistantOpen ? "border-danger bg-danger/10" : "border-danger/70"}`}
+      >
+        <LifeBuoy className="size-4 text-danger" />
+        <span className="hidden sm:inline">Assistant</span>
+      </button>
 
       <div data-tauri-drag-region className="h-full min-w-4 flex-1" />
 

@@ -1,30 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // Centre column: header, tab bar, then either the live CLI transcript + composer or the selected tab's mock.
-import { BgJobsRow } from "./bg-jobs-row";
 import { useEffect } from "react";
-import { Unplug } from "lucide-react";
 import { useUi } from "@/state/ui-state";
-import { EmptyState } from "@infantry/ui";
-import { useAgent, useAgentList } from "@/daemon/agents";
-import { useDaemon } from "@/daemon/daemon";
+import { useAgent } from "@/daemon/agents";
 import { TabContent } from "@/components/tabs/tab-content";
 import { useTabs } from "@/plugins/catalog";
 import { SessionHeader } from "./session-header";
 import { SessionTabBar } from "./session-tab-bar";
-import { Transcript } from "./transcript";
-import { Composer } from "./composer";
-import { PromptCards } from "./prompt-cards";
-import { ActivityBox } from "./activity-box";
+import { FullChatPanel } from "./chat-panel";
 import { SessionDialogs } from "./session-actions";
 
 export function SessionView() {
   const ui = useUi();
   const agent = useAgent(ui.selectedAgentId);
-  const link = useDaemon((s) => s.connection.state);
-  const requestHistory = useDaemon((s) => s.requestHistory);
-  const busy = agent?.status === "working";
-  const agentCount = useAgentList().length;
   const tabs = useTabs("center");
   const { sessionTab, set } = ui;
 
@@ -33,39 +22,13 @@ export function SessionView() {
     if (sessionTab !== "board" && !tabs.some((t) => t.id === sessionTab)) set("sessionTab", "cli");
   }, [sessionTab, tabs, set]);
 
-  // A session opened in the view brings its history, if the burst did not already ask for it.
-  useEffect(() => {
-    if (agent) requestHistory(agent.id);
-  }, [agent?.id, requestHistory]); // eslint-disable-line react-hooks/exhaustive-deps
-
   return (
     <main className="flex min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
       {agent && !ui.chatMax && <SessionHeader agent={agent} />}
       {!ui.chatMax && <SessionTabBar tabs={tabs} value={ui.sessionTab} onChange={(id) => ui.set("sessionTab", id)} />}
 
       {ui.sessionTab === "cli" ? (
-        <>
-          <div className="relative flex min-h-0 flex-1 flex-col">
-            {agent && <ActivityBox sessionId={agent.id} />}
-            {agent ? (
-              <Transcript agent={agent} sessionId={agent.id} />
-            ) : (
-              <div className="grid flex-1 place-items-center p-6">
-                <EmptyState
-                  icon={<Unplug className="size-7" />}
-                  title={link === "open" ? "No session selected" : "Not connected to the daemon"}
-                  hint={link === "open" ? "Send a prompt below to start a new session." : "The app reconnects on its own."}
-                />
-              </div>
-            )}
-          </div>
-          {agent && <PromptCards sessionId={agent.id} />}
-          {agent && <BgJobsRow sessionId={agent.id} />}
-          <div className="px-4 pt-2 pb-1.5 font-mono text-[11px] text-muted-foreground">
-            {agentCount} agent{agentCount === 1 ? "" : "s"} · {link !== "open" ? "not connected: commands are disabled" : agent ? (busy ? "working" : "idle") : "no session"}
-          </div>
-          <Composer sessionId={agent?.id ?? null} busy={busy} />
-        </>
+        <FullChatPanel sessionId={agent?.id ?? null} />
       ) : (
         <TabContent tab={ui.sessionTab} />
       )}

@@ -23,12 +23,18 @@ interface UiState {
   dialog: DialogId;
   /** Chat maximized: the header and tab bar step aside so the transcript and composer fill the column. */
   chatMax: boolean;
+  /** The Assistant box (floating chat) is open. Its position and size are remembered by the window itself. */
+  assistantOpen: boolean;
+  /** Sessions popped out into their own floating chat window. */
+  popouts: string[];
 }
 
 interface UiActions {
   set: <K extends keyof UiState>(key: K, value: UiState[K]) => void;
   toggle: (key: "leftOpen" | "rightOpen") => void;
   toggleTheme: () => void;
+  popOut: (sessionId: string) => void;
+  closePopout: (sessionId: string) => void;
 }
 
 const UiContext = createContext<(UiState & UiActions) | null>(null);
@@ -54,6 +60,8 @@ export function UiProvider({ children }: { children: ReactNode }) {
     rightOpen: !narrow,
     dialog: null,
     chatMax: false,
+    assistantOpen: false,
+    popouts: [],
   });
 
   useEffect(() => {
@@ -69,7 +77,10 @@ export function UiProvider({ children }: { children: ReactNode }) {
   const toggle = useCallback<UiActions["toggle"]>((key) => setState((s) => ({ ...s, [key]: !s[key] })), []);
   const toggleTheme = useCallback(() => setState((s) => ({ ...s, theme: s.theme === "dark" ? "light" : "dark" })), []);
 
-  const value = useMemo(() => ({ ...state, set, toggle, toggleTheme }), [state, set, toggle, toggleTheme]);
+  const popOut = useCallback((id: string) => setState((s) => (s.popouts.includes(id) ? s : { ...s, popouts: [...s.popouts, id] })), []);
+  const closePopout = useCallback((id: string) => setState((s) => (s.popouts.includes(id) ? { ...s, popouts: s.popouts.filter((x) => x !== id) } : s)), []);
+
+  const value = useMemo(() => ({ ...state, set, toggle, toggleTheme, popOut, closePopout }), [state, set, toggle, toggleTheme, popOut, closePopout]);
   return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
 }
 

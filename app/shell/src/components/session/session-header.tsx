@@ -9,6 +9,9 @@ import { AgentAvatar } from "@/components/agents/agent-avatar";
 import { Chip } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { useAutomationStats } from "@/daemon/use-timeline";
+import { ExternalLink } from "lucide-react";
+import { IconButton } from "@infantry/ui";
+import { useUi } from "@/state/ui-state";
 import { SessionActionButtons } from "./session-actions";
 
 const tokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
@@ -17,6 +20,7 @@ export function SessionHeader({ agent }: { agent: Agent }) {
   const effort = useDaemon((s) => s.sessions[agent.id]?.record.effort);
   const limit = useDaemon((s) => s.sessions[agent.id]?.record.contextLimit);
   const auto = useAutomationStats(agent.id);
+  const ui = useUi();
   return (
     <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-3 pb-2 [&_span]:max-w-full [&_span]:break-all">
       <AgentAvatar agent={agent} size="md" />
@@ -51,6 +55,9 @@ export function SessionHeader({ agent }: { agent: Agent }) {
             <Chip tone="blue">tokens: not in the Rust version yet</Chip>
           </span>
         )}
+        <IconButton label="Pop out this chat" onClick={() => ui.popOut(agent.id)}>
+          <ExternalLink />
+        </IconButton>
         <SessionActionButtons sessionId={agent.id} busy={agent.status === "working"} />
       </div>
     </div>

@@ -14,6 +14,7 @@ import { StatusBar } from "./status-bar";
 import { usePluginsLoaded } from "@/plugins/use-plugins";
 import { useShortcuts } from "./use-shortcuts";
 import { ToastHost } from "./toast-host";
+import { PopoutHost } from "@/components/session/popout-host";
 
 function Drawer({ side, onClose, children }: { side: "left" | "right"; onClose: () => void; children: ReactNode }) {
   return (
@@ -61,6 +62,7 @@ export function AppShell() {
             <AgentSidebar />
           </Drawer>
         )}
+        <PopoutHost />
         {ui.rightOpen && narrowRight && (
           <Drawer side="right" onClose={() => ui.toggle("rightOpen")}>
             <RightPanel />

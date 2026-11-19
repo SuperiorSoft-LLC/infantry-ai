@@ -29,7 +29,15 @@ const tools = [
 
 const NO_QUEUE: QueuedTurnView[] = [];
 
-export function Composer({ sessionId, busy }: { sessionId: string | null; busy: boolean }) {
+/** Maximize / minimize for the chat the composer sits under: the full view maps it to `ui.chatMax`, a popout to its own box. */
+export interface ChatViewControl {
+  max: boolean;
+  onMax: () => void;
+  onMin: () => void;
+}
+
+/** `compact`: always use the small-width toolbar (a popout's width, not the window's, decides). */
+export function Composer({ sessionId, busy, compact = false, view }: { sessionId: string | null; busy: boolean; compact?: boolean; view?: ChatViewControl }) {
   const [text, setText] = useState("");
   const ui = useUi();
   const actions: Record<string, (() => void) | undefined> = {
@@ -100,7 +108,7 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
   };
 
   return (
-    <div className="px-4 pb-3">
+    <div className={cn("pb-3", compact ? "px-2" : "px-4")}>
       {sessionId && queued.length > 0 && (
         <ul aria-label="Queued turns" className="mb-2 space-y-1">
           {queued.map((q) => (
@@ -156,12 +164,16 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
       <div className={cn("relative rounded-xl border-2 bg-card transition-colors", busy ? "border-danger" : "border-border focus-within:border-ring")}>
         {sessionId && (
           <div role="toolbar" aria-label="Chat view" className="absolute right-3 bottom-full -mb-0.5 flex items-center gap-1 rounded-t-lg border border-b-0 border-danger/60 bg-card p-1">
-            <IconButton label="Maximize chat" className="rounded-full" disabled={ui.chatMax} onClick={() => ui.set("chatMax", true)}>
-              <Maximize2 />
-            </IconButton>
-            <IconButton label="Minimize chat" className="rounded-full" disabled={!ui.chatMax} onClick={() => ui.set("chatMax", false)}>
-              <Minimize2 />
-            </IconButton>
+            {view && (
+              <>
+                <IconButton label="Maximize chat" className="rounded-full" disabled={view.max} onClick={view.onMax}>
+                  <Maximize2 />
+                </IconButton>
+                <IconButton label="Minimize chat" className="rounded-full" disabled={!view.max} onClick={view.onMin}>
+                  <Minimize2 />
+                </IconButton>
+              </>
+            )}
             <IconButton label="Search chat" className="rounded-full" onClick={() => window.dispatchEvent(new Event(CHAT_SEARCH_EVENT))}>
               <Search />
             </IconButton>
@@ -214,7 +226,7 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
           className="min-h-20 resize-none border-0 bg-transparent px-4 py-3 text-[15px] shadow-none focus-visible:ring-0 dark:bg-transparent"
         />
         <div className="flex items-center justify-between gap-2 px-2 pb-2">
-          <div role="toolbar" aria-label="Session actions (compact)" className="flex items-center gap-1 rounded-lg border border-danger/60 p-1 sm:hidden">
+          <div role="toolbar" aria-label="Session actions (compact)" className={cn("flex items-center gap-1 rounded-lg border border-danger/60 p-1", !compact && "sm:hidden")}>
             <IconButton label="Attach image" className="rounded-full" disabled={!online || !!heldBy} onClick={() => fileInput.current?.click()}>
               <ImagePlus />
             </IconButton>
@@ -238,7 +250,7 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <div role="toolbar" aria-label="Session actions" className="hidden items-center gap-1 rounded-lg border border-danger/60 p-1 sm:flex">
+          <div role="toolbar" aria-label="Session actions" className={cn("hidden items-center gap-1 rounded-lg border border-danger/60 p-1", !compact && "sm:flex")}>
             {tools.map(({ label, icon: Icon, danger }) => (
               <IconButton
                 key={label}
@@ -259,7 +271,7 @@ export function Composer({ sessionId, busy }: { sessionId: string | null; busy: 
               hidden
               onChange={(e) => (void attach(Array.from(e.target.files ?? [])), (e.target.value = ""))}
             />
-            <IconButton label="Attach image" className="hidden sm:inline-flex" disabled={!online || !!heldBy} onClick={() => fileInput.current?.click()}>
+            <IconButton label="Attach image" className={cn("hidden", !compact && "sm:inline-flex")} disabled={!online || !!heldBy} onClick={() => fileInput.current?.click()}>
               <ImagePlus />
             </IconButton>
             <IconButton label="Stop" className="text-danger hover:text-danger" disabled={!busy || !sessionId || !online} onClick={() => sessionId && interrupt(sessionId)}>
