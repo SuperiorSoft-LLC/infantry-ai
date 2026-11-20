@@ -33,13 +33,14 @@ import { HOST_GLOBAL, SCOPE_ATTRIBUTE, UI_API_VERSION, type UiHost } from "@infa
 import { host } from "@/host";
 import { daemonLink, daemonStore, useDaemon } from "@/daemon/daemon";
 import { pluginsStore, usePlugins } from "./use-plugins";
+import { usePreference } from "./preferences";
 
 /** Lends the plugins this window loads its own React, React DOM and UI kit, and the app state they may read. */
 function installHost(): void {
   const lent: UiHost = {
     apiVersion: UI_API_VERSION,
     modules: { react: React, "react/jsx-runtime": JsxRuntime, "react-dom": ReactDom, "@infantry/ui": Kit },
-    api: { useLinkState: () => useDaemon((s) => s.connection.state) },
+    api: { useLinkState: () => useDaemon((s) => s.connection.state), usePreference },
   };
   (globalThis as Record<string, unknown>)[HOST_GLOBAL] = Object.freeze(lent);
 }

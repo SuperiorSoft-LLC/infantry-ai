@@ -27,3 +27,7 @@ export function definePlugin(m: UiPluginModule): UiPluginModule {
 
 /** The daemon link's state (`open`, `connecting`, `closed`...); the component re-renders when it changes. */
 export const useLinkState = (): string => lent("useLinkState")();
+
+/** A per-device preference (see [HostApi.usePreference]); `[value, set]`, re-rendering when it changes. */
+export const usePreference = <T extends string | boolean>(key: string, fallback: T): readonly [T, (next: T) => void] =>
+  lent("usePreference")(key, fallback);

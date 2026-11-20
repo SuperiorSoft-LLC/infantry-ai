@@ -30,8 +30,10 @@ export const SCOPE_ATTRIBUTE: string = host.scopeAttribute;
  * - `settings.card`: a card on the Settings page.
  * - `plugin.config`: a card in this plugin's own settings, under Plugins (#42).
  * - `card.badge`: a badge on every board ticket card (its props carry the ticket).
+ * - `layout`: a whole-window layout (DESK-2). When the user picks it (the `layout` preference), the shell draws this view INSTEAD
+ *   of its own window and hands it today's shell as `Shell`, so the layout may wrap, shrink or hide the orchestrator.
  */
-export const SLOTS = ["tab", "panel", "settings.card", "plugin.config", "card.badge"] as const;
+export const SLOTS = ["tab", "panel", "settings.card", "plugin.config", "card.badge", "layout"] as const;
 export type Slot = (typeof SLOTS)[number];
 
 /** The modules the app lends: a plugin's imports of these are the app's own copy (one React, one UI kit). */
@@ -59,6 +61,20 @@ export interface SlotProps {
   "settings.card": Record<string, never>;
   "plugin.config": { plugin: string };
   "card.badge": { ticket: { id: string; title: string; status: string; [k: string]: unknown } };
+  layout: LayoutViewProps;
+}
+
+/** What a `layout` view is drawn with: today's whole app, and a way to draw another plugin's page contribution. */
+export interface LayoutViewProps {
+  /**
+   * The shell as it always was (tabs, sidebar, panels), drawn outside the plugin's style scope so nothing inside it changes.
+   * It renders a placeholder (give it room with `className`, e.g. `min-h-0 flex-1`) and the shell fills that placeholder.
+   * Hide the placeholder (display:none on it or an ancestor) to hide the shell while it keeps running and keeps its state;
+   * unmount it to close the shell.
+   */
+  Shell: ComponentType<{ className?: string }>;
+  /** Draws contribution [id] of plugin [plugin] as a page (an installed plugin's tab), with the app's loading and fault states. */
+  View: ComponentType<{ plugin: string; id: string }>;
 }
 
 /** What a plugin draws for one of its contributions. */
@@ -98,6 +114,11 @@ export interface UiPluginModule {
 export interface HostApi {
   /** The daemon link's state (`open`, `connecting`, `closed`...); re-renders when it changes. */
   useLinkState(): string;
+  /**
+   * A small per-device preference (a string or a boolean) kept in this window's storage; the component re-renders when it
+   * changes, here or in another plugin. The key `layout` is the active layout contribution (`<Plugin>/<id>`, or `default`).
+   */
+  usePreference<T extends string | boolean>(key: string, fallback: T): readonly [T, (next: T) => void];
 }
 
 /** What the app installs under HOST_GLOBAL. */
