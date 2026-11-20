@@ -66,7 +66,7 @@ jobs:
               echo "build=false" >> "$GITHUB_OUTPUT"; echo "version $v is already released; nothing to build"; exit 0
             fi
           fi
-          node app/src-tauri/scripts/release-tools.mjs plan app/src-tauri/tauri.conf.json app/src-tauri/Cargo.toml "$last" "$CHANNEL" "$GITHUB_RUN_NUMBER" | tee -a "$GITHUB_OUTPUT"
+          node app/src-tauri/scripts/release-tools.mjs plan app/src-tauri/tauri.conf.json app/src-tauri/Cargo.toml "$last" "$CHANNEL" "$GITHUB_RUN_NUMBER" rust/Cargo.toml | tee -a "$GITHUB_OUTPUT"
           echo "build=true" >> "$GITHUB_OUTPUT"
 
   windows:

@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-cli"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "MPL-2.0"
 description = "Native `infantry mcp serve`: a drop-in for the Kotlin MCP stdio bridge (RUST-MCP-1)"

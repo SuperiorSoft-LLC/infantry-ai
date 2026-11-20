@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-plugin-wit"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "Apache-2.0"
 description = "The Infantry AI daemon plugin ABI: the daemon-plugin WIT world and its JSON-lines mapping for native sidecars"

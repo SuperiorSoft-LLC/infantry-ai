@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-runner-link"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "MPL-2.0"
 description = "The runner link (runner_link_* frames, contract 1.11.0): a RemoteRunner client and the infantry-runner-agent, byte-compatible with the Kotlin link (RUST-LINK-1)"

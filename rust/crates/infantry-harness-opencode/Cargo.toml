@@ -1,6 +1,6 @@
 [package]
 name = "infantry-harness-opencode"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "Apache-2.0"
 description = "Infantry AI harness for the opencode CLI (one persistent opencode serve per session, HTTP + server-sent events through the runner)"

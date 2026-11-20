@@ -46,7 +46,15 @@ export function cargoVersion(text) {
   return m[1];
 }
 
-export function plan({ confVersion, cargoVer, lastTag, channel, run }) {
+/** The rust/ workspace version: the ONE version of the daemon and CLI. */
+export function workspaceVersion(text) {
+  const m = /^\[workspace\.package\][^[]*?^version\s*=\s*"([^"]+)"/ms.exec(text);
+  if (!m) throw new Error("rust/Cargo.toml has no [workspace.package] version");
+  return m[1];
+}
+
+export function plan({ confVersion, cargoVer, wsVer = confVersion, lastTag, channel, run }) {
+  if (wsVer !== confVersion) throw new Error(`rust/Cargo.toml [workspace.package] is ${wsVer} but tauri.conf.json is ${confVersion}: the daemon and CLI would report the wrong version; bump both`);
   if (confVersion !== cargoVer) throw new Error(`tauri.conf.json is ${confVersion} but Cargo.toml is ${cargoVer}: bump both`);
   const last = lastTag ? lastTag.replace(/^rust-v/, "") : null;
   let version = confVersion;
@@ -87,10 +95,11 @@ export function feed({ version, notes, baseUrl, entries, readFile = (f) => readF
 function main(argv) {
   const [cmd, ...a] = argv;
   if (cmd === "plan") {
-    const [conf, cargo, lastTag, channel, run] = a;
+    const [conf, cargo, lastTag, channel, run, ws] = a;
     const p = plan({
       confVersion: JSON.parse(readFileSync(conf, "utf8")).version,
       cargoVer: cargoVersion(readFileSync(cargo, "utf8")),
+      wsVer: ws ? workspaceVersion(readFileSync(ws, "utf8")) : undefined,
       lastTag,
       channel: channel || "stable",
       run: run || "0",

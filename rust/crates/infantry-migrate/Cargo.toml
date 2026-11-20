@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-migrate"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "MPL-2.0"
 description = "RUST-MIGRATE-1: snapshot a live Kotlin state dir into a Rust state dir (read-only on the source), verify it, report its status"

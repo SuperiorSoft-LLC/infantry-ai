@@ -1,6 +1,6 @@
 [package]
 name = "infantry-runner-api"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "MPL-2.0"
 description = "Infantry AI location-transparent runner interface: the Runner trait a harness codes against, local or remote"

@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-vault"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "MPL-2.0"
 description = "Infantry AI secrets vault (L1 platform): the keystore (Kotlin v1/v2 files), OS master-key protection, {{secret:...}} rendering, the output scrubber, Windows Hello reveal/copy, encrypted backup, the audit log and the secret_* frames"

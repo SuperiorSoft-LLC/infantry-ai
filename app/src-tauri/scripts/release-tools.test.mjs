@@ -43,3 +43,9 @@ test("the feed carries signatures for desktop and sha256 plus size for the APK",
   assert.match(f.platforms["android-aarch64"].sha256, /^[0-9a-f]{64}$/);
   assert.throws(() => feed({ version: "1.0.0", notes: "", baseUrl: "https://h", entries: ["windows-x86_64=a.exe"], readFile: () => "" }), /needs a signature/);
 });
+
+test("the rust workspace version must match tauri.conf.json (daemon and CLI report it)", async () => {
+  const { plan, workspaceVersion } = await import("./release-tools.mjs");
+  assert.equal(workspaceVersion('[workspace]\n[workspace.package]\n# c\nversion = "0.1.2"\n'), "0.1.2");
+  assert.throws(() => plan({ confVersion: "0.1.3", cargoVer: "0.1.3", wsVer: "0.1.2", lastTag: "rust-v0.1.2", channel: "stable", run: "1" }), /workspace\.package/);
+});
