@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 //! LIVE: two real codex turns through the generic driver on the real LocalRunner (a new thread, then a resume of it). It spends tokens, so it
-//! is ignored by default: `cargo test -p infantry-harness-codex --test live -- --ignored --nocapture`.
+//! is ignored by default: `cargo test -p infantry-harness-codex --test all live:: -- --ignored --nocapture`.
 
 use infantry_harness::{Harness, HarnessDriver, HarnessEvent, LaunchRequest, LocalProbe, TurnEnd};
 use infantry_harness_codex::CodexHarness;

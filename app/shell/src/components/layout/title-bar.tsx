@@ -62,16 +62,6 @@ export function TitleBar() {
         {attention}
         <span className="hidden sm:inline"> need attention</span>
       </button>}
-      <button
-        type="button"
-        aria-label="Open Stats"
-        data-testid="title-bar-stats"
-        onClick={() => ui.set("dialog", "stats")}
-        className="flex h-7 shrink-0 items-center gap-1.5 rounded border px-2 text-xs whitespace-nowrap hover:bg-accent"
-      >
-        <BarChart3 className="size-4" />
-        <span className="hidden sm:inline">Stats</span>
-      </button>
       <IconButton label={ui.rightOpen ? "Hide side panel" : "Show side panel"} onClick={() => ui.toggle("rightOpen")}>
         <PanelRight />
       </IconButton>
@@ -81,6 +71,9 @@ export function TitleBar() {
       <ConnectionBadge showUrl className="hidden font-mono text-xs whitespace-nowrap xl:flex" />
       <IconButton label={ui.theme === "dark" ? "Light theme" : "Dark theme"} className="hidden sm:inline-flex" onClick={ui.toggleTheme}>
         {ui.theme === "dark" ? <Sun /> : <Moon />}
+      </IconButton>
+      <IconButton label="Stats" onClick={() => ui.set("dialog", "stats")}>
+        <BarChart3 />
       </IconButton>
       <IconButton label="Settings" onClick={() => ui.set("dialog", "settings")}>
         <Settings />

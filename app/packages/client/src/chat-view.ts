@@ -35,3 +35,35 @@ export function resetChatViews(): void {
   windows.clear();
   listeners.forEach((l) => l());
 }
+
+// Composer layout rules (Kotlin ChatSurface CHAT-MINIMIZE-2/5): pixel sizes are the Kotlin dp values.
+/** Every composer button's touch target. */
+export const COMPOSER_TOUCH_PX = 48;
+/** The hanging groups' inset from the box's sides (clear of its 16px corner plus the join fillet). */
+export const COMPOSER_GROUP_INSET_PX = 26;
+/** The gap between the two groups. */
+export const COMPOSER_GROUP_GAP_PX = 24;
+
+/** How many tool buttons fit in the tools group of a composer [width] wide, beside [sendCount] send buttons and [extras] px. */
+export function composerToolsThatFit(width: number, sendCount: number, extras = 0): number {
+  const free = width - 2 * COMPOSER_GROUP_INSET_PX - COMPOSER_GROUP_GAP_PX - sendCount * COMPOSER_TOUCH_PX - extras;
+  return Math.max(0, Math.floor(free / COMPOSER_TOUCH_PX));
+}
+
+/** [count] tools in [fit] slots: all inline, or the first `fit - 1` inline and the rest behind "More actions" (the last slot). */
+export function splitComposerTools(count: number, fit: number): { inline: number; overflow: number } {
+  if (count <= fit) return { inline: count, overflow: 0 };
+  const inline = Math.max(0, fit - 1);
+  return { inline, overflow: count - inline };
+}
+
+/** The one status line above the box: permission mode (only once there is an agent), agent count, session state. */
+export function composerStatusLine(mode: string | null | undefined, agents: number, state: string | null | undefined): string {
+  return [mode && agents > 0 ? `permissions: ${mode}` : null, `${agents} agent${agents === 1 ? "" : "s"}`, state || null].filter(Boolean).join(" · ");
+}
+
+/** [text] with [insert] put at [at] (clamped), and the caret after it. */
+export function insertAt(text: string, at: number, insert: string): { text: string; caret: number } {
+  const i = Math.max(0, Math.min(at, text.length));
+  return { text: text.slice(0, i) + insert + text.slice(i), caret: i + insert.length };
+}

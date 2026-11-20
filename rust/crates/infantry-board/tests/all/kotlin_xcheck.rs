@@ -5,7 +5,7 @@
 //! `ticket_list` answer Rust gives for it to `<dir>/rust-tickets.json`. A Kotlin daemon started on that state
 //! dir must answer `ticket_list` with the same `tickets` data (`scripts`: see the RUST-ORCH-1 report).
 //! With INFANTRY_XCHECK_KOTLIN also set (Kotlin's `tickets` data, saved to a file), compares the two.
-mod common;
+use crate::common;
 
 use common::*;
 use infantry_board::BoardUnit;

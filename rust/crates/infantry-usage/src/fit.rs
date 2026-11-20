@@ -204,7 +204,7 @@ pub fn least_squares(cols: &[Vec<f64>], y: &[f64]) -> Option<Vec<f64>> {
         a[i][k] = (0..y.len()).map(|r| (cols[i][r] / scale[i]) * y[r]).sum();
     }
     for c in 0..k {
-        let piv = (c..k).max_by(|&x, &z| a[x][c].abs().partial_cmp(&a[z][c].abs()).unwrap_or(std::cmp::Ordering::Equal))?;
+        let piv = first_max_by((c..k).collect(), |&x| a[x][c].abs())?;
         if a[piv][c].abs() < 1e-12 {
             return None;
         }
@@ -219,6 +219,19 @@ pub fn least_squares(cols: &[Vec<f64>], y: &[f64]) -> Option<Vec<f64>> {
         }
     }
     Some((0..k).map(|i| a[i][k] / a[i][i] / scale[i]).collect())
+}
+
+/// Kotlin's `maxByOrNull`: the FIRST item with the greatest key (Rust's `max_by` would keep the last of a tie, and a tie in
+/// adjusted R-squared is common when two candidate fits explain the data exactly).
+fn first_max_by<T>(items: Vec<T>, key: impl Fn(&T) -> f64) -> Option<T> {
+    let mut best: Option<(f64, T)> = None;
+    for it in items {
+        let k = key(&it);
+        if best.as_ref().map_or(true, |(bk, _)| k > *bk) {
+            best = Some((k, it));
+        }
+    }
+    best.map(|b| b.1)
 }
 
 fn r2(y: &[f64], fitted: &[f64]) -> Option<f64> {
@@ -296,7 +309,7 @@ pub fn fit(steps: &[FitStep]) -> Option<FitResult> {
         });
     }
     let scored: Vec<(&Fit, (Candidate, Vec<f64>))> = fits.iter().filter_map(|f| evaluate(f, &y).map(|e| (f, e))).collect();
-    let (best_fit, best_eval) = scored.iter().max_by(|a, b| a.1 .0.adj_r2.partial_cmp(&b.1 .0.adj_r2).unwrap_or(std::cmp::Ordering::Equal))?;
+    let (best_fit, best_eval) = first_max_by(scored.iter().collect(), |e| e.1 .0.adj_r2)?;
     // "Hours in the interval" as a column: the part of a point no request explains (account-wide, unseen usage).
     let mut with_bg = Fit { key: best_fit.key.clone(), label: best_fit.label.clone(), names: best_fit.names.clone(), cols: best_fit.cols.clone() };
     with_bg.names.push("background".into());
@@ -515,3 +528,6 @@ mod tests {
         assert_eq!(intervals(&[a, b, c, d]), vec![(0, 1, 10.0), (2, 3, 2.0)]);
     }
 }
+
+#[cfg(test)]
+mod kotlin_parity;

@@ -349,10 +349,17 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         Arc::new(move |id: &str| project_dir(&p, id).map(|d| d.join(".infantry")))
     };
     let ext_list = exts.clone();
-    let scripts = ScriptStore::new(project_dirs.clone(), Arc::new(move || ext_list.clone())).with_global(&global_dir);
-    if let Some(g) = &scripts.global {
-        if let Err(e) = script_store::seed(g, state_dir, &script_store::bundled(), &exts, &log_line) {
-            log_line(&format!("global scripts not seeded: {e}"));
+    // Scripts live in the database (title, description, versions, stats); the folders are read once by the import below.
+    let library = Arc::new(infantry_scripting::library::ScriptLibrary::new(db.clone()).map_err(|e| format!("script library: {e}"))?);
+    let scripts = ScriptStore::new(project_dirs.clone(), Arc::new(move || ext_list.clone())).with_library(library.clone());
+    {
+        let known: Vec<(String, PathBuf)> = projects.store.list().into_iter().filter_map(|p| Some((p.id.clone(), project_dir(&projects, &p.id)?.join(".infantry")))).collect();
+        for line in library.migrate_files(Some(&global_dir), Some(&state_dir.join("global-hooks.json")), &known, &exts) {
+            log_line(&line);
+        }
+        let seeded = script_store::seed_library(&library, &script_store::bundled(), &log_line);
+        if !seeded.is_empty() {
+            log_line(&format!("bundled scripts seeded into the library: {}", seeded.join(", ")));
         }
     }
     let host: Arc<dyn infantry_scripting::host::ScriptHost> = tools.clone();
@@ -365,9 +372,9 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         };
         ScriptDispatcher::new(host, Arc::new(aliases), Arc::new(|| 3))
     };
-    let hook_store = Arc::new(HookStore::new(project_dirs, Some(state_dir.join("global-hooks.json"))));
+    let hook_store = Arc::new(HookStore::new(project_dirs, Some(state_dir.join("global-hooks.json"))).with_library(library.clone()));
     env.set_hooks(hook_store.clone());
-    let run_log = Arc::new(ScriptRunLog::default());
+    let run_log = Arc::new(ScriptRunLog::new(Arc::new(|| 200), Arc::new(infantry_scripting::runlog::now_ms), Some(library.clone() as Arc<dyn infantry_scripting::runlog::RunStore>)));
     let project_ids: Arc<dyn Fn() -> Vec<String> + Send + Sync> = {
         let p = projects.clone();
         Arc::new(move || p.store.list().into_iter().map(|p| p.id).collect())
@@ -418,7 +425,19 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             Arc::new(|| now_ms() as u64),
         )
     };
+    let manager = Arc::new(infantry_scripting::manage::ScriptManager {
+        library: library.clone(),
+        hooks: hook_store.clone(),
+        engines: engines.clone(),
+        plugins: None,
+        min_every_sec: {
+            let c = script_config.clone();
+            Arc::new(move || c("scripting.hooks.minEverySec").and_then(|v| v.trim().parse().ok()).unwrap_or(10))
+        },
+    });
+    let scripts_unit = infantry_scripting::unit::ScriptsUnit { manager: manager.clone(), host: tools.clone() };
     tools.set_scripting(ScriptingTools {
+        manager: Some(manager),
         chat,
         engines,
         store: scripts,
@@ -487,6 +506,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         board_side(Arc::new(crate::pods::PodsUnit { pods: pods.clone() })),
         Arc::new(crate::account::AccountUnit { account }),
         Arc::new(timeline_unit),
+        Arc::new(scripts_unit),
     ];
     units.extend(knowledge.units().into_iter().map(board_side));
     if let Some(p) = &plugin_set {

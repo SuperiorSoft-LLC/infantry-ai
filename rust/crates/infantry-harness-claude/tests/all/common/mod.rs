@@ -10,12 +10,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 pub const ID: &str = "11111111-2222-3333-4444-555555555555";
-pub const TURN: &str = include_str!("../fixtures/turn.jsonl");
-const SCREENS: &str = include_str!("../fixtures/screens.txt");
+pub const TURN: &str = include_str!("../../fixtures/turn.jsonl");
+const SCREENS: &str = include_str!("../../fixtures/screens.txt");
 pub const CLAUDE_RUN: &str =
-    include_str!("../../../../../superiorSoftLibrary/infantry/src/test/resources/retrieval/claude-run.jsonl");
+    include_str!("../../../../../../superiorSoftLibrary/infantry/src/test/resources/retrieval/claude-run.jsonl");
 pub const CLAUDE_TASKS: &str =
-    include_str!("../../../../../superiorSoftLibrary/infantry/src/test/resources/retrieval/claude-task-tools.jsonl");
+    include_str!("../../../../../../superiorSoftLibrary/infantry/src/test/resources/retrieval/claude-task-tools.jsonl");
 
 pub const INTERRUPTED: &str = r#"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]}}"#;
 pub const PROMPT: &str = r#"{"type":"user","uuid":"u-p","entrypoint":"cli","message":{"role":"user","content":"read a.txt"}}"#;

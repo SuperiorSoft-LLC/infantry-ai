@@ -29,9 +29,9 @@ import {
   Sparkles,
   SquareTerminal,
   Star,
-  TrendingUp,
   User,
   UserCircle,
+  ScrollText,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -42,10 +42,10 @@ import { McpPanel, ReviewPanel, ServicesTab, SitesPanel } from "@/components/pan
 import { SettingsPage } from "@/components/panels/settings-page";
 import { BoardTab } from "@/components/tabs/board-tab";
 import { CalendarTab } from "@/components/tabs/calendar-tab";
-import { PaceTab } from "@/components/tabs/pace-tab";
 import { RolesTab } from "@/components/roles/roles-tab";
 import { NotesTab } from "@/components/knowledge/notes-tab";
 import { SkillsTab } from "@/components/library/skills-tab";
+import { ScriptsTab } from "@/components/scripts/scripts-tab";
 import { PromptsTab } from "@/components/library/prompts-tab";
 import { MailTab } from "@/components/mail/mail-tab";
 import { ChangesPanel, GitTab } from "@/components/git/git-tab";
@@ -90,12 +90,12 @@ const CENTRE: Def[] = [
   { id: "notes", declared: "infantry.notes", label: "Notes", icon: FileText, render: () => <NotesTab /> },
   { id: "skills", builtin: true, label: "Skills", icon: Sparkles, render: () => <SkillsTab /> },
   { id: "prompts", builtin: true, label: "Prompts", icon: MessageSquare, render: () => <PromptsTab /> },
+  { id: "scripts", builtin: true, label: "Scripts", icon: ScrollText, render: () => <ScriptsTab /> },
   { id: "run", declared: "infantry.run", label: "Run", icon: Play, render: () => <RunTab /> },
   { id: "git", declared: "infantry.git", label: "Git", icon: GitBranch, render: () => <GitTab /> },
   { id: "processes", builtin: true, label: "Processes", icon: Cpu, render: () => <ProcessesTab /> },
   { id: "health", builtin: true, label: "Health", icon: Activity, render: () => <HealthTab /> },
   { id: "plugins", declared: "infantry.settings.plugins", builtin: true, label: "Plugins", icon: Puzzle, render: () => <PluginManager /> },
-  { id: "pace", declared: "infantry.pace", label: "Pace", icon: TrendingUp, render: () => <PaceTab /> },
   { id: "services", declared: "infantry.account", builtin: true, label: "Services", icon: Server, render: () => <ServicesTab /> },
   { id: "sites", declared: "infantry.sites", label: "Sites", icon: Globe, render: () => <TabPage title="Sites" description="Hosting servers (read-only here)"><SitesPanel /></TabPage> },
   { id: "settings", declared: "infantry.settings", label: "Settings", icon: Settings, render: () => <SettingsPage /> },

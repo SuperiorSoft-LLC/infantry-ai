@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 //! The board over a temp infantry.db with the real Kotlin schema, through the LocalOrchestrator and the unit.
-mod common;
+use crate::common;
 
 use common::*;
 use infantry_board::BoardUnit;

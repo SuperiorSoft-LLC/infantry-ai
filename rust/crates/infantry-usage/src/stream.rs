@@ -59,11 +59,16 @@ pub struct Totals {
     pub context_sum: i64,
 }
 
+/// The model name Claude gives its own (non-request) messages.
+const SYNTHETIC_MODEL: &str = "<synthetic>";
+
 #[derive(Default)]
 pub struct StreamUsage {
     seen: HashMap<String, usize>,
     turns: Vec<Turn>,
     result: Option<Totals>,
+    /// A result frame with no `usage` (its cost, turn count and model only).
+    result_extra: Option<Totals>,
 }
 
 fn n(v: Option<&Value>, k: &str) -> i64 {
@@ -142,29 +147,20 @@ impl StreamUsage {
         })
     }
 
+    /// Kotlin `StreamUsage.claudeResult`: the result's own `usage` (the main model's tokens) is the run's token count;
+    /// `total_cost_usd` and `num_turns` are kept; `modelUsage` only names the model when no assistant line did.
     fn claude_result(&mut self, v: &Value) {
         let mut t = Totals { cost_usd: f64_field(v, "total_cost_usd"), turns: long_field(v, "num_turns").unwrap_or(0), ..Default::default() };
-        if let Some(models) = v.get("modelUsage").and_then(Value::as_object).filter(|m| !m.is_empty()) {
-            let mut top = (0i64, String::new());
-            for (name, m) in models {
-                let (i, o) = (n(Some(m), "inputTokens"), n(Some(m), "outputTokens"));
-                t.input += i;
-                t.output += o;
-                t.cache_read += n(Some(m), "cacheReadInputTokens");
-                t.cache_write += n(Some(m), "cacheCreationInputTokens");
-                if i + o >= top.0 {
-                    top = (i + o, name.clone());
-                }
-            }
-            t.model = top.1;
-        } else if let Some(u) = v.get("usage") {
-            t.input = n(Some(u), "input_tokens");
-            t.output = n(Some(u), "output_tokens");
-            t.cache_read = n(Some(u), "cache_read_input_tokens");
-            t.cache_write = n(Some(u), "cache_creation_input_tokens");
-        } else {
+        t.model = v.get("modelUsage").and_then(Value::as_object).and_then(|m| m.keys().next().cloned()).unwrap_or_default();
+        let Some(u) = v.get("usage").filter(|u| u.is_object()) else {
+            // No usage on the result: the streamed turns stay the count; only the cost and turn count are taken.
+            self.result_extra = Some(t);
             return;
-        }
+        };
+        t.input = n(Some(u), "input_tokens");
+        t.output = n(Some(u), "output_tokens");
+        t.cache_read = n(Some(u), "cache_read_input_tokens");
+        t.cache_write = n(Some(u), "cache_creation_input_tokens");
         self.result = Some(t);
     }
 
@@ -209,17 +205,19 @@ impl StreamUsage {
         })
     }
 
-    /// `None` when the stream showed no usage at all.
+    /// `None` when the stream showed no usage at all (Kotlin `StreamUsage.totals`): turns are the model requests counted
+    /// from the stream, else the result's `num_turns`, else 1; with a result's usage its tokens are the run's, the
+    /// context sum stays per request; cost is the result's, else the requests' summed; the model is the last assistant
+    /// line's (never `<synthetic>`), else the result's.
     pub fn totals(&self) -> Option<Totals> {
-        let context_sum = self.turns.iter().map(Turn::context).sum();
-        if let Some(r) = &self.result {
-            return Some(Totals { context_sum, ..r.clone() });
-        }
-        if self.turns.is_empty() {
+        if self.result.is_none() && self.turns.is_empty() {
             return None;
         }
+        let extra = self.result.as_ref().or(self.result_extra.as_ref());
+        let counted = self.turns.len() as i64;
+        let turns = if counted > 0 { counted } else { extra.map(|r| r.turns).filter(|n| *n > 0).unwrap_or(1) };
+        let mut summed_cost: Option<f64> = None;
         let mut t = Totals::default();
-        let mut cost: Option<f64> = None;
         for turn in &self.turns {
             t.input += turn.input;
             t.output += turn.output;
@@ -227,15 +225,27 @@ impl StreamUsage {
             t.cache_read += turn.cache_read;
             t.cache_write += turn.cache_write;
             if let Some(c) = turn.cost_usd {
-                cost = Some(cost.unwrap_or(0.0) + c);
+                summed_cost = Some(summed_cost.unwrap_or(0.0) + c);
             }
-            if !turn.model.is_empty() {
+            if !turn.model.is_empty() && turn.model != SYNTHETIC_MODEL {
                 t.model = turn.model.clone();
             }
         }
-        t.cost_usd = cost;
-        t.turns = self.turns.len() as i64;
-        t.context_sum = context_sum;
+        let streamed_context: i64 = self.turns.iter().map(Turn::context).sum();
+        if let Some(r) = &self.result {
+            t.input = r.input;
+            t.output = r.output;
+            t.cache_read = r.cache_read;
+            t.cache_write = r.cache_write;
+            t.context_sum = if counted > 0 { streamed_context } else { r.input + r.cache_read + r.cache_write };
+        } else {
+            t.context_sum = streamed_context;
+        }
+        t.cost_usd = extra.and_then(|r| r.cost_usd).or(summed_cost);
+        if t.model.is_empty() {
+            t.model = extra.map(|r| r.model.clone()).unwrap_or_default();
+        }
+        t.turns = turns;
         Some(t)
     }
 }
@@ -255,7 +265,25 @@ mod tests {
         s.accept(r#"{"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"auto","pre_tokens":5}}"#);
         s.accept(r#"{"type":"result","total_cost_usd":0.5,"num_turns":3,"modelUsage":{"claude-opus":{"inputTokens":40,"outputTokens":20}}}"#);
         let t = s.totals().unwrap();
-        assert_eq!((t.input, t.cost_usd, t.turns, t.model.as_str()), (40, Some(0.5), 3, "claude-opus"));
+        // Kotlin StreamUsage: a result with no `usage` keeps the streamed tokens and the counted requests; its cost wins.
+        assert_eq!((t.input, t.cost_usd, t.turns, t.model.as_str()), (10, Some(0.5), 1, "claude-opus"));
+    }
+
+    /// Kotlin `UsageMeterTest`, "claude result totals win and assistant lines give turns and context", same lines and values.
+    #[test]
+    fn claude_result_totals_win_and_assistant_lines_give_turns_and_context() {
+        let mut s = StreamUsage::new();
+        for l in [
+            r#"{"type":"assistant","message":{"id":"m1","model":"claude-sonnet-5-5","usage":{"input_tokens":10,"output_tokens":1,"cache_read_input_tokens":1000,"cache_creation_input_tokens":200}}}"#,
+            r#"{"type":"assistant","message":{"id":"m1","model":"claude-sonnet-5-5","usage":{"input_tokens":10,"output_tokens":1,"cache_read_input_tokens":1000,"cache_creation_input_tokens":200}}}"#,
+            r#"{"type":"assistant","message":{"id":"m2","model":"claude-sonnet-5-5","usage":{"input_tokens":20,"output_tokens":2,"cache_read_input_tokens":1200,"cache_creation_input_tokens":0}}}"#,
+            r#"{"type":"result","num_turns":2,"total_cost_usd":0.5,"usage":{"input_tokens":30,"output_tokens":90,"cache_read_input_tokens":2200,"cache_creation_input_tokens":200}}"#,
+        ] {
+            s.accept(l);
+        }
+        let t = s.totals().unwrap();
+        assert_eq!((t.turns, t.input, t.output, t.cache_read, t.cache_write), (2, 30, 90, 2200, 200));
+        assert_eq!((t.context_sum, t.cost_usd, t.model.as_str()), (1210 + 1220, Some(0.5), "claude-sonnet-5-5"));
     }
 
     #[test]

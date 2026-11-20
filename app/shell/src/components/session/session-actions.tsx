@@ -2,19 +2,19 @@
 // Copyright (c) SuperiorSoft LLC
 // Session actions (RUST-SESS-2): interrupt (the store's existing `interrupt`), restart (`session_restart`; a mid-turn
 // refusal offers a forced retry), switch provider/model (`session_swap`, providers from the launcher's harness list)
-// and stats (`session_stats_get`). The header buttons and the composer toolbar open the same dialogs; every dialog is
+// and remove. Session stats live in the one Stats modal (top-right button). The header buttons and the composer toolbar open the same dialogs; every dialog is
 // the one modal.
 import { useEffect, useState } from "react";
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
-import { ArrowLeftRight, BarChart3, CircleX, RotateCw } from "lucide-react";
-import { createSessionActions, isMidTurnRefusal, type SessionActions, type SessionStats } from "@infantry/client";
+import { ArrowLeftRight, CircleX, RotateCw } from "lucide-react";
+import { createSessionActions, isMidTurnRefusal, type SessionActions } from "@infantry/client";
 import { AppDialog, Button, IconButton } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { useLauncher } from "@/components/dialogs/new-agent-dialog";
 import { ExecutorPicker, type ExecutorValue } from "@/components/dialogs/executor-picker";
 
-type Modal = "restart" | "swap" | "stats" | "delete";
+type Modal = "restart" | "swap" | "delete";
 
 const modal = createStore<{ open: Modal | null; sessionId: string | null }>(() => ({ open: null, sessionId: null }));
 
@@ -43,9 +43,6 @@ export function SessionActionButtons({ sessionId, busy }: { sessionId: string; b
       <IconButton label="Switch provider or model" disabled={!online} onClick={() => openSessionDialog("swap", sessionId)}>
         <ArrowLeftRight />
       </IconButton>
-      <IconButton label="Session stats" disabled={!online} onClick={() => openSessionDialog("stats", sessionId)}>
-        <BarChart3 />
-      </IconButton>
     </div>
   );
 }
@@ -57,8 +54,7 @@ export function SessionDialogs() {
   if (!open || !sessionId) return null;
   if (open === "restart") return <RestartDialog sessionId={sessionId} onClose={close} />;
   if (open === "swap") return <SwapDialog sessionId={sessionId} onClose={close} />;
-  if (open === "delete") return <DeleteDialog sessionId={sessionId} onClose={close} />;
-  return <StatsDialog sessionId={sessionId} onClose={close} />;
+  return <DeleteDialog sessionId={sessionId} onClose={close} />;
 }
 
 function Refusal({ text }: { text: string | null }) {
@@ -188,71 +184,3 @@ function SwapDialog({ sessionId, onClose }: { sessionId: string; onClose: () => 
   );
 }
 
-const dash = (v: unknown): string => (v == null || v === "" ? "-" : String(v));
-const when = (ms?: number | null): string => (ms ? new Date(ms).toLocaleString() : "-");
-function duration(ms?: number | null): string {
-  if (ms == null) return "-";
-  const s = Math.round(ms / 1000);
-  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
-}
-
-/** One session's numbers (`session_stats`): the Stats dialog and the Stats tab share it. */
-export function SessionStatsList({ sessionId }: { sessionId: string }) {
-  const [stats, setStats] = useState<SessionStats | null>(null);
-  const [why, setWhy] = useState<string | null>(null);
-  useEffect(() => {
-    let live = true;
-    sessionActions()
-      .stats(sessionId)
-      .then(
-        (s) => live && setStats(s),
-        (e) => live && setWhy(String(e)),
-      );
-    return () => {
-      live = false;
-    };
-  }, [sessionId]);
-  const rows: [string, string][] = stats
-    ? [
-        ["Harness", dash(stats.harness)],
-        ["Provider session", dash(stats.providerSessionId)],
-        ["Status", dash(stats.status)],
-        ["Started", when(stats.startedAt)],
-        ["Ended", when(stats.endedAt)],
-        ["Duration", duration(stats.durationMs)],
-        ["Prompts", dash(stats.userPrompts)],
-        ["Assistant turns", dash(stats.assistantTurns)],
-        ["Tool uses", dash(stats.toolUses)],
-        ["Models", stats.models?.length ? stats.models.join(", ") : "-"],
-        ["Last context tokens", dash(stats.lastContextTokens?.toLocaleString())],
-        ["Billed tokens", dash(stats.billedTokens?.toLocaleString())],
-        ["Cost", stats.costTotal != null ? `$${stats.costTotal.toFixed(4)}` : "-"],
-      ]
-    : [];
-  return (
-    <>
-      {why ? (
-        <Refusal text={why} />
-      ) : !stats ? (
-        <p className="text-xs text-muted-foreground">Loading...</p>
-      ) : (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
-          {rows.map(([k, v]) => (
-            <div key={k} className="contents">
-              <dt className="text-muted-foreground">{k}</dt>
-              <dd className="min-w-0 truncate font-mono text-xs leading-5">{v}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-    </>
-  );
-}
-
-function StatsDialog({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
-  return (
-    <AppDialog open onOpenChange={(o) => !o && onClose()} title="Session stats" description={sessionId}>
-      <SessionStatsList sessionId={sessionId} />
-    </AppDialog>
-  );
-}

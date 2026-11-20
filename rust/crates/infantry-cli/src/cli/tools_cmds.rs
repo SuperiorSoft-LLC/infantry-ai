@@ -31,13 +31,14 @@ fn print_run_tool(ctx: &mut Ctx, r: ToolResult) -> CmdResult {
 
 // ---- script ----
 
-pub const SCRIPT_USAGE: &str = "usage: infantry script hook list | add <on> <script> [--payload <args json>|-] | remove <id> | save <name> [--file <path> | --body -] | list | delete <name>   (<on>: \"lane enter done\", \"lane exit in_progress\" or an event name like ticket.commented)";
+pub const SCRIPT_USAGE: &str = "usage: infantry script hook list | add <on> <script> [--payload <args json>|-] | remove <id> | save <name> --title <t> --description <d> [--tags a,b] [--scope global] [--file <path> | --body -] | list [--query <text>] [--sort used|recent|failing|unused] | delete <name> | files export|import [--scope global] [--dir <path>]   (<on>: \"lane enter done\", \"lane exit in_progress\" or an event name like ticket.commented)";
 
 pub fn script_usage_error(args: &[String]) -> Option<String> {
     let a = |i: usize| args.get(i).map(String::as_str);
     let ok = matches!(
         (args.len(), a(0), a(1)),
         (2, Some("save"), _)
+            | (2, Some("files"), Some("export" | "import"))
             | (1, Some("list"), _)
             | (2, Some("delete"), _)
             | (2, Some("hook"), Some("list"))
@@ -69,6 +70,15 @@ fn script_run(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
         }
         if args[0] == "save" {
             a.insert("source".into(), s(payload.as_deref().unwrap_or_default()));
+        }
+        for k in ["title", "description", "tags", "scope", "query", "sort", "dir"] {
+            if let Some(v) = p.val(k) {
+                a.insert(k.into(), s(v));
+            }
+        }
+        if args[0] == "files" {
+            a.remove("name");
+            a.insert("action".into(), s(&args[1]));
         }
         let r = plugin_tools::call(ctx, &format!("infantry_script_{}", args[0]), a)?;
         return Ok(plugin_tools::print(ctx, &r));

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// The Stats modal: the top-right Stats button opens it (almost full screen, the one AppDialog). Tabs, as the Kotlin Stats
-// plugin groups them: Session (the selected session's tiles, context gauge, charts, what filled the context), Tokens
-// (by day / week), Cost (harness comparison + estimated cost), Context (per session + compactions) and Pace.
+// The Kotlin Stats plugin's two views (plugins/official/Infantry_Stats), as tabs of the Stats dialog: the selected
+// session's numbers (StatsPane: tiles, context gauge, charts with scale chips, what filled the context) and the daemon's
+// usage meter by day / week (UsageMeterPane: periods, then the overview: harness comparison, estimated cost, context per
+// session, job watcher). Same wording and derivations as Kotlin (stores/stats.ts).
 import { useEffect, useMemo, useState } from "react";
 import { BarChart3 } from "lucide-react";
 import { useStore } from "zustand";
@@ -13,41 +14,20 @@ import {
   type ChartKind, type ChartScaleSetting, type CostBy, type CostNames, type MeterAgg, type MeterSplit, type SessionStats, type StatsMeterStore, type StatsPoint,
   type UsageMeterReport,
 } from "@infantry/client";
-import { AppDialog, Chip, EmptyState, PanelCard, Tabs, TabsContent, TabsList, TabsTrigger, cn } from "@infantry/ui";
-import { daemonStore } from "@/daemon/daemon";
-import { useDaemon } from "@/daemon/daemon";
-import { useAgent } from "@/daemon/agents";
-import { useUi } from "@/state/ui-state";
+import { Chip, EmptyState, PanelCard, cn } from "@infantry/ui";
+import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { sessionActions } from "@/components/session/session-actions";
-import { PaceBody } from "@/components/tabs/pace-tab";
 
-/** How often the open modal asks the daemon for the selected session's numbers again. */
+/** How often the open Session tab asks the daemon for the selected session's numbers again (Kotlin STATS_REFRESH_MS). */
 export const STATS_REFRESH_MS = 3_000;
 
 let meter: StatsMeterStore | null = null;
 const meterStore = (): StatsMeterStore => (meter ??= createStatsMeterStore(daemonStore().getState()));
 
-export function StatsModal({ onClose }: { onClose: () => void }) {
-  const ui = useUi();
-  const agent = useAgent(ui.selectedAgentId);
-  return (
-    <AppDialog open onOpenChange={(o) => !o && onClose()} title="Stats" wide="screen" description={agent ? `${agent.name} · ${agent.id}` : "Pick a session in the sidebar for its Session tab"}>
-      <Tabs defaultValue="session" className="h-full min-h-0">
-        <TabsList>
-          <TabsTrigger value="session">Session</TabsTrigger>
-          <TabsTrigger value="tokens">Tokens by day/week</TabsTrigger>
-          <TabsTrigger value="cost">Cost</TabsTrigger>
-          <TabsTrigger value="context">Context</TabsTrigger>
-          <TabsTrigger value="pace">Pace</TabsTrigger>
-        </TabsList>
-        <TabsContent value="session">{agent ? <SessionTab key={agent.id} sessionId={agent.id} /> : <EmptyState icon={<BarChart3 className="size-6" />} title="No session selected" hint="Pick a session in the sidebar to see its turns, tools, tokens and cost." />}</TabsContent>
-        <TabsContent value="tokens"><MeterTab view="tokens" /></TabsContent>
-        <TabsContent value="cost"><MeterTab view="cost" /></TabsContent>
-        <TabsContent value="context"><MeterTab view="context" /></TabsContent>
-        <TabsContent value="pace"><PaceBody /></TabsContent>
-      </Tabs>
-    </AppDialog>
-  );
+/** The Session tab: the selected session's statistics, or the Kotlin empty state. */
+export function SessionStatsView({ sessionId }: { sessionId: string | null }) {
+  if (!sessionId) return <EmptyState icon={<BarChart3 className="size-6" />} title="No session selected" hint="Select an agent to see its session's statistics." />;
+  return <SessionTab key={sessionId} sessionId={sessionId} />;
 }
 
 // ---------------------------------------------------------------- Session tab
@@ -300,7 +280,7 @@ function Sources({ s }: { s: SessionStats }) {
           </div>
         </div>
       ))}
-      {s.unattributedToolTokens != null && s.unattributedToolTokens > 0 && (
+      {s.unattributedToolTokens != null && (
         <p className="mt-2.5 text-[10px] text-muted-foreground">{statsCompact(s.unattributedToolTokens)} tokens followed steps that ran several tools at once and are not split between them.</p>
       )}
     </div>
@@ -309,7 +289,8 @@ function Sources({ s }: { s: SessionStats }) {
 
 // ---------------------------------------------------------------- the daemon-wide meter tabs
 
-function MeterTab({ view }: { view: "tokens" | "cost" | "context" }) {
+/** The "Tokens by day/week" tab: one request when it opens, then the daemon pushes a fresh report per recorded turn. */
+export function UsageMeterView() {
   const store = meterStore();
   const report = useStore(store, (s) => s.report);
   const refusal = useStore(store, (s) => s.refusal);
@@ -319,7 +300,7 @@ function MeterTab({ view }: { view: "tokens" | "cost" | "context" }) {
   }, [live, store]);
   if (refusal && !report) return <p className="text-sm text-danger">{refusal}</p>;
   if (!report) return <p className="text-xs text-muted-foreground">Reading the usage meter...</p>;
-  return view === "tokens" ? <TokensView report={report} /> : view === "cost" ? <CostView report={report} /> : <ContextView report={report} />;
+  return <TokensView report={report} />;
 }
 
 const SPLITS: { id: MeterSplit; label: string }[] = [{ id: "source", label: "Source" }, { id: "role", label: "Role" }, { id: "model", label: "Model" }];
@@ -398,8 +379,11 @@ function TokensView({ report }: { report: UsageMeterReport }) {
           );
         })}
       </PanelCard>
+      <div className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">Overview (does not change with the toggles)</div>
       <p className="text-[10px] text-muted-foreground">Provider-reported only. Per-run rows kept this and last week, then daily rollups for {report.keepWeeks} weeks.</p>
       <p className="text-[10px] text-muted-foreground" data-testid="stats-turn-definition">A turn is one model request and its response (one provider usage report). A run is one agent process from prompt to exit; it holds many turns.</p>
+      <CostView report={report} />
+      <ContextView report={report} />
       {report.watch ? <p className="text-[10px] text-muted-foreground" data-testid="stats-watch-meter">{watchLine(report.watch)}</p> : null}
     </div>
   );
