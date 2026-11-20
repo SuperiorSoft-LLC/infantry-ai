@@ -62,6 +62,28 @@ pub const SENT_IDS_KEPT: usize = 500;
 /// Frames kept per session for `replay_request` (a reconnecting or late client rebuilds the transcript from them).
 pub const REPLAY_KEPT: usize = 5_000;
 
+/// Spawns a background task from any thread. `tokio::spawn` panics with "there is no reactor running" on a thread that
+/// is not inside the runtime (a std thread, a script hook, a plugin host thread) and the session-open path ran into
+/// exactly that (RUST-BUG 2617b342); this runs the task on the current runtime when there is one, else on a small
+/// fallback runtime owned by the process.
+pub fn spawn_bg<F>(fut: F)
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
+    static FALLBACK: std::sync::OnceLock<Option<tokio::runtime::Runtime>> = std::sync::OnceLock::new();
+    if let Ok(h) = tokio::runtime::Handle::try_current() {
+        h.spawn(fut);
+        return;
+    }
+    let rt = FALLBACK.get_or_init(|| tokio::runtime::Builder::new_multi_thread().worker_threads(1).thread_name("infantry-bg").enable_all().build().ok());
+    match rt {
+        Some(rt) => {
+            rt.spawn(fut);
+        }
+        None => eprintln!("[infantry] no runtime for a background task; it was dropped"),
+    }
+}
+
 pub fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
@@ -929,7 +951,7 @@ impl Daemon {
     /// When the session is at rest, sends its oldest held message as the next turn (one per turn end), after the current frames.
     fn drain_later(self: &Arc<Self>, sid: &str) {
         let (d, sid) = (self.clone(), sid.to_string());
-        tokio::spawn(async move {
+        crate::sessions::spawn_bg(async move {
             let Some(entry) = d.find(&sid) else { return };
             let mut e = entry.lock().unwrap();
             if e.removed || e.turn_active || e.rec.state == SessionState::Exited || e.rec.queued.is_empty() {
@@ -1088,7 +1110,7 @@ impl Daemon {
         let harness = self.harness_for(Some(&e.rec.provider)).ok_or_else(|| format!("no harness named `{}` on this daemon", e.rec.provider))?;
         let hs = harness.open(req, EventSink(tx))?;
         let (d, id) = (self.clone(), e.rec.id.clone());
-        tokio::spawn(async move {
+        crate::sessions::spawn_bg(async move {
             while let Some(ev) = rx.recv().await {
                 d.on_event(&id, ev);
             }
@@ -1204,7 +1226,7 @@ impl Daemon {
     /// The done-worker reaper's deferred removal, after the turn's frames.
     fn reap_later(self: &Arc<Self>, sid: &str) {
         let (d, sid) = (self.clone(), sid.to_string());
-        tokio::spawn(async move {
+        crate::sessions::spawn_bg(async move {
             let _ = tokio::task::spawn_blocking(move || d.reap_one(&sid)).await;
         });
     }
@@ -1272,7 +1294,7 @@ impl Daemon {
         self.emit(&mut e, wire::STATUS, wire::status_run("IDLE", "finished", now, started));
         let (gen, d, ms) = (e.gen, self.clone(), self.cfg.kill_settle_ms);
         drop(e);
-        tokio::spawn(async move {
+        crate::sessions::spawn_bg(async move {
             tokio::time::sleep(Duration::from_millis(ms)).await;
             let mut e = entry.lock().unwrap();
             if e.removed || e.gen != gen || e.rec.state != SessionState::Exited {

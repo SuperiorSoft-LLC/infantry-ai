@@ -17,6 +17,8 @@ mod local;
 #[cfg(desktop)]
 mod pairing;
 #[cfg(desktop)]
+mod supervisor;
+#[cfg(desktop)]
 mod update;
 #[cfg(target_os = "android")]
 mod android_update;

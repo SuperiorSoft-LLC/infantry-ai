@@ -214,8 +214,40 @@ fn kill_pid(pid: u32) -> Result<(), String> {
     if st.success() { Ok(()) } else { Err(format!("kill {pid} failed")) }
 }
 
+/// The daemon's log folder under the state dir.
+pub const LOGS: &str = "logs";
+
+/// Opens a fresh `<state>/logs/daemon.log`, first shifting the older ones up (`daemon.log` -> `daemon.1.log` -> ...)
+/// and dropping those past `keep`. The logs of the earlier layout (`<state>/daemon.log`, `daemon.prev.log`) are moved
+/// into the rotation, so no start ever truncates a log.
+pub fn rotate_log(state: &Path, keep: usize) -> Result<std::fs::File, String> {
+    let keep = keep.max(1);
+    let dir = state.join(LOGS);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("logs dir {}: {e}", dir.display()))?;
+    let at = |n: usize| dir.join(if n == 0 { "daemon.log".to_string() } else { format!("daemon.{n}.log") });
+    for old in ["daemon.prev.log", "daemon.log"] {
+        let legacy = state.join(old);
+        if legacy.is_file() {
+            // Older than anything in logs/: it takes the next free generation, or is dropped when none is free.
+            let free = (0..=keep).find(|n| !at(*n).exists());
+            if let Some(n) = free.filter(|n| *n > 0 || old == "daemon.log") {
+                let _ = std::fs::rename(&legacy, at(n));
+            } else {
+                let _ = std::fs::remove_file(&legacy);
+            }
+        }
+    }
+    let _ = std::fs::remove_file(at(keep));
+    for n in (0..keep).rev() {
+        if at(n).is_file() {
+            let _ = std::fs::rename(at(n), at(n + 1));
+        }
+    }
+    std::fs::File::create(at(0)).map_err(|e| format!("daemon log: {e}"))
+}
+
 /// The daemon for `state`: the one already running there, else a new sidecar on `port` (0 = any free port).
-pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch) -> Result<Sidecar, String> {
+pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch, log_keep: usize) -> Result<Sidecar, String> {
     if FOREIGN_PORTS.contains(&port) {
         return Err(format!("port {port} belongs to the Kotlin app's daemon; this app never uses it"));
     }
@@ -236,11 +268,8 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch) -> Result<Si
     }
     let _ = std::fs::remove_file(port_file(state));
     let bin = binary()?;
-    // RUST-BUG e0c433c9: keep the previous run's output (a crash's last words) as daemon.prev.log, never truncate it.
-    if state.join("daemon.log").is_file() {
-        let _ = std::fs::rename(state.join("daemon.log"), state.join("daemon.prev.log"));
-    }
-    let log = std::fs::File::create(state.join("daemon.log")).map_err(|e| format!("daemon log: {e}"))?;
+    // RUST-BUG 2617b342: never truncate the log. `<state>/logs/daemon.log` is rotated to daemon.1.log ... daemon.<keep>.log.
+    let log = rotate_log(state, log_keep)?;
     let mut cmd = Command::new(&bin);
     cmd.args(["--host", launch.host(), "--port", &port.to_string(), "--state-dir"])
         .arg(state)
@@ -270,7 +299,7 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch) -> Result<Si
     let start = Instant::now();
     while start.elapsed() < Duration::from_millis(START_TIMEOUT_MS) {
         if let Ok(Some(status)) = child.try_wait() {
-            return Err(format!("{} exited at start ({status}); see {}", bin.display(), state.join("daemon.log").display()));
+            return Err(format!("{} exited at start ({status}); see {}", bin.display(), state.join(LOGS).join("daemon.log").display()));
         }
         if let Some(p) = read_port(state).filter(|p| !FOREIGN_PORTS.contains(p)) {
             return Ok(Sidecar { url: format!("ws://127.0.0.1:{p}/ws"), child: Some(child), note: None });
@@ -284,6 +313,22 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch) -> Result<Si
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn logs_rotate_instead_of_truncating() {
+        let dir = std::env::temp_dir().join(format!("infantry-rot-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("daemon.log"), "legacy").unwrap();
+        for i in 1..=4 {
+            let mut f = rotate_log(&dir, 3).unwrap();
+            writeln!(f, "run {i}").unwrap();
+        }
+        let l = |n: &str| std::fs::read_to_string(dir.join("logs").join(n)).unwrap_or_default();
+        assert_eq!((l("daemon.log").trim(), l("daemon.1.log").trim(), l("daemon.2.log").trim(), l("daemon.3.log").trim()), ("run 4", "run 3", "run 2", "run 1"));
+        assert!(!dir.join("logs/daemon.4.log").exists() && !dir.join("daemon.log").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn a_daemon_older_than_the_binary_is_called_stale() {
@@ -327,10 +372,10 @@ mod tests {
         let mut v: serde_json::Value = serde_json::from_str(&real).unwrap();
         v["port"] = serde_json::json!(1);
         std::fs::write(&status, v.to_string()).unwrap();
-        assert!(ensure(&state, port, &dir, &Launch::default()).is_err());
+        assert!(ensure(&state, port, &dir, &Launch::default(), 5).is_err());
         assert!(healthy(port), "a foreign daemon must not be killed");
         std::fs::write(&status, real).unwrap();
-        let sc = ensure(&state, port, &dir, &Launch::default()).unwrap();
+        let sc = ensure(&state, port, &dir, &Launch::default(), 5).unwrap();
         assert_eq!(running_build_id(port).as_deref(), Some(id.as_str()), "the bundled daemon replaced the old one");
         let _ = old_child.wait();
         let _ = stop(&state);
@@ -368,6 +413,6 @@ mod tests {
         assert!(foreign("ws://127.0.0.1:8797/ws"));
         assert!(foreign("http://localhost:8787"));
         assert!(!foreign("ws://127.0.0.1:18990/ws"));
-        assert!(ensure(Path::new("."), 8797, Path::new("."), &super::Launch::default()).is_err());
+        assert!(ensure(Path::new("."), 8797, Path::new("."), &super::Launch::default(), 5).is_err());
     }
 }

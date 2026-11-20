@@ -8,7 +8,7 @@ import { ConnectScreen } from "./components/connect/connect-screen";
 import { runPerfScenario } from "./daemon/perf-scenario";
 import { PerfOverlay, perfOn } from "./components/layout/perf-overlay";
 import { promptsStore } from "./components/session/use-prompts";
-import { startUpdateCheck } from "./components/settings/desktop-install";
+import { listenDaemonNotices, startUpdateCheck } from "./components/settings/desktop-install";
 import "@infantry/ui/styles.css";
 
 /** Removes the start splash (index.html) once the UI has rendered; a daemon fault shows its message on it instead. */
@@ -43,6 +43,7 @@ void initDaemon().then(() => {
       {perfOn() && <PerfOverlay />}
     </React.StrictMode>,
   );
+  listenDaemonNotices();
   // With a daemon fault the shell still opens (it shows its own banner); the message stays readable for a moment.
   setTimeout(hideSplash, daemonError ? 2500 : 0);
   if (perfScenario) requestAnimationFrame(() => void runPerfScenario(perfScenario as string));

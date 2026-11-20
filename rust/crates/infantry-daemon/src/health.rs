@@ -40,16 +40,59 @@ pub const PANIC_LOG_MAX_BYTES: u64 = 256 * 1024;
 /// Where Windows Error Reporting writes a crashed process's dump by default (`%LOCALAPPDATA%\CrashDumps`).
 pub const CRASH_DUMPS_SUBDIR: &str = "CrashDumps";
 
-/// Installs a panic hook that appends the panic (thread, message, location) to `<state>/health/panics.log`, then runs
-/// the previous hook (stderr). A panic that aborts the process, or a later out-of-memory abort, is thereby on disk.
+/// Crash files live in `<state>/health/crashes/`, one per panic: the message, location, thread and a backtrace.
+pub const CRASHES_DIR: &str = "crashes";
+/// `limits.health.crashFiles` default: crash files kept (the oldest are deleted past this).
+pub const CRASH_FILES_KEEP: usize = 20;
+/// `INFANTRY_CRASH_FILES_KEEP` overrides [`CRASH_FILES_KEEP`] (the hook runs before settings are loaded).
+pub const CRASH_FILES_ENV: &str = "INFANTRY_CRASH_FILES_KEEP";
+
+/// Installs a panic hook that appends the panic (thread, message, location) to `<state>/health/panics.log`, writes the
+/// message and a backtrace to a crash file under `<state>/health/crashes/`, then runs the previous hook (stderr). A
+/// panic that aborts the process, or a later out-of-memory abort, is thereby on disk, and the health report lists it.
 pub fn install_panic_log(state_dir: &Path) {
     let dir = state_dir.join(DIR);
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let thread = std::thread::current().name().unwrap_or("unnamed").to_string();
-        append_panic_line(&dir, &format!("{} pid {} thread '{thread}' panicked: {info}", now_ms(), std::process::id()));
+        let at = now_ms();
+        append_panic_line(&dir, &format!("{at} pid {} thread '{thread}' panicked: {info}", std::process::id()));
+        let keep = std::env::var(CRASH_FILES_ENV).ok().and_then(|v| v.trim().parse().ok()).unwrap_or(CRASH_FILES_KEEP);
+        let trace = std::backtrace::Backtrace::force_capture();
+        write_crash_file(&dir, at, std::process::id(), &thread, &info.to_string(), &trace.to_string(), keep);
         previous(info);
     }));
+}
+
+/// Writes `crash-<ms>-pid<pid>.txt` and deletes the oldest files past `keep`. Never panics.
+pub fn write_crash_file(health_dir: &Path, at: i64, pid: u32, thread: &str, message: &str, backtrace: &str, keep: usize) {
+    let dir = health_dir.join(CRASHES_DIR);
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let body = format!("at {at} (ms since epoch)
+pid {pid}
+thread {thread}
+
+{message}
+
+backtrace:
+{backtrace}
+");
+    let _ = std::fs::write(dir.join(format!("crash-{at:015}-pid{pid}.txt")), body);
+    let mut files = crash_files(health_dir);
+    while files.len() > keep.max(1) {
+        let _ = std::fs::remove_file(files.remove(0));
+    }
+}
+
+/// The crash files, oldest first (the name carries a zero-padded timestamp).
+pub fn crash_files(health_dir: &Path) -> Vec<PathBuf> {
+    let mut v: Vec<PathBuf> = std::fs::read_dir(health_dir.join(CRASHES_DIR))
+        .map(|d| d.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("crash-"))).collect())
+        .unwrap_or_default();
+    v.sort();
+    v
 }
 
 fn append_panic_line(dir: &Path, line: &str) {
@@ -74,6 +117,10 @@ fn crash_evidence(health_dir: &Path, pid: i64, dumps: Option<&Path>) -> Vec<Stri
     let tag = format!(" pid {pid} ");
     if let Some(line) = std::fs::read_to_string(health_dir.join(PANICS)).ok().and_then(|t| t.lines().rev().find(|l| l.contains(&tag)).map(str::to_string)) {
         out.push(format!("last panic: {}", line.split_once("panicked: ").map(|(_, m)| m).unwrap_or(&line)));
+    }
+    let pid_tag = format!("-pid{pid}.txt");
+    if let Some(f) = crash_files(health_dir).into_iter().rev().find(|p| p.to_string_lossy().ends_with(&pid_tag)) {
+        out.push(format!("crash file: {}", f.display()));
     }
     if let Some(dir) = dumps {
         let exe = std::env::current_exe().ok().and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_else(|| "infantry-daemon.exe".into());
@@ -512,6 +559,7 @@ pub fn report(h: &Health, src: &HealthSources, session_id: Option<&str>, project
             "cliPath": cli_path_line(),
         },
         "events": h.journal.tail(EVENT_TAIL),
+        "crashes": crash_files(&h.state_dir.join(DIR)).iter().rev().take(EVENT_TAIL).map(|p| p.to_string_lossy().into_owned()).collect::<Vec<_>>(),
     })
 }
 
@@ -608,6 +656,13 @@ pub fn render(r: &Value) -> String {
             ));
         }
     }
+    let crashes = r["crashes"].as_array().cloned().unwrap_or_default();
+    if !crashes.is_empty() {
+        line(format!("crash files ({}), newest first:", crashes.len()));
+        for c in crashes {
+            line(format!("  {}", c.as_str().unwrap_or("?")));
+        }
+    }
     o.trim_end().to_string()
 }
 
@@ -674,6 +729,22 @@ mod tests {
         assert!(!detail.contains("someone else"), "{detail}");
         assert!(detail.contains("crash dump: ") && detail.contains(".dmp"), "{detail}");
         let _ = std::fs::remove_dir_all(d);
+    }
+
+    /// A panic leaves a crash file (message + backtrace); old files go past the keep limit; evidence names the file.
+    #[test]
+    fn crash_files_are_written_listed_and_pruned() {
+        let d = std::env::temp_dir().join(format!("infantry-crash-{}", std::process::id())).join(DIR);
+        let _ = std::fs::remove_dir_all(&d);
+        for i in 1..=4 {
+            write_crash_file(&d, i, 77, "main", "boom at x.rs:1:1", "frame 0", 3);
+        }
+        let files = crash_files(&d);
+        assert_eq!(files.len(), 3, "oldest pruned");
+        let text = std::fs::read_to_string(files.last().unwrap()).unwrap();
+        assert!(text.contains("boom at x.rs:1:1") && text.contains("backtrace:") && text.contains("pid 77"), "{text}");
+        assert!(crash_evidence(&d, 77, None).iter().any(|e| e.starts_with("crash file: ")));
+        let _ = std::fs::remove_dir_all(d.parent().unwrap());
     }
 
     #[test]

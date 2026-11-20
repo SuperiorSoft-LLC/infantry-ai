@@ -158,15 +158,24 @@ pub async fn update_install(app: AppHandle, state: State<'_, AppState>, pending:
         return Err("no update to install: check for updates first".into());
     };
     let bytes = update.download(|_, _| {}, || {}).await.map_err(|e| format!("download failed: {e}"))?;
+    // The app stops the daemon itself here: the supervisor must not call that a death.
+    state.paused.store(true, std::sync::atomic::Ordering::SeqCst);
     let stopped = match state.daemon_state.as_ref() {
         Some(dir) => {
             let dir = dir.clone();
-            tauri::async_runtime::spawn_blocking(move || daemon::stop(&dir)).await.map_err(|e| e.to_string())??
+            match tauri::async_runtime::spawn_blocking(move || daemon::stop(&dir)).await.map_err(|e| e.to_string()).and_then(|r| r) {
+                Ok(s) => s,
+                Err(e) => {
+                    state.paused.store(false, std::sync::atomic::Ordering::SeqCst);
+                    return Err(e);
+                }
+            }
         }
         None => None,
     };
     // On Windows the installer takes over and this process exits; reaching the error arm means it did not start.
     if let Err(e) = update.install(bytes) {
+        state.paused.store(false, std::sync::atomic::Ordering::SeqCst);
         if stopped.is_some() {
             let _ = state.restart_daemon();
         }
