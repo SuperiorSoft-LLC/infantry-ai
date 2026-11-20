@@ -115,6 +115,14 @@ impl Plugin for Settings {
                 project_answer(&ask("project_config", &json!({ "projectId": p }).to_string(), "project")?)
             }
             "infantry_project_config_set" => project_answer(&ask("project_config", &config_patch(&a)?.to_string(), "project")?),
+            "infantry_project_delete" => {
+                // No default: a delete never falls back to the caller's own project.
+                let p = s(&a, "projectId").ok_or("infantry_project_delete needs a projectId")?;
+                let force = a.get("force").and_then(Value::as_bool).unwrap_or(false);
+                let gone = ask("project_delete", &json!({ "projectId": p, "force": force }).to_string(), "project_deleted")?;
+                let v: Value = serde_json::from_str(&gone).map_err(|e| format!("project_delete: bad answer: {e}"))?;
+                Ok(json!({"deleted": true, "projectId": v.get("id"), "name": v.get("name")}).to_string())
+            }
             "infantry_settings_get" => {
                 let key = s(&a, "key").ok_or("infantry_settings_get needs a key")?;
                 let mut o = Map::new();

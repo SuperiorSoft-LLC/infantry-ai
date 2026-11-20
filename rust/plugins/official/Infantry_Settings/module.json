@@ -27,6 +27,21 @@
         "description": "Set a project per-role caps, autoRemoveDoneWorkers, routingRules (replace), experiment switches or generic project data."
       },
       {
+        "name": "infantry_project_delete",
+        "action": "projects.delete",
+        "kind": "destructive",
+        "description": "Delete a project and its workspaces. Refused while a session of the project is live unless force is true. Tickets and sessions are not touched.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "projectId": { "type": "string", "description": "The project id to delete." },
+            "force": { "type": "boolean", "description": "Delete even though a session of the project is live." }
+          },
+          "required": ["projectId"],
+          "additionalProperties": false
+        }
+      },
+      {
         "name": "infantry_settings_get",
         "action": "settings.read",
         "kind": "read",

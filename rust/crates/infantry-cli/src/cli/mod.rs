@@ -19,6 +19,7 @@ pub mod plugin_tools;
 pub mod tools_cmds;
 pub mod usage_settings;
 pub mod cmd_worktrees;
+pub mod cmd_project;
 pub mod health;
 pub mod local_cmds;
 pub mod progress;

@@ -52,6 +52,8 @@ pub trait Persistence: Send + Sync {
     fn upsert_project(&self, p: &Project) -> Result<(), String>;
     fn load_workspaces(&self) -> Vec<Workspace>;
     fn upsert_workspace(&self, w: &Workspace) -> Result<(), String>;
+    /// Removes the project and its workspaces.
+    fn delete_project(&self, id: &str) -> Result<(), String>;
 }
 
 /// Nothing outlives the process (tests, a stateless daemon).
@@ -69,6 +71,9 @@ impl Persistence for MemoryPersistence {
         Vec::new()
     }
     fn upsert_workspace(&self, _: &Workspace) -> Result<(), String> {
+        Ok(())
+    }
+    fn delete_project(&self, _: &str) -> Result<(), String> {
         Ok(())
     }
 }
@@ -184,6 +189,17 @@ impl Persistence for SqlPersistence {
                 if n == 0 {
                     c.execute("UPDATE workspaces SET project_id=?1, name=?2, path=?3 WHERE id=?4", params![w.project_id, w.name, w.path, w.id])?;
                 }
+                Ok(())
+            })
+            .map_err(|e| e.to_string())
+    }
+
+    fn delete_project(&self, id: &str) -> Result<(), String> {
+        self.db
+            .write(|c| {
+                // Explicit, so it does not depend on `PRAGMA foreign_keys`.
+                c.execute("DELETE FROM workspaces WHERE project_id=?1", params![id])?;
+                c.execute("DELETE FROM projects WHERE id=?1", params![id])?;
                 Ok(())
             })
             .map_err(|e| e.to_string())
@@ -381,6 +397,21 @@ impl ProjectStore {
             return refuse("expects a project id");
         }
         self.lock().by_id.get(wanted).cloned().ok_or_else(|| Refused(format!("no project '{}'", shown(wanted, 80))))
+    }
+
+    /// Removes a project and its workspaces; returns the removed project. Nothing is written for an unknown id.
+    pub fn delete(&self, id: &str) -> Res<Project> {
+        let wanted = id.trim();
+        if wanted.is_empty() {
+            return refuse("expects a project id");
+        }
+        let mut inner = self.lock();
+        let Some(existing) = inner.by_id.get(wanted).cloned() else { return refuse(format!("no project '{}'", shown(wanted, 80))) };
+        self.persistence.delete_project(wanted).map_err(|e| Refused(format!("could not delete the project: {e}")))?;
+        inner.by_id.remove(wanted);
+        inner.order.retain(|x| x != wanted);
+        inner.workspaces.retain(|w| w.project_id != wanted);
+        Ok(existing)
     }
 
     pub fn list(&self) -> Vec<Project> {

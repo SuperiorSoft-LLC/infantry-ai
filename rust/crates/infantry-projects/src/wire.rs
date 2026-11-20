@@ -320,6 +320,15 @@ pub struct ProjectSave {
     pub starter: bool,
 }
 
+/// `project_delete`: remove a project. Refused while one of its sessions is live unless `force`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProjectDeleteRequest {
+    pub project_id: String,
+    #[serde(default)]
+    pub force: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectBaseRequest {

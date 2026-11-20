@@ -33,6 +33,8 @@ fn refused(frame: &str) -> impl Fn(Refused) -> Refusal + '_ {
 
 pub type RoutingValidator = Arc<dyn Fn(Vec<RoutingRule>) -> Result<Vec<RoutingRule>, String> + Send + Sync>;
 pub type CutRepo = Arc<dyn Fn(&Project) -> Option<PathBuf> + Send + Sync>;
+/// The live sessions of a project, as `(sessionId, role)`.
+pub type LiveSessions = Arc<dyn Fn(&str) -> Vec<(String, String)> + Send + Sync>;
 pub type SessionCheckout = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
 
 // ---- projects + workspaces ---------------------------------------------------------------------
@@ -46,9 +48,11 @@ pub struct ProjectsUnit {
     /// Normalises and checks a routing-rule list. The default has no harness list and refuses every non-empty list;
     /// the composition root passes the orchestrator's validator.
     pub routing: RoutingValidator,
+    /// Which sessions of a project are live (`project_delete` refuses while any is, unless forced). Default: none.
+    pub live_sessions: LiveSessions,
 }
 
-const PROJECT_FRAMES: &[&str] = &[f::PROJECT_SAVE, f::PROJECT_GET, f::PROJECT_LIST, f::PROJECT_BASE, f::PROJECT_CONFIG, f::WORKSPACE_SAVE, f::WORKSPACE_LIST];
+const PROJECT_FRAMES: &[&str] = &[f::PROJECT_DELETE, f::PROJECT_SAVE, f::PROJECT_GET, f::PROJECT_LIST, f::PROJECT_BASE, f::PROJECT_CONFIG, f::WORKSPACE_SAVE, f::WORKSPACE_LIST];
 
 impl ProjectsUnit {
     pub fn new(store: Arc<ProjectStore>, branches: Arc<TicketBranches>, fallback_repo: Option<PathBuf>) -> Self {
@@ -67,7 +71,7 @@ impl ProjectsUnit {
                 Err("this daemon has no harness list to check a provider / model against".into())
             }
         });
-        ProjectsUnit { store, branches, cut_repo, routing }
+        ProjectsUnit { store, branches, cut_repo, routing, live_sessions: Arc::new(|_| Vec::new()) }
     }
 
     /// Accepts `branch` as project `p`'s base: the repo resolves it, and the project's directory is in that repo.
@@ -118,6 +122,29 @@ impl FrameUnit for ProjectsUnit {
             f::PROJECT_SAVE => one(self.store.save(&decode::<ProjectSave>(t, &env.data)?).map_err(rf)?),
             f::PROJECT_GET => one(self.store.get(&env.data).map_err(rf)?),
             f::PROJECT_LIST => Ok(vec![reply(env, f::PROJECTS, &self.store.list())]),
+            f::PROJECT_DELETE => {
+                let req: ProjectDeleteRequest = decode(t, &env.data)?;
+                let p = self.store.get(&req.project_id).map_err(&rf)?;
+                let live = (self.live_sessions)(&p.id);
+                if !live.is_empty() && !req.force {
+                    let who: Vec<String> = live.iter().take(5).map(|(id, role)| format!("{id} ({role})")).collect();
+                    return Err(Refusal::new(
+                        t,
+                        format!(
+                            "project {} '{}' has {} live session(s): {}{}; stop them, or delete with force",
+                            p.id,
+                            p.name,
+                            live.len(),
+                            who.join(", "),
+                            if live.len() > who.len() { ", ..." } else { "" }
+                        ),
+                    ));
+                }
+                let gone = self.store.delete(&p.id).map_err(&rf)?;
+                // Every client drops it.
+                ctx.bus.publish(Envelope::new(f::PROJECT_DELETED, serde_json::to_string(&gone).unwrap_or_default()));
+                Ok(vec![reply(env, f::PROJECT_DELETED, &gone)])
+            }
             f::PROJECT_BASE => {
                 let req: ProjectBaseRequest = decode(t, &env.data)?;
                 if req.clear && req.branch.is_some() {

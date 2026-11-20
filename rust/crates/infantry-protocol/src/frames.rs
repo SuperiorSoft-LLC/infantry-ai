@@ -228,6 +228,8 @@ pub const PROJECT: &str = "project";
 pub const PROJECTS: &str = "projects";
 pub const PROJECT_BASE: &str = "project_base";
 pub const PROJECT_CONFIG: &str = "project_config";
+pub const PROJECT_DELETE: &str = "project_delete";
+pub const PROJECT_DELETED: &str = "project_deleted";
 pub const PROJECT_GIT_STATUS: &str = "project_git_status";
 pub const PROJECT_GIT_DIFF: &str = "project_git_diff";
 pub const PROJECT_GIT_LOG: &str = "project_git_log";
@@ -545,6 +547,8 @@ pub const ALL: &[&str] = &[
     PROJECTS,
     PROJECT_BASE,
     PROJECT_CONFIG,
+    PROJECT_DELETE,
+    PROJECT_DELETED,
     PROJECT_GIT_STATUS,
     PROJECT_GIT_DIFF,
     PROJECT_GIT_LOG,

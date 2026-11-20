@@ -150,6 +150,10 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     {
         let d = daemon.clone();
         projects_unit.routing = Arc::new(move |rules| adapters::validate_routing(&d, rules));
+        let d = daemon.clone();
+        projects_unit.live_sessions = Arc::new(move |project: &str| {
+            d.records().iter().filter(|r| r.live() && r.project_id.as_deref() == Some(project)).map(|r| (r.id.clone(), r.role.clone().unwrap_or_default())).collect()
+        });
     }
     let mut git_unit = projects.git_unit();
     {

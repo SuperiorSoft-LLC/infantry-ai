@@ -35,6 +35,7 @@ pub static COMMANDS: &[&Command] = &[
     &super::usage_settings::SETTINGS,
     &super::health::HEALTH,
     &super::cmd_worktrees::WORKTREES,
+    &super::cmd_project::PROJECT,
     &super::local_cmds::INSTALL_CLI,
     &super::local_cmds::UNINSTALL_CLI,
     &super::local_cmds::REMOTE,

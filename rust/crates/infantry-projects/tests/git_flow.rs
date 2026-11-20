@@ -157,3 +157,25 @@ fn no_directory_is_unavailable_not_clean() {
     assert!(!s.available);
     assert_eq!(s.reason, "this project has no directory configured");
 }
+
+#[test]
+fn project_delete_refuses_while_live_unless_forced() {
+    let shared: Arc<dyn GitCli> = Arc::new(git());
+    let p = Projects::new(shared, None, GitViewConfig::default()).unwrap();
+    let mut unit = p.projects_unit(None);
+    unit.live_sessions = Arc::new(|id: &str| if id.is_empty() { vec![] } else { vec![("s-1".to_string(), "backend".to_string())] });
+    let mut reg = Registry::new();
+    reg.register(Arc::new(unit)).unwrap();
+
+    let id = body(&ask(&reg, "project_save", json!({"name": "Stray"})))["id"].as_str().unwrap().to_string();
+    let refused = ask(&reg, "project_delete", json!({"projectId": id}));
+    assert_eq!(refused.r#type, "error", "{}", refused.data);
+    assert!(refused.data.contains("live session") && refused.data.contains("force"), "{}", refused.data);
+    assert_eq!(body(&ask(&reg, "project_list", Value::String(String::new()))).as_array().unwrap().len(), 1);
+
+    let gone = ask(&reg, "project_delete", json!({"projectId": id, "force": true}));
+    assert_eq!(gone.r#type, "project_deleted", "{}", gone.data);
+    assert_eq!(body(&gone)["id"], id.as_str());
+    assert_eq!(body(&ask(&reg, "project_list", Value::String(String::new()))).as_array().unwrap().len(), 0);
+    assert_eq!(ask(&reg, "project_delete", json!({"projectId": id})).r#type, "error");
+}
