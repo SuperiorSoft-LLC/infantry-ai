@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 //! Links, reorder, epics and comments over a temp infantry.db with the real Kotlin schema.
-mod common;
+use crate::common;
 
 use common::*;
 use infantry_core::frames::{FrameCtx, FrameUnit};

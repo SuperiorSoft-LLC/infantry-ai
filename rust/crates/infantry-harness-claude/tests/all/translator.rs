@@ -4,7 +4,7 @@
 //! cases of Kotlin's `ClaudeTtySessionTest.kt` and the old runner driver), plus the transcript mapper, the stream reader,
 //! the screen readers, the hooks and the headless translator.
 
-mod common;
+use crate::common;
 
 use common::*;
 use infantry_harness::{ApprovalMode, HarnessEvent, Outbound, Translator, TranslatorInput, TurnEnd, Usage};

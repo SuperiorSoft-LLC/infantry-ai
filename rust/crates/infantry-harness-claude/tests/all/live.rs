@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 //! LIVE: the interactive `claude` in a PTY on the real LocalRunner: two turns in one process, then a NEW process that resumes
 //! the session and still knows what the first turn said. It spends tokens, so it is ignored by default:
-//! `cargo test -p infantry-harness-claude --test live -- --ignored --nocapture`.
+//! `cargo test -p infantry-harness-claude --test all live:: -- --ignored --nocapture`.
 //!
 //! The child gets a temp INFANTRY_STATE_DIR and no INFANTRY_URL / INFANTRY_TOKEN / INFANTRY_HOME, so it can never reach the
 //! owner's daemon.
