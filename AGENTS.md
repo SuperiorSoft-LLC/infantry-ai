@@ -93,6 +93,11 @@ cd app && pnpm installer                              # a debug installer
 cd app && pnpm tauri android build --apk --target aarch64   # the Android APK (what the release workflow runs)
 ```
 
+Every Rust build on the owner's machine, in any worktree, shares one target dir outside the worktrees
+(`%LOCALAPPDATA%\infantry-dev\preview-target`; set by a machine-local `.cargo/config.toml` above the checkout and by
+`scripts/rust-build-env.ps1`, setting `INFANTRY_CARGO_TARGET_DIR`). Cargo locks it, so builds queue (rule 7). After a
+MERGED step, `pwsh -NoProfile -File scripts/cargo-target-sweep.ps1` trims artifacts unused for `INFANTRY_SWEEP_DAYS` days.
+
 Read build output with `tail -n 20` and look at errors, not warning counts. Versions: `rust/Cargo.toml` (the workspace
 and profiles) and `app/package.json` (pnpm 11.21.0, `@tauri-apps/cli` 2). Check them before you use an API from memory.
 
