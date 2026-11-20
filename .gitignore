@@ -3,6 +3,7 @@
 .gradle
 **/build/
 !src/**/build/
+!app/packages/ui-plugin-api/build/
 local.properties
 .idea
 .vscode
@@ -46,3 +47,6 @@ scratch/
 .agenthq/
 .infantry/
 .worktrees/
+
+# Built web UI halves of modules (WEBUI-1): rust/plugins/stage.sh builds them from ui/src.
+**/ui/dist/

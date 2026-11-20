@@ -1,0 +1,14 @@
+{
+  "name": "Acme_UiFault",
+  "version": "0.1.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "description": "Test plugin, never shipped: a web UI half whose centre tab throws while drawing, to prove the app's fault card.",
+  "tier": "official",
+  "ui": {
+    "apiVersion": 1,
+    "entry": "ui/dist/index.js",
+    "contributes": [{ "slot": "tab", "id": "acme.uifault", "label": "UI fault", "order": 2100 }]
+  }
+}

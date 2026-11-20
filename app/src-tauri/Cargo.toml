@@ -32,6 +32,9 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 semver = "1"
+# WEBUI-1: daemon_http.rs reads the web UI plugin files the daemon serves, for the page (desktop and phone). Its TLS is
+# rustls with the bundled web roots, so a phone needs no platform verifier.
+ureq = { version = "2", default-features = false, features = ["tls"] }
 
 # The desktop app starts the daemon sidecar or runs agents in its embedded runner; a phone does neither (RUST-MOBILE-1):
 # it connects to a remote daemon only.

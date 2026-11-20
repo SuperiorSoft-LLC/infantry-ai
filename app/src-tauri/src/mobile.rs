@@ -164,6 +164,7 @@ pub fn run() {
         endpoint,
         remote_save,
         remote_forget,
+        crate::daemon_http::daemon_get,
         crate::android_update::update_settings_get,
         crate::android_update::update_settings_set,
         crate::android_update::update_check,
@@ -171,7 +172,7 @@ pub fn run() {
         crate::android_update::update_progress
     ]);
     #[cfg(not(target_os = "android"))]
-    let builder = builder.invoke_handler(tauri::generate_handler![endpoint, remote_save, remote_forget]);
+    let builder = builder.invoke_handler(tauri::generate_handler![endpoint, remote_save, remote_forget, crate::daemon_http::daemon_get]);
     builder
         .setup(|app| {
             // The scanner's permission is granted here, not in capabilities/ (the desktop build has no scanner plugin).

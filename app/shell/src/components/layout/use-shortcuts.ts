@@ -6,7 +6,7 @@ import { CHAT_SEARCH_EVENT, shortcutOf, stepThrough, type Shortcut } from "@infa
 import { useAgentList } from "@/daemon/agents";
 import { useTabs } from "@/plugins/catalog";
 import { useUi } from "@/state/ui-state";
-import { daemonStore } from "@/daemon/daemon";
+import { daemonStore, localMode } from "@/daemon/daemon";
 import { openSessionDialog } from "@/components/session/session-actions";
 
 export const AGENT_SEARCH_ID = "agent-search";
@@ -93,7 +93,8 @@ export function useShortcuts(): void {
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
-      const s = shortcutOf(e);
+      // Resume runs only in the embedded runner; elsewhere Ctrl+R is left to the browser, which reloads (UI-RESUME-WEB-1).
+      const s = shortcutOf(e, { resume: localMode });
       if (s && run(s)) e.preventDefault();
     };
     window.addEventListener("keydown", onKey);

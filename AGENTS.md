@@ -112,6 +112,7 @@ For the installer, the updater, and the Android build, read [Install](docs/wiki/
 | You want to | Go to | Recipe |
 |---|---|---|
 | Add a daemon tool, route or hook from a plugin | the plugin's daemon half (`rust/plugins/official/<Module>/`) and its `module.json` | [add a daemon tool](docs/wiki/recipes/add-daemon-tool.md) |
+| Add a tab, panel or card from a plugin | the plugin's web UI half (`<Module>/ui/`, module.json `ui`) | [Web UI plugins](docs/wiki/Web-UI-plugins.md) |
 | Add a panel or screen in the app | the React app (`app/shell/src`, `app/packages/ui`, `app/packages/client`) | [Plugins](docs/wiki/Plugins.md) |
 | Add a setting | the daemon settings and `ui.json` | [Settings](docs/wiki/Settings.md) |
 | Automate a process | a Lua script and a hook | [Scripting](docs/wiki/Scripting.md), [add a Lua hook](docs/wiki/recipes/add-lua-hook.md) |
@@ -138,7 +139,8 @@ If you are about to add a feature to `infantry-daemon` or to a core crate, check
 
 - [Architecture](docs/wiki/Architecture.md): layers, daemon, protocol, the request flow, plugins, scripting. Start here.
 - [Install](docs/wiki/Install.md), [Android](docs/wiki/Android.md), [Updates](docs/wiki/Updates.md).
-- [Plugins](docs/wiki/Plugins.md), [Make a plugin](docs/wiki/make-a-plugin.md), [Daemon plugin API](docs/wiki/daemon-plugin-api.md).
+- [Plugins](docs/wiki/Plugins.md), [Make a plugin](docs/wiki/make-a-plugin.md), [Daemon plugin API](docs/wiki/daemon-plugin-api.md),
+  [Web UI plugins](docs/wiki/Web-UI-plugins.md).
 - [Recipes](docs/wiki/recipes/README.md): worked "how to add X" guides.
 - [Harnesses](docs/wiki/Harnesses.md), [Runners](docs/wiki/runner-quickstart.md), [Command line](docs/wiki/CommandLine.md).
 - [Scripting](docs/wiki/Scripting.md), [Settings](docs/wiki/Settings.md), [Health](docs/wiki/Health.md), [Notifications](docs/wiki/Notifications.md).

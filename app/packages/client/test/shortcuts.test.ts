@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 import { describe, expect, it } from "vitest";
-import { hostLabel, promptKey, shortcutOf, stepThrough } from "../src";
+import { hostLabel, promptKey, shortcutHints, shortcutOf, stepThrough } from "../src";
 
 const press = (key: string, mods: Partial<{ ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }> = {}) => ({
   key,
@@ -20,6 +20,14 @@ describe("shortcuts", () => {
     expect(shortcutOf(press(",", { ctrlKey: true }))).toEqual({ kind: "settings" });
     expect(shortcutOf(press("k"))).toBeNull();
     expect(shortcutOf(press("k", { ctrlKey: true, shiftKey: true }))).toBeNull();
+  });
+
+  it("leaves Ctrl+R to the browser where Resume cannot run (UI-RESUME-WEB-1)", () => {
+    expect(shortcutOf(press("r", { ctrlKey: true }), { resume: true })).toEqual({ kind: "resume" });
+    expect(shortcutOf(press("r", { ctrlKey: true }), { resume: false })).toBeNull();
+    expect(shortcutHints({ resume: true })).toContain("^R resume");
+    expect(shortcutHints({ resume: false })).not.toContain("^R resume");
+    expect(shortcutHints({ resume: false })).toContain("^K search");
   });
 
   it("steps through agents, wrapping", () => {

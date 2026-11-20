@@ -8,30 +8,17 @@ import { Link2, QrCode, Unplug } from "lucide-react";
 import { parsePairingLink, socketUrl, type Pairing } from "@infantry/client";
 import { Button, Input, Label, PanelCard } from "@infantry/ui";
 import { isMobile, remote } from "@/daemon/daemon";
+import { host } from "@/host";
 
 async function save(p: Pairing): Promise<void> {
-  const { invoke } = await import("@tauri-apps/api/core");
-  await invoke<string>("remote_save", { url: p.url, token: p.token, name: p.name });
-  location.reload();
+  await host.call<string>("remote_save", { url: p.url, token: p.token, name: p.name });
+  host.reload();
 }
 
-/** Scans one QR code with the camera (the barcode-scanner plugin); null when cancelled or refused. */
+/** Scans one QR code with the phone's camera (HC-1 host.scanner); null when cancelled. */
 async function scanQr(): Promise<string | null> {
-  const bs = await import("@tauri-apps/plugin-barcode-scanner");
-  let perm = await bs.checkPermissions();
-  if (perm !== "granted") perm = await bs.requestPermissions();
-  if (perm !== "granted") throw new Error("Camera access was refused. Allow the camera in the phone's app settings, or paste the pairing link below.");
-  try {
-    const r = await bs.scan({ formats: [bs.Format.QRCode], windowed: true });
-    return r?.content ?? null;
-  } catch (e) {
-    // The plugin rejects with a plain string or object, not an Error.
-    const msg = e instanceof Error ? e.message : typeof e === "string" ? e : (JSON.stringify(e) ?? String(e));
-    if (/cancel/i.test(msg)) return null;
-    throw new Error(`The camera could not start (${msg}). Paste the pairing link below instead.`);
-  } finally {
-    await bs.cancel().catch(() => undefined);
-  }
+  if (!host.scanner) throw new Error("This device has no camera reader. Paste the pairing link below instead.");
+  return host.scanner.scan();
 }
 
 export function ConnectScreen() {
@@ -92,8 +79,7 @@ export function ConnectScreen() {
   };
 
   const cancelScan = async () => {
-    const bs = await import("@tauri-apps/plugin-barcode-scanner");
-    await bs.cancel().catch(() => undefined);
+    await host.scanner?.cancel();
   };
 
   const scan = async () => {
@@ -187,9 +173,8 @@ export function RemoteRow() {
   if (!isMobile || !remote) return null;
   const forget = async () => {
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("remote_forget");
-      location.reload();
+      await host.call("remote_forget");
+      host.reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }

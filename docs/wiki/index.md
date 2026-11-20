@@ -23,6 +23,7 @@ text under a legacy heading.
 
 - [Plugins](Plugins.md): `module.json`, the daemon half (WASM or sidecar), grants, the official plugins, building with `stage.sh`.
 - [Make a plugin](make-a-plugin.md): step by step, from an official plugin to a built daemon half.
+- [Web UI plugins](Web-UI-plugins.md): a plugin's own tabs, panels and cards, served by the daemon and loaded live by the app.
 - [Daemon plugin API](daemon-plugin-api.md): the WIT world: exports, imports, tools, frames, routes, hooks, events.
 - [Plugin knowledge](plugin-knowledge.md): module.json `knowledge` and the PLUGIN TOOLS briefing.
 - [Plugin lifecycle](Plugin-lifecycle.md): install, update, enable, disable and remove a plugin.

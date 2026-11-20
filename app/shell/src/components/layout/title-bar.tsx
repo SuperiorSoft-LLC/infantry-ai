@@ -13,7 +13,6 @@ import { AvatarStrip } from "@/components/agents/avatar-strip";
 import { Brand } from "./brand";
 import { ProjectPicker } from "./project-picker";
 import { WindowControls } from "./window-controls";
-import { isMobile } from "@/daemon/daemon";
 
 export function TitleBar() {
   const ui = useUi();
@@ -78,7 +77,8 @@ export function TitleBar() {
       <IconButton label="Settings" onClick={() => ui.set("dialog", "settings")}>
         <Settings />
       </IconButton>
-      {!isMobile && <WindowControls />}
+      {/* Desktop app only (HC-1 host.window); a browser or a phone renders nothing here (UI-WINCTRL-WEB-1). */}
+      <WindowControls />
     </header>
   );
 }

@@ -23,6 +23,7 @@ export default defineConfig(() => ({
       { find: /^@infantry\/ui\/styles\.css$/, replacement: path.resolve(__dirname, "../packages/ui/src/styles.css") },
       { find: /^@infantry\/ui$/, replacement: path.resolve(__dirname, "../packages/ui/src/index.ts") },
       { find: /^@infantry\/client$/, replacement: path.resolve(__dirname, "../packages/client/src/index.ts") },
+      { find: /^@infantry\/ui-plugin-api\/contract$/, replacement: path.resolve(__dirname, "../packages/ui-plugin-api/src/contract.ts") },
       { find: "@", replacement: path.resolve(__dirname, "./src") },
     ],
   },
@@ -40,6 +41,14 @@ export default defineConfig(() => ({
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on("proxyReqWs", (req) => req.removeHeader("origin"));
+          proxy.on("proxyReq", (req) => req.removeHeader("origin"));
+        },
+      },
+      // Web UI plugins' files (WEBUI-1): the browser host reads them like the socket, same-origin, with no Origin header.
+      "/ui-plugins": {
+        target: daemonHttp,
+        changeOrigin: true,
+        configure: (proxy) => {
           proxy.on("proxyReq", (req) => req.removeHeader("origin"));
         },
       },

@@ -1,0 +1,11 @@
+{
+  "apiVersion": 1,
+  "global": "__INFANTRY_UI_HOST__",
+  "scopeAttribute": "data-ui-plugin",
+  "modules": [
+    "react",
+    "react/jsx-runtime",
+    "react-dom",
+    "@infantry/ui"
+  ]
+}

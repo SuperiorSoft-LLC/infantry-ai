@@ -1,0 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) SuperiorSoft LLC
+// HC-1: this window's host (@infantry/client [Host]): the Tauri app (desktop or phone), else a plain browser. Components
+// ask it for window buttons, app commands, dialogs and daemon files instead of calling a platform API themselves.
+import { browserHost, type Host } from "@infantry/client";
+import { tauriHost } from "./tauri";
+
+/** Inside the Tauri app (desktop or phone). */
+export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+export const host: Host = isTauri ? tauriHost() : browserHost();

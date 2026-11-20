@@ -21,6 +21,7 @@ pub mod host_frames;
 pub mod project_files;
 pub mod timeline;
 pub mod plugins;
+pub mod ui_bundles;
 mod prompter;
 mod settings;
 pub mod scope;
@@ -99,6 +100,8 @@ pub struct Composed {
     pub tools: Arc<Tools>,
     pub knowledge: Arc<infantry_knowledge::Knowledge>,
     pub plugins: Option<Arc<infantry_plugin_host::PluginHost>>,
+    /// WEBUI-1: the plugins' web UI halves (`GET /ui-plugins/...`) and the enable rule they are served by.
+    pub ui_bundles: Arc<ui_bundles::UiBundles>,
     /// The open owner prompts (a new client is shown them).
     pub prompts: Arc<PendingPrompts>,
     next_conn: AtomicU64,
@@ -498,8 +501,10 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     }
 
     // ---- plugins ------------------------------------------------------------------------------------------
-    let plugin_set = plugins::start(state_dir, plugins_dir(), bus.clone(), handle.clone());
+    let disabled = Arc::new(plugins::Disabled::load(state_dir));
+    let plugin_set = plugins::start(state_dir, plugins_dir(), bus.clone(), handle.clone(), disabled.clone());
     let plugin_host = plugin_set.as_ref().map(|p| p.host.clone());
+    let bundles = Arc::new(ui_bundles::UiBundles { plugins_dir: plugins_dir(), plugins: plugin_host.clone(), disabled });
     tools.set_plugins(plugin_host.clone());
 
     // ---- the registry --------------------------------------------------------------------------------------
@@ -564,12 +569,12 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     units.push(harness_list);
     units.push(Arc::new(host_frames::HostFrames {
         daemon: daemon.clone(),
-        plugins: plugin_host.clone(),
         plugins_dir: plugins_dir(),
         registry: agent_registry.clone(),
         questions,
         state_dir: state_dir.to_path_buf(),
         projects: projects.store.clone(),
+        bundles: bundles.clone(),
     }));
     for u in units {
         let name = u.name();
@@ -594,6 +599,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         tools,
         knowledge: knowledge.clone(),
         plugins: plugin_host.clone(),
+        ui_bundles: bundles,
         prompts: prompts.clone(),
         next_conn: AtomicU64::new(1),
     });
@@ -765,6 +771,10 @@ impl FrameUnits for Composed {
     }
 
     fn http(&self) -> Option<axum::Router> {
-        Some(infantry_mail::mail::http::routes(self.mail.clone()).merge(infantry_knowledge::avatars::router(self.knowledge.avatars.clone())))
+        Some(
+            infantry_mail::mail::http::routes(self.mail.clone())
+                .merge(infantry_knowledge::avatars::router(self.knowledge.avatars.clone()))
+                .merge(ui_bundles::router(self.ui_bundles.clone())),
+        )
     }
 }

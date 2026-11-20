@@ -4,7 +4,7 @@
 // speaks the daemon's envelope frames over Tauri IPC: `local_connect` hands it a channel for every outbound frame,
 // `local_send` takes one inbound frame. The store, the reducer and the components are the same as against a daemon.
 import { Channel, invoke } from "@tauri-apps/api/core";
-import type { TransportFactory } from "@infantry/client";
+import type { EmbeddedRunner, LocalProject, ResumableSession, TransportFactory } from "@infantry/client";
 
 export function localTransport(): TransportFactory {
   return () => {
@@ -32,19 +32,9 @@ export function localTransport(): TransportFactory {
   };
 }
 
-export interface ResumableSession {
-  id: string;
-  modified: number;
-  bytes: number;
-  title: string;
-  running: boolean;
-}
-
-export interface LocalProject {
-  id: string;
-  name: string;
-  directory: string;
-}
-
-export const localSetProject = (folder: string) => invoke<LocalProject>("local_set_project", { folder });
-export const localResumable = (folder: string) => invoke<ResumableSession[]>("local_resumable", { folder });
+/** The desktop app's embedded runner (HC-1 [EmbeddedRunner]). */
+export const embeddedRunner: EmbeddedRunner = {
+  transport: localTransport,
+  setProject: (folder) => invoke<LocalProject>("local_set_project", { folder }),
+  resumable: (folder) => invoke<ResumableSession[]>("local_resumable", { folder }),
+};

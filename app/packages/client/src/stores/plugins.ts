@@ -3,7 +3,9 @@
 // The plugin store (RUST-UI-5): the daemon's plugin list (`plugins_op` {op:list} -> `plugins`), each row carrying the
 // module's `ui` declarations (tabs, panels, fills, slots), and the owner's plugin manager (`plugin_admin`
 // {args:[enable|disable, id]} -> `plugin_admin` {code,out,err}). `slotRegistry` is the pure rule the shell renders from:
-// the way Kotlin's PluginTree + UiRegistrar turn module.json declarations into tabs, panels and slot fills.
+// the way Kotlin's PluginTree + UiRegistrar turn module.json declarations into tabs, panels and slot fills. A row's
+// `ui.web` is the module's web UI half (WEBUI-1), which the ui-plugins loader imports; `plugins_changed` (a plugin
+// enabled or disabled, by any client) re-reads the list, so every window follows it live.
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { json, type Envelope } from "../wire";
 import { requester, type FrameLink } from "./link";
@@ -17,7 +19,25 @@ export interface UiDecl {
   title?: string;
   icon?: string;
   order?: number;
+  /** The key hint a tab shows (`^N` also binds Ctrl+N). */
+  hint?: string;
   [k: string]: unknown;
+}
+
+/** One `ui.contributes` entry of a web UI half: the slot it fills and its id there. */
+export interface WebContribution extends UiDecl {
+  slot: string;
+}
+
+/** A module's web UI half as the daemon lists it: daemon paths of its module and stylesheets, and a build fingerprint. */
+export interface WebHalf {
+  apiVersion: number;
+  /** The ES module, a `/ui-plugins/<id>/...` daemon path. */
+  entry: string;
+  styles: string[];
+  contributes: WebContribution[];
+  /** Changes with every new build of its files. */
+  rev: string;
 }
 
 export interface PluginUi {
@@ -30,6 +50,8 @@ export interface PluginUi {
   config: boolean;
   /** The settings nodes the module declares (its cards in Settings). */
   configNodes: string[];
+  /** The module's web UI half, when it has one. */
+  web?: WebHalf;
 }
 
 export interface PluginRow {
@@ -84,6 +106,18 @@ export function isFault(p: Pick<PluginRow, "status" | "enabled">): boolean {
 const decls = (v: unknown): UiDecl[] =>
   Array.isArray(v) ? v.map((d) => (typeof d === "string" ? { id: d } : (d as UiDecl))).filter((d) => d && typeof d.id === "string" && d.id.length > 0) : [];
 
+const UI_PATH = "/ui-plugins/";
+
+/** The `ui.web` block of a row, or undefined when it is absent or not one (a path outside `/ui-plugins/` included). */
+export function parseWebHalf(v: unknown): WebHalf | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const w = v as Record<string, unknown>;
+  if (typeof w.entry !== "string" || !w.entry.startsWith(UI_PATH) || typeof w.apiVersion !== "number") return undefined;
+  const styles = Array.isArray(w.styles) ? w.styles.filter((s): s is string => typeof s === "string" && s.startsWith(UI_PATH)) : [];
+  const contributes = decls(w.contributes).filter((c): c is WebContribution => typeof c.slot === "string" && c.slot.length > 0);
+  return { apiVersion: w.apiVersion, entry: w.entry, styles, contributes, rev: typeof w.rev === "string" ? w.rev : "" };
+}
+
 /** Normalises one row of the `plugins` answer; null when it is not a plugin row. */
 export function parsePlugin(v: unknown): PluginRow | null {
   if (!v || typeof v !== "object") return null;
@@ -111,6 +145,7 @@ export function parsePlugin(v: unknown): PluginRow | null {
       slots: decls(u.slots),
       config: u.config === true,
       configNodes: Array.isArray(u.configNodes) ? (u.configNodes as unknown[]).filter((n): n is string => typeof n === "string") : [],
+      web: parseWebHalf(u.web),
     },
   };
 }
@@ -129,6 +164,8 @@ export interface SlotRegistry {
   fills: Record<string, Contribution[]>;
   /** Slot id -> the plugin that declares (owns) it. */
   slots: Record<string, string>;
+  /** Plugin id -> its web UI half: which of its declared tabs and slots a web UI plugin draws (WEBUI-1). */
+  web: Record<string, WebHalf>;
 }
 
 /**
@@ -138,7 +175,7 @@ export interface SlotRegistry {
  * core slots (`infantry.shell.*`) work with no declaring plugin.
  */
 export function slotRegistry(plugins: PluginRow[]): SlotRegistry {
-  const reg: SlotRegistry = { tabs: [], panels: [], fills: {}, slots: {} };
+  const reg: SlotRegistry = { tabs: [], panels: [], fills: {}, slots: {}, web: {} };
   const seen = new Set<string>();
   const on = plugins.filter((p) => p.enabled);
   for (const p of on) for (const s of p.ui?.slots ?? []) reg.slots[s.id] ??= p.id;
@@ -146,6 +183,7 @@ export function slotRegistry(plugins: PluginRow[]): SlotRegistry {
   for (const p of on) {
     const ui = p.ui;
     if (!ui) continue;
+    if (ui.web) reg.web[p.id] = ui.web;
     for (const t of ui.tabs) if (!seen.has(t.id)) (seen.add(t.id), reg.tabs.push({ plugin: p.id, decl: t }));
     for (const t of ui.panels) if (!seen.has(t.id)) (seen.add(t.id), reg.panels.push({ plugin: p.id, decl: t }));
     for (const f of ui.fills) {
@@ -174,7 +212,7 @@ export function createPluginsStore(link: FrameLink): PluginsStore {
     let adminCounter = 0;
 
     const off = link.onFrame((env: Envelope) => {
-      if (env.type === "ready") {
+      if (env.type === "ready" || env.type === "plugins_changed") {
         if (get().loaded) get().refresh();
         return;
       }

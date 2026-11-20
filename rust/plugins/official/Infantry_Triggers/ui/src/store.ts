@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// The Triggers store (RUST-UI-5, contract 1.14.0+): `trigger_list` -> `triggers`; a change (`trigger_save`, `_arm`,
-// `_disable`, `_fire`) is pushed to every client as `trigger`, a delete as `triggers`; `trigger_events` "<id>" answers
-// `trigger_events` with that trigger's event rows. A trigger with an `owner` belongs to a module and is read-only here.
+// The Triggers store (RUST-UI-5, contract 1.14.0+; moved out of the app into this plugin's web UI half by WEBUI-1):
+// `trigger_list` -> `triggers`; a change (`trigger_save`, `_arm`, `_disable`, `_fire`) is pushed to every client as
+// `trigger`, a delete as `triggers`; `trigger_events` "<id>" answers `trigger_events` with that trigger's event rows. A
+// trigger with an `owner` belongs to a module and is read-only here.
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { json, type Envelope } from "../wire";
-import { requester, type FrameLink } from "./link";
+import { useStore } from "zustand";
+import { json, requester, type Envelope, type FrameLink } from "@infantry/ui-plugin-api";
 
 export interface TriggerAction {
   kind: string;
@@ -148,3 +149,17 @@ export function createTriggersStore(link: FrameLink): TriggersStore {
     };
   });
 }
+
+// The plugin's one store, made when the app activates it (index.tsx) and dropped when the plugin unloads.
+let current: TriggersStore | null = null;
+
+export function bindTriggersStore(s: TriggersStore | null): void {
+  current = s;
+}
+
+export function triggersStore(): TriggersStore {
+  if (!current) throw new Error("Infantry_Triggers: the store is used before the plugin is activated");
+  return current;
+}
+
+export const useTriggers = <T,>(select: (s: TriggersState & TriggersActions) => T): T => useStore(triggersStore(), select);

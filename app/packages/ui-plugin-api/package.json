@@ -1,0 +1,40 @@
+{
+  "name": "@infantry/ui-plugin-api",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "WEBUI-1: what a web UI plugin builds against. The slots it fills, the daemon link, the app's React and UI kit (lent, never bundled), the theme tokens, and the build helper that turns a module's ui/ folder into the files the daemon serves.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./contract": "./src/contract.ts",
+    "./theme.css": "./src/theme.css",
+    "./plugin.css": "./src/plugin.css"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.plugins.json",
+    "test": "vitest run",
+    "build-plugins": "node build/build-plugins.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^1.74.0",
+    "zustand": "^5.1.0"
+  },
+  "peerDependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^6.0.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwindcss": "^4.3.5",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16",
+    "vitest": "^5.1.0"
+  }
+}

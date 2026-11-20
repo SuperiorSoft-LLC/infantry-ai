@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
+import "./zod-config"; // first: some modules build zod schemas as they load
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
@@ -8,6 +9,7 @@ import { ConnectScreen } from "./components/connect/connect-screen";
 import { runPerfScenario } from "./daemon/perf-scenario";
 import { PerfOverlay, perfOn } from "./components/layout/perf-overlay";
 import { promptsStore } from "./components/session/use-prompts";
+import { uiPluginsStore } from "./plugins/web-plugins";
 import { listenDaemonNotices, startUpdateCheck } from "./components/settings/desktop-install";
 import "@infantry/ui/styles.css";
 
@@ -37,6 +39,8 @@ void initDaemon().then(() => {
   }
   // The prompt store listens from the start: the connection burst carries the open prompt cards.
   promptsStore();
+  // Web UI plugins (WEBUI-1): the host global is in place, and the enabled ones load, as soon as the plugin list is in.
+  uiPluginsStore();
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
       <App />

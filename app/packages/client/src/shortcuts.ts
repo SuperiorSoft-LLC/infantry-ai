@@ -24,7 +24,13 @@ export interface KeyPress {
   shiftKey: boolean;
 }
 
-export function shortcutOf(e: KeyPress): Shortcut | null {
+/** What this window can do, for the keys that depend on it (UI-RESUME-WEB-1). */
+export interface ShortcutAbilities {
+  /** Resume runs here: only the desktop app's embedded runner can (`localMode`). Elsewhere Ctrl+R stays the browser's reload. */
+  resume: boolean;
+}
+
+export function shortcutOf(e: KeyPress, can: ShortcutAbilities = { resume: true }): Shortcut | null {
   const mod = e.ctrlKey || e.metaKey;
   if (e.altKey && !mod && !e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) return { kind: "agent", step: e.key === "ArrowDown" ? 1 : -1 };
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
@@ -40,7 +46,7 @@ export function shortcutOf(e: KeyPress): Shortcut | null {
     case ",":
       return { kind: "settings" };
     case "r":
-      return { kind: "resume" };
+      return can.resume ? { kind: "resume" } : null;
     case "/":
       return { kind: "composer" };
     case "j":
@@ -60,8 +66,13 @@ export function stepThrough(ids: string[], current: string, step: 1 | -1): strin
   return ids[(at + step + ids.length) % ids.length];
 }
 
-/** The shortcut hints the status bar shows (only keys that work). */
+/** Every shortcut hint the status bar can show. */
 export const SHORTCUT_HINTS = ["^K search", "Alt+Up/Down agents", "^J needs input", "^N new", "^R resume"];
+
+/** The hints for this window: only keys that work here (no "^R resume" where Resume cannot run). */
+export function shortcutHints(can: ShortcutAbilities): string[] {
+  return SHORTCUT_HINTS.filter((h) => can.resume || h !== "^R resume");
+}
 
 /** Where the daemon runs, from the link's URL: "This computer" for a loopback address, else its host name. */
 export function hostLabel(url: string): string {

@@ -8,17 +8,16 @@ import { Eye, EyeOff, Copy, RefreshCw, Download } from "lucide-react";
 import qrcode from "qrcode-generator";
 import { desktopPairingLink, qrPath, updateNotice, type UpdateInfo } from "@infantry/client";
 import { Button, Input, Label, ProgressLine, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from "@infantry/ui";
-import { isMobile, isTauri } from "@/daemon/daemon";
+import { isMobile } from "@/daemon/daemon";
+import { host } from "@/host";
 import { attentionStore } from "@/components/mail/use-mail";
 
-async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<T>(cmd, args);
-}
+/** One of the app's own commands (HC-1 host.call; src-tauri update.rs, pairing.rs, android_update.rs). */
+const call = <T,>(cmd: string, args?: Record<string, unknown>): Promise<T> => host.call<T>(cmd, args);
 
-const desktop = () => isTauri && !isMobile;
+const desktop = () => host.kind === "desktop" && !isMobile;
 // RUST-UPD-2: the update commands exist on the desktop (Tauri updater plugin) and on Android (android_update.rs); iOS has none.
-const updatable = () => isTauri;
+const updatable = () => host.kind !== "browser";
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function Row({ id, title, hint, children }: { id: string; title: string; hint: React.ReactNode; children?: React.ReactNode }) {
@@ -36,9 +35,9 @@ function Row({ id, title, hint, children }: { id: string; title: string; hint: R
 /** At start (desktop, `updater.autoCheck` on): one check; a newer build posts an "update available" notice. Never installs. */
 /** RUST-BUG 2617b342: the app restarted a daemon that died (or could not); the window posts it as an owner notice. */
 export function listenDaemonNotices(): void {
-  if (!isTauri) return;
-  void import("@tauri-apps/api/event")
-    .then(({ listen }) => listen<{ id: string; title: string; body: string; level: "urgent" }>("daemon-notice", (e) => attentionStore().getState().post(e.payload)))
+  if (host.kind === "browser") return;
+  void host
+    .listen<{ id: string; title: string; body: string; level: "urgent" }>("daemon-notice", (n) => attentionStore().getState().post(n))
     .catch((e) => console.warn(`[infantry] daemon notices: ${message(e)}`));
 }
 

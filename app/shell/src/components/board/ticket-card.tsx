@@ -9,6 +9,7 @@ import { Chip, cn, type Tone } from "@infantry/ui";
 import { daemonStore } from "@/daemon/daemon";
 import { useBoard } from "./use-board";
 import { RoleIcon } from "@/components/agents/role-icon";
+import { PluginSlot, useSlotFills } from "@/plugins/web-plugins";
 
 const kindTone: Record<string, Tone> = { defect: "red", enhancement: "blue", performance: "amber", hardening: "amber" };
 
@@ -58,6 +59,8 @@ function CardActions({ t }: { t: BoardTicket }) {
 
 export function TicketCardView({ t, dragging, overlay, ...rest }: { t: BoardTicket; dragging?: boolean; overlay?: boolean } & React.ComponentProps<"article">) {
   const who = assigneeOf(t);
+  // Web UI plugins' badges (the `card.badge` slot, WEBUI-1), after the card's own chips.
+  const badges = useSlotFills("card.badge");
   return (
     <article
       {...rest}
@@ -69,6 +72,7 @@ export function TicketCardView({ t, dragging, overlay, ...rest }: { t: BoardTick
         <Chip tone={kindTone[kindOf(t)] ?? "neutral"}>{kindOf(t)}</Chip>
         {t.wontFix && <Chip>won't fix</Chip>}
         {(t.heldBy?.length ?? 0) > 0 && <Chip tone="amber">held</Chip>}
+        <PluginSlot fills={badges} props={{ ticket: t }} frame="badge" />
       </div>
       <p className="text-[13px] leading-5 font-medium break-words">{t.title}</p>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

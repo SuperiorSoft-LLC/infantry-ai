@@ -3,6 +3,7 @@
 // @infantry/client: the typed daemon client every surface uses.
 export * from "./wire";
 export * from "./connection";
+export * from "./host";
 export * from "./transcript";
 export * from "./store";
 export * from "./stress";
@@ -24,7 +25,7 @@ export * from "./stores/session-actions";
 export * from "./stores/stats";
 export * from "./stores/plugins";
 export * from "./stores/health";
-export * from "./stores/triggers";
+export * from "./stores/ui-plugins";
 export * from "./stores/query";
 export * from "./stores/panels";
 export * from "./stores/timeline";

@@ -1,0 +1,5 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright (c) SuperiorSoft LLC */
+/* WEBUI-1: the app's theme tokens and variants (bg-panel, text-danger, rounded-lg, dark:...), with no output of their own.
+   A plugin's stylesheet imports this after Tailwind's theme and utilities, so the classes it uses match the app's. */
+@import "../../ui/src/theme.css";

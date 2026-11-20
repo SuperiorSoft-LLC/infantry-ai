@@ -6,28 +6,30 @@
 import { useEffect, useState } from "react";
 import { FolderOpen, History } from "lucide-react";
 import { Button, EmptyState, ListRow, cn } from "@infantry/ui";
+import type { ResumableSession } from "@infantry/client";
 import { useDaemon } from "@/daemon/daemon";
-import { localResumable, localSetProject, type ResumableSession } from "@/daemon/local-transport";
+import { host } from "@/host";
 import { ago } from "@/daemon/agents";
 
+/** Shown only where the embedded runner runs (dialog-host.tsx), so host.embedded is there. */
 export function ResumeBody({ folder, onFolder, picked, onPick }: { folder: string | null; onFolder: (f: string) => void; picked: string | null; onPick: (id: string | null) => void }) {
   const [list, setList] = useState<ResumableSession[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const current = useDaemon((s) => s.projects[0]?.directory ?? null);
   const dir = folder ?? current;
+  const runner = host.embedded;
 
   useEffect(() => {
-    if (!dir) return;
+    if (!dir || !runner) return;
     setList(null);
-    localResumable(dir).then(setList, (e) => setError(String(e)));
-  }, [dir]);
+    runner.resumable(dir).then(setList, (e) => setError(String(e)));
+  }, [dir, runner]);
 
   const choose = async () => {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const f = await open({ directory: true, multiple: false, title: "Project folder" });
-    if (typeof f !== "string") return;
+    const f = await host.pickFolder("Project folder");
+    if (!f || !runner) return;
     try {
-      await localSetProject(f);
+      await runner.setProject(f);
       onPick(null);
       onFolder(f);
     } catch (e) {

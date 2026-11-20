@@ -9,8 +9,8 @@
 ## Plugins in the Rust framework
 
 Infantry AI on main is a Rust daemon plus a React app. Plugins are still modules: a folder named `Vendor_Module` with a
-`module.json`. What changed is what a plugin can be. In Rust a plugin has a **daemon half** only. There is no UI half
-(see "Where the UI half went" below).
+`module.json`. What changed is what a plugin can be. In Rust a plugin has a **daemon half** and, optionally, a **web UI
+half** that the daemon serves and the app loads at run time ([Web UI plugins](Web-UI-plugins.md)).
 
 ### The daemon half: two kinds
 
@@ -32,6 +32,7 @@ A real example is `rust/plugins/official/Infantry_Notes/module.json`. The fields
 | `name`, `version`, `tier` | The module id (same as the folder), its version, and `official` for the bundled ones. The host decides the tier from the install folder, not from this field. |
 | `tabs` | `[{id, container}]`. Declared for the app: the React shell shows a tab for each enabled plugin that declares one. |
 | `actions` | `[{id, label, kind, frames}]`. `kind` is `read`, `write` or `destructive`. |
+| `ui` | The web UI half: `apiVersion`, `entry`, `styles`, `assets` and `contributes` (the slots `tab`, `panel`, `settings.card`, `plugin.config` and `card.badge`). See [Web UI plugins](Web-UI-plugins.md). |
 | `daemon.component` / `daemon.sidecar` | The daemon half (path inside the module folder). |
 | `daemon.needs`, `daemon.wants` | The grants (below). |
 | `daemon.apiAtLeast` | The plugin ABI the module needs. A 0.x requirement above the host's version (0.1.0) is refused. |
@@ -52,16 +53,16 @@ manifest names them in `daemon.needs` or `daemon.wants`.
 ### Tabs and actions
 
 A tab id is a name the React shell knows. The shell keeps a catalog from tab id to view
-(`app/shell/src/plugins/catalog.tsx`). A declared tab with no view there gets a generic plugin view. Actions name the
+(`app/shell/src/plugins/catalog.tsx`). A tab that a web UI half contributes is drawn by the plugin itself. A declared
+tab with no view in either place gets a generic plugin view. Actions name the
 frames a click may send, with a read, write or destructive kind the policy can gate.
 
-### Where the UI half went
+### The web UI half
 
-The Kotlin plugin UI half (a jar of Compose code loaded into the app) has no Rust equivalent. I grepped `app/`: the
-React app has no loader for plugin UI code. It reads the daemon's plugin list and each module's declared `tabs`,
-`panels`, `fills` and `slots` (`app/packages/client/src/stores/plugins.ts`) and draws the views the shell itself ships.
-So a new tab with its own look needs a change in the app, not a drop-in plugin. Whether a drop-in UI loader is planned
-is not verified.
+The Kotlin plugin UI half (a jar of Compose code loaded into the app) has no Rust equivalent. A web UI half replaces it.
+It is an ES module in the module folder. The daemon serves it on its own port, and the app loads it on the desktop, in
+the browser and on Android, with no app rebuild. Enabling or disabling the plugin adds or removes its UI live. The
+manifest, the slots, the API, the styles and the trust model are in [Web UI plugins](Web-UI-plugins.md).
 
 ### Build, install, enable
 
@@ -70,7 +71,8 @@ rust/plugins/stage.sh <out-dir> [release]
 ```
 
 builds every official daemon plugin for `wasm32-wasip2` (needs `cargo`, `python` and that target) and lays out
-`<out>/official/<Module>/module.json` plus the component. Point the daemon at the folder with `INFANTRY_PLUGINS_DIR`
+`<out>/official/<Module>/module.json` plus the component. It builds each web UI half too (this needs `pnpm install` in
+`app/`) and copies its `ui/dist`. Point the daemon at the folder with `INFANTRY_PLUGINS_DIR`
 (default: a `plugins` folder beside the daemon). The owner build, `scripts/rust-owner-build.ps1`, stages the plugins too.
 
 The daemon loads `official` and `core` folders only. Loading community modules from a folder is not wired yet

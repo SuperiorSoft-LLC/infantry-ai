@@ -19,6 +19,7 @@ Read AGENTS.md first. Facts in these docs come from the code; where an older des
 
 - [Plugins](docs/wiki/Plugins.md): `module.json`, the daemon half (WASM component or sidecar), grants, the official plugins, building with `rust/plugins/stage.sh`.
 - [Make a plugin](docs/wiki/make-a-plugin.md): from an official plugin to a built daemon half.
+- [Web UI plugins](docs/wiki/Web-UI-plugins.md): a plugin's web UI half: the `ui` manifest block, the slots, `@infantry/ui-plugin-api`, scoped styles, faults, the trust model and the Tauri CSP.
 - [Daemon plugin API](docs/wiki/daemon-plugin-api.md): the WIT world: exports, imports, frames, tools, routes, hooks, events.
 - [Plugin knowledge](docs/wiki/plugin-knowledge.md): module.json `knowledge` and the PLUGIN TOOLS briefing.
 - [Plugin lifecycle](docs/wiki/Plugin-lifecycle.md): install, update, enable, disable, remove.

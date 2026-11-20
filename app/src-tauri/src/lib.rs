@@ -6,7 +6,9 @@
 //!
 //! Desktop (`desktop.rs`): the daemon sidecar, the embedded runner, or INFANTRY_URL. A phone (`mobile.rs`, RUST-MOBILE-1)
 //! runs no daemon and no agents: it connects to a remote daemon, paired by link or QR code, its token in the keystore.
+//! Both read the daemon's web UI plugin files for the page (`daemon_http.rs`, WEBUI-1).
 
+mod daemon_http;
 mod feed;
 #[cfg(desktop)]
 mod daemon;
