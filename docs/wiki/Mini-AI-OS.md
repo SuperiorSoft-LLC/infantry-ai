@@ -26,6 +26,13 @@ setting or its manifest flag, never by core. With nothing else installed the dae
 the installer's Apps screen; an install is live. Step 3 is the UI plugin (Infantry_Ui, BOOT-CHAIN-1): without it the installer stays the window. Before it the installer installs
 the component plugins and the shell stays built in. See [Plugins](Plugins.md#the-installer-and-the-bootstrap-plugin).
 
+Proof: `pwsh scripts/shell-only-check.ps1` builds the **shell-only** flavour (the core daemon plus the installer, nothing
+else), boots it on a throwaway state dir and port, installs the UI plugin and the rest of the plugin set from a local
+plugin repo folder (`-PluginRepo`, default: staged from this checkout), checks that the board works (create a ticket, list
+it), and compares the result with the bundled flavour (every plugin pre-installed): same plugins, same agent tools, and the
+size and idle memory of both. `-Serve shell-only` leaves that flavour running with a Vite shell on it, to look at.
+The board itself is still a core crate here (the LIC tickets move it into a plugin), so the installer offers the other plugins.
+
 ## 3. Splash and boot progress
 
 Core owns the splash and the boot progress: core, then installer, then UI, then plugins N/M. Plugins report progress
