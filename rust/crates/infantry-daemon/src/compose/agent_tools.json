@@ -289,7 +289,7 @@
  },
  {
   "name": "infantry_session_remove",
-  "description": "Remove a session from the list. A live session is refused unless force=true, which ends it first. Only the pm or the owner (own project), or the session's spawner, may remove one.",
+  "description": "Remove a session from the list. A live session is refused unless force=true, which ends it first. Only the pm or the owner (own project), or the session's spawner, may remove one. An id no session matches is already gone: OK with outcome already-removed.",
   "inputSchema": {
    "type": "object",
    "properties": {

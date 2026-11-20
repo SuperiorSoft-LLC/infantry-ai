@@ -362,7 +362,13 @@ impl AgentTools {
                 Ok(format!("id: {}\nfrom: {}\nto: {}\nthread: {}\nsubject: {}\n\n{}", read.id, read.from, read.to, read.thread_id, read.subject, read.body))
             })(),
             "infantry_session_remove" => (|| {
-                let r = self.find(&s(a, "sessionId").unwrap_or_default())?;
+                // Idempotent: an id no session matches is already gone (two park hooks fire on one ticket move).
+                let want = s(a, "sessionId").unwrap_or_default();
+                let want = want.trim();
+                if !want.is_empty() && !self.daemon.records().iter().any(|r| r.id.starts_with(want)) {
+                    return Ok(format!("already-removed {want}"));
+                }
+                let r = self.find(want)?;
                 let mine = inv.session_id.is_some() && r.spawner_session_id == inv.session_id;
                 let same_project = self.caller_project(inv).is_none() || self.caller_project(inv) == r.project_id;
                 if !(mine || inv.owner || (pm(inv) && same_project)) {
