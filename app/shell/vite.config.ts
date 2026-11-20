@@ -24,6 +24,7 @@ export default defineConfig(() => ({
       { find: /^@infantry\/ui$/, replacement: path.resolve(__dirname, "../packages/ui/src/index.ts") },
       { find: /^@infantry\/client$/, replacement: path.resolve(__dirname, "../packages/client/src/index.ts") },
       { find: /^@infantry\/ui-plugin-api\/contract$/, replacement: path.resolve(__dirname, "../packages/ui-plugin-api/src/contract.ts") },
+      { find: /^@infantry\/ui-plugin-api\/layout$/, replacement: path.resolve(__dirname, "../packages/ui-plugin-api/src/layout.ts") },
       { find: "@", replacement: path.resolve(__dirname, "./src") },
     ],
   },

@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./contract": "./src/contract.ts",
+    "./layout": "./src/layout.ts",
     "./theme.css": "./src/theme.css",
     "./plugin.css": "./src/plugin.css"
   },
