@@ -4,7 +4,7 @@
 //!
 //! A module.json `ui` block declares one browser ES module and the slots it fills:
 //! `{"apiVersion": 1, "entry": "ui/dist/index.js", "styles": ["ui/dist/index.css"], "assets": ["ui/dist/assets"],
-//!   "contributes": [{"slot": "tab", "id": "acme.board", "label": "Board", "order": 450}]}`.
+//!   "contributes": [{"slot": "tab", "id": "acme.board", "label": "Board"}]}`.
 //!
 //! - `GET /ui-plugins/{id}/{path}` answers an ENABLED module's entry, one of its styles, or a file under one of its asset
 //!   folders, resolved inside the module folder. Anything else is 404. The route sits behind the access policy of every
@@ -210,7 +210,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("infantry-uib-{tag}-{}", uuid::Uuid::new_v4()));
         let ui = json!({
             "apiVersion": 1, "entry": "ui/dist/index.js", "styles": ["ui/dist/index.css"], "assets": ["ui/dist/assets/"],
-            "contributes": [{"slot": "tab", "id": "web.tab", "label": "Web", "order": 450}, {"slot": "settings", "id": "web.card"}],
+            "contributes": [{"slot": "tab", "id": "web.tab", "label": "Web"}, {"slot": "settings", "id": "web.card"}],
         });
         for (tier, id, daemon) in [("official", "Web", false), ("community", "Wild", false), ("official", "Daemonish", true)] {
             let d = root.join(tier).join(id);

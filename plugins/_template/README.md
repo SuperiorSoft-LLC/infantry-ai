@@ -82,7 +82,7 @@ own React and UI kit, which the app lends at run time, so the built file stays s
 | `ui.entry` | The built ES module, a path inside the module folder (`ui/dist/index.js`). |
 | `ui.styles` | Its built stylesheets (`ui/dist/index.css`). The build scopes every rule to the plugin. |
 | `ui.assets` | Folders of other files it loads, such as images. They are served under the same path. |
-| `ui.contributes` | `[{ "slot", "id", "label", "hint", "order" }]`: where it draws. The slots are `tab`, `panel`, `settings.card`, `plugin.config` and `card.badge`. `activate` registers a view for each `id`. |
+| `ui.contributes` | `[{ "slot", "id", "label", "hint" }]`: what it offers. The app decides where it goes; a contribution names no position. The slots are `tab`, `panel`, `settings.card`, `plugin.config` and `card.badge`. `activate` registers a view for each `id`. |
 
 Build it from the repo root with `node app/packages/ui-plugin-api/build/build-plugins.mjs plugins/community/Acme_Notes`.
 It needs `pnpm install` in `app/` first. With no folder, it builds every official and test plugin and this template.

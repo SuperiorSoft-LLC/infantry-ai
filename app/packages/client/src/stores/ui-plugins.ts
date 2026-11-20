@@ -99,7 +99,7 @@ export function versionRefusal(id: string, needs: number, provides: number): str
   return `${id} needs UI API ${needs}; this app provides UI API ${provides}. Update ${needs > provides ? "the app" : "the plugin"} to use it.`;
 }
 
-/** Where a contribution sorts: by its `order`, one with none after every one with one. */
+/** Where a tab sorts: by the order the host's default layout gives it (a plugin names none); one with none goes last. */
 export function orderOf(c: { order?: unknown }): number {
   return typeof c.order === "number" && Number.isFinite(c.order) ? c.order : Number.MAX_SAFE_INTEGER;
 }
@@ -112,7 +112,7 @@ export interface SlotFill {
 }
 
 /**
- * The contributions to [slot] of every loaded plugin (only [plugin]'s when given), in `order` then id order. Loading and
+ * The contributions to [slot] of every loaded plugin (only [plugin]'s when given), in id order (a plugin declares no position). Loading and
  * failed plugins are in it too, so the app can draw their state (a fault card) where their view would be.
  */
 export function slotFills(entries: Record<string, UiEntry>, slot: string, plugin?: string): SlotFill[] {
@@ -121,7 +121,7 @@ export function slotFills(entries: Record<string, UiEntry>, slot: string, plugin
     if (plugin !== undefined && e.id !== plugin) continue;
     for (const c of e.web.contributes) if (c.slot === slot) out.push({ plugin: e.id, contribution: c, entry: e });
   }
-  return out.sort((a, b) => orderOf(a.contribution) - orderOf(b.contribution) || a.contribution.id.localeCompare(b.contribution.id));
+  return out.sort((a, b) => a.contribution.id.localeCompare(b.contribution.id));
 }
 
 interface Live {

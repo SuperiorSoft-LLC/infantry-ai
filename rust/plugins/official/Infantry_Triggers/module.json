@@ -110,7 +110,7 @@
     "apiVersion": 1,
     "entry": "ui/dist/index.js",
     "styles": ["ui/dist/index.css"],
-    "contributes": [{ "slot": "tab", "id": "infantry.triggers", "label": "Triggers", "hint": "^0", "order": 600 }]
+    "contributes": [{ "slot": "tab", "id": "infantry.triggers", "label": "Triggers", "hint": "^0" }]
   },
   "actions": [
     { "id": "triggers.save", "label": "New or edit a trigger", "kind": "write", "frames": ["trigger_save"] },
