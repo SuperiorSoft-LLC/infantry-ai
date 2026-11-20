@@ -8,4 +8,5 @@ mod migrated_state;
 mod queue_ack;
 mod sessions_suite;
 mod spawn_load;
+mod stats_consistency;
 mod waiting_flag;

@@ -23,6 +23,7 @@
 
 pub mod driver;
 pub mod shim;
+pub mod stats;
 pub mod writes;
 
 pub use driver::{DriverError, HarnessDriver};
@@ -91,6 +92,15 @@ pub trait Probe {
     fn home(&self) -> Option<PathBuf>;
     fn read_to_string(&self, path: &Path) -> Option<String>;
     fn exists(&self, path: &Path) -> bool;
+    /// The entries of a directory; empty when it cannot be read (a probe without listing sees none).
+    fn list_dir(&self, _path: &Path) -> Vec<PathBuf> {
+        Vec::new()
+    }
+    /// The lines of a file, streamed when the probe can (session records run to tens of MB); None when it cannot be read.
+    fn lines(&self, path: &Path) -> Option<Box<dyn Iterator<Item = String> + '_>> {
+        let text = self.read_to_string(path)?;
+        Some(Box::new(text.lines().map(String::from).collect::<Vec<_>>().into_iter()))
+    }
 }
 
 /// [`Probe`] over this process's own environment and file system.
@@ -108,6 +118,14 @@ impl Probe for LocalProbe {
     }
     fn exists(&self, path: &Path) -> bool {
         path.exists()
+    }
+    fn list_dir(&self, path: &Path) -> Vec<PathBuf> {
+        std::fs::read_dir(path).map(|r| r.flatten().map(|e| e.path()).collect()).unwrap_or_default()
+    }
+    fn lines(&self, path: &Path) -> Option<Box<dyn Iterator<Item = String> + '_>> {
+        use std::io::BufRead;
+        let f = std::fs::File::open(path).ok()?;
+        Some(Box::new(std::io::BufReader::new(f).lines().map_while(Result::ok)))
     }
 }
 
@@ -453,6 +471,16 @@ pub trait Harness: Send + Sync {
     /// The `/` commands a client offers while the user types (CP-4); none by default.
     fn commands(&self) -> Vec<HarnessCommand> {
         Vec::new()
+    }
+    /// One session read from the CLI's OWN local record (its transcript or store), in record order, for
+    /// `session_stats`; None = this harness keeps no record the daemon can read, or there is no such session.
+    /// Read only: never writes, never opens a credential file, never goes on the network.
+    fn store_stats(&self, _probe: &dyn Probe, _provider_session_id: &str) -> Option<Vec<stats::StatEvent>> {
+        None
+    }
+    /// The context window of `model` when a LOCAL catalog of this CLI states it (never guessed from a name).
+    fn context_window(&self, _probe: &dyn Probe, _model: &str) -> Option<u64> {
+        None
     }
 }
 

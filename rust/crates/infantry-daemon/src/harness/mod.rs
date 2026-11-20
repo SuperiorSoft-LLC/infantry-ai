@@ -142,6 +142,14 @@ pub trait Harness: Send + Sync {
     fn commands(&self) -> Vec<infantry_harness::HarnessCommand> {
         Vec::new()
     }
+    /// The session as the CLI's own local record tells it (`session_stats`); None = no record to read.
+    fn store_stats(&self, _provider_session_id: &str) -> Option<Vec<infantry_harness::stats::StatEvent>> {
+        None
+    }
+    /// The context window of `model` when this CLI's local catalog states it.
+    fn context_window(&self, _model: &str) -> Option<u64> {
+        None
+    }
 }
 
 /// One daemon session's harness side. Methods never block for long; output arrives through the [`EventSink`].
