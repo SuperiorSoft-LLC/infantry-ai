@@ -41,3 +41,8 @@ export function reduce(state: DesktopState, action: DesktopAction): DesktopState
     }
   }
 }
+
+/** What a taskbar entry does when clicked: restore a minimized app, minimize the one in front. */
+export function toggle(state: DesktopState, app: AppId): DesktopAction {
+  return { type: state.front === app ? "minimize" : "open", app };
+}

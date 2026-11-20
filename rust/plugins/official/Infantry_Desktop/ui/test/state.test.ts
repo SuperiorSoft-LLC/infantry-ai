@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 // The desktop's window rules: open puts an app in front, minimize keeps it running, close ends it.
 import { describe, expect, it } from "vitest";
-import { initialState, reduce } from "../src/state";
+import { initialState, reduce, toggle } from "../src/state";
 
 describe("desktop window state", () => {
   it("starts on the bare desktop, or with the orchestrator open when the setting says so", () => {
@@ -32,5 +32,12 @@ describe("desktop window state", () => {
   it("ignores minimizing an app that is not open", () => {
     const s = initialState(false);
     expect(reduce(s, { type: "minimize", app: "apps" })).toBe(s);
+  });
+
+  it("a taskbar click restores a minimized app and minimizes the one in front", () => {
+    let s = reduce(initialState(true), toggle(initialState(true), "orchestrator"));
+    expect(s.windows.orchestrator).toBe("minimized");
+    s = reduce(s, toggle(s, "orchestrator"));
+    expect(s).toEqual({ windows: { orchestrator: "open", apps: "closed" }, front: "orchestrator" });
   });
 });
