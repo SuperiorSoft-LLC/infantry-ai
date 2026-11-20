@@ -6,7 +6,7 @@ members = ["crates/*", "plugins/official/Infantry_Health/daemon", "plugins/offic
 # Real releases keep the full `release` profile. Build with `--profile owner-test`.
 [workspace.package]
 # The ONE version of the app, daemon, CLI and APK: the release bump edits this and tauri.conf.json + app/src-tauri/Cargo.toml.
-version = "0.1.2"
+version = "0.1.3"
 
 [profile.owner-test]
 inherits = "release"
