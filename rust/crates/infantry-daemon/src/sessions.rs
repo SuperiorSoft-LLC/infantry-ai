@@ -1182,6 +1182,11 @@ impl Daemon {
                 e.rec.last_output_at = Some(now_ms());
                 e.stats.tool(&name);
             }
+            HarnessEvent::Write(w) if e.turn_active => {
+                e.hung = false;
+                e.rec.last_output_at = Some(now_ms());
+                self.emit(&mut e, wire::STATUS, wire::status_write(&w));
+            }
             HarnessEvent::Usage(u) => {
                 e.rec.last_output_at = Some(now_ms());
                 e.stats.usage(u);

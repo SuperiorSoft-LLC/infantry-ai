@@ -23,6 +23,7 @@
 
 pub mod driver;
 pub mod shim;
+pub mod writes;
 
 pub use driver::{DriverError, HarnessDriver};
 /// The runner contract (RUST-RUN-1), re-exported so a harness crate needs only this one.

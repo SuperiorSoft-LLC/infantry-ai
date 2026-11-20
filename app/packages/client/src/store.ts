@@ -12,7 +12,7 @@ import { DaemonConnection, type LinkState, type TransportFactory } from "./conne
 import { applyFrames, type TranscriptItem } from "./transcript";
 import {
   CLIENT_SEND_PREFIX, Frame, RUN_IN_FLIGHT, STREAM_FRAMES, isRunning, json, parseReady,
-  type AgentProfile, type Envelope, type ProjectSummary, type ReadyInfo, type ReplayGap, type RunUsage, type SessionRecord,
+  type AgentProfile, type Envelope, type FileWrite, type ProjectSummary, type ReadyInfo, type ReplayGap, type RunUsage, type SessionRecord,
   type StatusPayload, type TicketSummary,
 } from "./wire";
 
@@ -42,6 +42,8 @@ export interface PendingSend {
 export interface ActivityEntry {
   at: number;
   label: string;
+  /** A file write: the Activity box draws it as the same change box the chat does. */
+  write?: FileWrite;
 }
 
 /** How many Activity box lines a session keeps. */
@@ -480,7 +482,9 @@ export function applyToView(v: SessionView, frames: readonly Envelope[]): Sessio
         const s = json<StatusPayload>(f.data);
         if (s) {
           status = s;
-          if (live && s.tool && s.activity) {
+          if (live && s.write) {
+            activityLog = [...activityLog, { at: now, label: `Edit: ${s.write.path}`, write: s.write }].slice(-MAX_ACTIVITY_LOG);
+          } else if (live && s.tool && s.activity) {
             activityLog = [...activityLog, { at: now, label: `${s.tool}: ${s.activity}` }].slice(-MAX_ACTIVITY_LOG);
           }
           if (record.state !== s.state) record = { ...record, state: s.state };

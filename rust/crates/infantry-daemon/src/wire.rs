@@ -71,6 +71,12 @@ pub fn status_activity(tool: &str, activity: &str) -> String {
     json!({"state": "BUSY", "detail": "", "tool": tool, "activity": activity}).to_string()
 }
 
+/// A file write (a change box): `{"state":"BUSY","detail":"","write":{...}}`; [write] is the `FileWrite` JSON.
+pub fn status_write(write: &str) -> String {
+    let w: Value = serde_json::from_str(write).unwrap_or(Value::Null);
+    json!({"state": "BUSY", "detail": "", "write": w}).to_string()
+}
+
 /// The run activity (`thinking`, `finished`, `idle`) beside the session state.
 pub fn status_run(state: &str, activity: &str, started_at: i64, turn_started_at: i64) -> String {
     json!({
@@ -86,4 +92,30 @@ pub fn finished(exit_code: Option<i32>, outcome: &str, detail: &str) -> String {
 
 pub fn array(items: Vec<Value>) -> String {
     Value::Array(items).to_string()
+}
+
+#[cfg(test)]
+mod write_tests {
+    use super::*;
+
+    #[test]
+    fn a_write_status_carries_the_file_write_object() {
+        let s: Value = serde_json::from_str(&status_write(r#"{"path":"a.rs","edits":[{"oldText":"x","newText":"y"}]}"#)).unwrap();
+        assert_eq!(s["state"], "BUSY");
+        assert_eq!(s["write"]["path"], "a.rs");
+        assert_eq!(s["write"]["edits"][0]["newText"], "y");
+    }
+
+    #[test]
+    fn a_claude_edit_tool_use_becomes_a_write() {
+        let line: Value = serde_json::from_str(
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Edit","input":{"file_path":"a.rs","old_string":"x","new_string":"y"}}]}}"#,
+        )
+        .unwrap();
+        let ev = infantry_harness_claude::stream::events(&line);
+        let infantry_harness::HarnessEvent::ToolStarted { name, input, .. } = &ev[0] else { panic!("no tool") };
+        let w = infantry_harness::writes::file_writes(name, input, infantry_harness::writes::WRITE_MAX_BYTES);
+        assert_eq!(w[0]["path"], "a.rs");
+        assert_eq!(w[0]["edits"][0]["oldText"], "x");
+    }
 }

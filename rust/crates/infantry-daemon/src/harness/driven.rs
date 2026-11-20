@@ -326,7 +326,12 @@ impl Worker {
                     self.state.alive.store(false, Ordering::SeqCst);
                     self.sink.emit(HarnessEvent::Exited { code });
                 }
-                Ev::ToolStarted { name, .. } => self.sink.emit(HarnessEvent::Tool(name)),
+                Ev::ToolStarted { name, input, .. } => {
+                    for w in infantry_harness::writes::file_writes(&name, &input, infantry_harness::writes::WRITE_MAX_BYTES) {
+                        self.sink.emit(HarnessEvent::Write(w.to_string()));
+                    }
+                    self.sink.emit(HarnessEvent::Tool(name));
+                }
                 Ev::Usage(u) => self.sink.emit(HarnessEvent::Usage(TokenUsage {
                     input: u.input_tokens,
                     cached: u.cached_input_tokens,

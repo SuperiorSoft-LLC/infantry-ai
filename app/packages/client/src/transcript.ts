@@ -7,7 +7,7 @@ import { Frame, json, type Envelope, type FileWrite, type FinishedPayload, type 
 export interface DiffLine {
   oldNo?: number;
   newNo?: number;
-  kind: "add" | "del" | "ctx";
+  kind: "add" | "del" | "ctx" | "hunk";
   text: string;
 }
 
@@ -17,7 +17,7 @@ export type TranscriptItem =
   | { kind: "text"; id: string; seq: number; text: string }
   | { kind: "thinking"; id: string; seq: number; count: number; text: string }
   | { kind: "tools"; id: string; seq: number; count: number; tool: string; activity: string }
-  | { kind: "edit"; id: string; seq: number; path: string; added: number; removed: number; lines: DiffLine[]; truncated: boolean }
+  | { kind: "edit"; id: string; seq: number; path: string; created: boolean; added: number; removed: number; lines: DiffLine[]; truncated: boolean }
   | { kind: "note"; id: string; seq: number; text: string; tone?: "danger" }
   | { kind: "finished"; id: string; seq: number; outcome: string; exitCode: number | null }
   | { kind: "gap"; id: string; seq: number; evicted: number };
@@ -36,6 +36,49 @@ export function originLabel(o: MessageOrigin): string {
   }
 }
 
+/** A text's lines; a final newline ends the last line rather than opening an empty one (Kotlin `linesOf`). */
+export function linesOf(text: string): string[] {
+  return text === "" ? [] : text.replace(/\n$/, "").split("\n").map((l) => l.replace(/\r$/, ""));
+}
+
+/** Above this many old x new lines an edit is drawn as all-removed then all-added rather than diffed (Kotlin `LCS_MAX_CELLS`). */
+export const LCS_MAX_CELLS = 1_000_000;
+
+/** The line diff of [old] against [next]: common lines are context, the rest `-` / `+`. Head and tail are matched first. */
+export function lineDiff(old: string[], next: string[]): DiffLine[] {
+  let head = 0;
+  while (head < old.length && head < next.length && old[head] === next[head]) head++;
+  let tail = 0;
+  while (tail < old.length - head && tail < next.length - head && old[old.length - 1 - tail] === next[next.length - 1 - tail]) tail++;
+  const a = old.slice(head, old.length - tail);
+  const b = next.slice(head, next.length - tail);
+  const out: DiffLine[] = [];
+  let o = 1, n = 1;
+  const ctx = (t: string) => out.push({ oldNo: o++, newNo: n++, kind: "ctx", text: t });
+  const del = (t: string) => out.push({ oldNo: o++, kind: "del", text: t });
+  const add = (t: string) => out.push({ newNo: n++, kind: "add", text: t });
+  old.slice(0, head).forEach(ctx);
+  if (a.length * b.length > LCS_MAX_CELLS) {
+    a.forEach(del);
+    b.forEach(add);
+  } else {
+    const w = b.length + 1;
+    const t = new Uint32Array((a.length + 1) * w);
+    for (let i = a.length - 1; i >= 0; i--)
+      for (let j = b.length - 1; j >= 0; j--) t[i * w + j] = a[i] === b[j] ? t[(i + 1) * w + j + 1] + 1 : Math.max(t[(i + 1) * w + j], t[i * w + j + 1]);
+    let i = 0, j = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) { ctx(a[i]); i++; j++; }
+      else if (t[(i + 1) * w + j] >= t[i * w + j + 1]) del(a[i++]);
+      else add(b[j++]);
+    }
+    while (i < a.length) del(a[i++]);
+    while (j < b.length) add(b[j++]);
+  }
+  old.slice(old.length - tail).forEach(ctx);
+  return out;
+}
+
 /** The diff lines of one file write: a unified patch, search/replace edits, or a whole new file. */
 export function writeToDiff(w: FileWrite): { lines: DiffLine[]; added: number; removed: number } {
   const lines: DiffLine[] = [];
@@ -50,12 +93,13 @@ export function writeToDiff(w: FileWrite): { lines: DiffLine[]; added: number; r
       else if (raw.startsWith(" ")) lines.push({ oldNo: o++, newNo: n++, kind: "ctx", text: raw.slice(1) });
     }
   } else if (w.edits && w.edits.length > 0) {
-    for (const e of w.edits) {
-      for (const t of e.oldText.split("\n")) lines.push({ kind: "del", text: t });
-      for (const t of e.newText.split("\n")) lines.push({ kind: "add", text: t });
-    }
+    const edits = w.edits;
+    edits.forEach((e, i) => {
+      if (edits.length > 1) lines.push({ kind: "hunk", text: `@@ edit ${i + 1} of ${edits.length} @@` });
+      lines.push(...lineDiff(linesOf(e.oldText), linesOf(e.newText)));
+    });
   } else if (w.content != null) {
-    w.content.split("\n").forEach((t, i) => lines.push({ newNo: i + 1, kind: "add", text: t }));
+    linesOf(w.content).forEach((t, i) => lines.push({ newNo: i + 1, kind: "add", text: t }));
   }
   let added = 0, removed = 0;
   for (const l of lines) l.kind === "add" ? added++ : l.kind === "del" && removed++;
@@ -97,7 +141,7 @@ export function applyFrames(items: readonly TranscriptItem[], frames: readonly E
         if (!s) break;
         if (s.write) {
           const d = writeToDiff(s.write);
-          out.push({ kind: "edit", id, seq, path: s.write.path, ...d, truncated: s.write.truncated === true });
+          out.push({ kind: "edit", id, seq, path: s.write.path, created: s.write.content != null && !s.write.patch && !(s.write.edits?.length), ...d, truncated: s.write.truncated === true });
         } else if (s.tool && s.activity) {
           const l = last();
           if (l?.kind === "tools") {

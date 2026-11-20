@@ -7,6 +7,7 @@ import { useState, type ReactNode } from "react";
 import { Activity, Maximize2, Minimize2, X } from "lucide-react";
 import { IconButton, cn } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
+import { ChangeBoxOfWrite } from "./change-box";
 
 type BoxMode = "closed" | "open" | "max";
 let remembered: BoxMode = "closed";
@@ -39,7 +40,13 @@ export function ActivityBox({ sessionId, actions }: { sessionId: string; actions
             {lines.map((e, i) => (
               <div key={`${e.at}:${i}`} className="flex gap-2">
                 <span className="shrink-0 text-muted-foreground">{timeFmt.format(e.at)}</span>
-                <span className="min-w-0 break-all">{e.label}</span>
+                {e.write ? (
+                  <div className="min-w-0 flex-1 py-0.5">
+                    <ChangeBoxOfWrite write={e.write} />
+                  </div>
+                ) : (
+                  <span className="min-w-0 break-all">{e.label}</span>
+                )}
               </div>
             ))}
           </div>
