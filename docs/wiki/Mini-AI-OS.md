@@ -43,10 +43,16 @@ day a bare machine or kiosk.
 
 ## 7. Licences
 
-Core is MPL-2.0. The SDK and the plugins are Apache-2.0. Nothing crosses that line (guard from #45). See
-[licensing](licensing.md).
+Core is MPL-2.0, and that includes the plugin host (the kernel's program loader, LIC-2). The SDK, the runner contract
+crate and the plugins are Apache-2.0 (LIC-1). Nothing crosses that line (guard from #45). A plugin never runs as the
+owner: it gets no owner-only frames, and it reads only its own secrets. See [licensing](licensing.md).
 
-## 8. The rule for every design
+## 8. The bet
+
+The stack is locked: React, Tauri 2 and Rust. Plugins are WebAssembly components (`infantry-plugin-wit`), so one build
+can run in the daemon, the browser and the phone. Cheap resources mean cheap hosting.
+
+## 9. The rule for every design
 
 **Can a user or an agent build and share a whole app without touching core?** If not, you are missing a seam: add the
 generic seam, not the feature (AGENTS.md rule 1).
