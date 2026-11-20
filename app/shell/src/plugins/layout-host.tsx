@@ -3,13 +3,121 @@
 // DESK-1: the shell's layout host. It subscribes to the layout store, so swapping the layout re-renders live. A layout with a
 // `root` owns the whole screen: the host draws that root instead of the shell, handing it today's shell as `Shell` (the
 // "orchestrator app"). A layout without one gets the shell as it always was.
-import type { ComponentType, ReactNode } from "react";
+// DESK-2: a plugin contributes a whole-window layout in the `layout` slot; the `layout` preference (`<Plugin>/<id>`, default
+// `default` = today's window) picks which one is drawn. The host turns the picked contribution into a layout with a root and
+// swaps it in; a layout that is gone (plugin removed or disabled) or has failed falls back to today's window, never a dead end.
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { LayoutRoot } from "@infantry/ui-plugin-api/layout";
+import { createLayoutProvider } from "@infantry/ui-plugin-api/layout";
 import { AppShell } from "@/components/layout/app-shell";
-import { useLayoutProvider } from "./default-layout";
+import { DEFAULT_LAYOUT, setLayoutProvider, useLayoutProvider } from "./default-layout";
+import { usePreference } from "./preferences";
+import { usePlugins, usePluginsLoaded } from "./use-plugins";
+import { PluginView, useSlotFills, useUiPlugins } from "./web-plugins";
+
+/** The preference value that means today's window. */
+export const DEFAULT_LAYOUT_CHOICE = "default";
+
+function View({ plugin, id }: { plugin: string; id: string }) {
+  return <PluginView plugin={plugin} id={id} frame="page" />;
+}
+
+/**
+ * The shell as a plugin layout draws it. A plugin's view sits inside its style scope, whose utility classes would also match
+ * the shell's elements (a scoped `.hidden` beating the shell's own `sm:contents`) and change the app. So the shell is NOT drawn
+ * inside the scope: it is rendered, through a portal (same React tree: its state and contexts are the app's own), into a
+ * host element outside every scope, and that host is laid over the placeholder the layout drew. The placeholder takes the
+ * layout's room; hiding it (a minimized window) hides the shell, which stays mounted; unmounting it closes the shell.
+ */
+function useShellOutlet(Shell: ComponentType): ComponentType<{ className?: string }> {
+  return useMemo(
+    () =>
+      function ShellOutlet({ className }: { className?: string }) {
+        const place = useRef<HTMLDivElement>(null);
+        const [host] = useState(() => {
+          const el = document.createElement("div");
+          el.style.position = "fixed";
+          el.style.display = "none";
+          return el;
+        });
+        useLayoutEffect(() => {
+          document.body.appendChild(host);
+          const sync = () => {
+            const at = place.current;
+            // display:none on the placeholder or an ancestor (a minimized window) gives it no layout box.
+            if (!at || at.getClientRects().length === 0) return void (host.style.display = "none");
+            const r = at.getBoundingClientRect();
+            host.style.display = "block";
+            host.style.left = `${r.left}px`;
+            host.style.top = `${r.top}px`;
+            host.style.width = `${r.width}px`;
+            host.style.height = `${r.height}px`;
+          };
+          sync();
+          const watch = new ResizeObserver(sync);
+          if (place.current) watch.observe(place.current);
+          watch.observe(document.documentElement);
+          window.addEventListener("resize", sync);
+          const tick = window.setInterval(sync, 250); // a move without a resize (a sibling above grew, a window shown)
+          return () => {
+            watch.disconnect();
+            window.removeEventListener("resize", sync);
+            window.clearInterval(tick);
+            host.remove();
+          };
+        }, [host]);
+        return (
+          <>
+            <div ref={place} className={className} data-shell-outlet />
+            {createPortal(<Shell />, host)}
+          </>
+        );
+      },
+    [Shell],
+  );
+}
+
+/** The root of plugin layout [plugin]/[id]: its `layout` view, or today's shell when that plugin's UI has failed. */
+function pluginRoot(plugin: string, id: string): LayoutRoot<ComponentType, ReactNode> {
+  return function PluginLayoutRoot({ Shell }) {
+    const failed = useUiPlugins((s) => s.entries[plugin]?.state === "failed" || !!s.entries[plugin]?.fault);
+    const Outlet = useShellOutlet(Shell);
+    if (failed) return <Shell />;
+    return <PluginView plugin={plugin} id={id} props={{ Shell: Outlet, View }} frame="page" />;
+  };
+}
+
+/**
+ * The layout the `layout` preference picks: its provider (also set in the layout store, for anything that reads it) and its
+ * root. `ready` is false while a plugin layout is chosen but the daemon's plugin list has not arrived: hold the window
+ * rather than flash today's shell.
+ */
+function useChosenLayout(): { ready: boolean; Root: LayoutRoot<ComponentType, ReactNode> | undefined } {
+  const [choice] = usePreference<string>("layout", DEFAULT_LAYOUT_CHOICE);
+  const loaded = usePlugins((s) => s.loaded);
+  const fills = useSlotFills("layout");
+  const wanted = useMemo(
+    () => (choice === DEFAULT_LAYOUT_CHOICE ? undefined : fills.find((f) => `${f.plugin}/${f.contribution.id}` === choice)),
+    [choice, fills],
+  );
+  const provider = useMemo(
+    () => createLayoutProvider(DEFAULT_LAYOUT, wanted ? { root: pluginRoot(wanted.plugin, wanted.contribution.id) as LayoutRoot } : {}),
+    [wanted],
+  );
+  useEffect(() => setLayoutProvider(provider), [provider]);
+  return { ready: choice === DEFAULT_LAYOUT_CHOICE || loaded, Root: provider.root as LayoutRoot<ComponentType, ReactNode> | undefined };
+}
 
 /** The window: the active layout's own root when it owns the screen, else the shell. */
 export function LayoutHost({ Shell = AppShell }: { Shell?: ComponentType } = {}) {
-  const Root = useLayoutProvider().root as LayoutRoot<ComponentType, ReactNode> | undefined;
-  return Root ? <>{Root({ Shell })}</> : <Shell />;
+  usePluginsLoaded(); // the plugin list is what finds a layout plugin; do not wait for a shell that a layout may not draw
+  const { ready, Root: Chosen } = useChosenLayout();
+  // A layout set straight in the store (setLayoutProvider, DESK-1) is honoured when no plugin layout is picked.
+  const stored = useLayoutProvider().root as LayoutRoot<ComponentType, ReactNode> | undefined;
+  const Root = Chosen ?? stored;
+  if (!ready) return null;
+  // Drawn as a component, not called: a root may use hooks.
+  const Layout = Root as ComponentType<{ Shell: ComponentType }> | undefined;
+  return Layout ? <Layout Shell={Shell} /> : <Shell />;
 }

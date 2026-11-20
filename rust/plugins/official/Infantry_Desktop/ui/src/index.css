@@ -1,0 +1,5 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright (c) SuperiorSoft LLC */
+/* The desktop's utilities, built with the app's theme and scoped to the plugin (WEBUI-1). */
+@import "@infantry/ui-plugin-api/plugin.css";
+@source "./";

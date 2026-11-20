@@ -17,6 +17,6 @@ describe("the UI API contract", () => {
     expect(HOST_GLOBAL).toBe(host.global);
     expect(SCOPE_ATTRIBUTE).toBe(host.scopeAttribute);
     expect([...HOST_MODULES]).toEqual(["react", "react/jsx-runtime", "react-dom", "@infantry/ui"]);
-    expect([...SLOTS]).toEqual(["tab", "panel", "settings.card", "plugin.config", "card.badge"]);
+    expect([...SLOTS]).toEqual(["tab", "panel", "settings.card", "plugin.config", "card.badge", "layout"]);
   });
 });

@@ -1,0 +1,30 @@
+{
+  "name": "Infantry_Desktop",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "displayName": "Desktop",
+  "description": "A desktop layout: a plain wallpaper with an icon for the orchestrator and one for Apps. The orchestrator opens full screen in exactly its usual layout, with an app title bar to minimize it back to the desktop or close it. Replaceable: any layout plugin can take its place.",
+  "tier": "official",
+  "sequence": [],
+  "ui": {
+    "apiVersion": 1,
+    "entry": "ui/dist/index.js",
+    "styles": [
+      "ui/dist/index.css"
+    ],
+    "contributes": [
+      {
+        "slot": "layout",
+        "id": "infantry.desktop",
+        "label": "Desktop"
+      },
+      {
+        "slot": "plugin.config",
+        "id": "infantry.desktop.config",
+        "label": "Desktop"
+      }
+    ]
+  }
+}
