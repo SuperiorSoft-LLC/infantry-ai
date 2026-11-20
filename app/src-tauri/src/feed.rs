@@ -14,9 +14,16 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// The feed when the user set none: one `latest.json` per channel on the product's public releases.
-pub const DEFAULT_FEED: &str = "https://github.com/SuperiorSoft-LLC/infantry-ai/releases/download/rust-{channel}/latest.json";
+/// Ticket 1d57e853: the app reads GitHub's releases live; publishing a release is the only step (no promoted feed file).
+/// Stable: the `latest.json` asset of GitHub's latest (non-prerelease) release. GitHub redirects this address itself.
+pub const STABLE_FEED: &str = "https://github.com/SuperiorSoft-LLC/infantry-ai/releases/latest/download/latest.json";
+/// Nightly: the release list; `nightly_feed` picks the newest prerelease that carries a `latest.json`.
+pub const RELEASES_API: &str = "https://api.github.com/repos/SuperiorSoft-LLC/infantry-ai/releases?per_page=30";
+/// What the settings show as the default feed: the per-channel GitHub source (a custom feed may use `{channel}`).
+pub const DEFAULT_FEED: &str = "github:SuperiorSoft-LLC/infantry-ai (latest release; nightly = newest prerelease)";
 pub const CHANNELS: [&str; 2] = ["stable", "nightly"];
+/// Named setting `updater.checkMinutes`: how often the open app re-checks. 0 turns the timer off (start + button remain).
+pub const DEFAULT_CHECK_MINUTES: u32 = 60;
 
 /// `ui.json` `updater` (desktop) or `updater.json` (phone).
 #[derive(Serialize, Deserialize, Default, Clone)]
@@ -30,6 +37,8 @@ pub struct UpdaterSettings {
     pub auto_check: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_install: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check_minutes: Option<u32>,
 }
 
 impl UpdaterSettings {
@@ -39,11 +48,67 @@ impl UpdaterSettings {
     pub fn feed_template(&self) -> &str {
         self.feed_url.as_deref().map(str::trim).filter(|u| !u.is_empty()).unwrap_or(DEFAULT_FEED)
     }
+    pub fn check_minutes(&self) -> u32 {
+        self.check_minutes.unwrap_or(DEFAULT_CHECK_MINUTES)
+    }
 }
 
-/// The feed for `channel`: `{channel}` replaced.
-pub fn feed_for(template: &str, channel: &str) -> String {
-    template.replace("{channel}", channel)
+/// Where a check reads.
+#[derive(Debug, PartialEq, Clone)]
+pub enum Source {
+    /// A `latest.json` address.
+    Manifest(String),
+    /// The GitHub release list (nightly): fetch it, then `nightly_feed` gives the manifest address.
+    ReleaseList(String),
+}
+
+/// The source for `channel`. No custom feed: stable is GitHub's latest release, nightly the newest prerelease.
+/// A custom feed has `{channel}` replaced.
+pub fn source_for(template: &str, channel: &str) -> Source {
+    if template == DEFAULT_FEED {
+        return if channel == "nightly" { Source::ReleaseList(RELEASES_API.to_string()) } else { Source::Manifest(STABLE_FEED.to_string()) };
+    }
+    Source::Manifest(template.replace("{channel}", channel))
+}
+
+#[derive(Deserialize)]
+struct GhRelease {
+    tag_name: String,
+    #[serde(default)]
+    draft: bool,
+    #[serde(default)]
+    prerelease: bool,
+    #[serde(default)]
+    assets: Vec<GhAsset>,
+}
+#[derive(Deserialize)]
+struct GhAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+/// From the GitHub release list: the `latest.json` of the highest-version published prerelease (`rust-v0.1.4-nightly.7`).
+/// The rolling `rust-nightly` / `rust-stable` releases are not versions and are skipped.
+pub fn nightly_feed(releases_json: &str) -> Result<String, String> {
+    let list: Vec<GhRelease> = serde_json::from_str(releases_json).map_err(|e| format!("GitHub's release list is not readable: {e}"))?;
+    list.iter()
+        .filter(|r| r.prerelease && !r.draft)
+        .filter_map(|r| {
+            let v = parse_version(r.tag_name.trim_start_matches("rust-"))?;
+            let a = r.assets.iter().find(|a| a.name == "latest.json")?;
+            Some((v, a.browser_download_url.clone()))
+        })
+        .max_by(|a, b| a.0.cmp(&b.0))
+        .map(|(_, url)| url)
+        .ok_or_else(|| "no nightly (prerelease) with a latest.json is published yet".to_string())
+}
+
+/// Status line: "up to date (0.1.3, checked 14:05)" or "0.1.4 available".
+pub fn status_line(current: &str, available: Option<&str>, checked_at: &str) -> String {
+    match available {
+        Some(v) => format!("{v} available"),
+        None => format!("up to date ({current}, checked {checked_at})"),
+    }
 }
 
 /// A feed address the app may read: https anywhere, plain http only on this machine.
@@ -142,12 +207,40 @@ mod tests {
     }
 
     #[test]
-    fn the_channel_fills_the_feed_and_unknown_channels_fall_back_to_stable() {
-        let s = UpdaterSettings { channel: Some("nightly".into()), ..Default::default() };
-        assert_eq!(feed_for(s.feed_template(), s.channel()), DEFAULT_FEED.replace("{channel}", "nightly"));
+    fn the_feed_source_per_channel_is_github_live_and_unknown_channels_fall_back_to_stable() {
+        let s = UpdaterSettings::default();
+        assert_eq!(
+            source_for(s.feed_template(), "stable"),
+            Source::Manifest("https://github.com/SuperiorSoft-LLC/infantry-ai/releases/latest/download/latest.json".into())
+        );
+        assert_eq!(source_for(s.feed_template(), "nightly"), Source::ReleaseList(RELEASES_API.into()));
+        assert!(!STABLE_FEED.contains("rust-stable") && !RELEASES_API.contains("rust-nightly"));
         let odd = UpdaterSettings { channel: Some("beta".into()), feed_url: Some("  ".into()), ..Default::default() };
         assert_eq!(odd.channel(), "stable");
         assert_eq!(odd.feed_template(), DEFAULT_FEED);
+        assert_eq!(source_for("https://x/{channel}/latest.json", "nightly"), Source::Manifest("https://x/nightly/latest.json".into()));
+        assert_eq!(UpdaterSettings::default().check_minutes(), 60);
+    }
+
+    #[test]
+    fn the_newest_published_prerelease_with_a_manifest_is_the_nightly() {
+        let a = |n: &str| format!(r#"{{"name":"latest.json","browser_download_url":"https://gh/{n}/latest.json"}}"#);
+        let json = format!(
+            r#"[{{"tag_name":"rust-nightly","prerelease":true,"draft":false,"assets":[{}]}},
+               {{"tag_name":"rust-v0.1.10-nightly.2","prerelease":true,"draft":false,"assets":[{}]}},
+               {{"tag_name":"rust-v0.1.9-nightly.9","prerelease":true,"draft":false,"assets":[{}]}},
+               {{"tag_name":"rust-v0.1.11-nightly.1","prerelease":true,"draft":true,"assets":[{}]}},
+               {{"tag_name":"rust-v0.2.0","prerelease":false,"draft":false,"assets":[{}]}}]"#,
+            a("roll"), a("n10"), a("n9"), a("draft"), a("stable")
+        );
+        assert_eq!(nightly_feed(&json).unwrap(), "https://gh/n10/latest.json");
+        assert!(nightly_feed("[]").is_err() && nightly_feed("nope").is_err());
+    }
+
+    #[test]
+    fn the_status_line_names_the_version_and_the_time() {
+        assert_eq!(status_line("0.1.3", None, "14:05"), "up to date (0.1.3, checked 14:05)");
+        assert_eq!(status_line("0.1.3", Some("0.1.4"), "14:05"), "0.1.4 available");
     }
 
     #[test]
@@ -156,6 +249,8 @@ mod tests {
         assert!(!offered("0.2.0", "0.1.0", "nightly"));
         assert!(!offered("0.2.0", "0.2.0", "nightly"));
         assert!(offered("0.1.0", "0.1.2", "stable"));
+        assert!(offered("0.1.9", "0.1.10", "stable"));
+        assert!(!offered("0.1.10", "0.1.9", "stable"));
         assert!(!offered("0.1.2", "0.1.0", "stable"));
         assert!(!offered("0.2.0-nightly.1", "0.1.9", "stable"));
         assert!(!offered("0.1.0", "v0.1.0", "stable"));

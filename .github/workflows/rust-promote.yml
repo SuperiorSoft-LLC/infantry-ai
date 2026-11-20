@@ -1,4 +1,5 @@
 # RUST-UPD-2: publishes a tested draft from rust-release.yml and points the update feed at it.
+# The app no longer reads the rust-stable/nightly feed: it reads GitHub's latest release live (ticket 1d57e853). Publishing is enough; this workflow also marks a stable release as latest.
 #
 # Two ways in, same job (ticket f740f0f6): run it by hand with the draft's tag, OR just publish the draft release on
 # GitHub (release: published) and the feed is promoted in the same step. Publishing a release is all it takes; nobody
@@ -45,7 +46,7 @@ jobs:
             if [ "$channel" = nightly ]; then
               gh release edit "$TAG" --repo "$REPO" --draft=false --prerelease --latest=false
             else
-              gh release edit "$TAG" --repo "$REPO" --draft=false --prerelease=false --latest=false
+              gh release edit "$TAG" --repo "$REPO" --draft=false --prerelease=false --latest
             fi
           fi
           roll="rust-$channel"

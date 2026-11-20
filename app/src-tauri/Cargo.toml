@@ -43,6 +43,8 @@ tokio = { version = "1", features = ["rt", "sync", "time"] }
 uuid = { version = "1", features = ["v4"] }
 # RUST-UPD-1: self-update from a signed feed, and the machine's addresses for phone pairing.
 tauri-plugin-updater = "2"
+# Ticket 1d57e853: the nightly channel reads GitHub's release list itself (the stable one is a plain manifest address).
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 if-addrs = "0.13"
 
 # Pairing by QR code (RUST-MOBILE-1).

@@ -42,13 +42,26 @@ export function listenDaemonNotices(): void {
     .catch((e) => console.warn(`[infantry] daemon notices: ${message(e)}`));
 }
 
+/** The newest check (start, timer or button), for the "up to date (0.1.N, checked HH:MM)" line. */
+let lastCheck: Date | null = null;
+const hhmm = (d: Date) => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
 export function startUpdateCheck(): void {
   if (!updatable()) return;
-  void call<{ autoCheck: boolean }>("update_settings_get")
-    .then((s) => (s.autoCheck ? call<UpdateInfo>("update_check") : null))
-    .then((u) => {
-      const n = u && updateNotice(u);
-      if (n) attentionStore().getState().post(n);
+  const run = () =>
+    call<UpdateInfo>("update_check")
+      .then((u) => {
+        lastCheck = new Date();
+        const n = updateNotice(u);
+        if (n) attentionStore().getState().post(n);
+      })
+      .catch((e) => console.warn(`[infantry] update check: ${message(e)}`));
+  void call<{ autoCheck: boolean; checkMinutes: number }>("update_settings_get")
+    .then((s) => {
+      if (!s.autoCheck) return;
+      void run();
+      // `updater.checkMinutes` (default 60; 0 = only at start): the open app keeps looking.
+      if (s.checkMinutes > 0) setInterval(() => void run(), s.checkMinutes * 60_000);
     })
     .catch((e) => console.warn(`[infantry] update check: ${message(e)}`));
 }
@@ -59,6 +72,7 @@ interface UpdaterView {
   channel: string;
   channels: string[];
   autoCheck: boolean;
+  checkMinutes: number;
   autoInstall: boolean;
   signed: boolean;
   current: string;
@@ -95,7 +109,9 @@ export function UpdaterRows() {
     setBusy("check");
     setError(null);
     try {
-      setFound(await call<UpdateInfo>("update_check"));
+      const u = await call<UpdateInfo>("update_check");
+      lastCheck = new Date();
+      setFound(u);
     } catch (e) {
       setError(message(e));
     } finally {
@@ -129,7 +145,7 @@ export function UpdaterRows() {
           </SelectContent>
         </Select>
       </Row>
-      <Row id="upd-auto" title="Check for updates automatically" hint="At start. Installing is always your call.">
+      <Row id="upd-auto" title="Check for updates automatically" hint={`At start and ${v.checkMinutes > 0 ? `every ${v.checkMinutes} minutes` : "on the button only"}. Installing is always your call.`}>
         <Switch id="upd-auto" checked={v.autoCheck} onCheckedChange={(on) => void save({ autoCheck: on })} />
       </Row>
       <div className="space-y-1.5 rounded-lg border bg-card p-3">
@@ -152,12 +168,12 @@ export function UpdaterRows() {
           )}
         </form>
         <p className="text-xs text-muted-foreground">
-          <code>{"{channel}"}</code> becomes the channel. {v.signed ? "Updates are verified with this build's signing key." : "This build has no signing key yet, so updates can be found but not installed."}
+          The default reads GitHub's newest release live (nightly: the newest prerelease). A custom feed may use <code>{"{channel}"}</code>. {v.signed ? "Updates are verified with this build's signing key." : "This build has no signing key yet, so updates can be found but not installed."}
         </p>
       </div>
       <Row
         id="upd-check"
-        title={found?.available ? `Version ${found.version} is available` : found ? "You run the newest version" : "Updates"}
+        title={found?.available ? `${found.version} available` : found ? `Up to date (${found.current}, checked ${hhmm(lastCheck ?? new Date())})` : "Updates"}
         hint={
           error ? (
             <span className="text-danger">{error}</span>
