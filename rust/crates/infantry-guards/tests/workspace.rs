@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use infantry_guards::check::{cargo_metadata, check_edges, check_placement, workspace_crates};
+use infantry_guards::{features, licences};
 
 fn rust_dir() -> PathBuf {
     // crates/infantry-guards -> rust/
@@ -46,6 +47,52 @@ fn core_names_no_plugin_id() {
     });
     assert!(core.join("src/lib.rs").exists(), "infantry-core not found at {}", core.display());
     assert!(hits.is_empty(), "infantry-core names a plugin id:\n  {}", hits.join("\n  "));
+}
+
+/// The licence line (licences.rs): MPL core links only the Apache API crates, an API crate links no MPL crate, every
+/// crate is MPL-2.0 or Apache-2.0. Today's crossings are on the shrinking list in licences.rs.
+#[test]
+fn licence_line_holds() {
+    let v = licences::check_crossings(&crates(), licences::CROSSINGS);
+    assert!(v.is_empty(), "licence line (docs/LICENSE-MAP.md section 1, docs/rust-port/DECOUPLE-PLAN.md section 7):\n  {}", v.join("\n  "));
+}
+
+/// Every `.rs` file carries the SPDX header of its crate's licence (scripts/license-headers.sh covers no `.rs` yet).
+#[test]
+fn every_rust_file_carries_its_crates_spdx_header() {
+    let v = licences::check_headers(&rust_dir(), &crates(), licences::HEADERLESS);
+    assert!(v.is_empty(), "SPDX headers (the crate's Cargo.toml `license` is the source of truth):\n  {}", v.join("\n  "));
+}
+
+/// No new feature enters core (DECOUPLE-1 #45): core names no feature beyond today's baseline in features.rs, which
+/// only shrinks. The baseline is per (file, term): a new file or a new term in a listed file fails. A move that clears a
+/// file or an edge deletes its entry in the same change; a move that splits a file may carry its entry over (same terms
+/// or fewer).
+#[test]
+fn core_names_no_new_feature() {
+    let cs = crates();
+    let v = features::check_ratchet(&features::feature_edges(&cs), &features::scan(&rust_dir(), &cs), features::BASELINE, features::EDGE_BASELINE);
+    assert!(v.is_empty(), "core and the features (docs/rust-port/DECOUPLE-PLAN.md section 3; AGENTS.md rule 1):\n  {}", v.join("\n  "));
+}
+
+/// DECOUPLE-1 (#45): the core files that still name a feature, by file and line. RED until the moves in
+/// docs/rust-port/DECOUPLE-PLAN.md land; the move that clears the last line removes the `#[ignore]`.
+#[test]
+#[ignore = "RED (DECOUPLE-1 #45): core still names the features that leave it; see docs/rust-port/DECOUPLE-PLAN.md section 3"]
+fn core_names_no_feature() {
+    let cs = crates();
+    let edges: Vec<String> = features::feature_edges(&cs).iter().map(|(f, t)| format!("`{f}` depends on `{t}`")).collect();
+    let hits = features::scan(&rust_dir(), &cs);
+    let files = features::report(&hits);
+    assert!(
+        edges.is_empty() && hits.is_empty(),
+        "core names a feature: {} crate edge(s), {} line(s) in {} file(s)\n  {}\n  {}",
+        edges.len(),
+        hits.len(),
+        files.len(),
+        edges.join("\n  "),
+        files.join("\n  ")
+    );
 }
 
 fn walk(dir: &Path, f: &mut dyn FnMut(&Path)) {
