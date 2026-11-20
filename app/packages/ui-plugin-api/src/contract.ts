@@ -32,6 +32,7 @@ export const SCOPE_ATTRIBUTE: string = host.scopeAttribute;
  * - `card.badge`: a badge on every board ticket card (its props carry the ticket).
  * - `layout`: a whole-window layout (DESK-2). When the user picks it (the `layout` preference), the shell draws this view INSTEAD
  *   of its own window and hands it today's shell as `Shell`, so the layout may wrap, shrink or hide the orchestrator.
+ *   A layout contribution may carry `"defaultLayout": true`: it is then the layout of a device that has never chosen one.
  */
 export const SLOTS = ["tab", "panel", "settings.card", "plugin.config", "card.badge", "layout"] as const;
 export type Slot = (typeof SLOTS)[number];
@@ -119,6 +120,26 @@ export interface HostApi {
    * changes, here or in another plugin. The key `layout` is the active layout contribution (`<Plugin>/<id>`, or `default`).
    */
   usePreference<T extends string | boolean>(key: string, fallback: T): readonly [T, (next: T) => void];
+  /** The agents of every project that are busy right now, read from the app's own session store (DESK-3: the taskbar badge). */
+  useAgentActivity(): AgentActivity;
+  /** The app's pixel-bot avatar for the agent with session id [agentId] (renders nothing for an unknown id). */
+  AgentAvatar: ComponentType<{ agentId: string; size?: "xs" | "sm" }>;
+}
+
+/** One busy agent, as a taskbar shows it. */
+export interface ActiveAgent {
+  id: string;
+  name: string;
+  /** `working`, or `needs-input` when it waits for the user. */
+  status: "working" | "needs-input";
+  statusLine: string;
+}
+
+/** How many agents are working, how many need the user, and the agents behind both counts (needs-input first). */
+export interface AgentActivity {
+  working: number;
+  needsInput: number;
+  agents: readonly ActiveAgent[];
 }
 
 /** What the app installs under HOST_GLOBAL. */

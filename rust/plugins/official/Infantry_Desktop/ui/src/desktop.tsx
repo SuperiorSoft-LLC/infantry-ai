@@ -5,9 +5,9 @@
 // they live in the daemon). The orchestrator is today's whole shell, drawn untouched. Built from the kit only.
 import { useReducer, useState, type ComponentType, type ReactNode } from "react";
 import { ChevronsDown, LayoutDashboard, PackageOpen, X } from "lucide-react";
-import { AppDialog, IconButton, PanelCard, Switch } from "@infantry/ui";
-import { usePreference } from "@infantry/ui-plugin-api";
-import { initialState, reduce, type AppId } from "./state";
+import { AppDialog, cn, IconButton, PanelCard, Switch, Tooltip, TooltipContent, TooltipTrigger } from "@infantry/ui";
+import { AgentAvatar, useAgentActivity, usePreference } from "@infantry/ui-plugin-api";
+import { initialState, reduce, toggle, type AppId, type DesktopState } from "./state";
 
 /** What the "About" of an app says: the owner's legibility rule (an app is a plugin under Apache-2.0, not core). */
 interface AppInfo {
@@ -96,13 +96,95 @@ function Window({ show, children }: { show: boolean; children: ReactNode }) {
   );
 }
 
+/** Avatars of the busy agents the taskbar has room for. */
+const TASKBAR_AVATARS = 4;
+
+/** The orchestrator entry's badge: agents working, and (highlighted) agents that need the user. Reads the app's session store. */
+function AgentBadge() {
+  const { working, needsInput } = useAgentActivity();
+  if (working === 0 && needsInput === 0) return null;
+  return (
+    <span className="flex items-center gap-1" data-testid="taskbar-badge">
+      {working > 0 && (
+        <span title={`${working} working`} aria-label={`${working} agents working`} data-testid="taskbar-working" className="grid h-5 min-w-5 place-items-center rounded border border-ok/70 px-1 text-[11px] text-ok">
+          {working}
+        </span>
+      )}
+      {needsInput > 0 && (
+        <span title={`${needsInput} need you`} aria-label={`${needsInput} agents need you`} data-testid="taskbar-needs-you" className="grid h-5 min-w-5 place-items-center rounded border border-danger/70 bg-danger/10 px-1 text-[11px] font-semibold text-danger">
+          {needsInput}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function TaskbarAvatars() {
+  const { agents } = useAgentActivity();
+  const shown = agents.slice(0, TASKBAR_AVATARS);
+  if (shown.length === 0) return null;
+  return (
+    <span className="hidden items-center gap-1 sm:flex" data-testid="taskbar-avatars">
+      {shown.map((a) => (
+        <Tooltip key={a.id}>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">
+              <AgentAvatar agentId={a.id} size="xs" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            {a.name} · {a.statusLine}
+          </TooltipContent>
+        </Tooltip>
+      ))}
+    </span>
+  );
+}
+
+/** Along the bottom on a desktop, a dock on a phone: one entry per open app. Clicking a minimized entry restores it; the front one minimizes. */
+function Taskbar({ state, onToggle }: { state: DesktopState; onToggle: (app: AppInfo) => void }) {
+  const open = APPS.filter((a) => state.windows[a.id] !== "closed");
+  return (
+    <nav aria-label="Taskbar" data-testid="taskbar" className="flex h-16 shrink-0 items-center justify-center gap-1 border-t bg-card px-2 sm:h-10 sm:justify-start">
+      {open.length === 0 && <span className="px-2 text-xs text-muted-foreground">No apps open</span>}
+      {open.map((a) => {
+        const Icon = a.icon;
+        const front = state.front === a.id;
+        return (
+          <div key={a.id} className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onToggle(a)}
+              aria-label={`${a.name}${front ? "" : " (minimized)"}`}
+              aria-pressed={front}
+              data-testid={`taskbar-${a.id}`}
+              data-state={front ? "open" : "minimized"}
+              title={front ? `Minimize ${a.name}` : `Restore ${a.name}`}
+              className={cn(
+                "flex h-12 items-center gap-2 rounded-lg border px-3 text-xs hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:h-8 sm:px-2.5",
+                front ? "border-foreground/40 bg-accent font-medium" : "bg-background",
+              )}
+            >
+              <Icon className="size-4" />
+              <span className="hidden sm:inline">{a.name}</span>
+              {a.id === "orchestrator" && <AgentBadge />}
+            </button>
+            {a.id === "orchestrator" && <TaskbarAvatars />}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function Desktop({ Shell, View }: { Shell: ComponentType<{ className?: string }>; View: ComponentType<{ plugin: string; id: string }> }) {
   const [openAtStart] = usePreference("desktop.openAtStart", false);
   const [state, dispatch] = useReducer(reduce, openAtStart, initialState);
   const [about, setAbout] = useState<AppInfo | null>(null);
   const body = (id: AppId): ReactNode => (id === "orchestrator" ? <Shell className="min-h-0 flex-1" /> : <View plugin="Infantry_Installer" id="infantry.installer" />);
   return (
-    <div className="relative h-full w-full overflow-hidden bg-gradient-to-br from-background via-muted to-background">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-gradient-to-br from-background via-muted to-background">
+     <div className="relative min-h-0 flex-1 overflow-hidden">
       {state.front === null && (
         <div data-tauri-drag-region className="absolute inset-0 flex flex-wrap content-start gap-2 p-4" role="group" aria-label="Desktop">
           {APPS.map((a) => (
@@ -121,6 +203,8 @@ export function Desktop({ Shell, View }: { Shell: ComponentType<{ className?: st
             </Window>
           ),
       )}
+     </div>
+      <Taskbar state={state} onToggle={(a) => dispatch(toggle(state, a.id))} />
       <About app={about} onClose={() => setAbout(null)} />
     </div>
   );
@@ -128,7 +212,8 @@ export function Desktop({ Shell, View }: { Shell: ComponentType<{ className?: st
 
 /** The plugin's card under Plugins: pick this layout, and whether the orchestrator opens at start. */
 export function DesktopSettings({ plugin }: { plugin: string }) {
-  const [choice, setChoice] = usePreference<string>("layout", "default");
+  // "" = never chosen: the start layout, which this plugin's manifest declares (defaultLayout), so the switch reads on.
+  const [choice, setChoice] = usePreference<string>("layout", "");
   const [openAtStart, setOpenAtStart] = usePreference("desktop.openAtStart", false);
   const mine = layoutChoice(plugin);
   return (
@@ -136,7 +221,7 @@ export function DesktopSettings({ plugin }: { plugin: string }) {
       <div className="space-y-3 text-sm">
         <label className="flex items-center justify-between gap-3">
           <span>Use the desktop layout on this device</span>
-          <Switch checked={choice === mine} onCheckedChange={(on: boolean) => setChoice(on ? mine : "default")} aria-label="Use the desktop layout" />
+          <Switch checked={choice === mine || choice === ""} onCheckedChange={(on: boolean) => setChoice(on ? mine : "default")} aria-label="Use the desktop layout" />
         </label>
         <label className="flex items-center justify-between gap-3">
           <span>Open the orchestrator at start</span>

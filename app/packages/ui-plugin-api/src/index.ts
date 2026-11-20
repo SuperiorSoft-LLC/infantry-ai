@@ -4,7 +4,8 @@
 // export, and the app state a plugin may read (`useLinkState`), taken from the app's host when it is used. `react`,
 // `react-dom` and `@infantry/ui` (the UI kit, TabPage, Field, RefusalBanner and `ago` included) are imported as usual: the
 // build helper turns those imports into the app's own copy (build/plugin-config.mjs).
-import { HOST_GLOBAL, type HostApi, type UiHost, type UiPluginModule } from "./contract";
+import { createElement, type ReactElement } from "react";
+import { HOST_GLOBAL, type AgentActivity, type HostApi, type UiHost, type UiPluginModule } from "./contract";
 
 export * from "./contract";
 // The frame helpers every app store uses: a request with its own id, and a JSON read that never throws. Bundled (they are
@@ -31,3 +32,11 @@ export const useLinkState = (): string => lent("useLinkState")();
 /** A per-device preference (see [HostApi.usePreference]); `[value, set]`, re-rendering when it changes. */
 export const usePreference = <T extends string | boolean>(key: string, fallback: T): readonly [T, (next: T) => void] =>
   lent("usePreference")(key, fallback);
+
+/** The agents that are busy right now (DESK-3, a taskbar badge): how many work, how many need the user, and which. */
+export const useAgentActivity = (): AgentActivity => lent("useAgentActivity")();
+
+/** The app's pixel-bot avatar for an agent's session id. */
+export function AgentAvatar(props: { agentId: string; size?: "xs" | "sm" }): ReactElement {
+  return createElement(lent("AgentAvatar"), props);
+}

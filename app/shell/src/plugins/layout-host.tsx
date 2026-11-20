@@ -18,6 +18,8 @@ import { PluginView, useSlotFills, useUiPlugins } from "./web-plugins";
 
 /** The preference value that means today's window. */
 export const DEFAULT_LAYOUT_CHOICE = "default";
+/** How long a never-chosen device waits for the plugin list (which may hold the start layout) before drawing today's window. */
+const START_WAIT_MS = 3000;
 
 function View({ plugin, id }: { plugin: string; id: string }) {
   return <PluginView plugin={plugin} id={id} frame="page" />;
@@ -94,19 +96,30 @@ function pluginRoot(plugin: string, id: string): LayoutRoot<ComponentType, React
  * rather than flash today's shell.
  */
 function useChosenLayout(): { ready: boolean; Root: LayoutRoot<ComponentType, ReactNode> | undefined } {
-  const [choice] = usePreference<string>("layout", DEFAULT_LAYOUT_CHOICE);
+  // "" = this device has never chosen. Then a layout whose manifest declares `defaultLayout: true` is the start layout (the shell
+  // names no plugin); "default" is an explicit choice of today's window and always wins.
+  const [choice] = usePreference<string>("layout", "");
   const loaded = usePlugins((s) => s.loaded);
   const fills = useSlotFills("layout");
-  const wanted = useMemo(
-    () => (choice === DEFAULT_LAYOUT_CHOICE ? undefined : fills.find((f) => `${f.plugin}/${f.contribution.id}` === choice)),
-    [choice, fills],
-  );
+  const unset = choice === "";
+  // With no daemon the plugin list never arrives: after a short wait show today's window rather than a blank screen.
+  const [gaveUp, setGaveUp] = useState(false);
+  useEffect(() => {
+    if (!unset || loaded) return;
+    const t = window.setTimeout(() => setGaveUp(true), START_WAIT_MS);
+    return () => window.clearTimeout(t);
+  }, [unset, loaded]);
+  const wanted = useMemo(() => {
+    if (choice === DEFAULT_LAYOUT_CHOICE) return undefined;
+    if (unset) return fills.find((f) => f.contribution.defaultLayout === true);
+    return fills.find((f) => `${f.plugin}/${f.contribution.id}` === choice);
+  }, [choice, unset, fills]);
   const provider = useMemo(
     () => createLayoutProvider(DEFAULT_LAYOUT, wanted ? { root: pluginRoot(wanted.plugin, wanted.contribution.id) as LayoutRoot } : {}),
     [wanted],
   );
   useEffect(() => setLayoutProvider(provider), [provider]);
-  return { ready: choice === DEFAULT_LAYOUT_CHOICE || loaded, Root: provider.root as LayoutRoot<ComponentType, ReactNode> | undefined };
+  return { ready: choice === DEFAULT_LAYOUT_CHOICE || loaded || gaveUp, Root: provider.root as LayoutRoot<ComponentType, ReactNode> | undefined };
 }
 
 /** The window: the active layout's own root when it owns the screen, else the shell. */
