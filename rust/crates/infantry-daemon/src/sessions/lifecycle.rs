@@ -48,6 +48,12 @@ pub struct Stats {
     pub series: Vec<(i64, u64, u64)>,
     pub first_at: Option<i64>,
     pub last_at: Option<i64>,
+    /// Tools called since the last usage report, waiting for the next one to measure what their results added.
+    pub pending_tools: Vec<String>,
+    /// Context tokens credited per tool: the growth between two requests when exactly one tool ran in between.
+    pub tokens_added: BTreeMap<String, u64>,
+    /// Growth after steps that ran several tools at once (never split between them).
+    pub unattributed_tool_tokens: u64,
 }
 
 impl Stats {
@@ -65,6 +71,18 @@ impl Stats {
 
     pub(super) fn usage(&mut self, u: crate::harness::TokenUsage) {
         let ctx = u.input + u.cached;
+        // Growth since the last request is what the tools called in between added; one tool gets it, several share
+        // it unsplit, a shrink (compaction) credits nothing.
+        if let (Some(prev), false) = (self.last_context_tokens, self.pending_tools.is_empty()) {
+            if ctx > prev {
+                if self.pending_tools.len() == 1 {
+                    *self.tokens_added.entry(self.pending_tools[0].clone()).or_default() += ctx - prev;
+                } else {
+                    self.unattributed_tool_tokens += ctx - prev;
+                }
+            }
+        }
+        self.pending_tools.clear();
         self.usage_seen = true;
         self.first_context_tokens.get_or_insert(ctx);
         self.last_context_tokens = Some(ctx);
@@ -80,6 +98,7 @@ impl Stats {
     pub(super) fn tool(&mut self, name: &str) {
         self.tool_uses += 1;
         *self.tools.entry(name.to_string()).or_default() += 1;
+        self.pending_tools.push(name.to_string());
     }
 
     fn path(state_dir: &std::path::Path, id: &str) -> PathBuf {
@@ -437,8 +456,10 @@ impl Daemon {
         let s = &e.stats;
         let r = &e.rec;
         let tok = |v: Option<u64>| if s.usage_seen { v } else { None };
-        let mut top: Vec<_> = s.tools.iter().map(|(k, v)| json!({"tool": k, "calls": v, "tokensAdded": null})).collect();
-        top.sort_by_key(|v| -v["calls"].as_i64().unwrap_or(0));
+        let mut top: Vec<_> = s.tools.iter().map(|(k, v)| (k, *v, if s.usage_seen { s.tokens_added.get(k).copied() } else { None })).collect();
+        // Most tokens added first (unmeasured last), then most calls, then name: the Kotlin order.
+        top.sort_by(|a, b| b.2.map_or(-1, |x| x as i64).cmp(&a.2.map_or(-1, |x| x as i64)).then(b.1.cmp(&a.1)).then(a.0.cmp(b.0)));
+        let top: Vec<_> = top.into_iter().map(|(k, n, t)| json!({"tool": k, "calls": n, "tokensAdded": t})).collect();
         let v = json!({
             "sessionId": r.id, "harness": r.provider, "providerSessionId": r.provider_session_id,
             "status": state_word(r.state), "startedAt": s.first_at, "endedAt": s.last_at,
@@ -449,7 +470,7 @@ impl Daemon {
             "billedTokens": tok(Some(s.billed_tokens)),
             "series": if s.usage_seen { Some(s.series.iter().map(|(at, c, b)| json!({"at": at, "contextTokens": c, "cumulativeBilledTokens": b})).collect::<Vec<_>>()) } else { None },
             "topSources": if top.is_empty() { None } else { Some(top) },
-            "costTotal": null, "firstContextTokens": tok(s.first_context_tokens),
+            "costTotal": null, "unattributedToolTokens": if s.usage_seen { Some(s.unattributed_tool_tokens) } else { None }, "firstContextTokens": tok(s.first_context_tokens),
         });
         Ok(v.to_string())
     }
@@ -641,6 +662,23 @@ mod tests {
         assert!(!s.usage_seen);
         s.usage(crate::harness::TokenUsage { input: 10, cached: 5, output: 3, reasoning: 0 });
         assert_eq!((s.last_context_tokens, s.billed_tokens, s.tool_uses), (Some(15), 18, 1));
+    }
+
+    #[test]
+    fn tool_growth_is_credited_to_a_lone_tool_and_shared_steps_stay_unattributed() {
+        let u = |ctx| crate::harness::TokenUsage { input: ctx, cached: 0, output: 1, reasoning: 0 };
+        let mut s = Stats::default();
+        s.usage(u(100));
+        s.tool("Read");
+        s.usage(u(150)); // Read alone: +50
+        s.tool("Bash");
+        s.tool("Grep");
+        s.usage(u(190)); // two tools: +40 unattributed
+        s.tool("Read");
+        s.usage(u(120)); // a shrink credits nothing
+        assert_eq!(s.tokens_added.get("Read"), Some(&50));
+        assert_eq!(s.unattributed_tool_tokens, 40);
+        assert!(s.tokens_added.get("Bash").is_none());
     }
 
     #[test]

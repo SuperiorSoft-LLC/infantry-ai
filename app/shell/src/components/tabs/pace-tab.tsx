@@ -7,17 +7,24 @@ import { RefreshUsage, UsageMeters, UsageRefusal } from "@/components/usage/usag
 import { useUsage } from "@/components/usage/use-usage";
 import { TabPage } from "./tab-page";
 
-export function PaceTab() {
+/** The pacing rule and the plan-account cards: the Pace tab's body, also the Stats modal's Pace tab. */
+export function PaceBody() {
   const rule = useUsage((s) => s.report?.rule);
   return (
+    <div className="space-y-3">
+      <PanelCard title="Rule">
+        <p className="text-[13px]">{ruleLine(rule)}</p>
+      </PanelCard>
+      <UsageRefusal />
+      <UsageMeters grid />
+    </div>
+  );
+}
+
+export function PaceTab() {
+  return (
     <TabPage title="Pace" description="How many ticket workers run, by plan usage" actions={<RefreshUsage />}>
-      <div className="space-y-3">
-        <PanelCard title="Rule">
-          <p className="text-[13px]">{ruleLine(rule)}</p>
-        </PanelCard>
-        <UsageRefusal />
-        <UsageMeters grid />
-      </div>
+      <PaceBody />
     </TabPage>
   );
 }

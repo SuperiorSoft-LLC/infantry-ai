@@ -24,7 +24,7 @@ export function openSessionDialog(kind: Modal, sessionId: string): void {
 }
 
 let actions: SessionActions | null = null;
-function sessionActions(): SessionActions {
+export function sessionActions(): SessionActions {
   return (actions ??= createSessionActions(daemonStore().getState()));
 }
 

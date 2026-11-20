@@ -10,6 +10,8 @@ export const DIALOG_WIDTHS = {
   default: "w-[min(760px,calc(100vw-2rem))] sm:max-w-none",
   wide: "w-[min(960px,calc(100vw-2rem))] sm:max-w-none",
   full: "w-[min(1400px,calc(100vw-2rem))] sm:max-w-none",
+  /** Almost the whole window: 95% of the viewport each way (the Stats modal). */
+  screen: "h-[95vh] max-h-[95vh] w-[95vw] sm:max-w-none",
 } as const;
 
 export function AppDialog({
@@ -27,7 +29,7 @@ export function AppDialog({
   description?: string;
   footer?: ReactNode;
   /** true: a roomy form dialog; "fill": grows with the window (min(1100px, 92vw) by min(85vh, 820px)), for settings-like content. */
-  wide?: boolean | "fill" | "image" | "full";
+  wide?: boolean | "fill" | "image" | "full" | "screen";
   children: ReactNode;
 }) {
   const fill = wide === "fill";
@@ -36,12 +38,13 @@ export function AppDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
-          "flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0",
+          "flex flex-col gap-0 overflow-hidden p-0",
           fill
             ? "h-[min(85vh,820px)] w-[min(1100px,92vw)] min-w-[min(480px,92vw)] sm:max-w-none"
             : image
               ? "h-auto max-h-[88vh] w-fit max-w-[92vw] min-w-[min(480px,92vw)] sm:max-w-[92vw] max-sm:h-dvh max-sm:max-h-none max-sm:w-screen max-sm:max-w-none max-sm:rounded-none"
-              : DIALOG_WIDTHS[wide === "full" ? "full" : wide ? "wide" : "default"],
+              : DIALOG_WIDTHS[wide === "screen" ? "screen" : wide === "full" ? "full" : wide ? "wide" : "default"],
+              wide === "screen" ? "" : "max-h-[85vh]",
         )}
       >
         <DialogHeader className="border-b p-4 pr-12">

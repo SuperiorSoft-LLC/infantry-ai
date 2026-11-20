@@ -22,6 +22,27 @@ export interface SessionStats {
   lastContextTokens?: number | null;
   billedTokens?: number | null;
   costTotal?: number | null;
+  firstContextTokens?: number | null;
+  modelContextLimit?: number | null;
+  /** One point per model request the harness reported. */
+  series?: StatsPoint[] | null;
+  /** Tools by calls, with the context tokens their results added (null = not measured). */
+  topSources?: ContextSource[] | null;
+  /** Context growth after steps that ran several tools at once (never split). */
+  unattributedToolTokens?: number | null;
+}
+
+export interface StatsPoint {
+  at?: number | null;
+  contextTokens: number;
+  cumulativeBilledTokens: number;
+  cumulativeCost?: number | null;
+}
+
+export interface ContextSource {
+  tool: string;
+  calls: number;
+  tokensAdded?: number | null;
 }
 
 export interface SessionSwapped {

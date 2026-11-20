@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 // Custom title bar: brand, project, new/quick, avatars, attention, host, connection, window controls.
 // Empty areas carry data-tauri-drag-region so the window moves by dragging the bar.
-import { LifeBuoy, PanelLeft, PanelRight, Plus, Wand2, Moon, Sun, Settings } from "lucide-react";
+import { BarChart3, LifeBuoy, PanelLeft, PanelRight, Plus, Wand2, Moon, Sun, Settings } from "lucide-react";
 import { attentionCount, hostLabel } from "@infantry/client";
 import { useAttention } from "@/components/mail/use-mail";
 import { useDaemon } from "@/daemon/daemon";
@@ -62,6 +62,16 @@ export function TitleBar() {
         {attention}
         <span className="hidden sm:inline"> need attention</span>
       </button>}
+      <button
+        type="button"
+        aria-label="Open Stats"
+        data-testid="title-bar-stats"
+        onClick={() => ui.set("dialog", "stats")}
+        className="flex h-7 shrink-0 items-center gap-1.5 rounded border px-2 text-xs whitespace-nowrap hover:bg-accent"
+      >
+        <BarChart3 className="size-4" />
+        <span className="hidden sm:inline">Stats</span>
+      </button>
       <IconButton label={ui.rightOpen ? "Hide side panel" : "Show side panel"} onClick={() => ui.toggle("rightOpen")}>
         <PanelRight />
       </IconButton>

@@ -229,7 +229,7 @@ All *(fixed today)*: before this sweep no window-wide key worked, and the hints 
 | Health | yes | done | |
 | Plugins: list, on/off, settings | yes | partial | No Browse / Sources / install-from-file / roll back: UI only (`plugin_admin`). |
 | Pace | yes | done | |
-| Stats | yes | partial | *(fixed today)* It was all sample tiles and bars. It now shows the selected session's real numbers. Tokens by day/week, cost ranking and harness comparison need a client store for `usage_meter`: UI only. |
+| Stats | yes | partial | *(ticket 7f677d1d)* No app tab: the top-right Stats button opens a 95%-screen modal with tabs Session, Tokens by day/week, Cost, Context, Pace. Session: tiles, context gauge, charts with scale chips, "what filled the context" with tokens added per tool. Gaps: model context limit and harness-reported cost are not captured (null, "limit unknown" / "cost not reported"); Claude headless reports usage once per turn, so its series is per turn, not per request; the job-watcher counters line has no Rust counters. |
 | Skills, Prompts | yes | done | No "Insert into the composer": UI only. |
 | Calendar | branch only | missing | *(fixed today)* Sample data was removed. The tab shows only when a plugin declares it. Daemon: calendar frames (none in the Rust protocol). |
 | Settings page (all scopes) | yes | done | |
