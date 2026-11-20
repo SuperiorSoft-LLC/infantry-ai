@@ -193,6 +193,11 @@ pub trait BoardEnv: Send + Sync {
     fn notify_session(&self, _session_id: &str, _subject: &str, _line: &str) -> bool {
         false
     }
+    /// Like `notify_session` for a notice that needs action now (a worker failed, was killed, or ended without a done
+    /// comment): the host should put it into the receiver's running turn and log it with its timestamp.
+    fn alert_session(&self, session_id: &str, subject: &str, line: &str, _ticket_id: &str) -> bool {
+        self.notify_session(session_id, subject, line)
+    }
 
     // ---- the work-running half (starts, lanes, briefs, done) ---------------------------------------------
 

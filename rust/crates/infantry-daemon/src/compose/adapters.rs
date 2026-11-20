@@ -198,6 +198,16 @@ impl BoardEnv for DaemonBoardEnv {
     fn notify_session(&self, session_id: &str, subject: &str, line: &str) -> bool {
         self.daemon.deliver(session_id, &format!("{subject}\n{line}")).is_ok()
     }
+    fn alert_session(&self, session_id: &str, subject: &str, line: &str, ticket_id: &str) -> bool {
+        let t0 = std::time::Instant::now();
+        let r = self.daemon.deliver_urgent(session_id, &format!("{subject}\n{line}"));
+        let (how, ok) = match &r {
+            Ok(h) => (h.to_string(), true),
+            Err(e) => (format!("refused: {e}"), false),
+        };
+        crate::health::record_notice(subject, ticket_id, session_id, &how, t0.elapsed().as_millis() as i64, line);
+        ok
+    }
     fn branch_facts(&self, project_id: Option<&str>, branch: Option<&str>, base: Option<&str>) -> Option<String> {
         let dir = super::project_dir(&self.projects, project_id?)?;
         let run = |args: &[&str]| infantry_proc::command("git").arg("-C").arg(&dir).args(args).output().ok();
