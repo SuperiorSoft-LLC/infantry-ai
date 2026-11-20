@@ -467,6 +467,7 @@ impl BgJobNotifier {
                 let w = s.watches.entry(job.id.clone()).or_insert_with(|| Watch { started_at: job.started_at, last_output_at: job.started_at, ..Default::default() });
                 if let (Some(reason), false) = (&job.opt_out, w.opt_out_seen) {
                     w.opt_out_seen = true;
+                    super::watch_meter::WATCH_METER.opt_out();
                     if let Some(to) = self.host.recipient_of(sid) {
                         escalations.push(MailSendRequest {
                             from: SYSTEM.into(),
@@ -528,6 +529,7 @@ impl BgJobNotifier {
                     let proc = if alive { "its process is still running" } else { "its process is GONE (the end report has not arrived)" };
                     let head = self.t("job.heartbeat.head", job, &[("logState", log_state.clone()), ("proc", proc.into()), ("next", fmt(w.interval))]);
                     let lines = self.tail_of(job);
+                    super::watch_meter::WATCH_METER.heartbeat();
                     outgoing.push((sid.clone(), job.clone(), self.mail(sid, job, self.t("job.heartbeat.subject", job, &[]), head, &lines)));
                     if !w.escalated && w.interval >= cfg.heartbeat_cap_ms {
                         w.escalated = true;
@@ -587,6 +589,7 @@ impl BgJobNotifier {
             if self.host.gate_handled(&p.session, &p.job, &p.req.subject, &p.req.body) {
                 continue;
             }
+            super::watch_meter::WATCH_METER.event();
             (self.send)(p.req);
         }
     }

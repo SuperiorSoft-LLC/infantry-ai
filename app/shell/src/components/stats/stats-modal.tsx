@@ -9,7 +9,7 @@ import { useStore } from "zustand";
 import {
   CHART_KINDS, COST_BYS, avgContextText, cacheHitText, compareHarnesses, contextSeries, costTable, createStatsMeterStore, deltaText,
   gaugeOver, gaugePercent, meterCostText, meterPeriods, NA, NONE, parseTokens, pctText, requestSessions, resolveAxis, shareText,
-  meterSplit, statsCompact, statsCost, statsDuration, statsGrouped, totalRows, turnsText, usdText,
+  meterSplit, statsCompact, statsCost, statsDuration, statsGrouped, totalRows, turnsText, usdText, watchLine,
   type ChartKind, type ChartScaleSetting, type CostBy, type CostNames, type MeterAgg, type MeterSplit, type SessionStats, type StatsMeterStore, type StatsPoint,
   type UsageMeterReport,
 } from "@infantry/client";
@@ -400,6 +400,7 @@ function TokensView({ report }: { report: UsageMeterReport }) {
       </PanelCard>
       <p className="text-[10px] text-muted-foreground">Provider-reported only. Per-run rows kept this and last week, then daily rollups for {report.keepWeeks} weeks.</p>
       <p className="text-[10px] text-muted-foreground" data-testid="stats-turn-definition">A turn is one model request and its response (one provider usage report). A run is one agent process from prompt to exit; it holds many turns.</p>
+      {report.watch ? <p className="text-[10px] text-muted-foreground" data-testid="stats-watch-meter">{watchLine(report.watch)}</p> : null}
     </div>
   );
 }

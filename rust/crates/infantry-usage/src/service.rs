@@ -60,6 +60,8 @@ pub struct UsageService {
     fit_cache: Mutex<Option<((String, usize, i64), Value)>>,
     /// The bus `start_background` was given, shared with the tracker's sink (built before the bus is known).
     bus: Arc<Mutex<Option<EventBus>>>,
+    /// The job watcher's counters for the meter report (`watch`), set by the composition root.
+    watch_counts: std::sync::OnceLock<Arc<dyn Fn() -> Value + Send + Sync>>,
 }
 
 fn file_in(dir: &Path, name: &str) -> PathBuf {
@@ -129,6 +131,7 @@ impl UsageService {
             pace_cursor: Mutex::new(now0),
             fit_cache: Mutex::new(None),
             bus,
+            watch_counts: std::sync::OnceLock::new(),
         });
         svc
     }
@@ -171,7 +174,14 @@ impl UsageService {
     }
 
     pub fn meter_report(&self) -> Result<meter::Report, String> {
-        self.meter.as_ref().ok_or_else(|| "the usage meter is off (usage-meter.db did not open)".to_string())?.report()
+        let mut r = self.meter.as_ref().ok_or_else(|| "the usage meter is off (usage-meter.db did not open)".to_string())?.report()?;
+        r.watch = self.watch_counts.get().map(|f| f());
+        Ok(r)
+    }
+
+    /// Where the meter report's `watch` counters come from (set once).
+    pub fn set_watch_counts(&self, f: Arc<dyn Fn() -> Value + Send + Sync>) {
+        let _ = self.watch_counts.set(f);
     }
 
     pub fn pace_settings(&self) -> PaceSettings {

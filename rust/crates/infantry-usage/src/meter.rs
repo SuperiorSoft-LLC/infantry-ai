@@ -137,6 +137,9 @@ pub struct Report {
     pub requests: Vec<RequestRow>,
     pub events: Vec<EventRow>,
     pub prices: Vec<Price>,
+    /// The job watcher's counters (Kotlin `WatchMeter.Counts`), filled by whoever owns the watcher; None = no watcher.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub watch: Option<serde_json::Value>,
 }
 
 struct Pending {
@@ -439,7 +442,7 @@ impl UsageMeter {
                 cost: t.cost_usd,
             });
         }
-        Ok(Report { rows, keep_weeks: (self.keep_weeks)(), generated_at: now, requests: self.requests()?, events: self.events()?, prices: (self.prices)() })
+        Ok(Report { rows, keep_weeks: (self.keep_weeks)(), generated_at: now, requests: self.requests()?, events: self.events()?, prices: (self.prices)(), watch: None })
     }
 
     fn requests(&self) -> Result<Vec<RequestRow>, String> {

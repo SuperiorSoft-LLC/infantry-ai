@@ -3,6 +3,7 @@
 //! Agent mail: the model, `mailbox.json` storage, the mailbox, the router, turn rendering, the bg-job notifier,
 //! the `/mail/*` HTTP routes and the mail frames.
 pub mod bgjob;
+pub mod watch_meter;
 pub mod http;
 pub mod mailbox;
 pub mod message;

@@ -50,6 +50,7 @@ impl WatchPorts for Ports {
     }
 
     fn nudge(&self, rec: &SessionRecord, body: &str) -> bool {
+        infantry_mail::mail::watch_meter::WATCH_METER.stall();
         self.daemon.deliver(&rec.id, &format!("[infantry watchdog] {body}")).is_ok()
     }
 }

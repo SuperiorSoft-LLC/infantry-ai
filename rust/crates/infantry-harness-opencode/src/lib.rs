@@ -12,6 +12,7 @@
 
 pub mod config;
 pub mod serve;
+pub mod store;
 
 use infantry_harness::{
     shim, ApprovalMode, Asset, Capabilities, Harness, LaunchError, LaunchPlan, LaunchRequest, ModelInfo, Probe, ProcessSpec,
@@ -135,6 +136,18 @@ impl Harness for OpenCodeHarness {
     /// The user's own opencode setup (config files, `auth.json`, the models.dev cache); empty = the CLI's default.
     fn models(&self, probe: &dyn Probe) -> Vec<ModelInfo> {
         config::Locations::from_probe(probe).map(|l| config::catalogue(probe, &l)).unwrap_or_default()
+    }
+
+    /// opencode's own store, `<data dir>/opencode/opencode.db` beside its `auth.json` (read-only, local files).
+    fn store_stats(&self, probe: &dyn Probe, provider_session_id: &str) -> Option<Vec<infantry_harness::stats::StatEvent>> {
+        let loc = config::Locations::from_probe(probe)?;
+        store::read(&loc.auth_file.parent()?.join("opencode.db"), provider_session_id)
+    }
+
+    /// The window opencode's cached models.dev catalog `models.json` states.
+    fn context_window(&self, probe: &dyn Probe, model: &str) -> Option<u64> {
+        let loc = config::Locations::from_probe(probe)?;
+        store::context_window(&probe.read_to_string(&loc.models_file)?, model)
     }
 
     /// opencode's free tier needs no sign-in: only a missing CLI is a problem.

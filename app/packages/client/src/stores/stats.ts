@@ -60,7 +60,22 @@ export interface UsageMeterReport {
   requests: MeterRequest[];
   events: MeterEvent[];
   prices: MeterPrice[];
+  /** The job watcher's counters (daemon-side work, no model call behind it); absent = no watcher. */
+  watch?: WatchCounts | null;
 }
+export interface WatchCounts {
+  events: number;
+  heartbeats: number;
+  optOuts: number;
+  stallNudges: number;
+  hookRewrites: number;
+  hookOverrides: number;
+  note: string;
+}
+/** The Kotlin "Job watcher" line (STALL-2), word for word. */
+export const watchLine = (w: WatchCounts): string =>
+  `Job watcher: ${w.events} events, ${w.heartbeats} heartbeats, ${w.hookRewrites} commands routed by hooks (${w.hookOverrides} overridden by another hook), ${w.optOuts} opt-outs, ${w.stallNudges} stall nudges` +
+  (w.note.trim() !== "" ? ` (${w.note})` : "");
 
 export interface StatsMeterState {
   report: UsageMeterReport | null;

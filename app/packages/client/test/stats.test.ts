@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import {
   avgContextText, cacheHitText, compareHarnesses, costTable, createStatsMeterStore, deltaText, gaugeOver, gaugePercent, meterPeriods, meterSplit,
-  parseTokens, periodKey, resolveAxis, statsCompact, statsCost, statsDuration, totalRows, type MeterRequest, type MeterRow, type UsageMeterReport,
+  parseTokens, periodKey, resolveAxis, statsCompact, statsCost, statsDuration, totalRows, type MeterRequest, type MeterRow, type UsageMeterReport, watchLine,
 } from "../src/index";
 
 const row = (day: string, source: string, input: number, cacheRead: number, turns = 2): MeterRow => ({
@@ -80,5 +80,13 @@ describe("the meter store", () => {
     expect(sent).toEqual(["usage_meter_get"]);
     listener({ type: "usage_meter", data: JSON.stringify({ rows: [], keepWeeks: 4, generatedAt: 1, requests: [], events: [], prices: [] }) });
     expect(store.getState().report?.keepWeeks).toBe(4);
+  });
+});
+
+describe("job watcher line", () => {
+  it("reads like the Kotlin STALL-2 line", () => {
+    expect(watchLine({ events: 3, heartbeats: 2, optOuts: 1, stallNudges: 4, hookRewrites: 5, hookOverrides: 0, note: "watcher, heartbeat and stall detector use no model tokens" })).toBe(
+      "Job watcher: 3 events, 2 heartbeats, 5 commands routed by hooks (0 overridden by another hook), 1 opt-outs, 4 stall nudges (watcher, heartbeat and stall detector use no model tokens)",
+    );
   });
 });

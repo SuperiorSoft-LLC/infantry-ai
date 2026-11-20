@@ -178,7 +178,10 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
                 .map(|r| infantry_usage::pacing::meter_for(&r.provider, r.model.as_deref()))
                 .collect()
         });
-        UsageService::open(UsageDeps::new(state_dir, meters))
+        let svc = UsageService::open(UsageDeps::new(state_dir, meters));
+        // The Stats "Job watcher" line: the mail crate's watcher counters on the meter report.
+        svc.set_watch_counts(Arc::new(|| infantry_mail::mail::watch_meter::WATCH_METER.counts()));
+        svc
     };
 
     // ---- the board + its work half -------------------------------------------------------------------------

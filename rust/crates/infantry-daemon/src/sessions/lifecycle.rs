@@ -450,8 +450,32 @@ impl Daemon {
     }
 
     /// `session_stats_get` `{sessionId}`: the `session_stats` body.
+    /// When the CLI keeps its own local record of the session (Claude's transcript, pi's jsonl, opencode's db), every
+    /// harness field comes from that record, exactly as the Kotlin app read it (STATS-1): one point per model request,
+    /// the reported cost, the context window from a local catalog. Otherwise (no record yet, a harness without one) the
+    /// counts the daemon captured from the live stream are served.
     pub fn stats_json(&self, sid: &str) -> Result<String, String> {
         let entry = self.find(sid).ok_or_else(|| format!("unknown session '{sid}'"))?;
+        let (provider, psid, live_model) = {
+            let e = entry.lock().unwrap();
+            (e.rec.provider.clone(), e.rec.provider_session_id.clone(), e.stats.models.last().cloned())
+        };
+        let harness = self.harness_for(Some(&provider));
+        // Read outside the session lock: a real transcript runs to tens of MB.
+        let store = psid.as_deref().filter(|p| !p.is_empty()).and_then(|p| harness.as_ref()?.store_stats(p)).map(|ev| infantry_harness::stats::fold(&ev));
+        let limit_model = store.as_ref().and_then(|s| s.last_model.clone().or_else(|| s.models.last().cloned())).or(live_model);
+        let limit = limit_model.as_deref().and_then(|m| self.context_window_of(harness.as_ref(), m));
+        if let Some(st) = store {
+            let r = entry.lock().unwrap().rec.clone();
+            let mut v = st.to_json(limit);
+            let o = v.as_object_mut().expect("an object");
+            o.insert("sessionId".into(), json!(r.id));
+            o.insert("harness".into(), json!(r.provider));
+            o.insert("providerSessionId".into(), json!(r.provider_session_id));
+            o.insert("status".into(), json!(state_word(r.state)));
+            o.insert("source".into(), json!("store"));
+            return Ok(v.to_string());
+        }
         let e = entry.lock().unwrap();
         let s = &e.stats;
         let r = &e.rec;
@@ -466,13 +490,25 @@ impl Daemon {
             "durationMs": s.first_at.zip(s.last_at).map(|(a, b)| b - a),
             "userPrompts": s.user_prompts, "assistantTurns": s.assistant_turns, "toolUses": s.tool_uses,
             "models": if s.models.is_empty() { None } else { Some(&s.models) },
-            "lastContextTokens": tok(s.last_context_tokens), "modelContextLimit": null,
+            "lastContextTokens": tok(s.last_context_tokens), "modelContextLimit": limit,
             "billedTokens": tok(Some(s.billed_tokens)),
             "series": if s.usage_seen { Some(s.series.iter().map(|(at, c, b)| json!({"at": at, "contextTokens": c, "cumulativeBilledTokens": b})).collect::<Vec<_>>()) } else { None },
             "topSources": if top.is_empty() { None } else { Some(top) },
             "costTotal": null, "unattributedToolTokens": if s.usage_seen { Some(s.unattributed_tool_tokens) } else { None }, "firstContextTokens": tok(s.first_context_tokens),
+            "source": "live",
         });
         Ok(v.to_string())
+    }
+
+    /// The context window of `model` from a LOCAL catalog: the session's own harness first, then any other harness's
+    /// catalog that lists the id (Kotlin `anyCatalogLimit`: Claude states none of its own). Never guessed from a name.
+    fn context_window_of(&self, own: Option<&Arc<dyn crate::harness::Harness>>, model: &str) -> Option<u64> {
+        if let Some(n) = own.and_then(|h| h.context_window(model)) {
+            return Some(n).filter(|n| *n > 0);
+        }
+        let mut all = vec![self.harness.clone()];
+        all.extend(self.harnesses.lock().unwrap().iter().cloned());
+        all.iter().filter(|h| own.is_none_or(|o| o.name() != h.name())).find_map(|h| h.context_window(model)).filter(|n| *n > 0)
     }
 
     /// Starts the watchdog loop (once).

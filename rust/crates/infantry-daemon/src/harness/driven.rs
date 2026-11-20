@@ -44,6 +44,15 @@ impl Harness for Driven {
         self.harness.commands()
     }
 
+    // The local runner's files: the CLI's record lives on this machine.
+    fn store_stats(&self, provider_session_id: &str) -> Option<Vec<infantry_harness::stats::StatEvent>> {
+        self.harness.store_stats(&infantry_harness::LocalProbe, provider_session_id)
+    }
+
+    fn context_window(&self, model: &str) -> Option<u64> {
+        self.harness.context_window(&infantry_harness::LocalProbe, model)
+    }
+
     fn capabilities(&self) -> Capabilities {
         let c = self.harness.capabilities();
         Capabilities {

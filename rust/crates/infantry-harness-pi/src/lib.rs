@@ -15,6 +15,7 @@
 //!   sets `INFANTRY_PI_MCP`).
 
 pub mod rpc;
+pub mod store;
 
 use infantry_harness::{
     shim, ApprovalMode, Asset, Capabilities, Harness, LaunchError, LaunchPlan, LaunchRequest, ModelInfo, Probe, ProcessSpec,
@@ -228,6 +229,17 @@ impl Harness for PiHarness {
 
     /// Proof only: pi cannot answer when no provider key variable is set and its agent dir holds no `auth.json` entry, no
     /// `models.json` and no extensions folder.
+    /// pi's own session record, `<agent dir>/sessions/<any>/*_<psid>.jsonl`.
+    fn store_stats(&self, probe: &dyn Probe, provider_session_id: &str) -> Option<Vec<infantry_harness::stats::StatEvent>> {
+        let file = store::find(probe, &Self::agent_dir(probe)?.join("sessions"), provider_session_id)?;
+        Some(store::read(probe.lines(&file)?))
+    }
+
+    /// The window pi's local catalog `models-store.json` states.
+    fn context_window(&self, probe: &dyn Probe, model: &str) -> Option<u64> {
+        store::context_window(&probe.read_to_string(&Self::agent_dir(probe)?.join("models-store.json"))?, model)
+    }
+
     fn sign_in_problem(&self, probe: &dyn Probe) -> Option<String> {
         let program = self.launcher.last().cloned().unwrap_or_else(|| "pi".into());
         if !shim::installed(probe, &program) {

@@ -14,6 +14,7 @@ pub mod headless;
 pub mod hooks;
 pub mod interactive;
 pub mod screen;
+pub mod store;
 pub mod stream;
 pub mod transcript;
 
@@ -189,6 +190,12 @@ pub fn config_dir(probe: &dyn Probe) -> Option<PathBuf> {
 }
 
 impl Harness for ClaudeHarness {
+    /// The session's own transcript, `<config dir>/projects/<any>/<psid>.jsonl` (Kotlin `ClaudeStats`).
+    fn store_stats(&self, probe: &dyn Probe, provider_session_id: &str) -> Option<Vec<infantry_harness::stats::StatEvent>> {
+        let file = store::find(probe, &config_dir(probe)?.join("projects"), provider_session_id)?;
+        Some(store::read(probe.lines(&file)?))
+    }
+
     fn commands(&self) -> Vec<infantry_harness::HarnessCommand> {
         use infantry_harness::{CommandAction as A, HarnessCommand as C};
         vec![
