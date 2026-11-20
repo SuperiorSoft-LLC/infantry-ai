@@ -1234,7 +1234,11 @@ impl Dispatcher {
         );
         let _ = self.comment(&row.id, &body, "issue", CommentAuthor::daemon());
         if let Some(starter) = row.started_by.clone().or_else(|| self.starter_of(&row.id)).filter(|_| self.auto_report()) {
-            self.env.notify_session(&starter, "[AUTOMATIC FAILURE] ticket run", &format!("{} \"{}\": {what}", row.id, take(&row.title, 60)));
+            self.env.alert_session(&starter, "[AUTOMATIC FAILURE] ticket run", &format!("{} \"{}\": {what}", row.id, take(&row.title, 60)), &row.id);
+        }
+        // A worker blocked by a permission dialog nobody answered: the owner hears it too, never a silent No.
+        if what.contains("permission dialog") {
+            self.env.notify_owner("Worker blocked by a permission dialog", &format!("{} \"{}\": {what}", row.id, take(&row.title, 60)), &row.id, row.project_id.as_deref());
         }
         self.hook(
             hooks::RUN_FAILED,

@@ -522,6 +522,20 @@ fn free_disk_mb(_dir: &Path) -> Option<u64> {
     None
 }
 
+/// Worker notices (failed, killed, ended without a done comment) most recently sent to a starter, newest last.
+static NOTICES: std::sync::Mutex<std::collections::VecDeque<Value>> = std::sync::Mutex::new(std::collections::VecDeque::new());
+const NOTICE_KEEP: usize = 30;
+
+/// Logs one worker notice: when it went out, to whom, how it arrived (`injected` into a running turn, `turn`, `queued`
+/// behind it) and how long the hand-off took.
+pub fn record_notice(subject: &str, ticket_id: &str, to: &str, how: &str, lag_ms: i64, line: &str) {
+    let mut n = NOTICES.lock().unwrap();
+    if n.len() >= NOTICE_KEEP {
+        n.pop_front();
+    }
+    n.push_back(serde_json::json!({"at": now_ms(), "subject": subject, "ticketId": ticket_id, "to": to, "how": how, "lagMs": lag_ms, "line": line.chars().take(160).collect::<String>()}));
+}
+
 /// The report (Kotlin `HealthReport`, the same keys).
 pub fn report(h: &Health, src: &HealthSources, session_id: Option<&str>, project_id: Option<&str>) -> Value {
     let t = now_ms();
@@ -559,6 +573,7 @@ pub fn report(h: &Health, src: &HealthSources, session_id: Option<&str>, project
             "cliPath": cli_path_line(),
         },
         "events": h.journal.tail(EVENT_TAIL),
+        "notices": NOTICES.lock().unwrap().iter().cloned().collect::<Vec<_>>(),
         "crashes": crash_files(&h.state_dir.join(DIR)).iter().rev().take(EVENT_TAIL).map(|p| p.to_string_lossy().into_owned()).collect::<Vec<_>>(),
     })
 }
@@ -653,6 +668,21 @@ pub fn render(r: &Value) -> String {
                 ev["kind"].as_str().unwrap_or("?"),
                 ev["cause"].as_str().map(|c| format!(" ({c})")).unwrap_or_default(),
                 ev["detail"].as_str().map(|d| format!(" {d}")).unwrap_or_default()
+            ));
+        }
+    }
+    let notices = r["notices"].as_array().cloned().unwrap_or_default();
+    if !notices.is_empty() {
+        line("worker notices sent to starters:".into());
+        for n in notices {
+            line(format!(
+                "  {} {} {} -> {} ({}, {} ms)",
+                n["at"].as_i64().unwrap_or(0),
+                n["subject"].as_str().unwrap_or("?"),
+                n["ticketId"].as_str().unwrap_or("?"),
+                n["to"].as_str().unwrap_or("?"),
+                n["how"].as_str().unwrap_or("?"),
+                n["lagMs"].as_i64().unwrap_or(0)
             ));
         }
     }

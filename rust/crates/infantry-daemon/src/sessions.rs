@@ -475,6 +475,34 @@ impl Daemon {
         self.queue_add(id, text.to_string())
     }
 
+    /// Like [`deliver`](Self::deliver), but a message that needs action now (a worker failed) goes into the receiver's
+    /// RUNNING turn when its harness takes input mid-turn, instead of waiting behind it. Returns how it arrived:
+    /// `"injected"`, `"turn"` (the session was at rest) or `"queued"` (the harness cannot take it mid-turn).
+    pub fn deliver_urgent(self: &Arc<Self>, id: &str, text: &str) -> Result<&'static str, String> {
+        self.not_held("prompt", id)?;
+        let entry = self.find(id).ok_or_else(|| format!("deliver_urgent refused: unknown session {id}"))?;
+        let inject = {
+            let mut e = entry.lock().unwrap();
+            if text.trim().is_empty() {
+                return Err("deliver_urgent refused: nothing to deliver".into());
+            }
+            if !e.turn_active {
+                self.turn_into(&mut e, text.to_string());
+                return Ok("turn");
+            }
+            e.hs.as_ref().and_then(|h| h.injector())
+        };
+        if let Some(inject) = inject {
+            if inject(text.to_string()) {
+                let mut e = entry.lock().unwrap();
+                self.emit(&mut e, wire::TURN, text.to_string());
+                return Ok("injected");
+            }
+        }
+        self.queue_add(id, text.to_string())?;
+        Ok("queued")
+    }
+
     /// Ends `id`'s process (idempotent); `reason` is recorded as who killed it.
     pub fn stop_session(self: &Arc<Self>, id: &str, reason: &str) -> Result<(), String> {
         self.kill(id, false)?;
