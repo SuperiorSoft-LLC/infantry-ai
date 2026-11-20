@@ -15,8 +15,15 @@ cd "$here/.."
 target_dir="$(cargo metadata --format-version 1 --no-deps | python -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')"
 for mj in plugins/official/*/module.json; do
   mod_dir="$(dirname "$mj")"; mod="$(basename "$mod_dir")"
+  # PM-ROLE-1: a data-only module (module.json `data`: folders it ships, e.g. a role catalog) is copied as is.
+  data="$(python -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1])).get("data") or []))' "$mj")"
+  if [ -n "$data" ]; then
+    dest="$out/official/$mod"; mkdir -p "$dest"; cp "$mj" "$dest/module.json"
+    for d in $data; do case "$d" in *..*|/*) echo "refuse $mod: data folder '$d' is outside the module" >&2; exit 1;; esac; cp -r "$mod_dir/$d" "$dest/"; done
+    echo "staged $mod (data: $data) -> $dest"
+  fi
   manifest="$mod_dir/daemon/Cargo.toml"; [ -f "$manifest" ] || manifest="$mod_dir/Cargo.toml"
-  [ -f "$manifest" ] || { echo "skip $mod: no daemon crate"; continue; }
+  [ -f "$manifest" ] || { [ -n "$data" ] || echo "skip $mod: no daemon crate"; continue; }
   crate="$(sed -n 's/^name = "\(.*\)"/\1/p' "$manifest" | head -1)"
   component="$(python -c 'import json,sys; print((json.load(open(sys.argv[1])).get("daemon") or {}).get("component",""))' "$mj")"
   [ -n "$component" ] || { echo "skip $mod: module.json names no daemon component"; continue; }

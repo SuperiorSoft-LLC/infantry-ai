@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
-//! Embeds the bundled role catalog and avatar set (the Kotlin Infantry_Roles resources, the spec) into the crate,
-//! as the Kotlin jar bundled them on its classpath: `roles/*` and `avatars/*`, path -> bytes.
+//! Embeds the bundled avatar set (the Kotlin Infantry_Roles resources, the spec) into the crate, as the Kotlin jar
+//! bundled it on its classpath: `avatars/*`, path -> bytes. Role texts are NOT embedded (PM-ROLE-1): they come from
+//! the role plugin's catalog at run time, so core holds none.
 use std::{env, fs, path::Path};
 
 fn main() {
     let res = Path::new(&env::var("CARGO_MANIFEST_DIR").unwrap()).join("../../../plugins/official/Infantry_Roles/daemon/src/main/resources");
     println!("cargo:rerun-if-changed={}", res.display());
     let mut out = String::from("pub static RESOURCES: &[(&str, &[u8])] = &[\n");
-    for dir in ["roles", "avatars"] {
+    for dir in ["avatars"] {
         let mut names: Vec<String> = fs::read_dir(res.join(dir))
             .map(|d| d.flatten().filter(|e| e.path().is_file()).filter_map(|e| e.file_name().to_str().map(String::from)).collect())
             .unwrap_or_default();

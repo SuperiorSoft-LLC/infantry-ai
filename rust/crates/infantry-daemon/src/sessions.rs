@@ -273,6 +273,8 @@ pub struct Daemon {
     env_extra: std::sync::OnceLock<Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>>,
     /// Whether a role exists (`session_swap` to a role); unset = any well-formed role.
     role_known: std::sync::OnceLock<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
+    /// PM-ROLE-1: the text a new conversation of a role starts with (the role catalog's persona); unset = none.
+    role_brief: std::sync::OnceLock<Arc<dyn Fn(&str) -> Option<String> + Send + Sync>>,
     /// Where tool approvals and questions go (the owner's prompt cards); unset = sessions run with allow-all.
     prompter: std::sync::OnceLock<Arc<dyn crate::harness::Prompter>>,
     mcp: std::sync::OnceLock<Arc<dyn McpSelector>>,
@@ -354,6 +356,7 @@ impl Daemon {
             launch: Mutex::new(Default::default()),
             env_extra: std::sync::OnceLock::new(),
             role_known: std::sync::OnceLock::new(),
+            role_brief: std::sync::OnceLock::new(),
             prompter: std::sync::OnceLock::new(),
             mcp: std::sync::OnceLock::new(),
         });
@@ -1053,12 +1056,16 @@ impl Daemon {
         }
         e.stats.turn(e.rec.model.as_deref());
         // HARNESS-CARRY-1: the first turn after a swap carries the conversation so far (the transcript shows the turn as typed).
-        let prompt = match e.carry.take().filter(|_| e.rec.provider_session_id.is_none()) {
-            Some(c) => format!("{c}
-
-{text}"),
-            None => text,
+        let carry = e.carry.take().filter(|_| e.rec.provider_session_id.is_none());
+        // PM-ROLE-1: a new conversation (the first turn, or the first after a swap) starts with its role's text.
+        let fresh = e.rec.provider_session_id.is_none() && (e.rec.run_count == 0 || carry.is_some());
+        let brief = match (fresh, e.rec.role.as_deref(), self.role_brief.get()) {
+            (true, Some(r), Some(f)) => f(r).filter(|b| !b.trim().is_empty()),
+            _ => None,
         };
+        let prompt = [brief, carry, Some(text)].into_iter().flatten().collect::<Vec<_>>().join("
+
+");
         let turn = Turn { prompt, resume: e.rec.provider_session_id.clone() };
         match e.hs.as_mut().unwrap().send_turn(turn) {
             Ok(start) => {
@@ -1090,6 +1097,11 @@ impl Daemon {
         e.rec.project_id = Some(project_id.to_string());
         self.push(&mut e);
         Ok(())
+    }
+
+    /// PM-ROLE-1: sets what the first turn of a new conversation of a role starts with (set once, at composition).
+    pub fn set_role_brief(&self, f: Arc<dyn Fn(&str) -> Option<String> + Send + Sync>) {
+        let _ = self.role_brief.set(f);
     }
 
     pub fn set_prompter(&self, p: Arc<dyn crate::harness::Prompter>) {

@@ -92,14 +92,24 @@ pub fn roles_dir(state_dir: &Path) -> PathBuf {
 impl Knowledge {
     /// Roles in `roles_dir`, avatar overrides in `avatars_dir`, the libraries in `db`.
     pub fn new(db: Arc<Db>, roles_dir: PathBuf, avatars_dir: PathBuf, daemon: Arc<dyn DaemonPorts>) -> Knowledge {
-        let roles = Arc::new(RoleService::new(roles_dir));
+        Self::with_roles(db, roles_dir, avatars_dir, daemon, vec![])
+    }
+
+    /// [`Knowledge::new`] over a role bundle (the roles plugins ship, PM-ROLE-1); the custom files in `roles_dir` win.
+    pub fn with_roles(db: Arc<Db>, roles_dir: PathBuf, avatars_dir: PathBuf, daemon: Arc<dyn DaemonPorts>, bundle: Vec<crate::roles::Role>) -> Knowledge {
+        let roles = Arc::new(RoleService::with_bundle(roles_dir, bundle));
         let library = Arc::new(Library::new(db, Arc::new(Ports { roles: roles.clone(), daemon: daemon.clone() })));
         Knowledge { roles, library, avatars: Arc::new(Avatars::new(avatars_dir)), daemon }
     }
 
     /// The standard layout under the daemon's state dir: `<state>/roles` (or `$INFANTRY_ROLES_DIR`), `<state>/avatars`.
     pub fn open(db: Arc<Db>, state_dir: &Path, daemon: Arc<dyn DaemonPorts>) -> Knowledge {
-        Self::new(db, roles_dir(state_dir), state_dir.join("avatars"), daemon)
+        Self::open_with_roles(db, state_dir, daemon, vec![])
+    }
+
+    /// [`Knowledge::open`] over the role bundle the loaded plugins ship.
+    pub fn open_with_roles(db: Arc<Db>, state_dir: &Path, daemon: Arc<dyn DaemonPorts>, bundle: Vec<crate::roles::Role>) -> Knowledge {
+        Self::with_roles(db, roles_dir(state_dir), state_dir.join("avatars"), daemon, bundle)
     }
 
     /// One role with its avatar reference filled in.
