@@ -11,6 +11,7 @@ import { EMPTY_DRAFT, NewAgentBody, addAgent, addBlockedReason, type NewAgentDra
 import { ResumeBody } from "./resume-body";
 import { PluginSettingsDialog } from "@/components/plugins/plugin-settings-dialog";
 import { SettingsBody } from "./settings-body";
+import { SetupWizardDialog } from "@/components/setup/setup-wizard";
 
 const config = {
   settings: { title: "Settings", description: "Appearance, daemon and notifications", primary: "Done", wide: "fill" },
@@ -29,6 +30,7 @@ export function DialogHost() {
   }, [ui.dialog]);
   if (!ui.dialog) return <PluginSettingsDialog />;
   if (ui.dialog === "new-ticket") return <TicketDialog ticketId={null} creating onClose={() => ui.set("dialog", null)} />;
+  if (ui.dialog === "setup") return <SetupWizardDialog onClose={() => ui.set("dialog", null)} />;
   const c = config[ui.dialog];
   const close = () => ui.set("dialog", null);
   const blocked = ui.dialog === "new-agent" ? addBlockedReason(agent) : null;

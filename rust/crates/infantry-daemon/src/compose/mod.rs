@@ -16,6 +16,7 @@ mod agent_frames;
 mod agent_registry;
 mod agent_tools;
 mod harness_frames;
+mod harness_install;
 pub mod host_frames;
 pub mod project_files;
 pub mod timeline;
@@ -505,7 +506,12 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             Arc::new(move |id: &str| project_dir(&p, id))
         },
     ))));
-    units.push(harness_frames::HarnessFrames::new(daemon.clone()));
+    let harness_list = harness_frames::HarnessFrames::new(daemon.clone());
+    units.push(harness_install::HarnessInstall::new(state_dir, {
+        let h = harness_list.clone();
+        Arc::new(move || h.rebuild_now())
+    }));
+    units.push(harness_list);
     units.push(Arc::new(host_frames::HostFrames {
         daemon: daemon.clone(),
         plugins: plugin_host.clone(),

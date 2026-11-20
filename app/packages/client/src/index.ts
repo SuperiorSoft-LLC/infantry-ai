@@ -36,3 +36,5 @@ export * from "./toasts";
 export * from "./tools";
 export * from "./images";
 export * from "./popout";
+export * from "./setup-wizard";
+export * from "./stores/harness-install";
