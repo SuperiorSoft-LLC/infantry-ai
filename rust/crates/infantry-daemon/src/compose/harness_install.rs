@@ -318,7 +318,14 @@ fn node_platform() -> Option<&'static str> {
 }
 
 fn http_get(url: &str) -> Result<Vec<u8>, String> {
-    let agent = ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(20)).timeout_read(Duration::from_secs(120)).build();
+    // ureq is built with only the native-tls feature, which is not a default backend: without an explicit connector every
+    // https call fails "no TLS backend is configured" (Windows Sandbox run 6: the wizard's Node step never downloaded).
+    let tls = native_tls::TlsConnector::new().map_err(|e| format!("no TLS for {url}: {e}"))?;
+    let agent = ureq::AgentBuilder::new()
+        .tls_connector(Arc::new(tls))
+        .timeout_connect(Duration::from_secs(20))
+        .timeout_read(Duration::from_secs(120))
+        .build();
     let resp = agent.get(url).call().map_err(|e| format!("could not reach {url}: {e}"))?;
     let mut buf = Vec::new();
     resp.into_reader().read_to_end(&mut buf).map_err(|e| format!("download of {url} failed: {e}"))?;

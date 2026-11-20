@@ -3,7 +3,7 @@
 // Ports Kotlin SetupWizardTest. The key-row and "unprobed sign-in" cases have no Rust twin: the Rust daemon reads a
 // harness's sign-in straight from its files (providers[].available), so there is no probe state to wait for.
 import { describe, expect, it } from "vitest";
-import { action, defaultPick, firstModel, firstStep, installed, needed, nodeNote, outcomeFor, statusText, type HarnessInstallReport, type HarnessInstallStatus } from "../src";
+import { createHarnessInstallStore, installHarnesses, type Envelope, action, defaultPick, firstModel, firstStep, installed, needed, nodeNote, outcomeFor, statusText, type HarnessInstallReport, type HarnessInstallStatus } from "../src";
 
 const h = (id: string, isInstalled: boolean): HarnessInstallStatus => ({ id, label: id, npmPackage: `pkg-${id}`, state: isInstalled ? "installed" : "missing", path: isInstalled ? `/bin/${id}` : null });
 const report = (hs: HarnessInstallStatus[], npm: string | null = "/usr/bin/npm"): HarnessInstallReport => ({ harnesses: hs, prefixDir: "/p", npmPath: npm, nodeInstallable: false, busy: false, log: [] });
@@ -65,5 +65,21 @@ describe("setup wizard", () => {
     expect(statusText(h("claude", false))).toBe("Not installed");
     expect(action(h("claude", false))).toBe("Install");
     expect(action(h("claude", true))).toBeNull();
+  });
+});
+
+describe("harness install store", () => {
+  it("re-reads the install report when an install is answered, so a fast failure shows instead of 'Installing' forever", () => {
+    const sent: Envelope[] = [];
+    const taps = new Set<(e: Envelope) => void>();
+    const l = { sendFrame: (e: Envelope) => (sent.push(e), true), onFrame: (f: (e: Envelope) => void) => (taps.add(f), () => void taps.delete(f)) };
+    const push = (e: Envelope) => taps.forEach((t) => t(e));
+    const s = createHarnessInstallStore(l);
+    s.getState().refresh();
+    push({ type: "harness_install_status", data: JSON.stringify(report([h("opencode", false)], null)), requestId: sent[0].requestId });
+    installHarnesses(s, [], { runtime: true });
+    const before = sent.filter((e) => e.type === "harness_install_status").length;
+    push({ type: "harness_install_result", data: JSON.stringify({ started: true }), requestId: sent[sent.length - 1].requestId });
+    expect(sent.filter((e) => e.type === "harness_install_status").length).toBe(before + 1);
   });
 });

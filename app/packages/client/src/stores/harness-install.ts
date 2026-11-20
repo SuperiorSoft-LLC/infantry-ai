@@ -18,6 +18,9 @@ export function createHarnessInstallStore(link: FrameLink): HarnessInstallStore 
       const r = raw as HarnessInstallReport | null;
       return r && Array.isArray(r.harnesses) ? { ...r, log: r.log ?? [], busy: !!r.busy } : null;
     },
+    // An install's answer means "read again": the wizard polls only while the report says busy, so without this re-read it never
+    // saw the install start (or a fast failure) and sat on "Installing it for you now" (Windows Sandbox run 6).
+    rereads: ["harness_install_result"],
     own: ["harness_install refused"],
   });
 }
