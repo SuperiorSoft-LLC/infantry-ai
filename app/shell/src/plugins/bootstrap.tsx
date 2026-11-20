@@ -4,7 +4,7 @@
 // names that plugin in its `boot_progress` report; the shell knows no plugin id. It draws the plugin's first tab as the whole
 // window, so the owner can install the rest from there. The first install ends bootstrap mode, the report turns inactive,
 // and `App` swaps to the normal shell with no reload.
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useStore } from "zustand";
 import { createBootstrapStore, type BootstrapInfo, type BootstrapStore } from "@infantry/client";
@@ -53,4 +53,17 @@ export function BootstrapScreen({ info }: { info: BootstrapInfo }) {
       )}
     </div>
   );
+}
+
+/** BOOT-CHAIN-1: true while the app must wait for the daemon's first `boot_progress` answer, so the normal app is never mounted for a
+ *  moment before it turns out the daemon is in bootstrap mode. A daemon that never answers (or says nothing about bootstrap) lets the
+ *  app show after a short wait, as it always did. */
+export function useBootPending(info: BootstrapInfo | null): boolean {
+  const link = useDaemon((s) => s.connection.state);
+  const [gaveUp, setGaveUp] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setGaveUp(true), 4000);
+    return () => clearTimeout(t);
+  }, []);
+  return info === null && !gaveUp && link !== "closed";
 }

@@ -22,6 +22,8 @@ use std::sync::{Arc, RwLock};
 
 pub const BOOTSTRAP_ENV: &str = "INFANTRY_BOOTSTRAP_PLUGIN";
 pub const BOOTSTRAP_KEY: &str = "plugins.bootstrap";
+pub const UI_ENV: &str = "INFANTRY_UI_PLUGIN";
+pub const UI_KEY: &str = "plugins.ui";
 pub const BUNDLED_ENV: &str = "INFANTRY_BUNDLED_PLUGINS_DIR";
 pub const BUNDLED_KEY: &str = "plugins.bundled";
 pub const SOURCES_KEY: &str = "plugins.sources";
@@ -32,6 +34,9 @@ pub const BUNDLED_DIR: &str = "plugins-bundled";
 #[derive(Debug, Clone, Default)]
 pub struct InstallConfig {
     pub bootstrap: Option<String>,
+    /// BOOT-CHAIN-1: the UI plugin (the shell and its layout), named by data like the bootstrap plugin: `INFANTRY_UI_PLUGIN`,
+    /// else the `plugins.ui` setting, else the first module whose manifest says `"uiPlugin": true`. None: this daemon has none.
+    pub ui_plugin: Option<String>,
     pub sources: Vec<PathBuf>,
 }
 
@@ -48,6 +53,7 @@ pub struct Offer {
     pub description: String,
     pub requires: Vec<String>,
     pub bootstrap: bool,
+    pub ui_plugin: bool,
     pub daemon: bool,
     pub ui: bool,
 }
@@ -92,6 +98,7 @@ fn offer_of(dir: &Path, tier: &str, source: &Path) -> Option<Offer> {
         description: text(&v, "description"),
         requires,
         bootstrap: v.get("bootstrap").and_then(Value::as_bool).unwrap_or(false),
+        ui_plugin: v.get("uiPlugin").and_then(Value::as_bool).unwrap_or(false),
         daemon: v.get("daemon").is_some_and(Value::is_object),
         ui: v.get("ui").is_some_and(Value::is_object),
     })
@@ -122,10 +129,11 @@ pub fn installed_ids(plugins_dir: &Path) -> BTreeSet<String> {
     super::host_frames::scan_modules(&Some(plugins_dir.to_path_buf())).into_iter().map(|m| m.id).collect()
 }
 
-/// True while the bootstrap plugin is installed and nothing else is: the daemon then offers the installer, not the app.
-pub fn bootstrap_active(plugins_dir: &Path, bootstrap: &str) -> bool {
+/// True while the bootstrap plugin is installed and the app has nothing to start from: nothing else is installed, or the
+/// daemon names a UI plugin (BOOT-CHAIN-1) and it is not installed. The daemon then offers the installer, not the app.
+pub fn bootstrap_active(plugins_dir: &Path, bootstrap: &str, ui_plugin: Option<&str>) -> bool {
     let ids = installed_ids(plugins_dir);
-    ids.contains(bootstrap) && ids.iter().all(|i| i == bootstrap)
+    ids.contains(bootstrap) && (ids.iter().all(|i| i == bootstrap) || ui_plugin.is_some_and(|u| u != bootstrap && !ids.contains(u)))
 }
 
 /// The sources and the bootstrap id from the environment, the settings and the manifests (`setting` reads an app-scope
@@ -153,7 +161,12 @@ pub fn config(plugins_dir: &Option<PathBuf>, setting: &dyn Fn(&str) -> Option<Va
         let installed = super::host_frames::scan_modules(plugins_dir).into_iter().find(|m| m.manifest.get("bootstrap").and_then(Value::as_bool) == Some(true)).map(|m| m.id);
         installed.or_else(|| catalog(&sources).into_iter().find(|o| o.bootstrap).map(|o| o.id))
     });
-    InstallConfig { bootstrap, sources }
+    let flagged = |key: &str| {
+        let installed = super::host_frames::scan_modules(plugins_dir).into_iter().find(|m| m.manifest.get(key).and_then(Value::as_bool) == Some(true)).map(|m| m.id);
+        installed.or_else(|| catalog(&sources).into_iter().find(|o| o.ui_plugin).map(|o| o.id))
+    };
+    let ui_plugin = crate::auth::env(UI_ENV).or_else(|| one(setting(UI_KEY))).or_else(|| flagged("uiPlugin"));
+    InstallConfig { bootstrap, ui_plugin, sources }
 }
 
 /// The modules to install, in the order to install them: `want` and everything they `requires`, each module after the
@@ -376,12 +389,36 @@ mod tests {
         assert_eq!(named.bootstrap.as_deref(), Some("Any_Other"), "the setting beats the manifest flag");
         // An empty plugins folder gets the bootstrap plugin from the source, and is then in bootstrap mode.
         assert_eq!(ensure_bootstrap(&Some(plugins.clone()), &cfg).as_deref(), Some("Any_Installer"));
-        assert!(bootstrap_active(&plugins, "Any_Installer"));
+        assert!(bootstrap_active(&plugins, "Any_Installer", None));
         // Anything installed ends it, and a folder that already holds something is left alone.
         let other = catalog(&[src.clone()]).into_iter().find(|o| o.id == "Any_Other").unwrap();
         place(&plugins, &other).unwrap();
-        assert!(!bootstrap_active(&plugins, "Any_Installer"));
+        assert!(!bootstrap_active(&plugins, "Any_Installer", None));
         assert_eq!(ensure_bootstrap(&Some(plugins.clone()), &cfg), None);
+        for d in [plugins, src] {
+            let _ = std::fs::remove_dir_all(d);
+        }
+    }
+
+    #[test]
+    fn a_named_ui_plugin_that_is_not_installed_keeps_bootstrap_mode_on() {
+        let (plugins, src) = (tmp("ui-plugins"), tmp("ui-bundle"));
+        module(&src, "official", "Any_Installer", json!({ "bootstrap": true }));
+        module(&src, "official", "Any_Ui", json!({ "uiPlugin": true }));
+        module(&src, "official", "Any_Other", json!({}));
+        let cfg = config(&Some(plugins.clone()), &|k| (k == SOURCES_KEY).then(|| json!([src.display().to_string()])));
+        assert_eq!(cfg.ui_plugin.as_deref(), Some("Any_Ui"), "the manifest flag names it");
+        let by_setting = config(&Some(plugins.clone()), &|k| (k == UI_KEY).then(|| json!("Any_Other")));
+        assert_eq!(by_setting.ui_plugin.as_deref(), Some("Any_Other"), "the setting beats the flag");
+        let find = |id: &str| catalog(&[src.clone()]).into_iter().find(|o| o.id == id).unwrap();
+        place(&plugins, &find("Any_Installer")).unwrap();
+        place(&plugins, &find("Any_Other")).unwrap();
+        // Something else is installed, but the UI plugin is not: the installer is still the window.
+        assert!(bootstrap_active(&plugins, "Any_Installer", Some("Any_Ui")));
+        place(&plugins, &find("Any_Ui")).unwrap();
+        assert!(!bootstrap_active(&plugins, "Any_Installer", Some("Any_Ui")));
+        remove(&plugins, &plugins.join("official").join("Any_Ui")).unwrap();
+        assert!(bootstrap_active(&plugins, "Any_Installer", Some("Any_Ui")), "removing the UI plugin falls back to the installer");
         for d in [plugins, src] {
             let _ = std::fs::remove_dir_all(d);
         }

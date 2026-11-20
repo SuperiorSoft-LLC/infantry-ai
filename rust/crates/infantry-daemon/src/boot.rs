@@ -9,7 +9,8 @@
 //! `plugins.bootstrap` setting, never in code) reports it under `bootstrap`: `{plugin, active, error}`. `active` is true
 //! while nothing but that plugin is installed, and the host layer then draws the plugin instead of the app. The
 //! `installer` step finishes when that plugin is done starting (`finish`), or at once when there is none to wait for.
-//! The UI plugin step of the boot chain finishes at once until BOOT-CHAIN-1 lands.
+//! BOOT-CHAIN-1: `active` is also true when the daemon names a UI plugin (`plugins.ui` or a `uiPlugin` manifest flag)
+//! and it is not installed, so removing it falls back to the installer.
 
 use infantry_core::bus::EventBus;
 use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Refusal};
