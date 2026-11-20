@@ -1,0 +1,8 @@
+# Repo-wide cargo config. It sits at the repo root because cargo reads .cargo/config.toml from the CURRENT
+# directory and its parents, never from --manifest-path: the owner build runs cargo from the repo root and
+# `pnpm tauri build` runs it from app/, so a rust/.cargo/config.toml is invisible to both.
+#
+# A clean Windows has no VC++ runtime: link the CRT statically so InfantryAI-Rust.exe, infantry.exe and
+# infantry-daemon.exe start there (Windows Sandbox first-time-install run: STATUS_DLL_NOT_FOUND on vcruntime140.dll).
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]
