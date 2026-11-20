@@ -8,11 +8,16 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'rust-build-env.ps1') -Owner
 $t0 = Get-Date
+# cargo reads .cargo/config.toml from the CURRENT dir and its parents (never from --manifest-path): run from the repo
+# root so the repo-root config (static CRT) applies whatever folder this script is started from.
+Set-Location $repo
 $sha = (git -C $repo rev-parse --short=8 HEAD).Trim()
 Push-Location (Join-Path $repo 'app'); try { pnpm install --frozen-lockfile; Push-Location shell; pnpm build; Pop-Location } finally { Pop-Location }
 $index = Join-Path $repo 'app\shell\dist\index.html'
 if (-not (Test-Path $index)) { throw "shell dist missing: $index" }
-cargo build --profile owner-test --manifest-path (Join-Path $repo 'rust\Cargo.toml') -p infantry-daemon
+# Build every exe the package copies: infantry.exe and infantry-migrate.exe were left stale in the shared target
+# (built once with the dynamic CRT), so the packaged CLI failed on a clean Windows with vcruntime140.dll missing.
+cargo build --profile owner-test --manifest-path (Join-Path $repo 'rust\Cargo.toml') -p infantry-daemon -p infantry-cli -p infantry-migrate
 cargo build --profile owner-test --features custom-protocol --manifest-path (Join-Path $repo 'app\src-tauri\Cargo.toml')
 $out = Join-Path $env:CARGO_TARGET_DIR 'owner-test'
 # RUST-BUG dd10c3bb: stage every official daemon plugin (WASM) into $out\plugins. Without this the package has no
@@ -34,6 +39,12 @@ $asset = (Get-ChildItem (Join-Path $repo 'app\shell\dist\assets') -Filter '*.js'
 $bytes = [IO.File]::ReadAllBytes((Join-Path $out 'infantry-tauri.exe'))
 $text = [Text.Encoding]::Latin1.GetString($bytes)
 if (-not $text.Contains($asset)) { throw "BUILD REFUSED: InfantryAI-Rust.exe (infantry-tauri.exe) does not embed the UI ($asset not found); it would load devUrl localhost:1420. Build with --features custom-protocol." }
+# STATIC CHECK: a clean Windows has no VC++ redistributable; every packaged exe must link the CRT statically
+# (repo-root .cargo/config.toml, +crt-static). An exe that imports vcruntime140.dll names it in its import table.
+foreach ($f in 'infantry-tauri.exe','infantry-daemon.exe','infantry-migrate.exe','infantry.exe') {
+    $t = [Text.Encoding]::Latin1.GetString([IO.File]::ReadAllBytes((Join-Path $out $f)))
+    if ($t.IndexOf('vcruntime140', [StringComparison]::OrdinalIgnoreCase) -ge 0) { throw "BUILD REFUSED: $f imports vcruntime140.dll (dynamic CRT): it will not start on a clean Windows" }
+}
 $dest = Join-Path $DistRoot ("builds\{0}-rust-{1}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $sha)
 New-Item -ItemType Directory -Force $dest | Out-Null
 Copy-Item (Join-Path $out 'infantry-tauri.exe') (Join-Path $dest 'InfantryAI-Rust.exe')
@@ -54,6 +65,11 @@ if (-not $SkipMsi) {
         $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content "$kd/test.key" -Raw; $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
         $ov = Join-Path $kd 'ov.json'; (@{ plugins = @{ updater = @{ pubkey = (Get-Content "$kd/test.key.pub" -Raw).Trim() } } } | ConvertTo-Json -Depth 5) | Set-Content $ov
         $cfg += @('--config', $ov); Write-Output 'MSI signed with a THROWAWAY test key (no installed app trusts it)'
+    }
+    # Clear earlier bundles first: the shared target keeps old-version MSIs, and copying '*.msi*' shipped a stale
+    # dynamic-CRT 0.1.0 MSI next to the new one (sandbox run 5: the daemon failed on vcruntime140.dll).
+    foreach ($d in (Join-Path $env:CARGO_TARGET_DIR 'release/bundle/msi'), (Join-Path $repo 'app/src-tauri/target/release/bundle/msi')) {
+        if (Test-Path $d) { Remove-Item (Join-Path $d '*.msi*') -Force }
     }
     Push-Location (Join-Path $repo 'app')
     try { pnpm tauri build --bundles msi @cfg --config '{"bundle":{"createUpdaterArtifacts":true}}'; if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' } } finally { Pop-Location }

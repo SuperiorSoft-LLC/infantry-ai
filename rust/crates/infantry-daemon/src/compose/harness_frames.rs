@@ -81,6 +81,12 @@ impl HarnessFrames {
         u
     }
 
+    /// Builds the listing now and stores it (the install changed what is on this machine; the next answer must show it).
+    pub fn rebuild_now(&self) {
+        let l = build(&self.daemon);
+        *self.cache.lock().unwrap_or_else(|e| e.into_inner()) = Some(l);
+    }
+
     fn refresh_in_background(&self) {
         {
             let mut r = self.refreshing.lock().unwrap_or_else(|e| e.into_inner());
@@ -128,6 +134,10 @@ impl FrameUnit for HarnessFrames {
         FRAMES
     }
     fn handle(&self, env: &Envelope, _ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
+        // `providers {"refresh":true}`: the owner just signed in or installed something; rebuild now instead of serving the cache.
+        if env.data.contains("refresh") {
+            self.rebuild_now();
+        }
         let (providers, models) = self.listing();
         let (ty, data) = match env.r#type.as_str() {
             pf::PROVIDERS => (pf::PROVIDERS, providers),

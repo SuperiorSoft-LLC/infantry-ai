@@ -1,5 +1,14 @@
-# Repo-wide cargo config, read by both builds below this folder (rust/ and app/src-tauri).
+# Repo-wide cargo config, read by both builds below this folder (rust/ and app/src-tauri). It sits at the repo root
+# because cargo reads .cargo/config.toml from the CURRENT directory and its parents, never from --manifest-path: the
+# owner build runs cargo from the repo root and `pnpm tauri build` runs it from app/, so a rust/.cargo/config.toml is
+# invisible to both.
+
 # Windows MSVC host: link with rust-lld (ships with the toolchain) instead of MSVC link.exe:
 # faster links and less RAM for the big test and app binaries. Other targets (Android, WASM) are untouched.
 [target.x86_64-pc-windows-msvc]
 linker = "rust-lld.exe"
+
+# A clean Windows has no VC++ runtime: link the CRT statically so InfantryAI-Rust.exe, infantry.exe and
+# infantry-daemon.exe start there (Windows Sandbox first-time-install run: STATUS_DLL_NOT_FOUND on vcruntime140.dll).
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]

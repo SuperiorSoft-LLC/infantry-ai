@@ -205,7 +205,7 @@ All *(fixed today)*: before this sweep no window-wide key worked, and the hints 
 | Secrets vault (reveal behind Windows Hello) | yes | done | |
 | Phone pairing, `infantry` on PATH, updater | yes | done | RUST-UPD-1. |
 | Tool approval settings (timer, expiry, rules) | yes | missing | Rules: UI only (`approval_rules`). Timer and expiry: daemon (`tool_approval_set` has no handler). |
-| Setup wizard (install Node, providers) | yes | missing | Daemon: `harness_install` / `cli_locations` handlers (frame names only). |
+| Setup wizard (install Node, providers) | yes | done | Node + harness install, sign-in check, first agent (ticket 4097d75b). Gaps: no in-app login (the tool's own sign-in), no outdated/update check. `cli_locations` still has no handler. |
 | Plugin drop-in install, consent dialog | yes | missing | UI only (`plugin_admin`). |
 | About: version | yes | done | *(fixed today)* It was a fixed string. |
 

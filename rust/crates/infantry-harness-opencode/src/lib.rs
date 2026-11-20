@@ -151,6 +151,16 @@ impl Harness for OpenCodeHarness {
     }
 
     /// opencode's free tier needs no sign-in: only a missing CLI is a problem.
+    fn credential(&self) -> Option<infantry_harness::Credential> {
+        Some(infantry_harness::Credential {
+            env: "OPENCODE_API_KEY".into(),
+            label: "OpenCode Go".into(),
+            help: "Create an API key in your OpenCode account (opencode.ai) and paste it here. Only needed for the paid OpenCode Go models; the free tier needs none.".into(),
+            auth_modes: Vec::new(),
+            login_argv: Vec::new(),
+        })
+    }
+
     fn sign_in_problem(&self, probe: &dyn Probe) -> Option<String> {
         (!shim::installed(probe, &self.program)).then(|| format!("{} is not installed (not on PATH)", self.program))
     }

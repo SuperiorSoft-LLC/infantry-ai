@@ -2,3 +2,5 @@
 [env]
 TS_RS_EXPORT_DIR = { value = "../app/src/generated", relative = true }
 TS_RS_LARGE_INT = "number"
+
+# The static-CRT rustflags live in the repo-root .cargo/config.toml (read from here too, as a parent dir).

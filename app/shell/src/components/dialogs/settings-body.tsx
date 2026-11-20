@@ -7,7 +7,7 @@ import { RemoteRow } from "@/components/connect/connect-screen";
 import { CliPathRow, PairingRows, UpdaterRows } from "@/components/settings/desktop-install";
 import { cn } from "@infantry/ui";
 import { useUi } from "@/state/ui-state";
-import { Switch } from "@infantry/ui";
+import { Button, Switch } from "@infantry/ui";
 import { Label } from "@infantry/ui";
 import { appVersionLine } from "@/components/layout/app-version";
 import { SecretsPanel } from "@/components/settings/secrets-panel";
@@ -94,6 +94,11 @@ export function SettingsBody() {
             <PairingRows />
             <RunnerRow />
             <CliPathRow />
+            <SettingRow id="set-setup" title="Guided setup" hint="Install an agent tool, sign in and say hello. It opens by itself while nothing can answer.">
+              <Button size="sm" variant="outline" id="set-setup" onClick={() => ui.set("dialog", "setup")}>
+                Open guided setup
+              </Button>
+            </SettingRow>
           </>
         )}
         {!searching && section === "Secrets" && <SecretsPanel />}

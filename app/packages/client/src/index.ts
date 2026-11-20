@@ -41,3 +41,5 @@ export * from "./popout";
 export * from "./worker-lanes";
 export * from "./chat-view";
 export * from "./stores/pace";
+export * from "./setup-wizard";
+export * from "./stores/harness-install";

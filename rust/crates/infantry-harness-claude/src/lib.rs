@@ -34,6 +34,8 @@ pub const ID: &str = "claude";
 pub const DEFAULT_MODEL: &str = "default";
 pub const CONFIG_DIR_ENV: &str = "CLAUDE_CONFIG_DIR";
 pub const OAUTH_TOKEN_ENV: &str = "CLAUDE_CODE_OAUTH_TOKEN";
+/// The Anthropic API key claude reads (the app's "Use an Anthropic API key" choice).
+pub const API_KEY_ENV: &str = "ANTHROPIC_API_KEY";
 pub const CREDENTIALS_FILE: &str = ".credentials.json";
 /// The env that sets the context window claude compacts at.
 pub const CONTEXT_ENV: &str = "CLAUDE_CODE_AUTO_COMPACT_WINDOW";
@@ -228,8 +230,18 @@ impl Harness for ClaudeHarness {
         MODELS.iter().map(|(id, label)| ModelInfo { id: (*id).into(), label: (*label).into() }).collect()
     }
 
+    fn credential(&self) -> Option<infantry_harness::Credential> {
+        Some(infantry_harness::Credential {
+            env: API_KEY_ENV.into(),
+            label: "Claude Code".into(),
+            help: "Create an API key in the Anthropic Console (console.anthropic.com). Only needed when you choose API key; with a Claude subscription you log in instead.".into(),
+            auth_modes: vec![infantry_harness::AUTH_API_KEY.into(), infantry_harness::AUTH_SUBSCRIPTION.into()],
+            login_argv: vec![self.program.clone(), "auth".into(), "login".into()],
+        })
+    }
+
     fn sign_in_problem(&self, probe: &dyn Probe) -> Option<String> {
-        if probe.env(OAUTH_TOKEN_ENV).is_some() {
+        if probe.env(OAUTH_TOKEN_ENV).is_some() || probe.env(API_KEY_ENV).is_some_and(|k| !k.trim().is_empty()) {
             return None;
         }
         let creds = config_dir(probe).map(|d| d.join(CREDENTIALS_FILE));

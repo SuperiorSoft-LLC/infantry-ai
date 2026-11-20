@@ -470,7 +470,12 @@ pub const HTTP_TIMEOUT_MS: u64 = 20_000;
 
 impl UreqHttp {
     fn agent() -> ureq::Agent {
-        ureq::AgentBuilder::new().timeout(std::time::Duration::from_millis(HTTP_TIMEOUT_MS)).build()
+        // native-tls is not ureq's default backend: without the connector every https call fails "no TLS backend is configured".
+        let b = ureq::AgentBuilder::new().timeout(std::time::Duration::from_millis(HTTP_TIMEOUT_MS));
+        match native_tls::TlsConnector::new() {
+            Ok(tls) => b.tls_connector(std::sync::Arc::new(tls)).build(),
+            Err(_) => b.build(),
+        }
     }
     fn answer(r: Result<ureq::Response, ureq::Error>) -> Result<(u16, Value), String> {
         match r {

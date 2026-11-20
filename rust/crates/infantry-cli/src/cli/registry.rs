@@ -40,6 +40,8 @@ pub static COMMANDS: &[&Command] = &[
     &super::local_cmds::UNINSTALL_CLI,
     &super::local_cmds::REMOTE,
     &super::issue::ISSUE,
+    &super::cmd_harness::HARNESS_STATUS,
+    &super::cmd_harness::HARNESS_INSTALL,
     // -- runner --
     &super::cmd_runner::RUNNER,
 ];

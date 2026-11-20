@@ -6,7 +6,7 @@ import { layoutFor, type Layout } from "@infantry/client";
 
 /** A right-panel view id; which ones exist comes from the plugin registry (plugins/catalog.tsx). */
 export type RightTab = string;
-export type DialogId = null | "settings" | "stats" | "new-agent" | "new-ticket" | "resume";
+export type DialogId = null | "settings" | "stats" | "new-agent" | "new-ticket" | "resume" | "setup";
 export type Theme = "dark" | "light";
 /** What the centre column shows: a tab id from the plugin registry (plugins/catalog.tsx), or `board`. */
 export type CentreView = string;

@@ -14,6 +14,7 @@ pub mod cmd_mail;
 pub mod cmd_sessions;
 pub mod cmd_runner;
 pub mod cmd_board;
+mod cmd_harness;
 pub mod cmd_ticket;
 pub mod plugin_tools;
 pub mod tools_cmds;

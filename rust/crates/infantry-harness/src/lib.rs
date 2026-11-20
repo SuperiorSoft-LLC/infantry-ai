@@ -482,7 +482,32 @@ pub trait Harness: Send + Sync {
     fn context_window(&self, _probe: &dyn Probe, _model: &str) -> Option<u64> {
         None
     }
+    /// How the CLI is given its account (Kotlin module.json `credential` + `authModes` + `authProbe.loginArgv`): the API-key
+    /// variable the app's guided setup and key screen fill, and the CLI's own sign-in command. None = it needs no key.
+    fn credential(&self) -> Option<Credential> {
+        None
+    }
 }
+
+/// The sign-in a harness declares ([`Harness::credential`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Credential {
+    /// The API-key environment variable the CLI reads (`ANTHROPIC_API_KEY`).
+    pub env: String,
+    /// The name the owner knows the tool by.
+    pub label: String,
+    /// Where the key comes from, in one or two plain sentences.
+    pub help: String,
+    /// The ways it connects: [`AUTH_API_KEY`] and/or [`AUTH_SUBSCRIPTION`]; empty = a key only.
+    pub auth_modes: Vec<String>,
+    /// The CLI's own sign-in, argv form (`claude auth login`); empty = no in-app sign-in.
+    pub login_argv: Vec<String>,
+}
+
+/// The auth mode that passes the stored API key to the CLI.
+pub const AUTH_API_KEY: &str = "api-key";
+/// The auth mode that uses the CLI's own subscription login (the API-key variable is blanked so it never bills that key).
+pub const AUTH_SUBSCRIPTION: &str = "subscription-login";
 
 /// What a `/` command does: the daemon knows these three, never a vendor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

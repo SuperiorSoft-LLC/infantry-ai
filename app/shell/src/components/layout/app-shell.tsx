@@ -16,6 +16,7 @@ import { usePluginsLoaded } from "@/plugins/use-plugins";
 import { useShortcuts } from "./use-shortcuts";
 import { ToastHost } from "./toast-host";
 import { PopoutHost } from "@/components/session/popout-host";
+import { useAutoSetup } from "@/components/setup/setup-wizard";
 
 function Drawer({ side, onClose, children }: { side: "left" | "right"; onClose: () => void; children: ReactNode }) {
   return (
@@ -34,6 +35,7 @@ export function AppShell() {
   const { set } = ui;
   usePluginsLoaded();
   useShortcuts();
+  useAutoSetup();
 
   // Crossing into a width where a panel becomes a drawer collapses it; the title-bar toggles reopen it (layout.ts).
   const prev = useRef<Layout | null>(null);
