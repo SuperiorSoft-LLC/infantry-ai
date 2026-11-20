@@ -2,7 +2,7 @@
 #
 # A push to main that changes app/src-tauri/tauri.conf.json (a version bump) builds every target, signs the updater
 # artifacts and makes a DRAFT GitHub release rust-v<version> holding the installers, the APK, SHA256SUMS and latest.json.
-# Nothing is published and the update feed is NOT touched: the owner tests the draft, then runs rust-promote.yml.
+# Nothing is published and the update feed is NOT touched: the owner tests the draft, then publishes it (rust-promote.yml runs on publish and points the feed at it).
 # By hand (workflow_dispatch) with channel=nightly it makes a draft prerelease rust-v<next patch>-nightly.<run>.
 #
 # Versions: a feature bumps the MINOR, a bug fix bumps the PATCH; the plan job refuses a version that did not move or

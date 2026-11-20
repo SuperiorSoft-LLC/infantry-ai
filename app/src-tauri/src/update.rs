@@ -129,11 +129,13 @@ pub async fn update_check(app: AppHandle, state: State<'_, AppState>, pending: S
     let s = state.settings.lock().unwrap().updater.clone().unwrap_or_default();
     let feed = feed_for(s.feed_template(), s.channel());
     let url: tauri::Url = feed.parse().map_err(|e| format!("feed URL {feed}: {e}"))?;
-    let mut b = app.updater_builder().endpoints(vec![url]).map_err(|e| e.to_string())?;
-    // Switching from nightly back to stable offers the newest stable even when it is older (Kotlin NIGHTLY-1).
-    if s.channel() == "stable" {
-        b = b.version_comparator(|current, remote| remote.version != current);
-    }
+    // Strictly newer only, on every channel: a feed that lags behind must never downgrade the app (ticket f740f0f6).
+    // (The plugin's default comparator is already `remote > current`; it is set here so the rule is explicit and tested.)
+    let b = app
+        .updater_builder()
+        .endpoints(vec![url])
+        .map_err(|e| e.to_string())?
+        .version_comparator(|current, remote| remote.version > current);
     let found = b.build().map_err(|e| e.to_string())?.check().await.map_err(|e| format!("update check failed: {e}"))?;
     let info = UpdateInfo {
         available: found.is_some(),
