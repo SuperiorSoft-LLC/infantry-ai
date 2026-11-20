@@ -15,7 +15,13 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// How long a fresh sidecar may take to write its port file.
-pub const START_TIMEOUT_MS: u64 = 15_000;
+pub const START_TIMEOUT_MS: u64 = 60_000;
+/// Env override for the start wait (a slow disk or antivirus after an install can make a cold first start take long).
+pub const START_TIMEOUT_ENV: &str = "INFANTRY_DAEMON_START_TIMEOUT_MS";
+
+fn start_timeout_ms() -> u64 {
+    std::env::var(START_TIMEOUT_ENV).ok().and_then(|v| v.trim().parse().ok()).filter(|v| *v > 0).unwrap_or(START_TIMEOUT_MS)
+}
 /// One `/health` probe.
 pub const HEALTH_TIMEOUT_MS: u64 = 1_500;
 
@@ -268,7 +274,8 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch) -> Result<Si
     }
     let mut child = cmd.spawn().map_err(|e| format!("could not start {}: {e}", bin.display()))?;
     let start = Instant::now();
-    while start.elapsed() < Duration::from_millis(START_TIMEOUT_MS) {
+    let limit = start_timeout_ms();
+    while start.elapsed() < Duration::from_millis(limit) {
         if let Ok(Some(status)) = child.try_wait() {
             return Err(format!("{} exited at start ({status}); see {}", bin.display(), state.join("daemon.log").display()));
         }
@@ -278,7 +285,7 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch) -> Result<Si
         std::thread::sleep(Duration::from_millis(20));
     }
     let _ = child.kill();
-    Err(format!("{} wrote no port file in {START_TIMEOUT_MS} ms", bin.display()))
+    Err(format!("{} wrote no port file in {limit} ms (set {START_TIMEOUT_ENV} to wait longer)", bin.display()))
 }
 
 #[cfg(test)]

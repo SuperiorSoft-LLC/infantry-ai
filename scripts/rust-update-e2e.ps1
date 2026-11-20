@@ -9,7 +9,7 @@
 # Steps: install V0 (msiexec /qn, per user, no admin) -> start it -> serve a local latest.json for V1 -> drive update_check +
 # update_install through the webview (CDP; no desktop input) -> assert the app came back on V1 with settings, token and
 # state kept -> uninstall and clean up. Processes are stopped by PID only, never by image name.
-param([Parameter(Mandatory)][string]$V0, [Parameter(Mandatory)][string]$V1, [int]$FeedPort = 18998, [int]$DaemonPort = 18997, [int]$CdpPort = 19333)
+param([Parameter(Mandatory)][string]$V0, [Parameter(Mandatory)][string]$V1, [int]$FeedPort = 18998, [int]$DaemonPort = 18997, [int]$CdpPort = 19333, [int]$WaitSec = 90)
 $ErrorActionPreference = 'Stop'
 $id = 'com.superiorsoft.infantry.msitest'
 $appData = Join-Path $env:LOCALAPPDATA $id
@@ -51,7 +51,7 @@ try {
     $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$CdpPort"
     $app = Start-Process $exe -PassThru; $appPid = $app.Id
     Remove-Item Env:\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
-    Step 'V0 daemon up on the test port' (Wait-Until { Health } 90) (Health)
+    Step 'V0 daemon up on the test port' (Wait-Until { Health } $WaitSec) (Health)
     $tokenFile = Get-ChildItem $state -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'token' } | Select-Object -First 1
     $tokenBefore = if ($tokenFile) { (Get-FileHash $tokenFile.FullName).Hash } else { $null }
     Set-Content (Join-Path $state 'e2e-marker.txt') 'kept'
@@ -81,7 +81,7 @@ await new Promise(r => setTimeout(r, 1500)); process.exit(0);
     Step 'old app process exited' (Wait-Until { -not (Get-Process -Id $appPid -ErrorAction SilentlyContinue) } 60)
     $ver = { (Get-Item $exe -ErrorAction SilentlyContinue).VersionInfo.ProductVersion }
     Step "installed exe is $v1" (Wait-Until { (& $ver) -like "$v1*" } 180) (& $ver)
-    $back = Wait-Until { (AppProcs) -and (Health) } 120
+    $back = Wait-Until { (AppProcs) -and (Health) } $WaitSec
     Step "app restarted from the install folder and its daemon answers" $back ("app pid(s): " + ((AppProcs | ForEach-Object ProcessId) -join ','))
     # 6. kept
     Step 'ui.json (settings) kept' ((Get-FileHash (Join-Path $appData 'ui.json')).Hash -eq $uiBefore)
