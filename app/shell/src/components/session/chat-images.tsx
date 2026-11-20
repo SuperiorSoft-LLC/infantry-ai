@@ -38,7 +38,7 @@ function ZoomImage({ src }: { src: string }) {
   );
 }
 
-function Thumb({ image }: { image: ImageRef }) {
+export function Thumb({ image }: { image: ImageRef }) {
   const [url, setUrl] = useState<string | null | undefined>(undefined);
   const [open, setOpen] = useState(false);
   useEffect(() => {

@@ -1,89 +1,181 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// Prompt composer. Idle session: Enter sends the prompt. Busy session: red border, Enter queues the text as its next
-// turn; the queued turns are listed above with remove / send-now. No session: Enter starts a new one.
-// Stop interrupts the running turn; Swap agent and Restart session open the session dialogs. The others are still mock.
-// Typing `/` lists the session provider's commands (`command_catalog`, fetched once per session) by prefix: Up/Down
-// move, Tab or Enter completes, Esc closes. Images (paste, or the clip button) upload at once with `image_upload`
-// (purpose chat, the session's project) and ride the prompt as `[image: <path>]` lines (Kotlin IMG-2).
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, ImagePlus, Play, CircleX, Trash2, RotateCw, MoreHorizontal, Square, SendHorizontal, X, Zap, Search, History } from "lucide-react";
-import { cn } from "@infantry/ui";
-import { Textarea } from "@infantry/ui";
-import { IconButton, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@infantry/ui";
-import { CHAT_SEARCH_EVENT, patchChatView, imageTag, matchSlash, slashCatalog, slashPrefix, uploadImage, type QueuedTurnView, type SlashCommand } from "@infantry/client";
+// The chat composer, ported from the Kotlin PromptBox (plugins/official/Infantry_Chat/src/ChatSurface.kt, CHAT-MINIMIZE-1..5,
+// PROMPT-BORDER-1/2, CHAT-QUEUE-1, ATTACH-INLINE-1). Top to bottom: the session's prompt card, the queued messages, the
+// attached images, the `/` command list, ONE status line, then one large rounded box with two tab-shaped groups hanging
+// from its bottom edge: tools on the left (Attach, Switch agent, Resume, Stop background jobs, End session / Remove agent,
+// Restart session; with no session: Attach, New agent), Stop and Send on the right. Box and groups share ONE outline: the
+// neutral border at rest, the brand colour (2px) while focused or hovered. A narrow composer keeps as many 48px tools as
+// fit and puts the rest behind "More actions". A hint line shows under the groups only when there is something to say.
+//
+// Keys: Enter sends (queues while the agent is busy, spawns with no session); Shift+Enter is a new line; Ctrl+Shift+A
+// attaches; Ctrl+V with an image on the clipboard attaches it. With the `/` list open: Up/Down move, Tab or Enter pick,
+// Esc closes it until the text changes. An attached image becomes its `[image: <path>]` reference at the caret, so the
+// text IS the attachment list: deleting the reference releases the image.
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowLeftRight, CircleX, MoreHorizontal, Paperclip, Play, RotateCw, SendHorizontal, Square, Trash2, UserPlus, X } from "lucide-react";
+import { cn, Textarea, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip, TooltipContent, TooltipTrigger } from "@infantry/ui";
+import {
+  chatViewOf,
+  composerStatusLine,
+  composerToolsThatFit,
+  imageRefs,
+  imageTag,
+  insertAt,
+  matchSlash,
+  patchChatView,
+  slashCatalog,
+  slashPrefix,
+  splitComposerTools,
+  uploadImage,
+  COMPOSER_GROUP_GAP_PX,
+  COMPOSER_GROUP_INSET_PX,
+  type QueuedTurnView,
+  type SlashCommand,
+} from "@infantry/client";
 import { useShallow } from "zustand/react/shallow";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
+import { useAgentList } from "@/daemon/agents";
 import { useUi } from "@/state/ui-state";
 import { openSessionDialog } from "./session-actions";
-import { readImageFile } from "./chat-images";
+import { readImageFile, Thumb } from "./chat-images";
 import { useProjects } from "@/components/git/use-projects";
 import { useChatView } from "./use-chat-view";
-
-const tools = [
-  { label: "Swap agent", icon: ArrowLeftRight },
-  { label: "Resume", icon: Play },
-  { label: "Cancel turn", icon: CircleX },
-  { label: "Delete session", icon: Trash2, danger: true },
-  { label: "Restart session", icon: RotateCw },
-];
-
-const GROUP = "flex flex-wrap items-center gap-1 rounded-b-lg border-2 border-t-0 border-border bg-card p-1";
-/** 48dp touch targets on a phone, the compact size from `sm` up. */
-const TOUCH = "max-sm:size-12";
+import { PromptCards } from "./prompt-cards";
+import { ComposerRound } from "./floating-chip";
 
 const NO_QUEUE: QueuedTurnView[] = [];
+const ENDED = new Set(["EXITED", "FAILED", "ORPHANED"]);
+/** Kotlin COMPOSER_MIN_LINES / MAX_LINES / EXPANDED_LINES; 13px text on a 20px line, 12px padding top and bottom. */
+const LINE = 20;
+const rows = (n: number) => n * LINE + 24;
+/** Kotlin COMPOSER_JOIN_RADIUS_DP / COMPOSER_TAB_RADIUS_DP. */
+const JOIN = 6;
+const IMAGE_MAX = 10 * 1024 * 1024;
 
-/** `compact`: always use the small-width toolbar (a popout's width, not the window's, decides). `windowId` keys the
- * remembered minimized / expanded / draft state (CHAT-MINIMIZE-1); the minimize and expand buttons live in ChatPanel. */
-export function Composer({ sessionId, busy, compact = false, windowId = "main" }: { sessionId: string | null; busy: boolean; compact?: boolean; windowId?: string }) {
+interface Act {
+  label: string;
+  icon: ReactNode;
+  shortcut?: string;
+  enabled: boolean;
+  tone?: "plain" | "danger" | "filled";
+  run: () => void;
+}
+
+/**
+ * One hanging group (Kotlin `composerTab`): open at the top, the box's fill, the box's outline continued down each side
+ * and round the bottom (12px corners). It is pulled up over the box's bottom line, which its fill hides under the
+ * opening; at each top corner a concave 6px fillet turns that line down into the group's side.
+ */
+function HangingGroup({ label, children }: { label: string; children: ReactNode }) {
+  const fillet = (side: "left" | "right") => ({
+    [side]: -JOIN,
+    background: `radial-gradient(circle at ${side === "left" ? "0" : "100%"} 100%, transparent calc(${JOIN}px - var(--ring-w)), var(--ring-c) calc(${JOIN}px - var(--ring-w)), var(--ring-c) ${JOIN}px, var(--color-card) ${JOIN}px)`,
+  });
+  return (
+    <div
+      role="toolbar"
+      aria-label={label}
+      className="relative z-[1] flex min-w-0 items-center rounded-b-xl bg-card px-0.5"
+      style={{ marginTop: "calc(-1 * var(--ring-w))", border: "var(--ring-w) solid var(--ring-c)", borderTop: 0, transition: "border-color 120ms" }}
+    >
+      <span aria-hidden className="pointer-events-none absolute top-0" style={{ width: JOIN, height: JOIN, ...fillet("left") }} />
+      <span aria-hidden className="pointer-events-none absolute top-0" style={{ width: JOIN, height: JOIN, ...fillet("right") }} />
+      {children}
+    </div>
+  );
+}
+
+/** "More actions": the tools that did not fit, as icon + label rows (dimmed when disabled). */
+function ComposerMore({ rest }: { rest: Act[] }) {
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <DropdownMenuTrigger asChild>
+          <TooltipTrigger asChild>
+            <button type="button" aria-label="More actions" className="group/round grid size-12 shrink-0 cursor-pointer place-items-center outline-none">
+              <span className="grid size-9 place-items-center rounded-full bg-accent text-foreground group-hover/round:bg-muted [&_svg]:size-[18px]">
+                <MoreHorizontal />
+              </span>
+            </button>
+          </TooltipTrigger>
+        </DropdownMenuTrigger>
+        <TooltipContent>More actions</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="start" side="top">
+        {rest.map((a) => (
+          <DropdownMenuItem key={a.label} disabled={!a.enabled} onSelect={a.run} className={cn("text-xs", a.tone && a.tone !== "plain" && "text-danger")}>
+            {a.icon} {a.label}
+            {a.shortcut && <span className="ml-auto pl-4 text-muted-foreground">{a.shortcut}</span>}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** `windowId` keys the remembered draft / expanded state (CHAT-MINIMIZE-1); minimize itself is ChatPanel's floater. */
+export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: string | null; busy: boolean; windowId?: string }) {
   const { draft: text, expanded } = useChatView(windowId);
   const setText = (t: string) => patchChatView(windowId, { draft: t });
   const ui = useUi();
-  const actions: Record<string, (() => void) | undefined> = {
-    Resume: () => ui.set("dialog", "resume"),
-    "Cancel turn": sessionId && busy ? () => interrupt(sessionId) : undefined,
-    "Swap agent": sessionId ? () => openSessionDialog("swap", sessionId) : undefined,
-    "Restart session": sessionId ? () => openSessionDialog("restart", sessionId) : undefined,
-    "Delete session": sessionId ? () => openSessionDialog("delete", sessionId) : undefined,
-  };
-  const queued = useDaemon((s) => (sessionId ? s.sessions[sessionId]?.record.queued : undefined)) ?? NO_QUEUE;
+  const record = useDaemon((s) => (sessionId ? s.sessions[sessionId]?.record : undefined));
+  const queued = record?.queued ?? NO_QUEUE;
   const online = useDaemon((s) => s.connection.state === "open");
+  const agentCount = useAgentList().length;
   // RUST-MIGRATE-1: a session live in the other app is never run here too (the daemon refuses it as well).
-  const heldBy = useDaemon((s) => (sessionId ? s.sessions[sessionId]?.record.heldBy : undefined)) ?? undefined;
-  // Actions are stable: picking them shallowly keeps the composer out of every streaming flush.
-  const { send, spawn, interrupt, unqueue, forceQueued, requestHistory } = useDaemon(
-    useShallow((s) => ({ send: s.send, spawn: s.spawn, interrupt: s.interrupt, unqueue: s.unqueue, forceQueued: s.forceQueued, requestHistory: s.requestHistory })),
+  const heldBy = record?.heldBy ?? undefined;
+  const { send, spawn, interrupt, unqueue, forceQueued, sendFrame } = useDaemon(
+    useShallow((s) => ({ send: s.send, spawn: s.spawn, interrupt: s.interrupt, unqueue: s.unqueue, forceQueued: s.forceQueued, sendFrame: s.sendFrame })),
   );
-
-  const [images, setImages] = useState<{ path: string; name: string }[]>([]);
-  const [uploading, setUploading] = useState(0);
-  const [imageError, setImageError] = useState<string | null>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const sessionProject = useDaemon((s) => (sessionId ? s.sessions[sessionId]?.record.projectId : undefined));
+
+  // ---- attachments: an image becomes its `[image: path]` reference at the caret (Kotlin ATTACH-INLINE-1) ----
+  const [uploading, setUploading] = useState(0);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const sessionProject = record?.projectId;
   const currentProject = useProjects((p) => p.currentId);
   const project = sessionProject || currentProject;
+  const refs = useMemo(() => imageRefs(text).refs, [text]);
   const attach = async (files: File[]) => {
-    const picked = files.filter((f) => f.type.startsWith("image/"));
-    if (!picked.length) return;
-    if (!project) return setImageError("Pick a project first: images are stored in a project.");
-    setImageError(null);
-    for (const f of picked) {
+    if (!files.length) return;
+    const others = files.filter((f) => !f.type.startsWith("image/"));
+    // The Rust daemon stores chat images only (`image_upload` purposes chat / ticket); other files are refused here.
+    if (others.length) setAttachError(`${others[0].name}: only images can be attached for now`);
+    else setAttachError(null);
+    if (!project) return setAttachError("Pick a project first: images are stored in a project.");
+    let caret = box.current?.selectionStart ?? text.length;
+    for (const f of files.filter((f) => f.type.startsWith("image/"))) {
+      const name = f.name || "pasted image";
+      if (f.size > IMAGE_MAX) {
+        setAttachError(`${name}: the file is over the 10 MB limit`);
+        continue;
+      }
       setUploading((n) => n + 1);
       try {
         const r = await uploadImage(daemonStore().getState(), project, await readImageFile(f), f.type, f.name);
-        if (r.ok) setImages((cur) => [...cur, { path: r.path, name: f.name || "pasted image" }]);
-        else setImageError(`${f.name || "image"}: ${r.text}`);
+        if (r.ok) {
+          const cur = chatViewOf(windowId).draft;
+          const at = insertAt(cur, caret, imageTag(r.path));
+          patchChatView(windowId, { draft: at.text });
+          caret = at.caret;
+        } else setAttachError(`${name}: ${r.text}`);
       } catch {
-        setImageError(`${f.name || "image"}: could not be read`);
+        setAttachError(`${name}: could not be read`);
       } finally {
         setUploading((n) => n - 1);
       }
     }
+    box.current?.focus();
   };
+  const pick = () => online && !heldBy && fileInput.current?.click();
+  const removeRef = (path: string) => setText(text.replace(imageTag(path), "").replace(/\n{3,}/g, "\n\n"));
+
+  // ---- the `/` command list ----
   const [catalog, setCatalog] = useState<SlashCommand[]>([]);
-  const [pick, setPick] = useState(0);
-  const [hideSlash, setHideSlash] = useState(false);
+  const [slashAt, setSlashAt] = useState(0);
+  const [dismissedFor, setDismissedFor] = useState<string | null>(null);
   useEffect(() => {
     setCatalog([]);
     if (!sessionId || !online) return;
@@ -94,121 +186,154 @@ export function Composer({ sessionId, busy, compact = false, windowId = "main" }
     };
   }, [sessionId, online]);
   const prefix = slashPrefix(text);
-  const matches = useMemo(() => (prefix === null || hideSlash ? [] : matchSlash(catalog, prefix)), [catalog, prefix, hideSlash]);
-  const at = Math.min(pick, Math.max(0, matches.length - 1));
-  const complete = (c: SlashCommand) => (setText(`/${c.name}${c.argument || c.values?.length ? " " : ""}`), setPick(0));
+  const matches = useMemo(() => (prefix === null || dismissedFor === text ? [] : matchSlash(catalog, prefix)), [catalog, prefix, dismissedFor, text]);
+  const at = Math.min(slashAt, Math.max(0, matches.length - 1));
+  const complete = (c: SlashCommand) => (setText(`/${c.name}${c.argument || c.values?.length ? " " : ""}`), setSlashAt(0));
 
+  // ---- send ----
+  const canSend = online && !heldBy && uploading === 0 && text.trim().length > 0;
   const submit = () => {
-    if ((!text.trim() && !images.length) || !online || heldBy || uploading) return;
-    const full = [text.trim(), ...images.map((i) => imageTag(i.path))].filter(Boolean).join("\n");
+    if (!canSend) return;
+    const full = text.trim();
     if (sessionId) send(sessionId, full);
     else spawn(full);
     setText("");
-    setImages([]);
+    setAttachError(null);
   };
 
+  // ---- the tools group (Kotlin S:641-674) ----
+  const ended = !!record && ENDED.has(String(record.state));
+  const dormant = !!record?.dormant;
+  const bgPids = (record?.bgJobs ?? []).map((j) => Number(j.pid)).filter((p) => p > 0);
+  const tools: Act[] = [{ label: "Attach file", icon: <Paperclip />, shortcut: "Ctrl+Shift+A", enabled: online && !heldBy, run: pick }];
+  if (sessionId) {
+    tools.push(
+      { label: "Switch agent", icon: <ArrowLeftRight />, enabled: online, run: () => openSessionDialog("swap", sessionId) },
+      {
+        label: dormant ? "Resume session" : "Resume",
+        icon: <Play />,
+        shortcut: "Ctrl+R",
+        enabled: online && !heldBy && (ended || dormant),
+        // A dormant session with an empty box attaches the CLI with no turn; typed text is sent as the next turn.
+        run: () => (text.trim() ? submit() : void sendFrame({ type: "session_restart", data: JSON.stringify({ sessionId, force: "false" }), sessionId })),
+      },
+      {
+        label: "Stop background jobs",
+        icon: <CircleX />,
+        tone: "danger",
+        enabled: online && bgPids.length > 0,
+        run: () => bgPids.forEach((pid) => sendFrame({ type: "processes_reap", data: JSON.stringify({ op: "reap", pid }), sessionId })),
+      },
+      ended
+        ? { label: "Remove agent", icon: <Trash2 />, tone: "danger", enabled: online, run: () => openSessionDialog("delete", sessionId) }
+        : { label: "End session", icon: <Trash2 />, tone: "filled", enabled: online, run: () => void sendFrame({ type: "kill", data: "", sessionId }) },
+      { label: "Restart session", icon: <RotateCw />, enabled: online, run: () => openSessionDialog("restart", sessionId) },
+    );
+  } else {
+    tools.push({ label: "New agent", icon: <UserPlus />, enabled: online, run: () => ui.set("dialog", "new-agent") });
+  }
+  const sendCount = sessionId ? 2 : 1;
+  const groupsRow = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = groupsRow.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width + 2 * COMPOSER_GROUP_INSET_PX));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const { inline, overflow } = splitComposerTools(tools.length, width ? composerToolsThatFit(width, sendCount) : tools.length);
+
+  // ---- one outline for box + groups (PROMPT-BORDER-1): neutral 1px at rest, brand 2px focused or hovered ----
+  const [focused, setFocused] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const active = focused || hovered;
+  const ring = { "--ring-w": active ? "2px" : "1px", "--ring-c": active ? "var(--color-primary)" : "var(--color-border)" } as React.CSSProperties;
+
+  const placeholder = heldBy
+    ? `Live in ${heldBy}: resume it there, or stop it there first`
+    : !sessionId
+      ? "Task for a NEW agent. Enter to spawn, Shift+Enter for a new line"
+      : busy
+        ? "Agent is busy. Enter to queue: sent as its next turn when this one ends"
+        : `Message ${record?.worktreeBranch ?? sessionId.slice(0, 8)}. Enter to send`;
+  const hint = !online ? "Not connected: commands are disabled." : heldBy ? `This session is live in ${heldBy}.` : null;
+
   return (
-    <div className={cn("pb-3", compact ? "px-2" : "px-4")}>
+    <div
+      className="bg-background p-2.5"
+      data-testid="composer"
+      onDragOver={(e) => e.dataTransfer.types.includes("Files") && e.preventDefault()}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return;
+        e.preventDefault();
+        void attach(Array.from(e.dataTransfer.files));
+      }}
+    >
+      {sessionId && <PromptCards sessionId={sessionId} />}
       {sessionId && queued.length > 0 && (
-        <ul aria-label="Queued turns" className="mb-2 space-y-1">
-          {queued.map((q) => (
-            <li key={q.id} className="flex items-center gap-2 rounded-lg border border-dashed bg-card px-3 py-1 text-xs">
-              <span className="shrink-0 text-muted-foreground">queued</span>
-              <span className="min-w-0 flex-1 truncate">{q.text}</span>
-              <IconButton label="Send now" className="size-6" onClick={() => forceQueued(sessionId, q.id)}>
-                <Zap />
-              </IconButton>
-              <IconButton label="Remove from queue" className="size-6" onClick={() => unqueue(sessionId, q.id)}>
+        <ul aria-label="Queued messages" className="mb-1 font-mono text-[11px] text-muted-foreground">
+          {queued.map((q, i) => (
+            <li key={q.id} className="flex items-center">
+              <span className={cn("min-w-0 flex-1 truncate", i > 0 && "pl-2")}>
+                {i === 0 ? `Queued (${queued.length}): ` : ""}
+                {q.text.split("\n")[0]}
+              </span>
+              <QueueAction label="Send now (into the running turn)" disabled={!online} onClick={() => forceQueued(sessionId, q.id)}>
+                <SendHorizontal />
+              </QueueAction>
+              <QueueAction label="Remove from queue" disabled={!online} onClick={() => unqueue(sessionId, q.id)}>
                 <X />
-              </IconButton>
+              </QueueAction>
             </li>
           ))}
         </ul>
       )}
+      {(refs.length > 0 || uploading > 0 || attachError) && (
+        <div className="mb-1.5 space-y-1">
+          {(refs.length > 0 || uploading > 0) && (
+            <div className="flex items-center gap-1.5 overflow-x-auto" aria-label="Attached images">
+              {refs.map((r) => (
+                <span key={r.path} className="flex shrink-0 items-center gap-1 rounded-md border bg-accent p-1 [&_button]:size-8">
+                  <Thumb image={r} />
+                  <span className="max-w-32 truncate text-[10px]">{r.path.split(/[\\/]/).pop()}</span>
+                  <button type="button" aria-label="Remove the image" title="Remove the image" onClick={() => removeRef(r.path)} className="grid !size-5 place-items-center text-muted-foreground hover:text-foreground">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ))}
+              {uploading > 0 && <span className="text-[10px] text-muted-foreground">Uploading…</span>}
+            </div>
+          )}
+          {attachError && (
+            <p role="alert" className="text-[11px] text-danger">
+              {attachError}
+            </p>
+          )}
+        </div>
+      )}
       {matches.length > 0 && (
-        <ul aria-label="Commands" role="listbox" className="mb-2 max-h-48 space-y-1 overflow-auto">
+        <ul aria-label="Commands" role="listbox" className="mb-1.5 max-h-48 overflow-auto bg-accent">
           {matches.map((c, i) => (
             <li
               key={c.name}
               role="option"
               aria-selected={i === at}
               onMouseDown={(e) => (e.preventDefault(), complete(c))}
-              className={cn("flex cursor-pointer items-center gap-2 rounded-lg border bg-card px-3 py-1 text-xs", i === at && "border-ring")}
+              className={cn("flex cursor-pointer items-center gap-2.5 px-2.5 py-1", i === at && "bg-border")}
             >
-              <span className="shrink-0 font-mono">/{c.name}</span>
-              {c.argument && <span className="shrink-0 text-muted-foreground">{c.argument}</span>}
-              <span className="min-w-0 flex-1 truncate text-muted-foreground">{c.description}</span>
+              <span className="shrink-0 font-mono text-xs">/{c.name}</span>
+              {c.argument && <span className="shrink-0 text-[11px] text-muted-foreground">{c.argument}</span>}
+              <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{c.description}</span>
             </li>
           ))}
         </ul>
       )}
-      {(images.length > 0 || uploading > 0 || imageError) && (
-        <ul aria-label="Attached images" className="mb-2 flex flex-wrap gap-1">
-          {images.map((im, i) => (
-            <li key={im.path} className="flex items-center gap-1 rounded-lg border bg-card px-2 py-0.5 text-xs" title={im.path}>
-              <ImagePlus className="size-3 text-muted-foreground" />
-              <span className="max-w-40 truncate">{im.name}</span>
-              <IconButton label={`Remove ${im.name}`} className="size-5" onClick={() => setImages((cur) => cur.filter((_, j) => j !== i))}>
-                <X />
-              </IconButton>
-            </li>
-          ))}
-          {uploading > 0 && <li className="px-2 py-0.5 text-xs text-muted-foreground">uploading {uploading}…</li>}
-          {imageError && (
-            <li role="alert" className="px-2 py-0.5 text-xs text-danger">
-              {imageError}
-            </li>
-          )}
-        </ul>
-      )}
-      <div className={cn("relative rounded-xl border-2 bg-card transition-colors", busy ? "border-danger" : "border-border focus-within:border-ring")}>
-        <Textarea
-          value={text}
-          onChange={(e) => (setText(e.target.value), setHideSlash(false))}
-          onPaste={(e) => {
-            const files = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith("image/"));
-            if (files.length) (e.preventDefault(), void attach(files));
-          }}
-          onKeyDown={(e) => {
-            if (matches.length > 0) {
-              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                e.preventDefault();
-                setPick((at + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
-                return;
-              }
-              if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && prefix !== matches[at].name)) {
-                e.preventDefault();
-                complete(matches[at]);
-                return;
-              }
-              if (e.key === "Escape") {
-                e.preventDefault();
-                setHideSlash(true);
-                return;
-              }
-            }
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          aria-label="Prompt"
-          disabled={!!heldBy}
-          placeholder={
-            heldBy
-              ? `Live in ${heldBy}: resume it there, or stop it there first`
-              : !sessionId
-              ? "Start a new session..."
-              : busy
-                ? "Agent is busy. Enter to queue: sent as its next turn when this one ends"
-                : "Message the agent..."
-          }
-          className={cn("resize-none border-0 bg-transparent px-4 py-3 text-[15px] shadow-none focus-visible:ring-0 dark:bg-transparent", expanded ? "min-h-[50vh]" : "min-h-20")}
-        />
+      <div className="truncate pb-0.5 pl-1.5 text-[11px] text-muted-foreground" data-testid="composer-status">
+        {composerStatusLine(null, agentCount, record ? (busy ? "working" : String(record.state).toLowerCase()) : null)}
       </div>
-      {/* Tab-shaped groups hang from the box's bottom edge (Kotlin ChatSurface); they wrap on a narrow width, never clip. */}
-      <div className="-mt-0.5 flex flex-wrap items-start justify-between gap-x-2 gap-y-1 px-3">
-        <div role="toolbar" aria-label="Session actions" className={GROUP}>
+      <div style={ring} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+        <div className="relative rounded-2xl bg-card" style={{ border: "var(--ring-w) solid var(--ring-c)", transition: "border-color 120ms" }}>
           <input
             ref={fileInput}
             type="file"
@@ -217,50 +342,94 @@ export function Composer({ sessionId, busy, compact = false, windowId = "main" }
             hidden
             onChange={(e) => (void attach(Array.from(e.target.files ?? [])), (e.target.value = ""))}
           />
-          <IconButton label="Attach image" className={TOUCH} disabled={!online || !!heldBy} onClick={() => fileInput.current?.click()}>
-            <ImagePlus />
-          </IconButton>
-          {(compact ? tools.slice(0, 1) : tools).map(({ label, icon: Icon, danger }) => (
-            <IconButton key={label} label={label} className={cn(TOUCH, danger && "bg-danger text-white hover:bg-danger/85 hover:text-white")} onClick={actions[label]}>
-              <Icon />
-            </IconButton>
-          ))}
-          {compact && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton label="More session actions" className={TOUCH}>
-                  <MoreHorizontal />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="top">
-                {tools.slice(1).map(({ label, icon: Icon, danger }) => (
-                  <DropdownMenuItem key={label} disabled={!actions[label]} onSelect={() => actions[label]?.()} className={cn(danger && "text-danger")}>
-                    <Icon /> {label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-          {sessionId && (
-            <>
-              <IconButton label="Search chat" className={TOUCH} onClick={() => window.dispatchEvent(new Event(CHAT_SEARCH_EVENT))}>
-                <Search />
-              </IconButton>
-              <IconButton label="Load history" className={TOUCH} onClick={() => requestHistory(sessionId)}>
-                <History />
-              </IconButton>
-            </>
-          )}
+          <Textarea
+            ref={box}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            onPaste={(e) => {
+              const files = Array.from(e.clipboardData.files);
+              if (files.length) (e.preventDefault(), void attach(files));
+            }}
+            onKeyDown={(e) => {
+              if (matches.length > 0) {
+                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setSlashAt((at + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
+                  return;
+                }
+                if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && prefix !== matches[at].name)) {
+                  e.preventDefault();
+                  complete(matches[at]);
+                  return;
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setDismissedFor(text);
+                  return;
+                }
+              }
+              if (e.ctrlKey && e.shiftKey && (e.key === "A" || e.key === "a")) {
+                e.preventDefault();
+                pick();
+                return;
+              }
+              if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            aria-label="Prompt"
+            disabled={!!heldBy}
+            placeholder={placeholder}
+            style={{ minHeight: rows(expanded ? 14 : 3), maxHeight: rows(expanded ? 28 : 8), lineHeight: `${LINE}px` }}
+            className="field-sizing-content resize-none overflow-y-auto rounded-2xl border-0 bg-transparent px-4 py-3 text-[13px] shadow-none placeholder:truncate focus-visible:ring-0 dark:bg-transparent"
+          />
         </div>
-        <div role="toolbar" aria-label="Send" className={cn(GROUP, "ml-auto")}>
-          <IconButton label="Stop" className={cn(TOUCH, "text-danger hover:text-danger")} disabled={!busy || !sessionId || !online} onClick={() => sessionId && interrupt(sessionId)}>
-            <Square className="fill-current" />
-          </IconButton>
-          <IconButton label={busy ? "Queue message" : "Send"} className={cn(TOUCH, "text-danger hover:text-danger")} disabled={(!text.trim() && !images.length) || !online || !!heldBy || uploading > 0} onClick={submit}>
-            <SendHorizontal />
-          </IconButton>
+        {/* The two groups hang from the box's bottom line, inset clear of its corners, tools left and Stop/Send right. */}
+        <div ref={groupsRow} className="flex items-start justify-between" style={{ paddingInline: COMPOSER_GROUP_INSET_PX, columnGap: COMPOSER_GROUP_GAP_PX }}>
+          <HangingGroup label="Composer tools">
+            {tools.slice(0, inline).map((a) => (
+              <ComposerRound key={a.label} label={a.label} shortcut={a.shortcut} disabled={!a.enabled} tone={a.tone} onClick={a.run}>
+                {a.icon}
+              </ComposerRound>
+            ))}
+            {overflow > 0 && <ComposerMore rest={tools.slice(inline)} />}
+          </HangingGroup>
+          <HangingGroup label="Send">
+            {sessionId && (
+              <ComposerRound label="Stop turn" tone="danger" disabled={!busy || !online} onClick={() => interrupt(sessionId)}>
+                <Square className="fill-current" />
+              </ComposerRound>
+            )}
+            <ComposerRound label={!sessionId ? "Spawn" : busy ? "Queue" : "Send"} shortcut="Enter" tone="accent" disabled={!canSend} onClick={submit}>
+              <SendHorizontal />
+            </ComposerRound>
+          </HangingGroup>
         </div>
       </div>
+      {hint && <p className={cn("truncate pt-1 text-[11px]", !online ? "text-danger" : "text-muted-foreground")}>{hint}</p>}
     </div>
+  );
+}
+
+/** A queued row's small action (Kotlin QueueAction): a 24px hit box on desktop, 48px on a phone; the glyph stays small. */
+function QueueAction({ label, disabled, onClick, children }: { label: string; disabled: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          disabled={disabled}
+          onClick={onClick}
+          className="grid size-6 shrink-0 cursor-pointer place-items-center text-foreground disabled:cursor-default disabled:text-muted-foreground/50 max-sm:size-12 [&_svg]:size-3.5"
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
