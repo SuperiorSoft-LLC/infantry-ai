@@ -10,9 +10,18 @@ version = "0.2.0"
 
 # Dev and test builds (`cargo build`, `cargo run`, `cargo test`; tests inherit `dev`): optimize the
 # DEPENDENCIES only (wasmtime, SQLite, serde, tokio run 10-50x slower unoptimized). Workspace crates
-# keep the dev defaults: opt-level 0 and full debug info.
+# keep opt-level 0.
+# BUILD-SPEED-1 (#78): debug info is what the dev link spends its time on (the daemon's PDB was 547 MB), so
+# workspace crates keep line tables only (backtraces keep file:line; a debugger shows no locals) and dependencies
+# get none. Measured: daemon edit 15 s -> 7 s, infantry-core edit 20 s -> 9.5 s, clean build 469 s -> 296 s.
+# Full debug info for your own crates when you need a debugger: set CARGO_PROFILE_DEV_DEBUG=full.
+# Release, owner-test and the MSI are not affected (docs/wiki/Build-speed.md).
+[profile.dev]
+debug = "line-tables-only"
+
 [profile.dev.package."*"]
 opt-level = 2
+debug = false
 
 [profile.owner-test]
 inherits = "release"

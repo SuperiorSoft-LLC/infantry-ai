@@ -55,9 +55,14 @@ tauri-plugin-barcode-scanner = "2"
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 # Dev and test builds (`cargo build`, `cargo run`, `cargo test`; tests inherit `dev`): optimize the
 # DEPENDENCIES only (wasmtime, SQLite, serde, tokio run 10-50x slower unoptimized). Workspace crates
-# keep the dev defaults: opt-level 0 and full debug info.
+# keep opt-level 0. BUILD-SPEED-1 (#78), same as rust/Cargo.toml: line tables only for this crate, no debug
+# info for dependencies (the link time is mostly debug info). CARGO_PROFILE_DEV_DEBUG=full brings it back.
+[profile.dev]
+debug = "line-tables-only"
+
 [profile.dev.package."*"]
 opt-level = 2
+debug = false
 
 [profile.release]
 codegen-units = 1

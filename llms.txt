@@ -12,6 +12,7 @@ Read AGENTS.md first. Facts in these docs come from the code; where an older des
 - [Android](docs/wiki/Android.md): the Android app, pairing a phone to a daemon, building the APK.
 - [Updates](docs/wiki/Updates.md): the stable and nightly channels, the feed, signing, the release pipeline.
 - [Command line](docs/wiki/CommandLine.md): the native `infantry` command.
+- [Build speed](docs/wiki/Build-speed.md): the dev build settings and their measured effect.
 - [Recipes](docs/wiki/recipes/README.md): worked "how to add X" guides with the files to touch.
 
 ## Build plugins

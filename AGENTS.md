@@ -97,6 +97,9 @@ Every Rust build on the owner's machine, in any worktree, shares one target dir 
 (`%LOCALAPPDATA%\infantry-dev\preview-target`; set by a machine-local `.cargo/config.toml` above the checkout and by
 `scripts/rust-build-env.ps1`, setting `INFANTRY_CARGO_TARGET_DIR`). Cargo locks it, so builds queue (rule 7). After a
 MERGED step, `pwsh -NoProfile -File scripts/cargo-target-sweep.ps1` trims artifacts unused for `INFANTRY_SWEEP_DAYS` days.
+Dev builds keep line tables only for workspace crates and no debug info for dependencies (a debugger session:
+`CARGO_PROFILE_DEV_DEBUG=full`); the settings, their measured effect and `scripts/rust-build-bench.ps1` are in
+[Build speed](docs/wiki/Build-speed.md).
 
 Read build output with `tail -n 20` and look at errors, not warning counts. Versions: `rust/Cargo.toml` (the workspace
 and profiles) and `app/package.json` (pnpm 11.21.0, `@tauri-apps/cli` 2). Check them before you use an API from memory.

@@ -16,6 +16,7 @@ text under a legacy heading.
 - [Android](Android.md): the Android app, pairing a phone to a daemon, building the APK.
 - [Updates](Updates.md): the update channels, the feed, the signing keys, the release pipeline.
 - [Command line](CommandLine.md): the native `infantry` command and what it hands to the Kotlin launcher.
+- [Build speed](Build-speed.md): the dev build settings, what they measured, and how to measure again.
 - [Home](Home.md): the wiki front page, the support and reporting pages.
 
 ## Build plugins
