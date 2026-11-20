@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **Attention:** we are currently refactoring our framework and rebuilding it on Rust, React and Tauri. Please be patient while we go through this process; we will be updating our wiki and license very soon.
+>
+> Our license keeps the same structure: the core code for managing plugins and abstraction is **MPL-2.0**, while the specifics, such as the entire Orchestrator, the Agents and anything else that is business-specific, will always be **Apache-2.0**.
+
 <p align="center"><img src="assets/branding/infantry-ai-emblem.png" alt="Infantry AI emblem" width="220"></p>
 
 <h1 align="center">Infantry AI</h1>
