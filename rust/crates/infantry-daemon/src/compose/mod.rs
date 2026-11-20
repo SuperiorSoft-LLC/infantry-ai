@@ -126,6 +126,21 @@ fn plugins_dir() -> Option<PathBuf> {
     std::env::current_exe().ok()?.parent().map(|p| p.join("plugins"))
 }
 
+/// PM-ROLE-1: the role catalog file of every module that declares one (`module.json` `roleCatalog`, a path inside the
+/// module folder), in tier precedence order.
+fn role_catalogs(plugins_dir: &Option<PathBuf>) -> Vec<PathBuf> {
+    host_frames::scan_modules(plugins_dir)
+        .into_iter()
+        .filter_map(|m| {
+            let rel = host_frames::s(&m.manifest, "roleCatalog");
+            if rel.is_empty() || rel.contains("..") || Path::new(rel).is_absolute() {
+                return None;
+            }
+            Some(m.dir.join(rel)).filter(|p| p.is_file())
+        })
+        .collect()
+}
+
 /// Builds every unit over `daemon` and attaches them to it. Call inside the tokio runtime.
 pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, String> {
     build_with_mode(daemon, state_dir, crate::mode::Mode::Both)
@@ -280,7 +295,19 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     }
 
     // ---- knowledge (roles, traits, skills, prompts, avatars) and the secrets vault ------------------------
-    let knowledge = Arc::new(infantry_knowledge::Knowledge::open(db.clone(), state_dir, Arc::new(adapters::KnowledgePorts { daemon: daemon.clone() })));
+    // PM-ROLE-1: role texts come from the plugins that ship a catalog (module.json `roleCatalog`); core holds none.
+    let role_bundle = {
+        let (bundle, problems) = infantry_knowledge::roles::plugin_bundle(&role_catalogs(&plugins_dir()));
+        for p in problems {
+            log_line(&format!("role catalog skipped: {p}"));
+        }
+        bundle
+    };
+    let knowledge = Arc::new(infantry_knowledge::Knowledge::open_with_roles(db.clone(), state_dir, Arc::new(adapters::KnowledgePorts { daemon: daemon.clone() }), role_bundle));
+    {
+        let roles = knowledge.roles.clone();
+        daemon.set_role_brief(Arc::new(move |id: &str| roles.role(id).filter(|r| !r.disabled).map(|r| r.persona)));
+    }
     let vault_projects = projects.clone();
     let vault = Arc::new(infantry_vault::unit::VaultUnit::open(
         state_dir,

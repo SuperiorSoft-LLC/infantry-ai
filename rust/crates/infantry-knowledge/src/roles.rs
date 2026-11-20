@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
-//! The role catalog: custom role files (`<dir>/<id>.md`) over the bundled manifest (`/roles/index.json`) over the
-//! canonical id contract, plus [`RoleService`]: save, seed (plugin roles), delete (with the "owner removed" mark).
+//! The role catalog: custom role files (`<dir>/<id>.md`) over the role bundle a plugin ships (a `roles/index.json`
+//! manifest, PM-ROLE-1) over the canonical id contract, plus [`RoleService`]: save, seed (plugin roles), delete (with
+//! the "owner removed" mark). Core holds no role text: with no plugin bundle a role is its bare canonical id.
 //!
 //! Same files and same JSON as the Kotlin Infantry_Roles daemon half, so an existing `roles/` folder keeps working.
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -18,7 +19,7 @@ mod bundle {
     include!(concat!(env!("OUT_DIR"), "/resources.rs"));
 }
 
-/// A bundled resource (`/roles/index.json`, `/avatars/index.json`, ...), as the Kotlin classpath held it.
+/// A bundled resource (`/avatars/index.json`, ...), as the Kotlin classpath held it. Role texts are never bundled.
 pub fn resource(path: &str) -> Option<&'static [u8]> {
     bundle::RESOURCES.iter().find(|(p, _)| *p == path).map(|(_, b)| *b)
 }
@@ -215,9 +216,41 @@ pub fn bundled_with(read: impl Fn(&str) -> Option<String>) -> Result<Vec<Role>, 
     Ok(out)
 }
 
-/// The roles this build bundles.
-pub fn bundled() -> Vec<Role> {
-    bundled_with(|p| resource(p).map(|b| String::from_utf8_lossy(b).into_owned())).unwrap_or_default()
+/// PM-ROLE-1: the roles of one plugin's catalog file (`manifest`, the `/roles/index.json` format); each persona file it
+/// names is read from the manifest's own folder (a bare file name: no separator, no `..`).
+pub fn bundled_from(manifest: &Path) -> Result<Vec<Role>, String> {
+    let folder = manifest.parent().map(Path::to_path_buf).unwrap_or_default();
+    let index = fs::read_to_string(manifest).map_err(|e| format!("{}: {e}", manifest.display()))?;
+    bundled_with(|p| {
+        if p == "/roles/index.json" {
+            return Some(index.clone());
+        }
+        let file = p.strip_prefix("/roles/")?;
+        if file.is_empty() || file.contains(['/', '\\']) || file.contains("..") {
+            return None;
+        }
+        fs::read_to_string(folder.join(file)).ok()
+    })
+    .map_err(|e| format!("{}: {e}", manifest.display()))
+}
+
+/// PM-ROLE-1: the merged role bundle of every plugin catalog, in order (the first plugin naming an id wins), plus one
+/// line per catalog that could not be read.
+pub fn plugin_bundle(manifests: &[PathBuf]) -> (Vec<Role>, Vec<String>) {
+    let (mut out, mut problems): (Vec<Role>, Vec<String>) = (vec![], vec![]);
+    for m in manifests {
+        match bundled_from(m) {
+            Ok(roles) => {
+                for r in roles {
+                    if !out.iter().any(|o| o.id == r.id) {
+                        out.push(r);
+                    }
+                }
+            }
+            Err(e) => problems.push(e),
+        }
+    }
+    (out, problems)
 }
 
 // ---- custom role files --------------------------------------------------------------------------------------------
@@ -360,8 +393,9 @@ pub struct RoleService {
 }
 
 impl RoleService {
+    /// A catalog over `dir` with no plugin bundle: canonical ids and the custom files only.
     pub fn new(dir: impl Into<PathBuf>) -> RoleService {
-        Self::with_bundle(dir, bundled())
+        Self::with_bundle(dir, vec![])
     }
 
     pub fn with_bundle(dir: impl Into<PathBuf>, builtin: Vec<Role>) -> RoleService {
@@ -617,7 +651,7 @@ impl RoleService {
         }
         let file = self.dir.join(format!("{id}{EXTENSION}"));
         if !file.is_file() {
-            return Err(if self.builtin.iter().any(|r| r.id == id) {
+            return Err(if ids::is_built_in(id) || self.builtin.iter().any(|r| r.id == id) {
                 format!("role '{id}' is built in and has no custom definition to delete")
             } else {
                 format!("unknown role '{id}'")
@@ -764,9 +798,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bundle_loads_and_canonical_order() {
-        let b = bundled();
-        assert!(b.iter().any(|r| r.id == "pm" && !r.persona.is_empty()));
+    fn core_bundles_no_role_text() {
+        assert!(resource("/roles/index.json").is_none(), "role texts come from a plugin, never from core");
+        assert!(RoleService::new(tempfile::tempdir().unwrap().path()).persona("pm").is_none());
+    }
+
+    #[test]
+    fn plugin_bundle_loads_and_canonical_order() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("index.json"), r##"{"roles":[{"id":"pm","name":"PM","color":"#eab308","persona":"pm.md"},{"id":"zeta","name":"Zeta","persona":"../x.md"}]}"##).unwrap();
+        fs::write(dir.path().join("pm.md"), "Run the board.\r\n").unwrap();
+        assert!(bundled_from(&dir.path().join("index.json")).unwrap_err().contains("../x.md"), "a persona outside the folder is refused");
+        fs::write(dir.path().join("index.json"), r##"{"roles":[{"id":"pm","name":"PM","color":"#eab308","persona":"pm.md"}]}"##).unwrap();
+        let other = tempfile::tempdir().unwrap();
+        fs::write(other.path().join("index.json"), r#"{"roles":[{"id":"pm","name":"Other"}]}"#).unwrap();
+        let (b, problems) = plugin_bundle(&[dir.path().join("index.json"), other.path().join("index.json"), other.path().join("missing.json")]);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert_eq!(b.len(), 1, "the first plugin naming an id wins");
+        assert!(b.iter().any(|r| r.id == "pm" && r.persona.trim() == "Run the board." && !r.persona.contains('\r')));
         let c = Catalog::new(b, vec![]);
         assert_eq!(c.all()[0].id, "architect");
         assert_eq!(c.all().iter().position(|r| r.id == "custom"), Some(16));
