@@ -21,6 +21,11 @@ user's view, "plugin" and "app" mean the same thing; the SDK and API names keep 
 
 With plugins installed, it opens like a normal app.
 
+Status: step 2 is built (INSTALLER-1). `Infantry_Installer` is the bootstrap plugin, named by the generic `plugins.bootstrap`
+setting or its manifest flag, never by core. With nothing else installed the daemon reports bootstrap mode and the app draws
+the installer's Apps screen; an install is live. Step 3 (the UI plugin) is BOOT-CHAIN-1; until then the installer installs
+the component plugins and the shell stays built in. See [Plugins](Plugins.md#the-installer-and-the-bootstrap-plugin).
+
 ## 3. Splash and boot progress
 
 Core owns the splash and the boot progress: core, then installer, then UI, then plugins N/M. Plugins report progress

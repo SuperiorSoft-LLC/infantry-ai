@@ -3,8 +3,11 @@
 //! The plugin host: loads every installed daemon half (`<plugins>/official/<Module>`, `<plugins>/core/<Module>`),
 //! answers their imports from the daemon ([`DaemonServices`]), registers their frames and hands them bus events.
 //! `plugin_admin` enables and disables them, and the modules with no daemon half (a web UI half, declarations), for good.
+//! INSTALLER-1: it also installs and uninstalls them from the sources (see `installer`), with no restart.
 
+use super::installer::{self, InstallConfig, LateUnits};
 use super::Composed;
+use crate::boot::{BootState, Bootstrap};
 use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Refusal};
 use infantry_core::bus::EventBus;
 use infantry_plugin_host::unit::PluginFrameUnit;
@@ -13,7 +16,7 @@ use infantry_plugin_wit::jsonl::{HttpRequest, HttpResponse, LogLevel};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock, Weak};
+use std::sync::{Arc, Mutex, OnceLock, RwLock, Weak};
 use std::time::Duration;
 
 /// The tiers loaded from the plugins folder (community modules need the owner's modules.json allow list: not yet).
@@ -79,18 +82,173 @@ pub struct Plugins {
     pub admin: Arc<Admin>,
 }
 
+/// What the install ops need besides the plugin host: where plugins come from and which one bootstraps, the boot state a
+/// change of bootstrap mode is reported on, and the late frame table a plugin installed after start answers through.
+pub struct InstallSeam {
+    pub config: InstallConfig,
+    pub boot: Arc<BootState>,
+    pub late: Arc<LateUnits>,
+}
+
 /// What `plugin_admin` manages: the installed daemon halves, the modules with none, and the owner's disabled set.
 pub struct Admin {
     host: Arc<PluginHost>,
     plugins_dir: PathBuf,
-    installed: BTreeMap<String, Installed>,
+    installed: RwLock<BTreeMap<String, Installed>>,
     disabled: Arc<Disabled>,
+    install: InstallSeam,
 }
 
 impl Admin {
+    fn has_daemon_half(&self, id: &str) -> bool {
+        self.installed.read().unwrap_or_else(|e| e.into_inner()).contains_key(id)
+    }
+
     /// The official and core modules with no daemon half (a web UI half, or declarations only).
     fn without_daemon(&self) -> Vec<String> {
-        super::host_frames::scan_modules(&Some(self.plugins_dir.clone())).into_iter().filter(|m| TIERS.contains(&m.tier.as_str()) && !self.installed.contains_key(&m.id)).map(|m| m.id).collect()
+        super::host_frames::scan_modules(&Some(self.plugins_dir.clone())).into_iter().filter(|m| TIERS.contains(&m.tier.as_str()) && !self.has_daemon_half(&m.id)).map(|m| m.id).collect()
+    }
+
+    /// The bootstrap plugin's state (None: this daemon has none, or it is not installed): bootstrap mode is on while it
+    /// is the only module installed, and `error` is why its daemon half is not running, while that is the case.
+    pub fn bootstrap_report(&self) -> Option<Bootstrap> {
+        let id = self.install.config.bootstrap.clone()?;
+        let installed = installer::installed_ids(&self.plugins_dir);
+        if !installed.contains(&id) {
+            return None;
+        }
+        let active = installed.iter().all(|i| *i == id);
+        let error = if active && self.has_daemon_half(&id) { self.host.statuses().get(&id).filter(|s| s.as_str() != "loaded").cloned() } else { None };
+        Some(Bootstrap { plugin: id, active, error })
+    }
+
+    /// Tells the boot state (and so every client) whether bootstrap mode is on, after an install or an uninstall.
+    fn sync_bootstrap(&self) {
+        self.install.boot.set_bootstrap(self.bootstrap_report());
+    }
+
+    /// Records a freshly placed module: its daemon half is loaded (unless the owner disabled that id) and its frames
+    /// answer from now on. On a refusal nothing stays registered; the caller removes the folder.
+    fn register(&self, id: &str, dir: &Path) -> Result<(), String> {
+        let Some((_, frames)) = daemon_half(dir) else { return Ok(()) };
+        self.installed.write().unwrap_or_else(|e| e.into_inner()).insert(id.to_string(), Installed { dir: dir.to_path_buf(), frames: frames.clone() });
+        if !frames.is_empty() {
+            self.install.late.add(id, &frames, Arc::new(PluginFrameUnit::declared(self.host.clone(), id, &frames)));
+        }
+        if self.disabled.contains(id) {
+            return Ok(());
+        }
+        self.host.load(dir).map(|_| ()).map_err(|e| {
+            self.forget(id);
+            e
+        })
+    }
+
+    /// Drops the daemon half of `id` from the running daemon (unloaded, no frames, not listed).
+    fn forget(&self, id: &str) {
+        self.host.unload(id);
+        self.install.late.remove(id);
+        self.installed.write().unwrap_or_else(|e| e.into_inner()).remove(id);
+    }
+
+    /// `available`: every module a source offers and every module installed, one row each.
+    fn available(&self) -> Vec<serde_json::Value> {
+        let offers = installer::catalog(&self.install.config.sources);
+        let installed = super::host_frames::scan_modules(&Some(self.plugins_dir.clone()));
+        let disabled = self.disabled.snapshot();
+        let statuses = self.host.statuses();
+        let bootstrap = self.install.config.bootstrap.as_deref();
+        let mut rows: BTreeMap<String, serde_json::Value> = BTreeMap::new();
+        for o in &offers {
+            rows.insert(
+                o.id.clone(),
+                serde_json::json!({
+                    "id": o.id, "displayName": o.display_name, "description": o.description, "version": o.version, "tier": o.tier,
+                    "requires": o.requires, "bootstrap": bootstrap == Some(o.id.as_str()), "daemon": o.daemon, "ui": o.ui,
+                    "source": o.source.display().to_string(), "installed": false, "enabled": false, "status": "available",
+                }),
+            );
+        }
+        for m in installed.iter().filter(|m| TIERS.contains(&m.tier.as_str())) {
+            let off = disabled.contains(&m.id);
+            let status = if off { "disabled".to_string() } else { statuses.get(&m.id).cloned().unwrap_or_else(|| "ui only".into()) };
+            let t = |k: &str| super::host_frames::s(&m.manifest, k).to_string();
+            let row = rows.entry(m.id.clone()).or_insert_with(|| {
+                serde_json::json!({
+                    "id": m.id, "displayName": t("displayName"), "description": t("description"), "version": t("version"), "tier": m.tier,
+                    "requires": m.manifest.get("requires").cloned().unwrap_or_else(|| serde_json::json!([])),
+                    "bootstrap": bootstrap == Some(m.id.as_str()), "daemon": m.manifest.get("daemon").is_some_and(|d| d.is_object()),
+                    "ui": m.manifest.get("ui").is_some_and(|d| d.is_object()), "source": null,
+                })
+            });
+            row["installed"] = true.into();
+            row["enabled"] = (!off).into();
+            row["status"] = status.into();
+        }
+        rows.into_values().collect()
+    }
+
+    /// `install <id>...`: each module and what it requires, in dependency order, copied from the first source that
+    /// offers it and loaded at once. Stops at the first failure and says what was installed before it.
+    fn install_ops(&self, want: &[String], bus: &EventBus) -> (i32, String, String) {
+        let fail = |e: String| (1, String::new(), e);
+        if want.is_empty() {
+            return fail("usage: plugin install <id>...".into());
+        }
+        let offers = installer::catalog(&self.install.config.sources);
+        let order = match installer::plan(want, &offers, &installer::installed_ids(&self.plugins_dir)) {
+            Ok(o) => o,
+            Err(e) => return fail(e),
+        };
+        if order.is_empty() {
+            return (0, "nothing to install: already installed".into(), String::new());
+        }
+        let mut done: Vec<String> = Vec::new();
+        for offer in order {
+            let step = installer::place(&self.plugins_dir, &offer).and_then(|dir| {
+                self.register(&offer.id, &dir).map_err(|e| {
+                    let _ = installer::remove(&self.plugins_dir, &dir);
+                    format!("{} not loaded: {e}", offer.id)
+                })
+            });
+            if let Err(e) = step {
+                self.sync_bootstrap();
+                let before = if done.is_empty() { String::new() } else { format!(" (installed before it: {})", done.join(", ")) };
+                return fail(format!("{e}{before}"));
+            }
+            done.push(offer.id.clone());
+            self.changed(bus, &offer.id, true);
+        }
+        self.sync_bootstrap();
+        (0, format!("installed {}", done.join(", ")), String::new())
+    }
+
+    /// `uninstall <id>`: unloads the module and deletes its folder. The bootstrap plugin stays (it is the way back in),
+    /// and so does a module another installed module requires.
+    fn uninstall_op(&self, id: &str, bus: &EventBus) -> (i32, String, String) {
+        let fail = |e: String| (1, String::new(), e);
+        if id.is_empty() {
+            return fail("usage: plugin uninstall <id>".into());
+        }
+        if self.install.config.bootstrap.as_deref() == Some(id) {
+            return fail(format!("{id} is the installer: it stays, so there is always a way to install"));
+        }
+        let mods = super::host_frames::scan_modules(&Some(self.plugins_dir.clone()));
+        let Some(module) = mods.iter().find(|m| m.id == id && TIERS.contains(&m.tier.as_str())) else {
+            return fail(format!("plugin '{id}' is not installed"));
+        };
+        let needs: Vec<&str> = mods.iter().filter(|m| m.id != id && m.manifest.get("requires").and_then(|r| r.as_array()).is_some_and(|r| r.iter().any(|x| x.as_str() == Some(id)))).map(|m| m.id.as_str()).collect();
+        if !needs.is_empty() {
+            return fail(format!("{id} is required by {}; uninstall those first", needs.join(", ")));
+        }
+        self.forget(id);
+        if let Err(e) = installer::remove(&self.plugins_dir, &module.dir) {
+            return fail(e);
+        }
+        let _ = self.disabled.set(id, false);
+        self.changed(bus, id, false);
+        self.sync_bootstrap();
+        (0, format!("uninstalled {id}"), String::new())
     }
 
     /// After an enable or disable: the plugins hear `modules.changed`, every client gets `plugins_changed`.
@@ -109,9 +267,9 @@ impl Admin {
             "status" | "list" => {
                 let statuses = self.host.statuses();
                 let disabled = self.disabled.snapshot();
-                let mut rows: Vec<serde_json::Value> = self
-                    .installed
-                    .keys()
+                let with_daemon: Vec<String> = self.installed.read().unwrap_or_else(|e| e.into_inner()).keys().cloned().collect();
+                let mut rows: Vec<serde_json::Value> = with_daemon
+                    .iter()
                     .filter(|m| id.is_empty() || m.as_str() == id)
                     .map(|m| {
                         let loaded = self.host.get(m);
@@ -136,7 +294,8 @@ impl Admin {
             }
             "enable" | "disable" => {
                 let on = op == "enable";
-                match self.installed.get(id) {
+                let found = self.installed.read().unwrap_or_else(|e| e.into_inner()).get(id).cloned();
+                match found {
                     Some(m) if on => {
                         if self.host.get(id).is_none() {
                             if let Err(e) = self.host.load(&m.dir) {
@@ -157,15 +316,19 @@ impl Admin {
                 self.changed(bus, id, on);
                 (0, format!("{id} {op}d"), String::new())
             }
-            "" => fail("usage: plugin <status|enable|disable> [id]".into()),
-            other => fail(format!("plugin {other}: not supported by this daemon yet (it serves status, enable, disable)")),
+            "available" => (0, serde_json::to_string_pretty(&self.available()).unwrap_or_default(), String::new()),
+            "install" => self.install_ops(&args[1..].iter().map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect::<Vec<_>>(), bus),
+            "uninstall" => self.uninstall_op(id, bus),
+            "" => fail("usage: plugin <status|available|install|uninstall|enable|disable> [id]".into()),
+            other => fail(format!("plugin {other}: not supported by this daemon yet (it serves status, available, install, uninstall, enable, disable)")),
         }
     }
 }
 
 /// `plugin_admin` (the Kotlin PluginCli over a frame, owner only): `enable` / `disable` a module on this host (its daemon
-/// half is loaded or unloaded; one with none is only marked), kept across restarts; `status` (each installed half: load status, the guard's fault, cooling). Other operations
-/// (install, update, remove, rollback, grants) answer exit code 1: this daemon serves only bundled modules.
+/// half is loaded or unloaded; one with none is only marked), kept across restarts; `status` (each installed half: load status, the guard's fault, cooling).
+/// INSTALLER-1: `available` (what the sources offer and what is installed), `install <id>...` and `uninstall <id>`, live.
+/// Other operations (update, rollback, grants) answer exit code 1.
 pub struct PluginAdmin {
     admin: Arc<Admin>,
 }
@@ -318,8 +481,14 @@ fn daemon_half(dir: &Path) -> Option<(String, Vec<String>)> {
 }
 
 /// Starts the host and loads every installed daemon half; None when there is no plugins folder or the host failed.
-pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: tokio::runtime::Handle, disabled: Arc<Disabled>) -> Option<Plugins> {
+pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: tokio::runtime::Handle, disabled: Arc<Disabled>, install: InstallSeam) -> Option<Plugins> {
     let dir = dir.filter(|d| d.is_dir())?;
+    // The bootstrap plugin is the way in while nothing else is installed: the owner's disabled mark does not apply then.
+    if let Some(id) = install.config.bootstrap.as_deref().filter(|id| disabled.contains(id) && installer::bootstrap_active(&dir, id)) {
+        if let Err(e) = disabled.set(id, false) {
+            eprintln!("[infantry] bootstrap plugin {id} stays disabled: {e}");
+        }
+    }
     let db = match rusqlite::Connection::open(state_dir.join("infantry.db")) {
         Ok(c) => {
             let _ = c.busy_timeout(Duration::from_secs(5));
@@ -365,20 +534,21 @@ pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: toki
             }
         }
     }
-    let admin = Arc::new(Admin { host: host.clone(), plugins_dir: dir, installed, disabled });
+    let admin = Arc::new(Admin { host: host.clone(), plugins_dir: dir, installed: RwLock::new(installed), disabled, install });
+    admin.sync_bootstrap();
     Some(Plugins { host, services, admin })
 }
 
 /// One frame unit per installed daemon half that declares frames (loaded or not: one enabled later answers at once),
 /// plus the owner's `plugin_admin`.
 pub fn frame_units(p: &Plugins) -> Vec<Arc<dyn FrameUnit>> {
-    let mut units: Vec<Arc<dyn FrameUnit>> = p
-        .admin
-        .installed
+    let installed = p.admin.installed.read().unwrap_or_else(|e| e.into_inner());
+    let mut units: Vec<Arc<dyn FrameUnit>> = installed
         .iter()
         .filter(|(_, m)| !m.frames.is_empty())
         .map(|(id, m)| Arc::new(PluginFrameUnit::declared(p.host.clone(), id, &m.frames)) as Arc<dyn FrameUnit>)
         .collect();
+    drop(installed);
     units.push(Arc::new(PluginAdmin { admin: p.admin.clone() }));
     units
 }

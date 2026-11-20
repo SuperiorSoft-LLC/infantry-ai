@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-installer-daemon"
+version = "1.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Infantry_Installer daemon half (WASM component)"
+publish = false
+
+
+[lib]
+name = "infantry_installer_daemon"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+infantry-plugin-sdk = { path = "../../../../crates/infantry-plugin-sdk" }
+serde_json = "1"

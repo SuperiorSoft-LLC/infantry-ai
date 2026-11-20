@@ -18,6 +18,7 @@ mod agent_tools;
 mod harness_frames;
 mod harness_install;
 pub mod host_frames;
+pub mod installer;
 pub mod project_files;
 pub mod timeline;
 pub mod plugins;
@@ -33,7 +34,7 @@ use crate::sessions::{Daemon, FrameUnits};
 use crate::wire;
 use infantry_board::{Board as TicketBoard, BoardUnit, Dispatcher, LocalOrchestrator};
 use infantry_core::db::Db;
-use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Registry};
+use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Refusal, Registry};
 use infantry_core::bus::EventBus;
 use infantry_mail::mail::mailbox::Mailbox;
 use infantry_mail::mail::router::{IncomingVerdict, MailRouter, RouterConfig};
@@ -102,6 +103,8 @@ pub struct Composed {
     pub plugins: Option<Arc<infantry_plugin_host::PluginHost>>,
     /// WEBUI-1: the plugins' web UI halves (`GET /ui-plugins/...`) and the enable rule they are served by.
     pub ui_bundles: Arc<ui_bundles::UiBundles>,
+    /// INSTALLER-1: the frames of plugins installed after start, asked after the registry.
+    pub late: Arc<installer::LateUnits>,
     /// The open owner prompts (a new client is shown them).
     pub prompts: Arc<PendingPrompts>,
     next_conn: AtomicU64,
@@ -502,15 +505,29 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
 
     // ---- plugins ------------------------------------------------------------------------------------------
     let disabled = Arc::new(plugins::Disabled::load(state_dir));
-    let plugin_set = plugins::start(state_dir, plugins_dir(), bus.clone(), handle.clone(), disabled.clone());
+    // BOOT-SPLASH-1: the boot steps. INSTALLER-1: the install seam names where plugins come from and which plugin
+    // bootstraps (all data: the environment, the `plugins.*` settings, a manifest flag; core names no plugin). A daemon
+    // with nothing installed gets that plugin from the bundled folder before the plugins load.
+    let boot = crate::boot::BootState::new(Some(bus.clone()));
+    let late = Arc::new(installer::LateUnits::default());
+    let install_config = {
+        let settings = settings::SettingsUnit { db: db.clone() };
+        let config = installer::config(&plugins_dir(), &|k| settings.app(k));
+        if let Some(id) = installer::ensure_bootstrap(&plugins_dir(), &config) {
+            log_line(&format!("nothing is installed: {id} installed as the bootstrap plugin"));
+        }
+        config
+    };
+    let plugin_set = plugins::start(state_dir, plugins_dir(), bus.clone(), handle.clone(), disabled.clone(), plugins::InstallSeam { config: install_config, boot: boot.clone(), late: late.clone() });
     let plugin_host = plugin_set.as_ref().map(|p| p.host.clone());
     let bundles = Arc::new(ui_bundles::UiBundles { plugins_dir: plugins_dir(), plugins: plugin_host.clone(), disabled });
     tools.set_plugins(plugin_host.clone());
-    // BOOT-SPLASH-1: the boot steps. The installer and UI-plugin steps have no owner yet, so they finish at once.
-    let boot = crate::boot::BootState::new(Some(bus.clone()));
-    for step in ["core", "installer", "ui"] {
-        boot.finish(step);
-    }
+    // The core steps are done; the installer step is done once the bootstrap plugin is (plugins::start loaded it, or
+    // recorded in `bootstrap.error` why it could not start), or at once when this daemon has none. The UI-plugin step
+    // has no owner until BOOT-CHAIN-1.
+    boot.finish("core");
+    boot.finish("installer");
+    boot.finish("ui");
     {
         let statuses = plugin_host.as_ref().map(|h| h.statuses()).unwrap_or_default();
         let loaded = statuses.values().filter(|s| s.as_str() == "loaded").count();
@@ -611,6 +628,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         knowledge: knowledge.clone(),
         plugins: plugin_host.clone(),
         ui_bundles: bundles,
+        late,
         prompts: prompts.clone(),
         next_conn: AtomicU64::new(1),
     });
@@ -721,10 +739,15 @@ fn health_unit(
 }
 
 impl Composed {
+    /// The unit that owns `env`'s frame: the registry's, else the one of a plugin installed after start.
+    fn serve(&self, env: &Envelope, ctx: &FrameCtx) -> Option<Result<Vec<Envelope>, Refusal>> {
+        self.registry.dispatch(env, ctx).or_else(|| self.late.owner(&env.r#type).map(|u| u.handle(env, ctx)))
+    }
+
     /// Dispatches `env` through the registry as one client (`owner`); the replies encoded, a refusal as an `error`.
     pub fn dispatch(&self, env: &Envelope, conn_id: u64, owner: bool) -> Option<Vec<String>> {
         let ctx = FrameCtx { conn_id, owner, bus: self.bus.clone() };
-        let r = self.registry.dispatch(env, &ctx)?;
+        let r = self.serve(env, &ctx)?;
         Some(match r {
             Ok(out) => out.iter().map(|e| serde_json::to_string(e).unwrap_or_default()).collect(),
             Err(refusal) => {
@@ -739,7 +762,7 @@ impl Composed {
     /// The same, as envelopes (for in-process callers: plugins, tools).
     pub fn request(&self, env: &Envelope, owner: bool) -> Result<Vec<Envelope>, String> {
         let ctx = FrameCtx { conn_id: 0, owner, bus: self.bus.clone() };
-        match self.registry.dispatch(env, &ctx) {
+        match self.serve(env, &ctx) {
             Some(r) => r.map_err(|e| e.0),
             None => Err(format!("{} refused: no unit serves this frame", env.r#type)),
         }
@@ -748,7 +771,7 @@ impl Composed {
 
 impl FrameUnits for Composed {
     fn owns(&self, ty: &str) -> bool {
-        self.registry.owner(ty).is_some()
+        self.registry.owner(ty).is_some() || self.late.owner(ty).is_some()
     }
 
     fn handle(&self, env: Envelope, owner: bool) -> Vec<String> {

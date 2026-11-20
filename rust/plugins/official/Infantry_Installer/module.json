@@ -1,0 +1,42 @@
+{
+  "name": "Infantry_Installer",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "displayName": "Installer",
+  "description": "Installs, enables and removes plugins from the bundled folder and the configured sources, and is the plugin the daemon starts with when nothing else is installed.",
+  "tier": "official",
+  "bootstrap": true,
+  "sequence": [],
+  "daemon": {
+    "component": "daemon.component",
+    "apiAtLeast": "0.1.0",
+    "needs": [
+      "frames"
+    ],
+    "tools": [
+      {
+        "name": "infantry_installer_available",
+        "action": "installer.read",
+        "kind": "read",
+        "description": "Every plugin the sources offer and every plugin installed: id, name, version, what it requires, whether it is installed and enabled. Installs nothing: the owner installs from the Apps tab."
+      }
+    ]
+  },
+  "ui": {
+    "apiVersion": 1,
+    "entry": "ui/dist/index.js",
+    "styles": [
+      "ui/dist/index.css"
+    ],
+    "contributes": [
+      {
+        "slot": "tab",
+        "id": "infantry.installer",
+        "label": "Apps",
+        "order": 2200
+      }
+    ]
+  }
+}

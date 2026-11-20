@@ -25,6 +25,7 @@ export * from "./stores/session-actions";
 export * from "./stores/stats";
 export * from "./stores/plugins";
 export * from "./stores/health";
+export * from "./stores/bootstrap";
 export * from "./stores/ui-plugins";
 export * from "./stores/query";
 export * from "./stores/panels";

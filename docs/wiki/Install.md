@@ -61,6 +61,11 @@ infantry-daemon --port 18990
 The official plugins are loaded from a `plugins/` folder beside the daemon (or `INFANTRY_PLUGINS_DIR`). The installer ships
 them there. See [Plugins](Plugins.md).
 
+A build can instead ship them in a `plugins-bundled/` folder (or the folder `INFANTRY_BUNDLED_PLUGINS_DIR` names) and leave
+`plugins/` empty. The daemon then copies the bootstrap plugin (`Infantry_Installer`) into `plugins/` and opens on its Apps
+screen; the owner installs what they want from there, live, and the app opens as usual after the first install. See
+[the installer](Plugins.md#the-installer-and-the-bootstrap-plugin).
+
 ## Other platforms
 
 The release workflow (`.github/workflows/rust-release.yml`) also builds, on a best-effort basis, a Linux AppImage and a

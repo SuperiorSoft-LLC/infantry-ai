@@ -53,7 +53,7 @@ The Kotlin/Gradle version is kept on the `legacy-java` branch. Every section bel
 | `rust/crates/infantry-migrate` | Snapshots a Kotlin state dir into a Rust one. |
 | `rust/crates/infantry-guards` | Test-only layer and rule guards. |
 | `rust/crates/conformance` | Black-box v1 WebSocket conformance suite, runnable against any daemon URL. |
-| `rust/plugins/official/` | The official plugins (13 daemon halves; see [Plugins](docs/wiki/Plugins.md)). |
+| `rust/plugins/official/` | The official plugins (14 daemon halves; see [Plugins](docs/wiki/Plugins.md)). |
 | `rust/plugins/stage.sh` | Builds the official daemon plugins as WASM components and lays them out for the daemon. |
 | `app/` | The pnpm workspace. `app/packages/ui` and `app/packages/client` are the React app; `app/shell` is the Vite shell; `app/src-tauri` is the Tauri 2 host (crate `infantry-tauri`) with its generated Android project in `gen/android`. |
 | `scripts/` | Owner build and proof scripts: `rust-owner-build.ps1`, `rust-build-env.ps1`, `rust-update-e2e.ps1`, and the release tools. |
