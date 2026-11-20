@@ -18,6 +18,7 @@ column still applies there, and they are kept as history.
 |---|---|---|
 | [docs/rust-port/PLAN.md](rust-port/PLAN.md) | design record (2026-11-18) | The plan to rebuild Infantry AI as a Rust daemon and a Tauri 2 / React app. Replaced by [Architecture](wiki/Architecture.md) for the current shape. |
 | [docs/rust-port/LAYERS.md](rust-port/LAYERS.md) | current reference | The crate layer table. The guard `infantry-guards` enforces it. Replaced by [Architecture](wiki/Architecture.md), section 2. |
+| [docs/rust-port/DECOUPLE-PLAN.md](rust-port/DECOUPLE-PLAN.md) | design record (2026-11-20) | DECOUPLE-1 (#45): what leaves core, the RED tests, the licence line and the LIC-1 to LIC-10 moves, the UI map and the boot chain (EPIC #41). |
 | [docs/rust-port/MIGRATION.md](rust-port/MIGRATION.md) | current reference | Moving a Kotlin state dir to the Rust app with `infantry-migrate`. |
 | [docs/rust-port/MCP-BRIDGE.md](rust-port/MCP-BRIDGE.md) | current reference | The native `infantry mcp serve`, a drop-in for the Kotlin MCP stdio bridge. |
 | [docs/rust-port/BUILD-SPEED.md](rust-port/BUILD-SPEED.md) | current reference | The `owner-test` build profile and why it is quicker than the release profile. |

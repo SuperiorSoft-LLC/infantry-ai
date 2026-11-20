@@ -41,6 +41,7 @@ Read AGENTS.md first. Facts in these docs come from the code; where an older des
 - [CONTRIBUTING](CONTRIBUTING.md): building, branches, testing.
 - [Licensing](docs/wiki/licensing.md): what is MPL-2.0 and what is Apache-2.0, per crate and module.
 - [Rust port records](docs/rust-port/PLAN.md): the plan, the layer table, migration, parity and the move-over bar.
+- [Decouple plan](docs/rust-port/DECOUPLE-PLAN.md): what leaves core, the licence line, and the moves that make the orchestrator removable (EPIC #41).
 
 ## Optional
 

@@ -13,6 +13,8 @@ use crate::layers::{classify, Layer, ALLOWLIST, HARNESS_MODULE_NAMES, PLUGIN_DEP
 pub struct Crate {
     pub name: String,
     pub manifest_path: String,
+    /// The `license` of its Cargo.toml (an SPDX id; empty when it has none).
+    pub license: String,
     /// Workspace crates it depends on (normal and build dependencies; dev-dependencies are
     /// test-only and not checked).
     pub deps: Vec<String>,
@@ -47,6 +49,7 @@ pub fn workspace_crates(meta: &Value) -> Result<Vec<Crate>, String> {
     for p in ws {
         let name = p["name"].as_str().ok_or("package without name")?.to_string();
         let manifest_path = p["manifest_path"].as_str().unwrap_or_default().to_string();
+        let license = p["license"].as_str().unwrap_or_default().to_string();
         let mut deps: Vec<String> = p["dependencies"]
             .as_array()
             .map(|a| a.as_slice())
@@ -59,7 +62,7 @@ pub fn workspace_crates(meta: &Value) -> Result<Vec<Crate>, String> {
             .collect();
         deps.sort();
         deps.dedup();
-        crates.push(Crate { name, manifest_path, deps });
+        crates.push(Crate { name, manifest_path, license, deps });
     }
     Ok(crates)
 }
@@ -142,6 +145,17 @@ pub fn check_placement(crates: &[Crate]) -> Vec<String> {
 
 pub fn crate_dir(c: &Crate) -> PathBuf {
     Path::new(&c.manifest_path).parent().map(Path::to_path_buf).unwrap_or_default()
+}
+
+/// `file` relative to `root`, with `/`. Tolerates the `\\?\` prefix that `canonicalize` adds on Windows while cargo
+/// metadata paths have none; a file outside `root` comes back whole.
+pub fn rel_path(root: &Path, file: &Path) -> String {
+    fn norm(p: &Path) -> String {
+        let s = p.to_string_lossy().replace('\\', "/");
+        s.strip_prefix("//?/").map(str::to_string).unwrap_or(s)
+    }
+    let (root, file) = (norm(root), norm(file));
+    file.strip_prefix(&format!("{}/", root.trim_end_matches('/'))).map(str::to_string).unwrap_or(file)
 }
 
 #[cfg(test)]
