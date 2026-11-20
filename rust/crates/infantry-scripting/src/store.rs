@@ -150,16 +150,29 @@ pub struct ScriptStore {
     extensions: Arc<dyn Fn() -> Vec<String> + Send + Sync>,
     pub global: Option<ScriptDir>,
     pub plugins: Option<Arc<dyn PluginScripts>>,
+    /// When set, project and global scripts live in the database (title, description, versions, stats) and the
+    /// folders above are only read by the one-time import.
+    pub library: Option<Arc<crate::library::ScriptLibrary>>,
 }
 
 impl ScriptStore {
     pub fn new(project_dirs: ProjectDirs, extensions: Arc<dyn Fn() -> Vec<String> + Send + Sync>) -> Self {
-        ScriptStore { project_dirs, extensions, global: None, plugins: None }
+        ScriptStore { project_dirs, extensions, global: None, plugins: None, library: None }
     }
 
     pub fn with_global(mut self, dir: impl Into<PathBuf>) -> Self {
         self.global = Some(ScriptDir::new(dir, GLOBAL));
         self
+    }
+
+    pub fn with_library(mut self, l: Arc<crate::library::ScriptLibrary>) -> Self {
+        self.library = Some(l);
+        self
+    }
+
+    /// True when the app-wide Script Arsenal can be written (a folder, or the database library).
+    pub fn has_global(&self) -> bool {
+        self.global.is_some() || self.library.is_some()
     }
 
     pub fn with_plugins(mut self, p: Arc<dyn PluginScripts>) -> Self {
@@ -179,6 +192,18 @@ impl ScriptStore {
     /// Project copy, then global, then a shipped one. `Err` = bad name or a disabled plugin's script.
     pub fn read(&self, project: &str, name: &str) -> Result<Option<Script>, String> {
         check_name(name)?;
+        if let Some(l) = &self.library {
+            if let Some(m) = l.resolve(project, name)? {
+                if !m.enabled {
+                    return Err(format!("script '{name}' is disabled (enable it in the Scripts view)"));
+                }
+                return Ok(Some(Script { name: m.name, extension: m.ext, source: m.body, scope: m.scope }));
+            }
+            return match &self.plugins {
+                Some(p) => p.find(name),
+                None => Ok(None),
+            };
+        }
         let exts = self.extensions();
         if let Some(s) = self.project_dir(project).and_then(|d| d.read(name, &exts)) {
             return Ok(Some(s));
@@ -193,10 +218,22 @@ impl ScriptStore {
     }
 
     pub fn has_project_copy(&self, project: &str, name: &str) -> bool {
+        if let Some(l) = &self.library {
+            return l.find("project", project, name).ok().flatten().is_some();
+        }
         self.project_dir(project).is_some_and(|d| d.has(name, &self.extensions()))
     }
 
     pub fn names(&self, project: &str) -> Vec<String> {
+        if let Some(l) = &self.library {
+            let mut all: Vec<String> = l.list(Some(project)).unwrap_or_default().into_iter().map(|s| s.name).collect();
+            if let Some(p) = &self.plugins {
+                all.extend(p.names());
+            }
+            all.sort();
+            all.dedup();
+            return all;
+        }
         let exts = self.extensions();
         let mut all: Vec<String> = self.project_dir(project).map(|d| d.entries(&exts)).unwrap_or_default().into_iter().map(|e| e.name).collect();
         if let Some(g) = &self.global {
@@ -314,4 +351,53 @@ pub fn seed(global: &ScriptDir, state_dir: &Path, bundled: &[BundledScript], ext
     let sorted: std::collections::BTreeMap<_, _> = seeded.into_iter().collect();
     std::fs::write(state_file, serde_json::to_string(&sorted).unwrap_or_default())?;
     Ok(written)
+}
+
+/// Seeds the bundled scripts into the database library's global scope: a missing one is added (title from its name,
+/// description from its header line), an existing one is refreshed only while nobody edited it (the hash last seeded,
+/// kept in `ms_meta`, still equals the stored body). Returns the names written.
+pub fn seed_library(lib: &crate::library::ScriptLibrary, bundled: &[BundledScript], log: &dyn Fn(&str)) -> Vec<String> {
+    use crate::library::{description_from_header, title_from_name, SaveInput};
+    let mut written = Vec::new();
+    for b in bundled {
+        let key = format!("seed:{}", b.name);
+        let hash = sha256(&b.source);
+        let existing = lib.find(GLOBAL, "", &b.name).ok().flatten();
+        let header = description_from_header(&b.source);
+        let description = header.strip_prefix(&format!("{}:", b.name)).map(|d| d.trim().to_string()).filter(|d| !d.is_empty()).unwrap_or(header);
+        let input = |tags: Option<Vec<String>>, title: String| SaveInput {
+            scope: GLOBAL.into(),
+            project_id: String::new(),
+            name: b.name.clone(),
+            ext: b.ext.clone(),
+            title,
+            description: if description.is_empty() { format!("Bundled script {}", b.name) } else { description.clone() },
+            body: b.source.clone(),
+            tags,
+            author: SEEDED_BY.into(),
+        };
+        match existing {
+            None => match lib.save(input(Some(vec!["bundled".into()]), title_from_name(&b.name))) {
+                Ok(_) => {
+                    lib.set_meta_value(&key, &hash);
+                    written.push(b.name.clone());
+                }
+                Err(e) => log(&format!("bundled script {} not seeded: {e}", b.name)),
+            },
+            Some(cur) => {
+                let cur_hash = sha256(&cur.body);
+                if cur_hash == hash {
+                    lib.set_meta_value(&key, &hash);
+                } else if lib.meta(&key).as_deref() == Some(cur_hash.as_str()) {
+                    if lib.save(input(None, cur.title.clone())).is_ok() {
+                        lib.set_meta_value(&key, &hash);
+                        written.push(b.name.clone());
+                    }
+                } else {
+                    log(&format!("global script {} was edited; the bundled update is not applied", b.name));
+                }
+            }
+        }
+    }
+    written
 }

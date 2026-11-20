@@ -1566,6 +1566,7 @@ dependencies = [
  "infantry-proc",
  "mlua",
  "regex",
+ "rusqlite",
  "serde_json",
  "sha2",
  "tempfile",

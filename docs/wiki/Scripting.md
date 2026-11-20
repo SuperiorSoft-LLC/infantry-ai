@@ -15,6 +15,34 @@ Scripting is the `infantry-scripting` crate (no model, no tokens).
 
 The text below describes the Kotlin app (LuaJ). The Rust engine is built to run those scripts unchanged.
 
+## The managed script library (Rust)
+
+Scripts and hooks live in the daemon database (tables `ms_*`, created by `infantry-scripting`'s `ScriptLibrary`), not in
+loose files. Each script has an id, a **title**, a **description**, a body, tags, an author, created/updated times, an
+enabled flag, a scope (`project`, `global`, or `plugin` = shipped, read-only) and a version history: every save keeps the
+previous body, and a restore saves an old body as a new version.
+
+* **Saving needs a title and a description.** `infantry_script_save` (and `infantry script save <name> --title .. --description ..
+  [--tags a,b] [--scope global]`) refuses without both. Read `infantry_script_list` first (it returns title, description, tags,
+  runs and hooks; `query` and `sort` narrow it) and reuse a script before writing a duplicate.
+* **Stats per script:** runs, failures, average duration, last run and last error, kept in `ms_stats`; `infantry_script_stats`
+  appends them (with the hooks that use each script) to its answer. Run records persist in `ms_runs`.
+* **Hooks** are rows in `ms_hooks` and hold the script **id**; the name shown follows the script. `infantry_script_hook` is
+  unchanged for agents.
+* **Scripts view** (app, "Scripts" tab): cards with title, description, tags, status, runs, last run and the hooks that use
+  each script; search, filter (failing, unused, used by hooks, duplicates to review, disabled) and sort (name, most used,
+  recently run, most failing, unused first). The editor has the source, a Run box with args and output (and Dry run), an
+  enable switch, the script's hooks (add/enable/remove) and the version list with Restore. Frames: `scripts_list`,
+  `scripts_get`, `scripts_save`, `scripts_delete`, `scripts_enable`, `scripts_restore`, `scripts_run`, `scripts_hook`,
+  `scripts_files` (answers `scripts`, `scripts_item`, `scripts_result`; `scripts_changed` is pushed to every client).
+* **Migration (once, at daemon start):** the global folder, each project's `.infantry/scripts` (and `.agenthq/scripts`
+  leftovers) and every `hooks.json` / `global-hooks.json` are imported. Title comes from the file name, description from
+  the `.meta.json` or the leading `--` comment; `.bak` files and sidecars are skipped. Likely versioned copies (`x-4`,
+  `x-merge-5` while `x` exists) and identical bodies get a **flag** shown on the card, for the owner to merge or delete.
+  The files stay on disk untouched.
+* **Files for sharing and git:** `infantry_script_files` (`infantry script files export|import [--scope global] [--dir ..]`)
+  writes `<name>.lua` + `.meta.json` (title, description, tags) and reads them back; default folder `.infantry/scripts`.
+
 ## Legacy (Kotlin) reference
 
 

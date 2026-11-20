@@ -32,6 +32,7 @@ import {
   Star,
   User,
   UserCircle,
+  ScrollText,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -46,6 +47,7 @@ import { StatsTab } from "@/components/tabs/stats-tab";
 import { RolesTab } from "@/components/roles/roles-tab";
 import { NotesTab } from "@/components/knowledge/notes-tab";
 import { SkillsTab } from "@/components/library/skills-tab";
+import { ScriptsTab } from "@/components/scripts/scripts-tab";
 import { PromptsTab } from "@/components/library/prompts-tab";
 import { MailTab } from "@/components/mail/mail-tab";
 import { ChangesPanel, GitTab } from "@/components/git/git-tab";
@@ -90,6 +92,7 @@ const CENTRE: Def[] = [
   { id: "notes", declared: "infantry.notes", label: "Notes", icon: FileText, render: () => <NotesTab /> },
   { id: "skills", builtin: true, label: "Skills", icon: Sparkles, render: () => <SkillsTab /> },
   { id: "prompts", builtin: true, label: "Prompts", icon: MessageSquare, render: () => <PromptsTab /> },
+  { id: "scripts", builtin: true, label: "Scripts", icon: ScrollText, render: () => <ScriptsTab /> },
   { id: "run", declared: "infantry.run", label: "Run", icon: Play, render: () => <RunTab /> },
   { id: "git", declared: "infantry.git", label: "Git", icon: GitBranch, render: () => <GitTab /> },
   { id: "processes", builtin: true, label: "Processes", icon: Cpu, render: () => <ProcessesTab /> },
