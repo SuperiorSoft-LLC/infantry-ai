@@ -5,7 +5,8 @@
       "@/*": ["./src/*"],
       "@infantry/client": ["../packages/client/src/index.ts"],
       "@infantry/ui": ["../packages/ui/src/index.ts"],
-      "@infantry/ui-plugin-api/contract": ["../packages/ui-plugin-api/src/contract.ts"]
+      "@infantry/ui-plugin-api/contract": ["../packages/ui-plugin-api/src/contract.ts"],
+      "@infantry/ui-plugin-api/layout": ["../packages/ui-plugin-api/src/layout.ts"]
     }
   },
   "include": ["src"],
