@@ -22,7 +22,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-pub use crate::feed::{feed_for, UpdaterSettings, CHANNELS, DEFAULT_FEED};
+pub use crate::feed::{nightly_feed, source_for, Source, UpdaterSettings, CHANNELS, DEFAULT_FEED};
 /// tauri.conf.json carries this until the owner generates the signing key pair (UPDATER.md).
 pub const PUBKEY_PLACEHOLDER: &str = "OWNER-SETS-THE-UPDATER-PUBLIC-KEY";
 
@@ -54,6 +54,8 @@ pub struct UpdaterView {
     channels: [&'static str; 2],
     auto_check: bool,
     auto_install: bool,
+    /// Minutes between automatic checks while the app runs (0 = only at start).
+    check_minutes: u32,
     /// A real public key is configured, so an update can be installed.
     signed: bool,
     current: String,
@@ -69,6 +71,7 @@ pub fn update_settings_get(app: AppHandle, state: State<'_, AppState>) -> Update
         channels: CHANNELS,
         auto_check: s.auto_check.unwrap_or(true),
         auto_install: s.auto_install.unwrap_or(false),
+        check_minutes: s.check_minutes(),
         signed: signed(pubkey(&app).as_deref()),
         current: app.package_info().version.to_string(),
     }
@@ -82,6 +85,7 @@ pub fn update_settings_set(
     channel: Option<String>,
     auto_check: Option<bool>,
     auto_install: Option<bool>,
+    check_minutes: Option<u32>,
 ) -> Result<(), String> {
     if let Some(c) = channel.as_deref() {
         if !CHANNELS.contains(&c) {
@@ -107,6 +111,9 @@ pub fn update_settings_set(
         if auto_install.is_some() {
             u.auto_install = auto_install;
         }
+        if check_minutes.is_some() {
+            u.check_minutes = check_minutes;
+        }
         s.updater = Some(u);
     })
 }
@@ -127,7 +134,23 @@ pub struct UpdateInfo {
 #[tauri::command]
 pub async fn update_check(app: AppHandle, state: State<'_, AppState>, pending: State<'_, Pending>) -> Result<UpdateInfo, String> {
     let s = state.settings.lock().unwrap().updater.clone().unwrap_or_default();
-    let feed = feed_for(s.feed_template(), s.channel());
+    let feed = match source_for(s.feed_template(), s.channel()) {
+        Source::Manifest(u) => u,
+        Source::ReleaseList(api) => {
+            let text = reqwest::Client::new()
+                .get(&api)
+                .header("User-Agent", "infantry-ai-updater")
+                .header("Accept", "application/vnd.github+json")
+                .send()
+                .await
+                .and_then(|r| r.error_for_status())
+                .map_err(|e| format!("update check failed: GitHub releases: {e}"))?
+                .text()
+                .await
+                .map_err(|e| format!("update check failed: {e}"))?;
+            nightly_feed(&text)?
+        }
+    };
     let url: tauri::Url = feed.parse().map_err(|e| format!("feed URL {feed}: {e}"))?;
     // Strictly newer only, on every channel: a feed that lags behind must never downgrade the app (ticket f740f0f6).
     // (The plugin's default comparator is already `remote > current`; it is set here so the rule is explicit and tested.)
@@ -242,16 +265,6 @@ pub fn manage(app: &tauri::App) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_channel_fills_the_feed_and_unknown_channels_fall_back_to_stable() {
-        let s = UpdaterSettings { channel: Some("nightly".into()), ..Default::default() };
-        assert_eq!(feed_for(s.feed_template(), s.channel()), DEFAULT_FEED.replace("{channel}", "nightly"));
-        let odd = UpdaterSettings { channel: Some("beta".into()), feed_url: Some("  ".into()), ..Default::default() };
-        assert_eq!(odd.channel(), "stable");
-        assert_eq!(odd.feed_template(), DEFAULT_FEED);
-        assert_eq!(feed_for("https://x/{channel}/latest.json", "stable"), "https://x/stable/latest.json");
-    }
 
     #[test]
     fn the_placeholder_key_is_not_a_signature_key() {

@@ -6,7 +6,7 @@
 //! has (`update_settings_get`, `update_settings_set`, `update_check`, `update_install`) plus `update_progress`, which it
 //! polls while a download runs, so Settings > About is one component for both.
 
-use crate::feed::{android_offer, feed_allowed, feed_for, Offer, UpdaterSettings, CHANNELS, DEFAULT_FEED};
+use crate::feed::{android_offer, feed_allowed, nightly_feed, source_for, Offer, Source, UpdaterSettings, CHANNELS, DEFAULT_FEED};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -71,6 +71,7 @@ pub struct UpdaterView {
     channels: [&'static str; 2],
     auto_check: bool,
     auto_install: bool,
+    check_minutes: u32,
     /// Android verifies the APK's signing key itself, and the download is checked against the feed's sha256.
     signed: bool,
     current: String,
@@ -86,6 +87,7 @@ pub fn update_settings_get(app: AppHandle) -> UpdaterView {
         channels: CHANNELS,
         auto_check: s.auto_check.unwrap_or(true),
         auto_install: false,
+        check_minutes: s.check_minutes(),
         signed: true,
         current: app.package_info().version.to_string(),
     }
@@ -98,6 +100,7 @@ pub fn update_settings_set(
     channel: Option<String>,
     auto_check: Option<bool>,
     _auto_install: Option<bool>,
+    check_minutes: Option<u32>,
 ) -> Result<(), String> {
     if let Some(c) = channel.as_deref() {
         if !CHANNELS.contains(&c) {
@@ -119,6 +122,9 @@ pub fn update_settings_set(
     if auto_check.is_some() {
         u.auto_check = auto_check;
     }
+    if check_minutes.is_some() {
+        u.check_minutes = check_minutes;
+    }
     let text = serde_json::to_string_pretty(&u).map_err(|e| e.to_string())?;
     std::fs::write(settings_path(&app)?, text).map_err(|e| e.to_string())
 }
@@ -138,12 +144,18 @@ pub struct UpdateInfo {
 #[tauri::command]
 pub async fn update_check(app: AppHandle, updater: State<'_, Updater>, pending: State<'_, Pending>) -> Result<UpdateInfo, String> {
     let s = load(&app);
-    let feed = feed_for(s.feed_template(), s.channel());
+    let current = app.package_info().version.to_string();
+    let abi = updater.0.run_mobile_plugin_async::<Abi>("abi", ()).await.map_err(|e| e.to_string())?.abi;
+    let feed = match source_for(s.feed_template(), s.channel()) {
+        Source::Manifest(u) => u,
+        Source::ReleaseList(api) => {
+            let list = updater.0.run_mobile_plugin_async::<Text>("fetch", Url { url: &api }).await.map_err(|e| e.to_string())?.text;
+            nightly_feed(&list)?
+        }
+    };
     if !feed_allowed(&feed) {
         return Err(format!("the feed must be an https:// URL: {feed}"));
     }
-    let current = app.package_info().version.to_string();
-    let abi = updater.0.run_mobile_plugin_async::<Abi>("abi", ()).await.map_err(|e| e.to_string())?.abi;
     let text = updater.0.run_mobile_plugin_async::<Text>("fetch", Url { url: &feed }).await.map_err(|e| e.to_string())?.text;
     let offer = android_offer(&text, &current, s.channel(), &abi)?;
     let info = UpdateInfo {
