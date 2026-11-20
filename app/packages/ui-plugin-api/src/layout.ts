@@ -27,6 +27,13 @@ export interface LayoutDocument {
   regions: LayoutRegion[];
 }
 
+/**
+ * A layout that owns the whole screen: a component the shell renders INSTEAD of its own window. It gets today's shell as
+ * `Shell` (the "orchestrator app") and may draw it, wrap it, shrink it, or not draw it at all. Typed loosely so this file
+ * stays free of React: in the shell, `Shell` is a component and the return value a React node.
+ */
+export type LayoutRoot<Shell = unknown, Node = unknown> = (props: { Shell: Shell }) => Node;
+
 /** What the shell asks. A layout plugin implements this; the shell never reads a layout document directly. */
 export interface LayoutProvider {
   /** The whole document (for an editor or a debug view). */
@@ -35,15 +42,43 @@ export interface LayoutProvider {
   componentsIn(regionId: string): readonly LayoutSlot[];
   /** Where [componentId] sits in region [regionId]: its index, or -1 when the layout does not place it there. */
   positionOf(regionId: string, componentId: string): number;
+  /** Absent = the shell's own window with this layout's tab order. Present = this layout owns the whole screen (see [LayoutRoot]). */
+  readonly root?: LayoutRoot;
 }
 
 /** A provider over a plain document. The default provider and any layout plugin can use it. */
-export function createLayoutProvider(doc: LayoutDocument): LayoutProvider {
+export function createLayoutProvider(doc: LayoutDocument, options: { root?: LayoutRoot } = {}): LayoutProvider {
   const byRegion = new Map(doc.regions.map((r) => [r.id, r.components] as const));
   return {
     layout: () => doc,
     componentsIn: (regionId) => byRegion.get(regionId) ?? [],
     positionOf: (regionId, componentId) => (byRegion.get(regionId) ?? []).findIndex((c) => c.id === componentId),
+    ...(options.root ? { root: options.root } : {}),
+  };
+}
+
+/** A reactive holder for the active layout: `set` swaps it and tells every subscriber (the shell re-renders, no reload). */
+export interface LayoutStore {
+  get(): LayoutProvider;
+  set(next: LayoutProvider): void;
+  /** Calls [listener] after every swap; returns the unsubscribe. Shaped for React's `useSyncExternalStore`. */
+  subscribe(listener: () => void): () => void;
+}
+
+export function createLayoutStore(initial: LayoutProvider): LayoutStore {
+  let current = initial;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => current,
+    set(next) {
+      if (next === current) return;
+      current = next;
+      for (const l of [...listeners]) l();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
   };
 }
 

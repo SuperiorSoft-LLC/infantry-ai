@@ -4,7 +4,8 @@
 // the right-panel tabs, in their usual order. A component id is a declared tab/panel id, or a shell view's own id when no
 // plugin declares it. The shell asks `layoutProvider()` where things go; a layout plugin swaps it with `setLayoutProvider`.
 // A component the layout does not place (a newly installed plugin's tab) goes after the placed ones, never missing.
-import { createLayoutProvider, type LayoutDocument, type LayoutProvider } from "@infantry/ui-plugin-api/layout";
+import { useSyncExternalStore } from "react";
+import { createLayoutProvider, createLayoutStore, type LayoutDocument, type LayoutProvider } from "@infantry/ui-plugin-api/layout";
 
 const ids = (...list: string[]) => list.map((id) => ({ id }));
 
@@ -27,12 +28,20 @@ export const DEFAULT_LAYOUT: LayoutDocument = {
   ],
 };
 
-let current: LayoutProvider = createLayoutProvider(DEFAULT_LAYOUT);
+const store = createLayoutStore(createLayoutProvider(DEFAULT_LAYOUT));
+
+/** The layout store: what React subscribes to, so a swap re-renders the shell live. */
+export const layoutStore = store;
 
 /** The layout the shell draws now. */
-export const layoutProvider = (): LayoutProvider => current;
+export const layoutProvider = (): LayoutProvider => store.get();
 
-/** A layout plugin's entry: replaces the layout. Call before the shell renders (or re-render after). */
+/** A layout plugin's entry: replaces the layout and re-renders the shell at once, no reload. */
 export function setLayoutProvider(p: LayoutProvider): void {
-  current = p;
+  store.set(p);
+}
+
+/** The active layout provider; re-renders the caller when the layout is swapped. */
+export function useLayoutProvider(): LayoutProvider {
+  return useSyncExternalStore(store.subscribe, store.get);
 }
