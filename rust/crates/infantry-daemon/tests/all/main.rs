@@ -6,6 +6,7 @@ mod gateway;
 mod hung_child;
 mod migrated_state;
 mod queue_ack;
+mod session_remove;
 mod sessions_suite;
 mod spawn_load;
 mod stats_consistency;
