@@ -1,4 +1,9 @@
-# RUST-UPD-2: publishes a tested draft from rust-release.yml and points the update feed at it. Manual only.
+# RUST-UPD-2: publishes a tested draft from rust-release.yml and points the update feed at it.
+#
+# Two ways in, same job (ticket f740f0f6): run it by hand with the draft's tag, OR just publish the draft release on
+# GitHub (release: published) and the feed is promoted in the same step. Publishing a release is all it takes; nobody
+# has to remember a second step (rust-v0.1.1 and 0.1.2 were published and rust-stable stayed at 0.1.0).
+# The feed never goes backwards: a release older than what the feed holds leaves the feed alone.
 #
 # The owner downloads and tests the draft release, then runs this with its tag. It needs the `rust-release` environment,
 # which the owner configures with required reviewers (Settings > Environments), so a run waits for an explicit approval.
@@ -8,6 +13,8 @@
 name: rust-promote
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       tag:
@@ -20,10 +27,11 @@ permissions:
 
 jobs:
   promote:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'rust-v')
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ github.token }}
-      TAG: ${{ inputs.tag }}
+      TAG: ${{ inputs.tag || github.event.release.tag_name }}
       REPO: ${{ github.repository }}
     steps:
       - name: Publish the release and update the feed
@@ -31,15 +39,23 @@ jobs:
           set -euo pipefail
           case "$TAG" in rust-v*) ;; *) echo "not a rust release tag: $TAG" >&2; exit 1;; esac
           channel=stable; case "$TAG" in *-nightly.*) channel=nightly;; esac
-          gh release view "$TAG" --repo "$REPO" --json isDraft -q .isDraft | grep -q true || { echo "$TAG is not a draft" >&2; exit 1; }
           mkdir feed; gh release download "$TAG" --repo "$REPO" --pattern latest.json --dir feed
-          if [ "$channel" = nightly ]; then
-            gh release edit "$TAG" --repo "$REPO" --draft=false --prerelease --latest=false
-          else
-            gh release edit "$TAG" --repo "$REPO" --draft=false --prerelease=false --latest=false
+          # A manual run starts from a draft and publishes it; a `release: published` run finds it already public.
+          if gh release view "$TAG" --repo "$REPO" --json isDraft -q .isDraft | grep -q true; then
+            if [ "$channel" = nightly ]; then
+              gh release edit "$TAG" --repo "$REPO" --draft=false --prerelease --latest=false
+            else
+              gh release edit "$TAG" --repo "$REPO" --draft=false --prerelease=false --latest=false
+            fi
           fi
           roll="rust-$channel"
           gh release view "$roll" --repo "$REPO" >/dev/null 2>&1 || gh release create "$roll" --repo "$REPO" --prerelease --latest=false --target "$GITHUB_SHA" \
             --title "Update feed: $channel" --notes "Rolling release holding the $channel update feed (latest.json). Do not delete."
+          # Never roll the feed back: keep it when it already holds this version or a newer one.
+          new=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("feed/latest.json","utf8")).version)')
+          cur=$(curl -fsSL "https://github.com/$REPO/releases/download/$roll/latest.json" 2>/dev/null | node -e 'try{console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).version)}catch{console.log("")}')
+          if [ -n "$cur" ] && node -e 'const p=v=>v.replace(/^v/,"").split("-")[0].split(".").map(Number);const [a,b]=[p(process.argv[1]),p(process.argv[2])];let c=0;for(let i=0;i<3&&!c;i++)c=(a[i]||0)-(b[i]||0);process.exit(c>0?0:1)' "$cur" "$new"; then
+            echo "the $channel feed holds $cur, newer than $new: left alone" >&2; exit 0
+          fi
           gh release upload "$roll" feed/latest.json --repo "$REPO" --clobber
-          echo "published $TAG; the $channel feed now points at it"
+          echo "published $TAG; the $channel feed now points at it ($cur -> $new)"

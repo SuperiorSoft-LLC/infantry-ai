@@ -87,14 +87,10 @@ fn parse_version(v: &str) -> Option<Version> {
     Version::parse(v.trim().trim_start_matches('v')).ok()
 }
 
-/// Whether `remote` should be offered to a build running `current`. Nightly: only a newer version. Stable: any different
-/// version, so leaving nightly brings the newest stable even when it is older (the same rule as the desktop check).
-pub fn offered(current: &str, remote: &str, channel: &str) -> bool {
-    match (parse_version(current), parse_version(remote)) {
-        (Some(c), Some(r)) if channel == "stable" => c != r,
-        (Some(c), Some(r)) => r > c,
-        _ => false,
-    }
+/// Whether `remote` should be offered to a build running `current`: only a strictly newer version, on every channel.
+/// A feed that lags behind (a stable feed still at 0.1.0 while 0.1.2 is installed) must never downgrade the app.
+pub fn offered(current: &str, remote: &str, _channel: &str) -> bool {
+    matches!((parse_version(current), parse_version(remote)), (Some(c), Some(r)) if r > c)
 }
 
 /// The platform keys to try for an Android ABI (`aarch64`, `armv7`, `x86_64`), the specific one first.
@@ -155,11 +151,13 @@ mod tests {
     }
 
     #[test]
-    fn nightly_takes_newer_only_and_stable_takes_any_different_version() {
+    fn only_a_strictly_newer_version_is_offered_on_every_channel() {
         assert!(offered("0.1.0", "0.2.0", "nightly"));
         assert!(!offered("0.2.0", "0.1.0", "nightly"));
         assert!(!offered("0.2.0", "0.2.0", "nightly"));
-        assert!(offered("0.2.0-nightly.1", "0.1.9", "stable"));
+        assert!(offered("0.1.0", "0.1.2", "stable"));
+        assert!(!offered("0.1.2", "0.1.0", "stable"));
+        assert!(!offered("0.2.0-nightly.1", "0.1.9", "stable"));
         assert!(!offered("0.1.0", "v0.1.0", "stable"));
         assert!(!offered("0.1.0", "junk", "stable"));
     }
