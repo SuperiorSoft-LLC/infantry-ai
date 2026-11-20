@@ -8,6 +8,7 @@ Read AGENTS.md first. Facts in these docs come from the code; where an older des
 
 - [AGENTS.md](AGENTS.md): the guide for AI coding agents: rules, repo layout, build and test commands, where each change goes.
 - [Architecture](docs/wiki/Architecture.md): the daemon, the layers, the wire, plugins, a request from the app to the daemon and back, scripting.
+- [Mini AI OS](docs/wiki/Mini-AI-OS.md): the identity and boot chain: core as kernel, installer, UI, plugins as apps.
 - [Install](docs/wiki/Install.md): the Windows installer, the headless daemon, `infantry` on PATH, building from source.
 - [Android](docs/wiki/Android.md): the Android app, pairing a phone to a daemon, building the APK.
 - [Updates](docs/wiki/Updates.md): the stable and nightly channels, the feed, signing, the release pipeline.

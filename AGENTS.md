@@ -128,6 +128,7 @@ If you are about to add a feature to `infantry-daemon` or to a core crate, check
 
 ## 5. Documentation map
 
+- [Mini AI OS](docs/wiki/Mini-AI-OS.md): the identity (a mini AI operating system), boot chain, plugins as apps. Read first.
 - [Architecture](docs/wiki/Architecture.md): layers, daemon, protocol, the request flow, plugins, scripting. Start here.
 - [Install](docs/wiki/Install.md), [Android](docs/wiki/Android.md), [Updates](docs/wiki/Updates.md).
 - [Plugins](docs/wiki/Plugins.md), [Make a plugin](docs/wiki/make-a-plugin.md), [Daemon plugin API](docs/wiki/daemon-plugin-api.md).

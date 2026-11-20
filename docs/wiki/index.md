@@ -12,6 +12,7 @@ text under a legacy heading.
 ## Start here
 
 - [Architecture](Architecture.md): the Rust framework: the daemon, the layers, the wire, plugins, scripting, clients.
+- [Mini AI OS](Mini-AI-OS.md): the identity: a mini AI operating system, the boot chain, plugins as apps, the rule for every design.
 - [Install](Install.md): the Windows installer, the headless daemon, the `infantry` command on PATH, building from source.
 - [Android](Android.md): the Android app, pairing a phone to a daemon, building the APK.
 - [Updates](Updates.md): the update channels, the feed, the signing keys, the release pipeline.
