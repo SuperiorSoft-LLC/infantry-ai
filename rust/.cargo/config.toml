@@ -2,3 +2,8 @@
 [env]
 TS_RS_EXPORT_DIR = { value = "../app/src/generated", relative = true }
 TS_RS_LARGE_INT = "number"
+
+# A clean Windows has no VC++ runtime: link the CRT statically so infantry.exe and infantry-daemon.exe start there
+# (found in the Windows Sandbox first-time-install run: STATUS_DLL_NOT_FOUND on vcruntime140.dll).
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]
