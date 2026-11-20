@@ -4,6 +4,12 @@
     <!-- RUST-UPD-2: the in-app update hands the downloaded APK to the system package installer. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- RUST-BUG scan QR: the pairing scanner (barcode-scanner plugin) opens the camera. Declared here so the checked-in
+         manifest owns it (the plugin merges the same permission); required=false keeps TVs and tablets installable. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
 

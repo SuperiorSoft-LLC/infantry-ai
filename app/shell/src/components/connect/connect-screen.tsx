@@ -20,9 +20,17 @@ async function scanQr(): Promise<string | null> {
   const bs = await import("@tauri-apps/plugin-barcode-scanner");
   let perm = await bs.checkPermissions();
   if (perm !== "granted") perm = await bs.requestPermissions();
-  if (perm !== "granted") throw new Error("the camera permission was refused");
-  const r = await bs.scan({ formats: [bs.Format.QRCode], windowed: false });
-  return r?.content ?? null;
+  if (perm !== "granted") throw new Error("Camera access was refused. Allow the camera in the phone's app settings, or paste the pairing link below.");
+  try {
+    const r = await bs.scan({ formats: [bs.Format.QRCode], windowed: false });
+    return r?.content ?? null;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/cancel/i.test(msg)) return null;
+    throw new Error(`The camera could not start (${msg}). Paste the pairing link below instead.`);
+  } finally {
+    await bs.cancel().catch(() => undefined);
+  }
 }
 
 export function ConnectScreen() {
