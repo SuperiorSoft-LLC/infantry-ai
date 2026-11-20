@@ -501,6 +501,16 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     let plugin_set = plugins::start(state_dir, plugins_dir(), bus.clone(), handle.clone());
     let plugin_host = plugin_set.as_ref().map(|p| p.host.clone());
     tools.set_plugins(plugin_host.clone());
+    // BOOT-SPLASH-1: the boot steps. The installer and UI-plugin steps have no owner yet, so they finish at once.
+    let boot = crate::boot::BootState::new(Some(bus.clone()));
+    for step in ["core", "installer", "ui"] {
+        boot.finish(step);
+    }
+    {
+        let statuses = plugin_host.as_ref().map(|h| h.statuses()).unwrap_or_default();
+        let loaded = statuses.values().filter(|s| s.as_str() == "loaded").count();
+        boot.plugins(loaded, statuses.len());
+    }
 
     // ---- the registry --------------------------------------------------------------------------------------
     let mut registry = Registry::new();
@@ -540,6 +550,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     if let Some(p) = &plugin_set {
         units.extend(plugins::frame_units(p));
     }
+    units.push(Arc::new(crate::boot::BootUnit { boot }));
     let min_disk_db = db.clone();
     units.push(Arc::new(health_unit(daemon, &projects, plugin_host.clone(), hooks.store().clone(), Box::new(move || {
         let v = settings::SettingsUnit { db: min_disk_db.clone() }.app(crate::health::MIN_DISK_SETTING);

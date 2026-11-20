@@ -9,6 +9,7 @@ pub mod board;
 pub mod compose;
 pub mod fresh_schema;
 pub mod harness;
+pub mod boot;
 pub mod health;
 pub mod mcp;
 pub mod mode;

@@ -77,6 +77,7 @@ pub const WAITING: &str = "waiting";
 pub const PROCESSES: &str = "processes";
 pub const PROCESSES_REAP: &str = "processes_reap";
 pub const HEALTH: &str = "health";
+pub const BOOT_PROGRESS: &str = "boot_progress";
 pub const PLUGIN_ADMIN: &str = "plugin_admin";
 pub const PROCESS_PRESSURE: &str = "process_pressure";
 pub const MAIL_REFUSED: &str = "mail_refused";
@@ -396,6 +397,7 @@ pub const ALL: &[&str] = &[
     PROCESSES,
     PROCESSES_REAP,
     HEALTH,
+    BOOT_PROGRESS,
     PLUGIN_ADMIN,
     PROCESS_PRESSURE,
     MAIL_REFUSED,
