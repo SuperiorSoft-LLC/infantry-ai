@@ -140,7 +140,7 @@ export function ChatPopout({ id, title, sessionId, variant = "popout", onClose, 
             sessionId={sessionId}
             variant={variant}
             empty={empty}
-            view={{ max: maximized, onMax: () => patch({ maximized: true }), onMin: () => patch({ maximized: false }) }}
+            windowId={id}
           />
         )}
         {!minimized &&
