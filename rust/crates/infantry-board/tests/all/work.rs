@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 //! The work half, light: a start puts the ticket in_progress, a done starts the lane's next ticket, a lane cap queues,
 //! and concurrent starts never wait on each other.
-mod common;
+use crate::common;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};

@@ -1,0 +1,5 @@
+# Repo-wide cargo config, read by both builds below this folder (rust/ and app/src-tauri).
+# Windows MSVC host: link with rust-lld (ships with the toolchain) instead of MSVC link.exe:
+# faster links and less RAM for the big test and app binaries. Other targets (Android, WASM) are untouched.
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"
