@@ -296,14 +296,8 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         Arc::new(crate::mcp::Registry::new(state_dir, secret, plugin_servers, session))
     };
     daemon.set_mcp(mcp.clone());
-    // One shared cargo target for every agent (a worktree must not build its own multi-GB `target`): setting `cargo.targetDir`.
-    {
-        let (st, sd) = (settings::SettingsUnit { db: db.clone() }, state_dir.to_path_buf());
-        daemon.set_env_extra(Arc::new(move || {
-            let v = st.app(crate::harness::launch::CARGO_TARGET_SETTING).and_then(|v| v.as_str().map(String::from));
-            crate::harness::launch::cargo_target_env(v.as_deref(), &sd).into_iter().collect()
-        }));
-    }
+    // No shared cargo target: every worktree builds in its own `target` (a shared one is locked by cargo, so workers
+    // would wait on each other). The sweep deletes a finished ticket's target folders.
 
     // ---- the account hub: providers modules declare, device sign-in, refresh tokens in the vault ----------
     let account = crate::account::Account::new(

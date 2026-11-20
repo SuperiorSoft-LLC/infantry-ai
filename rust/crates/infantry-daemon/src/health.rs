@@ -403,7 +403,7 @@ impl Health {
 /// What the report needs from the composed daemon, as functions (core names no plugin).
 /// Setting: free disk (MB) under which `infantry health` warns.
 pub const MIN_DISK_SETTING: &str = "health.minDiskMb";
-pub const DEFAULT_MIN_DISK_MB: u64 = 10_240;
+pub const DEFAULT_MIN_DISK_MB: u64 = 20_480;
 
 /// The disk warning line, or None when the disk is fine (or unknown).
 pub fn disk_warning(free_mb: Option<u64>, min_mb: u64) -> Option<String> {

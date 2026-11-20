@@ -77,7 +77,7 @@ pub struct DaemonBoardEnv {
     hooks: std::sync::OnceLock<Arc<infantry_scripting::hooks::HookStore>>,
 }
 
-/// `lanes.maxInProgress`: scopes app, project, role; default 1.
+/// `lanes.maxInProgress`: scopes app, project, role; default = the usage pacing allowance.
 pub const LANES_MAX_IN_PROGRESS: &str = "lanes.maxInProgress";
 
 impl DaemonBoardEnv {
@@ -103,6 +103,17 @@ impl DaemonBoardEnv {
 
     fn project(&self, id: Option<&str>) -> Option<infantry_protocol::projects::Project> {
         self.projects.store.get(id?).ok()
+    }
+
+    /// The most workers the usage pacing allows now: the largest allowance over the meters (no limit, or no reading,
+    /// follows the lane cap). At least 1. The meter's own start check still refuses a start over its allowance.
+    fn pacing_allowance(&self, project_id: Option<&str>, role: &str) -> u32 {
+        let meters = self.usage.report().meters;
+        let lane = BoardEnv::lane_cap(self, project_id, role);
+        if meters.is_empty() || meters.iter().any(|m| m.allowance.is_none()) {
+            return lane;
+        }
+        meters.iter().filter_map(|m| m.allowance).max().unwrap_or(1).max(1) as u32
     }
 }
 
@@ -209,7 +220,9 @@ impl BoardEnv for DaemonBoardEnv {
     fn max_in_progress(&self, project_id: Option<&str>, role: &str) -> u32 {
         let d = serde_json::json!({ "project": project_id, "role": role });
         let v = self.settings.resolve(LANES_MAX_IN_PROGRESS, &d)["value"].clone();
-        v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok())).filter(|n| *n >= 1).unwrap_or(1) as u32
+        // An explicit setting wins; unset, the cap is the usage pacing allowance (`infantry usage`), so workers of a role
+        // wait on the owner's pacing and on nothing else.
+        v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok())).filter(|n| *n >= 1).map(|n| n as u32).unwrap_or_else(|| self.pacing_allowance(project_id, role))
     }
     fn auto_start_next(&self, project_id: Option<&str>) -> bool {
         let off = |v: Option<&serde_json::Value>| match v {
