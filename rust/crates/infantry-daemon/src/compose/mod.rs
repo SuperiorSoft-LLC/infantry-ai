@@ -524,7 +524,8 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     tools.set_plugins(plugin_host.clone());
     // The core steps are done; the installer step is done once the bootstrap plugin is (plugins::start loaded it, or
     // recorded in `bootstrap.error` why it could not start), or at once when this daemon has none. The UI-plugin step
-    // has no owner until BOOT-CHAIN-1.
+    // (BOOT-CHAIN-1) is done once the UI plugin is installed; without it the daemon is in bootstrap mode and the clients
+    // draw the installer, so the step ends there too and the splash gives way to it, never to a blank window.
     boot.finish("core");
     boot.finish("installer");
     boot.finish("ui");

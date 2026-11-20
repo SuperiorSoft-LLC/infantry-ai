@@ -50,6 +50,10 @@ for mj in "${manifests[@]}"; do
     echo "staged $mod (web UI) -> $dest/ui/dist"
     staged=1
   fi
+  # BOOT-CHAIN-1: the UI plugin (module.json `uiPlugin`) has no code to build: its manifest is the whole module.
+  if python -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("uiPlugin") else 1)' "$mj"; then
+    mkdir -p "$dest"; cp "$mj" "$dest/module.json"; echo "staged $mod (UI plugin) -> $dest"; continue
+  fi
   manifest="$mod_dir/daemon/Cargo.toml"; [ -f "$manifest" ] || manifest="$mod_dir/Cargo.toml"
   [ -f "$manifest" ] || { [ -n "$staged" ] || echo "skip $mod: no daemon crate"; continue; }
   crate="$(sed -n 's/^name = "\(.*\)"/\1/p' "$manifest" | head -1)"

@@ -1,0 +1,12 @@
+{
+  "name": "Infantry_Ui",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "displayName": "Interface",
+  "description": "The app's interface: the shell and its default layout (the centre tabs and the right panel, as the app has always looked). The boot chain loads it after the installer. Without it the daemon stays on the installer's screen instead of opening a blank window. The shell code ships in the app; this module is the switch that turns it on, so removing it falls back to the installer.",
+  "tier": "official",
+  "uiPlugin": true,
+  "sequence": []
+}

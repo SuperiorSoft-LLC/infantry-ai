@@ -117,7 +117,7 @@ impl Admin {
         if !installed.contains(&id) {
             return None;
         }
-        let active = installed.iter().all(|i| *i == id);
+        let active = installer::bootstrap_active(&self.plugins_dir, &id, self.install.config.ui_plugin.as_deref());
         let error = if active && self.has_daemon_half(&id) { self.host.statuses().get(&id).filter(|s| s.as_str() != "loaded").cloned() } else { None };
         Some(Bootstrap { plugin: id, active, error })
     }
@@ -484,7 +484,7 @@ fn daemon_half(dir: &Path) -> Option<(String, Vec<String>)> {
 pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: tokio::runtime::Handle, disabled: Arc<Disabled>, install: InstallSeam) -> Option<Plugins> {
     let dir = dir.filter(|d| d.is_dir())?;
     // The bootstrap plugin is the way in while nothing else is installed: the owner's disabled mark does not apply then.
-    if let Some(id) = install.config.bootstrap.as_deref().filter(|id| disabled.contains(id) && installer::bootstrap_active(&dir, id)) {
+    if let Some(id) = install.config.bootstrap.as_deref().filter(|id| disabled.contains(id) && installer::bootstrap_active(&dir, id, install.config.ui_plugin.as_deref())) {
         if let Err(e) = disabled.set(id, false) {
             eprintln!("[infantry] bootstrap plugin {id} stays disabled: {e}");
         }
