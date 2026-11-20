@@ -6,13 +6,14 @@
 // shared and never copied. `variant` only changes density: "full" is the centre column, "popout" a floating window,
 // "compact" a popout without the activity box and job row.
 import { useEffect } from "react";
-import { Unplug } from "lucide-react";
-import { EmptyState, cn } from "@infantry/ui";
+import { Maximize2, Minimize2, PanelBottomClose, PanelBottomOpen, Unplug } from "lucide-react";
+import { EmptyState, IconButton, cn } from "@infantry/ui";
 import { useAgent, useAgentList } from "@/daemon/agents";
 import { useDaemon } from "@/daemon/daemon";
-import { useUi } from "@/state/ui-state";
+import { toggleExpanded, toggleMinimized } from "@infantry/client";
+import { useChatView } from "./use-chat-view";
 import { Transcript } from "./transcript";
-import { Composer, type ChatViewControl } from "./composer";
+import { Composer } from "./composer";
 import { PromptCards } from "./prompt-cards";
 import { ActivityBox } from "./activity-box";
 import { BgJobsRow } from "./bg-jobs-row";
@@ -23,20 +24,21 @@ export interface ChatPanelProps {
   /** The session to show; null shows the empty state, and the composer starts a new session. */
   sessionId: string | null;
   variant?: ChatVariant;
-  /** Maximize / minimize for the composer toolbar. Omit it and the buttons are not drawn. */
-  view?: ChatViewControl;
+  /** The window this chat lives in; its minimized / expanded / draft state is remembered under this id. */
+  windowId?: string;
   /** Shown instead of the default empty state when there is no session. */
   empty?: { title: string; hint: string };
   className?: string;
 }
 
-export function ChatPanel({ sessionId, variant = "full", view, empty, className }: ChatPanelProps) {
+export function ChatPanel({ sessionId, variant = "full", windowId = "main", empty, className }: ChatPanelProps) {
   const agent = useAgent(sessionId ?? "");
   const link = useDaemon((s) => s.connection.state);
   const requestHistory = useDaemon((s) => s.requestHistory);
   const busy = agent?.status === "working";
   const agentCount = useAgentList().length;
   const full = variant === "full";
+  const { minimized, expanded } = useChatView(windowId);
 
   // A session opened in a view brings its history, if the burst did not already ask for it.
   useEffect(() => {
@@ -46,7 +48,27 @@ export function ChatPanel({ sessionId, variant = "full", view, empty, className 
   return (
     <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)} data-chat-variant={variant}>
       <div className="relative flex min-h-0 flex-1 flex-col">
-        {agent && variant !== "compact" && <ActivityBox sessionId={agent.id} />}
+        {agent && (
+          <ActivityBox
+            sessionId={agent.id}
+            actions={
+              minimized ? (
+                <IconButton label="Restore chat box" variant="outline" className="rounded-full bg-card max-sm:size-12" onClick={() => toggleMinimized(windowId)}>
+                  <PanelBottomOpen />
+                </IconButton>
+              ) : (
+                <>
+                  <IconButton label={expanded ? "Collapse input" : "Expand input"} variant="outline" className="rounded-full bg-card max-sm:size-12" onClick={() => toggleExpanded(windowId)}>
+                    {expanded ? <Minimize2 /> : <Maximize2 />}
+                  </IconButton>
+                  <IconButton label="Minimize chat box" variant="outline" className="rounded-full bg-card max-sm:size-12" onClick={() => toggleMinimized(windowId)}>
+                    <PanelBottomClose />
+                  </IconButton>
+                </>
+              )
+            }
+          />
+        )}
         {agent ? (
           <Transcript agent={agent} sessionId={agent.id} />
         ) : (
@@ -61,18 +83,20 @@ export function ChatPanel({ sessionId, variant = "full", view, empty, className 
       </div>
       {agent && <PromptCards sessionId={agent.id} />}
       {agent && variant !== "compact" && <BgJobsRow sessionId={agent.id} />}
-      {full && (
-        <div className="px-4 pt-2 pb-1.5 font-mono text-[11px] text-muted-foreground">
-          {agentCount} agent{agentCount === 1 ? "" : "s"} · {link !== "open" ? "not connected: commands are disabled" : agent ? (busy ? "working" : "idle") : "no session"}
-        </div>
-      )}
-      <Composer sessionId={agent?.id ?? null} busy={busy} compact={!full} view={view} />
+      {/* Minimize: the status line and composer are hidden (display none: no space, and the attachments and queue state survive). */}
+      <div hidden={minimized} className="min-w-0">
+        {full && (
+          <div className="px-4 pt-2 pb-1.5 font-mono text-[11px] text-muted-foreground">
+            {agentCount} agent{agentCount === 1 ? "" : "s"} · {link !== "open" ? "not connected: commands are disabled" : agent ? (busy ? "working" : "idle") : "no session"}
+          </div>
+        )}
+        <Composer sessionId={agent?.id ?? null} busy={busy} compact={!full} windowId={windowId} />
+      </div>
     </div>
   );
 }
 
-/** The centre column's chat: maximize maps to `ui.chatMax`, which hides the header and tab bar. */
+/** The centre column's chat. */
 export function FullChatPanel({ sessionId }: { sessionId: string | null }) {
-  const ui = useUi();
-  return <ChatPanel sessionId={sessionId} variant="full" view={{ max: ui.chatMax, onMax: () => ui.set("chatMax", true), onMin: () => ui.set("chatMax", false) }} />;
+  return <ChatPanel sessionId={sessionId} variant="full" />;
 }

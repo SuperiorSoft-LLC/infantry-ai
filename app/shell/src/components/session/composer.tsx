@@ -7,17 +7,18 @@
 // move, Tab or Enter completes, Esc closes. Images (paste, or the clip button) upload at once with `image_upload`
 // (purpose chat, the session's project) and ride the prompt as `[image: <path>]` lines (Kotlin IMG-2).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, ImagePlus, Play, CircleX, Trash2, RotateCw, MoreHorizontal, Square, SendHorizontal, X, Zap, Maximize2, Minimize2, Search, History } from "lucide-react";
+import { ArrowLeftRight, ImagePlus, Play, CircleX, Trash2, RotateCw, MoreHorizontal, Square, SendHorizontal, X, Zap, Search, History } from "lucide-react";
 import { cn } from "@infantry/ui";
 import { Textarea } from "@infantry/ui";
 import { IconButton, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@infantry/ui";
-import { CHAT_SEARCH_EVENT, imageTag, matchSlash, slashCatalog, slashPrefix, uploadImage, type QueuedTurnView, type SlashCommand } from "@infantry/client";
+import { CHAT_SEARCH_EVENT, patchChatView, imageTag, matchSlash, slashCatalog, slashPrefix, uploadImage, type QueuedTurnView, type SlashCommand } from "@infantry/client";
 import { useShallow } from "zustand/react/shallow";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { useUi } from "@/state/ui-state";
 import { openSessionDialog } from "./session-actions";
 import { readImageFile } from "./chat-images";
 import { useProjects } from "@/components/git/use-projects";
+import { useChatView } from "./use-chat-view";
 
 const tools = [
   { label: "Swap agent", icon: ArrowLeftRight },
@@ -27,18 +28,17 @@ const tools = [
   { label: "Restart session", icon: RotateCw },
 ];
 
+const GROUP = "flex flex-wrap items-center gap-1 rounded-b-lg border-2 border-t-0 border-border bg-card p-1";
+/** 48dp touch targets on a phone, the compact size from `sm` up. */
+const TOUCH = "max-sm:size-12";
+
 const NO_QUEUE: QueuedTurnView[] = [];
 
-/** Maximize / minimize for the chat the composer sits under: the full view maps it to `ui.chatMax`, a popout to its own box. */
-export interface ChatViewControl {
-  max: boolean;
-  onMax: () => void;
-  onMin: () => void;
-}
-
-/** `compact`: always use the small-width toolbar (a popout's width, not the window's, decides). */
-export function Composer({ sessionId, busy, compact = false, view }: { sessionId: string | null; busy: boolean; compact?: boolean; view?: ChatViewControl }) {
-  const [text, setText] = useState("");
+/** `compact`: always use the small-width toolbar (a popout's width, not the window's, decides). `windowId` keys the
+ * remembered minimized / expanded / draft state (CHAT-MINIMIZE-1); the minimize and expand buttons live in ChatPanel. */
+export function Composer({ sessionId, busy, compact = false, windowId = "main" }: { sessionId: string | null; busy: boolean; compact?: boolean; windowId?: string }) {
+  const { draft: text, expanded } = useChatView(windowId);
+  const setText = (t: string) => patchChatView(windowId, { draft: t });
   const ui = useUi();
   const actions: Record<string, (() => void) | undefined> = {
     Resume: () => ui.set("dialog", "resume"),
@@ -162,26 +162,6 @@ export function Composer({ sessionId, busy, compact = false, view }: { sessionId
         </ul>
       )}
       <div className={cn("relative rounded-xl border-2 bg-card transition-colors", busy ? "border-danger" : "border-border focus-within:border-ring")}>
-        {sessionId && (
-          <div role="toolbar" aria-label="Chat view" className="absolute right-3 bottom-full -mb-0.5 flex items-center gap-1 rounded-t-lg border border-b-0 border-danger/60 bg-card p-1">
-            {view && (
-              <>
-                <IconButton label="Maximize chat" className="rounded-full" disabled={view.max} onClick={view.onMax}>
-                  <Maximize2 />
-                </IconButton>
-                <IconButton label="Minimize chat" className="rounded-full" disabled={!view.max} onClick={view.onMin}>
-                  <Minimize2 />
-                </IconButton>
-              </>
-            )}
-            <IconButton label="Search chat" className="rounded-full" onClick={() => window.dispatchEvent(new Event(CHAT_SEARCH_EVENT))}>
-              <Search />
-            </IconButton>
-            <IconButton label="Load history" className="rounded-full" onClick={() => requestHistory(sessionId)}>
-              <History />
-            </IconButton>
-          </div>
-        )}
         <Textarea
           value={text}
           onChange={(e) => (setText(e.target.value), setHideSlash(false))}
@@ -223,21 +203,32 @@ export function Composer({ sessionId, busy, compact = false, view }: { sessionId
                 ? "Agent is busy. Enter to queue: sent as its next turn when this one ends"
                 : "Message the agent..."
           }
-          className="min-h-20 resize-none border-0 bg-transparent px-4 py-3 text-[15px] shadow-none focus-visible:ring-0 dark:bg-transparent"
+          className={cn("resize-none border-0 bg-transparent px-4 py-3 text-[15px] shadow-none focus-visible:ring-0 dark:bg-transparent", expanded ? "min-h-[50vh]" : "min-h-20")}
         />
-        <div className="flex items-center justify-between gap-2 px-2 pb-2">
-          <div role="toolbar" aria-label="Session actions (compact)" className={cn("flex items-center gap-1 rounded-lg border border-danger/60 p-1", !compact && "sm:hidden")}>
-            <IconButton label="Attach image" className="rounded-full" disabled={!online || !!heldBy} onClick={() => fileInput.current?.click()}>
-              <ImagePlus />
+      </div>
+      {/* Tab-shaped groups hang from the box's bottom edge (Kotlin ChatSurface); they wrap on a narrow width, never clip. */}
+      <div className="-mt-0.5 flex flex-wrap items-start justify-between gap-x-2 gap-y-1 px-3">
+        <div role="toolbar" aria-label="Session actions" className={GROUP}>
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            multiple
+            hidden
+            onChange={(e) => (void attach(Array.from(e.target.files ?? [])), (e.target.value = ""))}
+          />
+          <IconButton label="Attach image" className={TOUCH} disabled={!online || !!heldBy} onClick={() => fileInput.current?.click()}>
+            <ImagePlus />
+          </IconButton>
+          {(compact ? tools.slice(0, 1) : tools).map(({ label, icon: Icon, danger }) => (
+            <IconButton key={label} label={label} className={cn(TOUCH, danger && "bg-danger text-white hover:bg-danger/85 hover:text-white")} onClick={actions[label]}>
+              <Icon />
             </IconButton>
-            {tools.slice(0, 1).map(({ label, icon: Icon }) => (
-              <IconButton key={label} label={label} className="rounded-full" onClick={actions[label]}>
-                <Icon />
-              </IconButton>
-            ))}
+          ))}
+          {compact && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <IconButton label="More session actions" className="rounded-full">
+                <IconButton label="More session actions" className={TOUCH}>
                   <MoreHorizontal />
                 </IconButton>
               </DropdownMenuTrigger>
@@ -249,38 +240,25 @@ export function Composer({ sessionId, busy, compact = false, view }: { sessionId
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
-          <div role="toolbar" aria-label="Session actions" className={cn("hidden items-center gap-1 rounded-lg border border-danger/60 p-1", !compact && "sm:flex")}>
-            {tools.map(({ label, icon: Icon, danger }) => (
-              <IconButton
-                key={label}
-                label={label}
-                className={cn("rounded-full", danger && "bg-danger text-white hover:bg-danger/85 hover:text-white")}
-                onClick={actions[label]}
-              >
-                <Icon />
+          )}
+          {sessionId && (
+            <>
+              <IconButton label="Search chat" className={TOUCH} onClick={() => window.dispatchEvent(new Event(CHAT_SEARCH_EVENT))}>
+                <Search />
               </IconButton>
-            ))}
-          </div>
-          <div className="flex items-center gap-1 rounded-lg border border-danger/60 p-1">
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp"
-              multiple
-              hidden
-              onChange={(e) => (void attach(Array.from(e.target.files ?? [])), (e.target.value = ""))}
-            />
-            <IconButton label="Attach image" className={cn("hidden", !compact && "sm:inline-flex")} disabled={!online || !!heldBy} onClick={() => fileInput.current?.click()}>
-              <ImagePlus />
-            </IconButton>
-            <IconButton label="Stop" className="text-danger hover:text-danger" disabled={!busy || !sessionId || !online} onClick={() => sessionId && interrupt(sessionId)}>
-              <Square className="fill-current" />
-            </IconButton>
-            <IconButton label={busy ? "Queue message" : "Send"} className="text-danger hover:text-danger" disabled={(!text.trim() && !images.length) || !online || !!heldBy || uploading > 0} onClick={submit}>
-              <SendHorizontal />
-            </IconButton>
-          </div>
+              <IconButton label="Load history" className={TOUCH} onClick={() => requestHistory(sessionId)}>
+                <History />
+              </IconButton>
+            </>
+          )}
+        </div>
+        <div role="toolbar" aria-label="Send" className={cn(GROUP, "ml-auto")}>
+          <IconButton label="Stop" className={cn(TOUCH, "text-danger hover:text-danger")} disabled={!busy || !sessionId || !online} onClick={() => sessionId && interrupt(sessionId)}>
+            <Square className="fill-current" />
+          </IconButton>
+          <IconButton label={busy ? "Queue message" : "Send"} className={cn(TOUCH, "text-danger hover:text-danger")} disabled={(!text.trim() && !images.length) || !online || !!heldBy || uploading > 0} onClick={submit}>
+            <SendHorizontal />
+          </IconButton>
         </div>
       </div>
     </div>

@@ -37,3 +37,4 @@ export * from "./tools";
 export * from "./images";
 export * from "./popout";
 export * from "./worker-lanes";
+export * from "./chat-view";
