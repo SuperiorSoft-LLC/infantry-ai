@@ -77,6 +77,7 @@ pub const WAITING: &str = "waiting";
 pub const PROCESSES: &str = "processes";
 pub const PROCESSES_REAP: &str = "processes_reap";
 pub const HEALTH: &str = "health";
+pub const BOOT_PROGRESS: &str = "boot_progress";
 pub const PLUGIN_ADMIN: &str = "plugin_admin";
 /// WEBUI-1: pushed to every client after a plugin is enabled or disabled, `{"id", "enabled"}`: re-read the plugin list.
 pub const PLUGINS_CHANGED: &str = "plugins_changed";
@@ -398,6 +399,7 @@ pub const ALL: &[&str] = &[
     PROCESSES,
     PROCESSES_REAP,
     HEALTH,
+    BOOT_PROGRESS,
     PLUGIN_ADMIN,
     PLUGINS_CHANGED,
     PROCESS_PRESSURE,
