@@ -20,9 +20,18 @@ async function scanQr(): Promise<string | null> {
   const bs = await import("@tauri-apps/plugin-barcode-scanner");
   let perm = await bs.checkPermissions();
   if (perm !== "granted") perm = await bs.requestPermissions();
-  if (perm !== "granted") throw new Error("the camera permission was refused");
-  const r = await bs.scan({ formats: [bs.Format.QRCode], windowed: false });
-  return r?.content ?? null;
+  if (perm !== "granted") throw new Error("Camera access was refused. Allow the camera in the phone's app settings, or paste the pairing link below.");
+  try {
+    const r = await bs.scan({ formats: [bs.Format.QRCode], windowed: true });
+    return r?.content ?? null;
+  } catch (e) {
+    // The plugin rejects with a plain string or object, not an Error.
+    const msg = e instanceof Error ? e.message : typeof e === "string" ? e : (JSON.stringify(e) ?? String(e));
+    if (/cancel/i.test(msg)) return null;
+    throw new Error(`The camera could not start (${msg}). Paste the pairing link below instead.`);
+  } finally {
+    await bs.cancel().catch(() => undefined);
+  }
 }
 
 export function ConnectScreen() {
@@ -32,6 +41,25 @@ export function ConnectScreen() {
   const [link, setLink] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [scanning, setScanning] = useState(false);
+
+  // While the camera shows behind the (windowed) WebView the page must be see-through; Back cancels the scan instead of
+  // leaving the app (a full-screen preview with no way out was the "app closes" report).
+  useEffect(() => {
+    if (!scanning) return;
+    const root = document.documentElement;
+    const prev = [root.style.background, document.body.style.background];
+    root.style.background = "transparent";
+    document.body.style.background = "transparent";
+    history.pushState({ scan: true }, "");
+    const onPop = () => void cancelScan();
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      root.style.background = prev[0];
+      document.body.style.background = prev[1];
+    };
+  }, [scanning]);
 
   useEffect(() => {
     let light = false;
@@ -63,8 +91,14 @@ export function ConnectScreen() {
     }
   };
 
+  const cancelScan = async () => {
+    const bs = await import("@tauri-apps/plugin-barcode-scanner");
+    await bs.cancel().catch(() => undefined);
+  };
+
   const scan = async () => {
     setError(null);
+    setScanning(true);
     try {
       const text = await scanQr();
       if (!text) return;
@@ -73,8 +107,21 @@ export function ConnectScreen() {
       await connect(r.pairing);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setScanning(false);
     }
   };
+
+  if (scanning) {
+    return (
+      <main className="flex h-full flex-col justify-between bg-transparent p-4 text-white">
+        <p className="rounded bg-black/60 p-2 text-sm">Point the camera at the pairing QR code.</p>
+        <Button className="h-12 w-full" variant="secondary" onClick={() => void cancelScan()}>
+          Cancel
+        </Button>
+      </main>
+    );
+  }
 
   return (
     <main className="flex h-full items-start justify-center overflow-y-auto bg-background p-4 text-foreground sm:items-center">
