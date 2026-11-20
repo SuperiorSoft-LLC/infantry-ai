@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-projects"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "MPL-2.0"
 description = "Infantry AI platform (L1): projects, workspaces, the project git view, session worktrees and ticket branches over the git CLI."

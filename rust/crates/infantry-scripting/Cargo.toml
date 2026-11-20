@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-scripting"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "MPL-2.0"
 description = "Infantry AI scripting (L1 platform): sandboxed Lua 5.2 engine (mlua), the ih.* binding through a host trait, the two-phase action dispatcher, hooks on the event bus, timers, exec, the script store and run stats."

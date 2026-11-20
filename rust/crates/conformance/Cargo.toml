@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-conformance"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "Apache-2.0"
 description = "Black-box v1 WebSocket conformance suite: scripted scenarios, record and compare, runnable against ANY daemon URL (RUST-CONF-1)"

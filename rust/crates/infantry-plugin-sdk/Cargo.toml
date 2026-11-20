@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-plugin-sdk"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "Apache-2.0"
 description = "Infantry AI daemon plugin SDK: the daemon-plugin WIT bindings, a host facade and export_plugin! (WASM component or native sidecar)"

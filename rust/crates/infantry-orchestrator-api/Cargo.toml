@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-orchestrator-api"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "Apache-2.0"
 description = "Infantry AI orchestrator interface (L4): the location-transparent Orchestrator trait and the board's wire DTOs. Agents and harnesses never import it."

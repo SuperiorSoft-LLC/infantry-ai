@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-daemon"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "MPL-2.0"
 description = "The Infantry AI daemon (Rust port, RUST-DAEMON-1): tokio + axum serving the v1 WebSocket sessions frames"

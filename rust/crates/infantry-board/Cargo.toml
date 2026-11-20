@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-board"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "Apache-2.0"
 description = "Infantry AI board (L4): tickets on the existing infantry.db schema, lane rules, the ticket_* FrameUnit and the in-process LocalOrchestrator. Becomes the Infantry_Board wasm plugin once the WIT storage SQL exists."

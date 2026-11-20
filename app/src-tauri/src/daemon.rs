@@ -254,6 +254,8 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch) -> Result<Si
             cmd.env_remove(&k);
         }
     }
+    // The agents' `infantry health` reports the app version from this (the app is the one place the installed version is known).
+    cmd.env("INFANTRY_APP_VERSION", env!("CARGO_PKG_VERSION"));
     if launch.remote {
         let f = launch.token_file.as_ref().ok_or("phone access needs a token file")?;
         cmd.env("INFANTRY_TOKEN_FILE", f);

@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-usage"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "MPL-2.0"
 description = "Infantry AI usage, limits and pacing (L1 platform): live plan meters, refresher backoff, usage-meter.db, the pacing judge, Pace forecast, overrides and the governor's workers-allowed answer"

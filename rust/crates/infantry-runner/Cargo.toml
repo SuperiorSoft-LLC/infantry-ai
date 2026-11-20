@@ -1,6 +1,6 @@
 [package]
 name = "infantry-runner"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "MPL-2.0"
 description = "Infantry AI process runner: harness sessions in a PTY (screen state, transcript tail, hook channel, Job Objects)"

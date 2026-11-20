@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-plugin-host"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 license = "Apache-2.0"
 description = "Infantry AI daemon plugin host: wasmtime components and native sidecars behind one Plugin trait, grants as linker entries, PluginGuard breaker"
