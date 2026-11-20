@@ -129,8 +129,11 @@ const FALLBACK_ICONS: Record<string, LucideIcon> = {
 export const BOARD: TabEntry = { id: "board", label: "Board", icon: Layers, render: () => <BoardTab />, builtin: true, plugin: null };
 
 /** A declared tab's key hint and place, as its declaration gives them. */
+/** The host's default layout for plugin tabs: where a declared tab sits, by id. A plugin names no position; one not listed goes last. */
+const DEFAULT_ORDER: Record<string, number> = { "infantry.triggers": 600 };
+
 function placed(c: Contribution): Pick<TabEntry, "hint" | "order"> {
-  return { hint: typeof c.decl.hint === "string" && c.decl.hint ? c.decl.hint : undefined, order: typeof c.decl.order === "number" ? c.decl.order : undefined };
+  return { hint: typeof c.decl.hint === "string" && c.decl.hint ? c.decl.hint : undefined, order: DEFAULT_ORDER[c.decl.id] };
 }
 
 function generic(c: Contribution): TabEntry {

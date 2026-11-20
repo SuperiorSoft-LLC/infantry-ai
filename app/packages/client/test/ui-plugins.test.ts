@@ -19,7 +19,7 @@ const web = (id: string, over: object = {}) => ({
   apiVersion: 1,
   entry: `/ui-plugins/${id}/ui/dist/index.js`,
   styles: [`/ui-plugins/${id}/ui/dist/index.css`],
-  contributes: [{ slot: "tab", id: `${id.toLowerCase()}.tab`, label: "Tab", order: 600 }],
+  contributes: [{ slot: "tab", id: `${id.toLowerCase()}.tab`, label: "Tab" }],
   rev: "r1",
   ...over,
 });
@@ -63,7 +63,7 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 describe("the web half of a plugin row", () => {
   it("is read from ui.web, and refused outside /ui-plugins/", () => {
     expect(parseWebHalf(web("Acme"))).toMatchObject({ apiVersion: 1, entry: "/ui-plugins/Acme/ui/dist/index.js", rev: "r1" });
-    expect(parseWebHalf(web("Acme"))!.contributes[0]).toMatchObject({ slot: "tab", id: "acme.tab", order: 600 });
+    expect(parseWebHalf(web("Acme"))!.contributes[0]).toMatchObject({ slot: "tab", id: "acme.tab" });
     expect(parseWebHalf({ ...web("Acme"), entry: "https://elsewhere.example/x.js" })).toBeUndefined();
     expect(parseWebHalf({ ...web("Acme"), styles: ["/etc/passwd", "/ui-plugins/Acme/a.css"] })!.styles).toEqual(["/ui-plugins/Acme/a.css"]);
     expect(row("Acme", true, null).ui?.web).toBeUndefined();
@@ -205,8 +205,8 @@ describe("the web UI plugin loader", () => {
     expect(s.getState().entries.Acme).toMatchObject({ state: "ready", fault: null });
   });
 
-  it("lists a slot's fills by order, with plugins still loading or failed, so the app can draw their state", async () => {
-    const card = (id: string, order?: number) => ({ slot: "settings.card", id, ...(order === undefined ? {} : { order }) });
+  it("lists a slot's fills by id (a plugin names no position), with plugins still loading or failed, so the app can draw their state", async () => {
+    const card = (id: string) => ({ slot: "settings.card", id });
     const h = host({
       Late: { apiVersion: 1, activate: (ctx) => ctx.register("late.card", { render: () => "late" }) },
       Early: { apiVersion: 1, activate: (ctx) => ctx.register("early.card", { render: () => "early" }) },
@@ -215,19 +215,20 @@ describe("the web UI plugin loader", () => {
     const s = createUiPluginsStore(h.deps);
     s.getState().sync([
       row("Late", true, web("Late", { contributes: [card("late.card")] })),
-      row("Early", true, web("Early", { contributes: [card("early.card", 100), { slot: "tab", id: "early.tab" }] })),
-      row("Broken", true, web("Broken", { contributes: [card("broken.card", 200)] })),
+      row("Early", true, web("Early", { contributes: [card("early.card"), { slot: "tab", id: "early.tab" }] })),
+      row("Broken", true, web("Broken", { contributes: [card("broken.card")] })),
     ]);
     expect(slotFills(s.getState().entries, "settings.card").map((f) => f.entry.state)).toEqual(["loading", "loading", "loading"]);
     await settle();
     const fills = slotFills(s.getState().entries, "settings.card");
     expect(fills.map((f) => [f.contribution.id, f.entry.state])).toEqual([
-      ["early.card", "ready"],
       ["broken.card", "failed"],
+      ["early.card", "ready"],
       ["late.card", "ready"],
     ]);
     expect(slotFills(s.getState().entries, "settings.card", "Early").map((f) => f.contribution.id)).toEqual(["early.card"]);
     expect(orderOf({})).toBeGreaterThan(orderOf({ order: 1e9 }));
     expect(orderOf({ order: Number.NaN })).toBe(orderOf({}));
+    expect(parseWebHalf(web("Acme"))!.contributes[0]).not.toHaveProperty("order");
   });
 });

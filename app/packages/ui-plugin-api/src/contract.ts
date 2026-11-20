@@ -49,8 +49,6 @@ export interface Contribution {
   label?: string;
   /** The key hint shown on a tab; `^N` also binds Ctrl+N. */
   hint?: string;
-  /** Where a tab sits among the app's own (100, 200, ... in their order); none = after them. */
-  order?: number;
   [k: string]: unknown;
 }
 

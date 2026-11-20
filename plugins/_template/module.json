@@ -19,7 +19,7 @@
     "apiVersion": 1,
     "entry": "ui/dist/index.js",
     "styles": ["ui/dist/index.css"],
-    "contributes": [{ "slot": "tab", "id": "example.starter.web", "label": "Starter", "order": 2100 }]
+    "contributes": [{ "slot": "tab", "id": "example.starter.web", "label": "Starter" }]
   },
   "daemon": {
     "entry": "com.example.starter.daemon.StarterDaemon",
