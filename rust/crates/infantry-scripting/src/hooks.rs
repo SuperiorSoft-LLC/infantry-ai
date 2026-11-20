@@ -261,6 +261,8 @@ pub struct HookStore {
     plugin_hooks: Arc<dyn Fn() -> Vec<Hook> + Send + Sync>,
     cache: Mutex<HashMap<String, Cached>>,
     write: Mutex<()>,
+    /// When set, hooks live in the database and name their script by id (hooks.json is only imported once).
+    library: Option<Arc<crate::library::ScriptLibrary>>,
 }
 
 fn stamp(p: &std::path::Path) -> Stamp {
@@ -271,7 +273,41 @@ fn stamp(p: &std::path::Path) -> Stamp {
 
 impl HookStore {
     pub fn new(project_dirs: ProjectDirs, arsenal_file: Option<PathBuf>) -> Self {
-        HookStore { project_dirs, arsenal_file, plugin_hooks: Arc::new(Vec::new), cache: Mutex::new(HashMap::new()), write: Mutex::new(()) }
+        HookStore { project_dirs, arsenal_file, plugin_hooks: Arc::new(Vec::new), cache: Mutex::new(HashMap::new()), write: Mutex::new(()), library: None }
+    }
+
+    pub fn with_library(mut self, l: Arc<crate::library::ScriptLibrary>) -> Self {
+        self.library = Some(l);
+        self
+    }
+
+    /// The stored hooks of `scope_key` (`""` = the arsenal) from the database; the script name follows the script id.
+    fn db_hooks(&self, scope_key: &str) -> Vec<Hook> {
+        let Some(l) = &self.library else { return Vec::new() };
+        l.hooks(scope_key)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|(_, script_id, name, data)| {
+                let v: Value = serde_json::from_str(&data).ok()?;
+                let mut h = parse_hooks(&json!({"hooks": [v]}).to_string()).ok()?.into_iter().next()?;
+                h.script = script_id.and_then(|id| l.get(&id).ok().flatten()).map(|s| s.name).unwrap_or(name);
+                Some(h)
+            })
+            .collect()
+    }
+
+    /// Replaces the hooks of `scope_key` with `next`: puts the new and changed, deletes the removed.
+    fn db_replace(&self, project: &str, scope_key: &str, next: &[Hook]) -> Result<(), String> {
+        let l = self.library.as_ref().ok_or("no library")?;
+        let have: Vec<String> = l.hooks(scope_key)?.into_iter().map(|h| h.0).collect();
+        for h in next {
+            let sid = if scope_key.is_empty() { l.find("global", "", &h.script)? } else { l.resolve(project, &h.script)? }.map(|s| s.id);
+            l.hook_put(scope_key, &h.id, sid.as_deref(), &h.script, &h.to_json().to_string())?;
+        }
+        for id in have.iter().filter(|id| next.iter().all(|h| &h.id != *id)) {
+            l.hook_delete(scope_key, id)?;
+        }
+        Ok(())
     }
 
     pub fn with_plugin_hooks(mut self, f: Arc<dyn Fn() -> Vec<Hook> + Send + Sync>) -> Self {
@@ -285,7 +321,7 @@ impl HookStore {
 
     /// The project's hooks, then arsenal hooks it does not shadow, then plugin hooks neither shadows.
     pub fn list(&self, project: &str) -> Vec<Hook> {
-        let own = self.load(project).hooks;
+        let own = self.list_own(project);
         let mut shared = own.clone();
         shared.extend(self.arsenal_hooks().into_iter().filter(|g| own.iter().all(|h| h.id != g.id)));
         let plugin = (self.plugin_hooks)();
@@ -295,15 +331,24 @@ impl HookStore {
     }
 
     pub fn list_own(&self, project: &str) -> Vec<Hook> {
+        if self.library.is_some() {
+            return self.db_hooks(project);
+        }
         self.load(project).hooks
     }
 
     /// Why `hooks.json` of `project` could not be read, or `None`.
     pub fn error(&self, project: &str) -> Option<String> {
+        if self.library.is_some() {
+            return None;
+        }
         self.load(project).error
     }
 
     pub fn arsenal_hooks(&self) -> Vec<Hook> {
+        if self.library.is_some() {
+            return self.db_hooks("").into_iter().map(|h| Hook { arsenal: true, ..h }).collect();
+        }
         let Some(f) = self.arsenal_file.as_ref().filter(|f| f.is_file()) else { return Vec::new() };
         let text = std::fs::read_to_string(f).unwrap_or_default();
         parse_hooks(&text).unwrap_or_default().into_iter().map(|h| Hook { arsenal: true, ..h }).collect()
@@ -311,6 +356,14 @@ impl HookStore {
 
     pub fn add_arsenal(&self, hook: Hook) -> Result<(), String> {
         let _g = self.write.lock().unwrap();
+        if self.library.is_some() {
+            let mut cur = self.db_hooks("");
+            if cur.iter().any(|h| h.id == hook.id) {
+                return Err(format!("global hook '{}' already exists (remove it first)", hook.id));
+            }
+            cur.push(hook);
+            return self.db_replace("", "", &cur);
+        }
         let f = self.arsenal_file.clone().ok_or("this daemon has no global hook file")?;
         let mut cur = if f.is_file() { parse_hooks(&std::fs::read_to_string(&f).unwrap_or_default()).map_err(|e| format!("global hooks file does not parse: {e}"))? } else { Vec::new() };
         if cur.iter().any(|h| h.id == hook.id) {
@@ -322,6 +375,15 @@ impl HookStore {
 
     pub fn remove_arsenal(&self, id: &str) -> Result<bool, String> {
         let _g = self.write.lock().unwrap();
+        if self.library.is_some() {
+            let cur = self.db_hooks("");
+            let next: Vec<Hook> = cur.iter().filter(|h| h.id != id).cloned().collect();
+            if next.len() == cur.len() {
+                return Ok(false);
+            }
+            self.db_replace("", "", &next)?;
+            return Ok(true);
+        }
         let Some(f) = self.arsenal_file.clone().filter(|f| f.is_file()) else { return Ok(false) };
         let cur = parse_hooks(&std::fs::read_to_string(&f).unwrap_or_default()).map_err(|e| format!("global hooks file does not parse: {e}"))?;
         let next: Vec<Hook> = cur.iter().filter(|h| h.id != id).cloned().collect();
@@ -371,6 +433,11 @@ impl HookStore {
 
     fn mutate(&self, project: &str, mut change: impl FnMut(&[Hook]) -> Result<Vec<Hook>, String>) -> Result<(), String> {
         let _g = self.write.lock().unwrap();
+        if self.library.is_some() {
+            let cur = self.db_hooks(project);
+            let next = change(&cur)?;
+            return self.db_replace(project, project, &next);
+        }
         let path = self.path(project).ok_or_else(|| format!("unknown project '{project}'"))?;
         // Refuse to overwrite a file we cannot read: the owner's hand edit must not be lost to a failed parse.
         let cur = match std::fs::read_to_string(&path) {
