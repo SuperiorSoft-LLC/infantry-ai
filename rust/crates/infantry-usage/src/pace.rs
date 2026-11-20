@@ -20,6 +20,8 @@ pub const RESET_TOLERANCE_MS: i64 = 30 * 60_000;
 /// A percent falling by more than this inside one window is a reset the provider did not announce.
 pub const DROP_POINTS: f64 = 5.0;
 pub const MIN_ELAPSED: f64 = 0.10;
+/// A pace delta this many points either side of even still reads "on pace".
+pub const ON_PACE_POINTS: i64 = 2;
 pub const RAW_CAP: usize = 200;
 pub const DEFAULT_MAX_POINTS: usize = 400;
 pub const SAMPLE_EVERY_MS: i64 = 60_000;
@@ -255,21 +257,35 @@ pub fn forecast(series: &[PaceSample], window_minutes: i32, now: i64, s: &PaceSe
     Forecast { ready: true, reason: None, current: Some(current), recent: Some(recent), hours_left: Some(hours_left) }
 }
 
+/// Java's `Math.round`: halves go up, so -0.5 reads 0 and 95.5 reads 96, the same as the Kotlin plugin.
+fn round_half_up(d: f64) -> i64 {
+    (d + 0.5).floor() as i64
+}
+
+/// The readable pace words, never a bare "-1 pts": `on pace (−1)`, `ahead of pace (+4)`, `under pace (−12)`. A gap of up
+/// to [`ON_PACE_POINTS`] either way reads as on pace. The figure in brackets is the delta in points, with a real minus.
+pub fn pace_label(delta: f64) -> String {
+    let pts = round_half_up(delta);
+    let figure = if pts > 0 { format!("+{pts}") } else if pts < 0 { format!("\u{2212}{}", -pts) } else { "0".to_string() };
+    let words = if pts.abs() <= ON_PACE_POINTS { "on pace" } else if pts > 0 { "ahead of pace" } else { "under pace" };
+    format!("{words} ({figure})")
+}
+
 /// "at the current rate you land at 107%; at the last 6h rate, 96% (falling); stays under 100%".
 pub fn sentence(f: &Forecast, m: Momentum) -> String {
     let (Some(c), Some(r), true) = (&f.current, &f.recent, f.ready) else { return f.reason.clone().unwrap_or_else(|| "not enough data yet".into()) };
     let mm = if m == Momentum::Unknown { String::new() } else { format!(" ({})", m.name().to_lowercase()) };
     let cross = match (c.hours_to_cross, r.hours_to_cross) {
-        (Some(a), Some(b)) => format!("; you cross 100% in {}h", fmt_num(crate::util::round1(a.min(b)))),
-        (None, Some(b)) => format!("; at the recent rate you cross 100% in {}h", fmt_num(crate::util::round1(b))),
-        (Some(a), None) => format!("; at the current rate you cross 100% in {}h", fmt_num(crate::util::round1(a))),
+        (Some(a), Some(b)) => format!("; you cross 100% in {}h", fmt_num(a.min(b))),
+        (None, Some(b)) => format!("; at the recent rate you cross 100% in {}h", fmt_num(b)),
+        (Some(a), None) => format!("; at the current rate you cross 100% in {}h", fmt_num(a)),
         _ => "; stays under 100%".into(),
     };
     format!(
         "at the current rate you land at {}%; at the {} rate, {}%{mm}{cross}",
-        c.landing_percent.round() as i64,
+        round_half_up(c.landing_percent),
         r.label.trim_end_matches(" rate"),
-        r.landing_percent.round() as i64
+        round_half_up(r.landing_percent)
     )
 }
 
@@ -505,9 +521,14 @@ impl PaceQuery {
         PaceQuery {
             provider: s("provider"),
             window: s("window"),
-            since_ms: since,
-            max_points: v.get("maxPoints").and_then(Value::as_u64).map(|n| n as usize).filter(|n| *n >= 2).unwrap_or(DEFAULT_MAX_POINTS),
-            include_samples: v.get("samples").and_then(Value::as_bool).unwrap_or(false),
+            since_ms: since.max(0),
+            max_points: v.get("maxPoints").and_then(Value::as_i64).map(|n| n.clamp(2, 5000) as usize).unwrap_or(DEFAULT_MAX_POINTS),
+            // The Kotlin tool takes the string "true"; a JSON true is accepted too.
+            include_samples: match v.get("samples") {
+                Some(Value::Bool(b)) => *b,
+                Some(Value::String(t)) => t == "true",
+                _ => false,
+            },
         }
     }
 }
@@ -521,6 +542,20 @@ fn line_json(l: &Option<RateLine>) -> Value {
         None => Value::Null,
         Some(l) => json!({"label": l.label, "ratePerHour": l.rate_per_hour, "landingPercent": l.landing_percent, "hoursToCross": l.hours_to_cross, "staysUnder": l.stays_under}),
     }
+}
+
+/// The Kotlin `rawSamples[].tokens` shape of a stored `k` array.
+fn raw_tokens(k: &Option<Value>) -> Value {
+    let Some(Value::Array(a)) = k else { return json!([]) };
+    Value::Array(
+        a.iter()
+            .map(|t| {
+                let n = |key: &str| t.get(key).and_then(Value::as_i64);
+                json!({"session": t.get("s").and_then(Value::as_str).unwrap_or(""), "role": t.get("r").and_then(Value::as_str).unwrap_or(""),
+                    "input": n("i"), "output": n("o"), "cacheRead": n("cr"), "cacheWrite": n("cw")})
+            })
+            .collect(),
+    )
 }
 
 /// The `pace_report` body.
@@ -569,13 +604,13 @@ pub fn report(store: &PaceStore, s: &PaceSettings, q: &PaceQuery, now: i64) -> V
             let skip = shown.len().saturating_sub(RAW_CAP);
             obj["rawSamples"] = shown[skip..]
                 .iter()
-                .map(|x| json!({"t": x.observed_at, "percent": x.percent, "prev": x.prev_percent, "delta": x.delta_percent, "tokens": x.tokens.clone().unwrap_or(json!([]))}))
+                .map(|x| json!({"t": x.observed_at, "percent": x.percent, "prev": x.prev_percent, "delta": x.delta_percent, "tokens": raw_tokens(&x.tokens)}))
                 .collect();
         }
         text.push(format!(
             "{p} / {w}: {}{}, momentum {} ({} samples)\n    {sent}",
             latest.map(|l| format!("{}% used", fmt_num(l.percent))).unwrap_or_else(|| "no reading".into()),
-            latest.and_then(|l| l.pace_delta).map(|d| format!(", {}{} vs even pace", if d >= 0.0 { "+" } else { "" }, fmt_num(d))).unwrap_or_default(),
+            latest.and_then(|l| l.pace_delta).map(|d| format!(", {}", pace_label(d))).unwrap_or_default(),
             headline.name(),
             all.len()
         ));
@@ -623,3 +658,6 @@ mod tests {
         let _ = std::fs::remove_file(&f);
     }
 }
+
+#[cfg(test)]
+mod kotlin_parity;
