@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// One agent in the sidebar. Selected = amber border + scrolling stripes (SelectedStripes); a busy PM card is striped (SelectedStripes.kt).
+// One agent in the sidebar. Selected = amber border + static stripes; working = moving stripes, selected or not (SelectedStripes.kt).
 import { memo, useState } from "react";
 import { cn } from "@infantry/ui";
 import type { Agent } from "@/mock/types";
@@ -20,7 +20,7 @@ const chipTone: Record<Agent["status"], string> = {
 
 /** Memoised: a card re-renders only when its own session (or the selection) changed. */
 export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: { agent: Agent; selected: boolean; onSelect: (id: string) => void }) {
-  const striped = agent.roleId === "pm" && agent.status === "working";
+  const working = agent.status === "working";
   const compact = agent.group === "quiet";
   const [menu, setMenu] = useState(false);
   return (
@@ -34,10 +34,10 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
         "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
         selected ? "border-warn" : "border-info/25",
         compact && "border",
-        striped && "stripes border-info/40",
       )}
     >
-      <SelectedStripes active={selected} />
+      {/* Kotlin parity: working = moving stripes (selected or not); selected and idle = a static stripe. */}
+      <SelectedStripes active={selected || working} animate={working} />
       <div className="relative flex min-w-0 items-start gap-3">
         <AgentAvatar agent={agent} size="lg" live={!compact} className="mt-3 shrink-0" />
         <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
@@ -58,7 +58,7 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
               {agent.statusLine}
             </div>
           ) : (
-            !compact && !striped && <div className="truncate text-xs text-muted-foreground">{agent.statusLine}</div>
+            !compact && <div className="truncate text-xs text-muted-foreground">{agent.statusLine}</div>
           )}
           {agent.progress !== undefined && !compact && <ProgressLine value={agent.progress} className="my-1.5" />}
 
