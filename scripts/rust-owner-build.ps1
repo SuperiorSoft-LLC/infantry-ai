@@ -15,19 +15,43 @@ $sha = (git -C $repo rev-parse --short=8 HEAD).Trim()
 Push-Location (Join-Path $repo 'app'); try { pnpm install --frozen-lockfile; Push-Location shell; pnpm build; Pop-Location } finally { Pop-Location }
 $index = Join-Path $repo 'app\shell\dist\index.html'
 if (-not (Test-Path $index)) { throw "shell dist missing: $index" }
-# Build every exe the package copies: infantry.exe and infantry-migrate.exe were left stale in the shared target
-# (built once with the dynamic CRT), so the packaged CLI failed on a clean Windows with vcruntime140.dll missing.
-cargo build --profile owner-test --manifest-path (Join-Path $repo 'rust\Cargo.toml') -p infantry-daemon -p infantry-cli -p infantry-migrate
-cargo build --profile owner-test --features custom-protocol --manifest-path (Join-Path $repo 'app\src-tauri\Cargo.toml')
-$out = Join-Path $env:CARGO_TARGET_DIR 'owner-test'
+# ONE full build. With the MSI on, the release exes (stage-bundle.sh + `tauri build`) are the only compile, and the
+# folder is packaged from those same optimized exes (OWNER-BUILD-ONCE-1: it used to compile owner-test AND release).
+# With -SkipMsi the quick owner-test build is kept. Every exe the package copies is built: infantry.exe and
+# infantry-migrate.exe were once left stale in the shared target (dynamic CRT), so the CLI failed on a clean Windows.
+$gitRoot = Split-Path (Get-Command git).Source -Parent; while ($gitRoot -and -not (Test-Path (Join-Path $gitRoot 'bin\bash.exe'))) { $gitRoot = Split-Path $gitRoot -Parent }
+$gitBash = Join-Path $gitRoot 'bin\bash.exe'
+if (-not (Test-Path $gitBash)) { throw "BUILD REFUSED: Git Bash not found at $gitBash" }
+if ($SkipMsi) {
+    cargo build --profile owner-test --manifest-path (Join-Path $repo 'rust\Cargo.toml') -p infantry-daemon -p infantry-cli -p infantry-migrate
+    cargo build --profile owner-test --features custom-protocol --manifest-path (Join-Path $repo 'app\src-tauri\Cargo.toml')
+    $out = Join-Path $env:CARGO_TARGET_DIR 'owner-test'
+} else {
+    # RUST-INSTALLER (60bc4e42): the per-user MSI. Release-profile exes are staged by stage-bundle.sh; the MSI is signed
+    # with the TEST updater key unless TAURI_SIGNING_PRIVATE_KEY is set.
+    $env:INFANTRY_BUNDLE_PROFILE = 'release'
+    & $gitBash (Join-Path $repo 'app/src-tauri/scripts/stage-bundle.sh'); if ($LASTEXITCODE -ne 0) { throw 'MSI: staging failed' }
+    $cfg = @('--config', 'src-tauri/bundle-stage/tauri.bundle.conf.json')
+    if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+        $kd = Join-Path $env:TEMP "infantry-msi-key-$sha"; New-Item -ItemType Directory -Force $kd | Out-Null
+        Push-Location (Join-Path $repo 'app'); try { pnpm tauri signer generate --ci -p '' -w "$kd/test.key" | Out-Null } finally { Pop-Location }
+        $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content "$kd/test.key" -Raw; $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
+        $ov = Join-Path $kd 'ov.json'; (@{ plugins = @{ updater = @{ pubkey = (Get-Content "$kd/test.key.pub" -Raw).Trim() } } } | ConvertTo-Json -Depth 5) | Set-Content $ov
+        $cfg += @('--config', $ov); Write-Output 'MSI signed with a THROWAWAY test key (no installed app trusts it)'
+    }
+    # Clear earlier bundles first: the shared target keeps old-version MSIs, and copying '*.msi*' shipped a stale
+    # dynamic-CRT 0.1.0 MSI next to the new one (sandbox run 5: the daemon failed on vcruntime140.dll).
+    foreach ($d in (Join-Path $env:CARGO_TARGET_DIR 'release/bundle/msi'), (Join-Path $repo 'app/src-tauri/target/release/bundle/msi')) {
+        if (Test-Path $d) { Remove-Item (Join-Path $d '*.msi*') -Force }
+    }
+    Push-Location (Join-Path $repo 'app')
+    try { pnpm tauri build --bundles msi @cfg --config '{"bundle":{"createUpdaterArtifacts":true}}'; if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' } } finally { Pop-Location }
+    $out = Join-Path $env:CARGO_TARGET_DIR 'release'
+}
 # RUST-BUG dd10c3bb: stage every official daemon plugin (WASM) into $out\plugins. Without this the package has no
 # plugins folder and every plugin frame (Triggers, Notes, image_upload) answers "does not serve that frame yet".
 $stagedPlugins = Join-Path $out 'plugins'
 if (Test-Path $stagedPlugins) { Remove-Item $stagedPlugins -Recurse -Force }
-# Git Bash, never C:\Windows\system32\bash.exe (that is WSL: no cargo, no python on its PATH).
-$gitRoot = Split-Path (Get-Command git).Source -Parent; while ($gitRoot -and -not (Test-Path (Join-Path $gitRoot 'bin\bash.exe'))) { $gitRoot = Split-Path $gitRoot -Parent }
-$gitBash = Join-Path $gitRoot 'bin\bash.exe'
-if (-not (Test-Path $gitBash)) { throw "BUILD REFUSED: Git Bash not found at $gitBash" }
 & $gitBash (Join-Path $repo 'rust/plugins/stage.sh') $stagedPlugins release
 if ($LASTEXITCODE -ne 0) { throw 'BUILD REFUSED: plugin staging failed' }
 $nWasm = @(Get-ChildItem $stagedPlugins -Recurse -Include *.wasm,*.component -ErrorAction SilentlyContinue).Count
@@ -53,31 +77,12 @@ Copy-Item $stagedPlugins $dest -Recurse
 Set-Content (Join-Path $dest 'start.cmd') "@echo off`r`nrem Rust app, default port 18990, own state dir (%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust)`r`nset INFANTRY_PORT=18990`r`nset INFANTRY_PLUGINS_DIR=%~dp0plugins`r`nstart `"`" `"%~dp0InfantryAI-Rust.exe`""
 if ($SwitchScriptFrom) { Copy-Item $SwitchScriptFrom (Join-Path $dest 'switch-to-rust.ps1') }
 
-# RUST-INSTALLER (60bc4e42): also produce the per-user MSI (the installable, auto-updating form) next to the folder build.
-# Release-profile exes are staged by stage-bundle.sh; the MSI is signed with the TEST updater key unless TAURI_SIGNING_PRIVATE_KEY is set.
 if (-not $SkipMsi) {
-    $env:INFANTRY_BUNDLE_PROFILE = 'release'
-    & $gitBash (Join-Path $repo 'app/src-tauri/scripts/stage-bundle.sh'); if ($LASTEXITCODE -ne 0) { throw 'MSI: staging failed' }
-    $cfg = @('--config', 'src-tauri/bundle-stage/tauri.bundle.conf.json')
-    if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
-        $kd = Join-Path $env:TEMP "infantry-msi-key-$sha"; New-Item -ItemType Directory -Force $kd | Out-Null
-        Push-Location (Join-Path $repo 'app'); try { pnpm tauri signer generate --ci -p '' -w "$kd/test.key" | Out-Null } finally { Pop-Location }
-        $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content "$kd/test.key" -Raw; $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
-        $ov = Join-Path $kd 'ov.json'; (@{ plugins = @{ updater = @{ pubkey = (Get-Content "$kd/test.key.pub" -Raw).Trim() } } } | ConvertTo-Json -Depth 5) | Set-Content $ov
-        $cfg += @('--config', $ov); Write-Output 'MSI signed with a THROWAWAY test key (no installed app trusts it)'
-    }
-    # Clear earlier bundles first: the shared target keeps old-version MSIs, and copying '*.msi*' shipped a stale
-    # dynamic-CRT 0.1.0 MSI next to the new one (sandbox run 5: the daemon failed on vcruntime140.dll).
-    foreach ($d in (Join-Path $env:CARGO_TARGET_DIR 'release/bundle/msi'), (Join-Path $repo 'app/src-tauri/target/release/bundle/msi')) {
-        if (Test-Path $d) { Remove-Item (Join-Path $d '*.msi*') -Force }
-    }
-    Push-Location (Join-Path $repo 'app')
-    try { pnpm tauri build --bundles msi @cfg --config '{"bundle":{"createUpdaterArtifacts":true}}'; if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' } } finally { Pop-Location }
     $msiDir = Join-Path $env:CARGO_TARGET_DIR 'release/bundle/msi'
     if (-not (Test-Path $msiDir)) { $msiDir = Join-Path $repo 'app/src-tauri/target/release/bundle/msi' }
     Copy-Item (Join-Path $msiDir '*.msi*') $dest
     Write-Output "MSI: $((Get-ChildItem $dest -Filter *.msi | Select-Object -First 1).FullName)"
 }
 $min = [math]::Round(((Get-Date) - $t0).TotalMinutes, 1)
-Set-Content (Join-Path $dest 'README.txt') "Infantry AI (Rust/Tauri) owner-test build $sha. Run start.cmd (port 18990). UI embedded (custom-protocol, checked). Build time: $min min (cached, incremental)."
+Set-Content (Join-Path $dest 'README.txt') "Infantry AI (Rust/Tauri) owner build $sha ($(if ($SkipMsi) {'owner-test'} else {'release, same exes as the MSI'}) profile). Run start.cmd (port 18990). UI embedded (custom-protocol, checked). Build time: $min min (cached, incremental)."
 Write-Output "BUILD OK $dest ($min min)"
