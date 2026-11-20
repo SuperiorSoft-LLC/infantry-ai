@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 import { describe, expect, it } from "vitest";
-import { arrangeBy, createLayoutProvider, type LayoutDocument } from "../src/layout";
+import { arrangeBy, createLayoutProvider, createLayoutStore, type LayoutDocument } from "../src/layout";
 
 const doc: LayoutDocument = {
   id: "t",
@@ -27,5 +27,28 @@ describe("the layout provider", () => {
   it("arranges items by the layout, unplaced ones last in their given order", () => {
     const items = ["x", "c", "y", "a"];
     expect(arrangeBy(p, "center", items, (s) => s)).toEqual(["a", "c", "x", "y"]);
+  });
+});
+
+describe("the layout store", () => {
+  it("notifies subscribers on a swap, not on the same provider, and stops after unsubscribe", () => {
+    const a = createLayoutProvider(doc);
+    const b = createLayoutProvider({ ...doc, id: "u" });
+    const store = createLayoutStore(a);
+    let calls = 0;
+    const off = store.subscribe(() => calls++);
+    store.set(a);
+    expect(calls).toBe(0);
+    store.set(b);
+    expect(store.get()).toBe(b);
+    expect(calls).toBe(1);
+    off();
+    store.set(a);
+    expect(calls).toBe(1);
+  });
+  it("carries a root only when the layout owns the screen", () => {
+    expect(createLayoutProvider(doc).root).toBeUndefined();
+    const root = () => null;
+    expect(createLayoutProvider(doc, { root }).root).toBe(root);
   });
 });

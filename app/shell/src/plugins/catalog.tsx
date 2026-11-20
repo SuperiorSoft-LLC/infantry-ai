@@ -57,7 +57,7 @@ import { AttentionPanel } from "@/components/usage/attention-panel";
 import { HealthTab } from "@/components/health/health-tab";
 import { PluginManager } from "@/components/plugins/plugin-manager";
 import { arrangeBy } from "@infantry/ui-plugin-api/layout";
-import { layoutProvider } from "./default-layout";
+import { layoutProvider, useLayoutProvider } from "./default-layout";
 import { PluginFallback } from "./plugin-fallback";
 import { useRegistry } from "./use-plugins";
 import { PluginView, webTabIcon } from "./web-plugins";
@@ -182,5 +182,6 @@ export function entryFor(id: string, reg: SlotRegistry | null): TabEntry | undef
 /** The tabs of one container, recomputed only when the registry changes. */
 export function useTabs(container: "center" | "right"): TabEntry[] {
   const reg = useRegistry();
-  return useMemo(() => tabsFor(container, reg), [container, reg]);
+  const layout = useLayoutProvider(); // a layout swap re-arranges the tabs
+  return useMemo(() => tabsFor(container, reg), [container, reg, layout]);
 }
