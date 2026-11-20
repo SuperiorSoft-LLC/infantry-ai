@@ -241,7 +241,9 @@ impl Harness for ClaudeHarness {
     }
 
     fn sign_in_problem(&self, probe: &dyn Probe) -> Option<String> {
-        if probe.env(OAUTH_TOKEN_ENV).is_some() || probe.env(API_KEY_ENV).is_some_and(|k| !k.trim().is_empty()) {
+        // An API_KEY_ENV key does not count as signed in yet: that check is part of the credential detection that is
+        // not switched on (WIP 4097d75b, harness/credentials.rs is not compiled). Backlog #51 finishes it and adds it here.
+        if probe.env(OAUTH_TOKEN_ENV).is_some() {
             return None;
         }
         let creds = config_dir(probe).map(|d| d.join(CREDENTIALS_FILE));
