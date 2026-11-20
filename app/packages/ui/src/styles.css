@@ -253,6 +253,12 @@
     will-change: transform;
     animation: selected-stripes-move 3s linear infinite;
   }
+  .selected-stripes-static {
+    animation: none;
+  }
+  [data-page-hidden] .selected-stripes {
+    animation-play-state: paused;
+  }
   @keyframes selected-stripes-move {
     to {
       transform: translateX(28px);
