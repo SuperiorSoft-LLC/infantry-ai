@@ -5,6 +5,13 @@ import type { ReactNode } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/dialog";
 import { cn } from "../lib/utils";
 
+/** Width tiers. default is at least the chat feed's width (the centre column), full width minus gutters on a phone. */
+export const DIALOG_WIDTHS = {
+  default: "w-[min(760px,calc(100vw-2rem))] sm:max-w-none",
+  wide: "w-[min(960px,calc(100vw-2rem))] sm:max-w-none",
+  full: "w-[min(1400px,calc(100vw-2rem))] sm:max-w-none",
+} as const;
+
 export function AppDialog({
   open,
   onOpenChange,
@@ -20,7 +27,7 @@ export function AppDialog({
   description?: string;
   footer?: ReactNode;
   /** true: a roomy form dialog; "fill": grows with the window (min(1100px, 92vw) by min(85vh, 820px)), for settings-like content. */
-  wide?: boolean | "fill" | "image";
+  wide?: boolean | "fill" | "image" | "full";
   children: ReactNode;
 }) {
   const fill = wide === "fill";
@@ -34,9 +41,7 @@ export function AppDialog({
             ? "h-[min(85vh,820px)] w-[min(1100px,92vw)] min-w-[min(480px,92vw)] sm:max-w-none"
             : image
               ? "h-auto max-h-[88vh] w-fit max-w-[92vw] min-w-[min(480px,92vw)] sm:max-w-[92vw] max-sm:h-dvh max-sm:max-h-none max-sm:w-screen max-sm:max-w-none max-sm:rounded-none"
-              : wide
-                ? "sm:max-w-3xl"
-                : "sm:max-w-md",
+              : DIALOG_WIDTHS[wide === "full" ? "full" : wide ? "wide" : "default"],
         )}
       >
         <DialogHeader className="border-b p-4 pr-12">
