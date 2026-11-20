@@ -80,6 +80,9 @@ export function SettingsBody() {
         {(searching || declared.includes(section)) && <DeclaredSettings tab={section} query={query} />}
         {!searching && section === "Appearance" && (
           <>
+            <SettingRow id="set-workers" title="Global workers board" hint="The Working counter opens every project's working agents">
+              <Switch id="set-workers" checked={ui.globalWorkers} onCheckedChange={(v) => ui.set("globalWorkers", v)} />
+            </SettingRow>
             <SettingRow id="set-dark" title="Dark theme" hint="Light theme when off">
               <Switch id="set-dark" checked={ui.theme === "dark"} onCheckedChange={ui.toggleTheme} />
             </SettingRow>
