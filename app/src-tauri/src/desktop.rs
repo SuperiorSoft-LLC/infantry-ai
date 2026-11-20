@@ -9,9 +9,10 @@ use crate::{env, ws_url};
 use serde::Serialize;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use tauri::ipc::Channel;
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 
 /// Where the daemon is, resolved like the `infantry` CLI: INFANTRY_URL, else INFANTRY_PORT on loopback, else 8787.
 /// The old AGENTHQ_* names are read as fallbacks (AGENTS.md §7).
@@ -97,6 +98,9 @@ pub(crate) struct UiSettings {
     /// RUST-UPD-1: keep the app folder on the user PATH (`infantry install-cli`). Opt-in, off by default.
     #[serde(default, rename = "paths.addCli", skip_serializing_if = "Option::is_none")]
     pub(crate) add_cli: Option<bool>,
+    /// RUST-BUG 2617b342: the app restarts a daemon that died (supervisor.rs); backoff, polling and log generations.
+    #[serde(default, rename = "daemonSupervisor", skip_serializing_if = "Option::is_none")]
+    pub(crate) supervisor: Option<crate::supervisor::SupervisorSettings>,
 }
 
 fn settings_path(state: &std::path::Path) -> PathBuf {
@@ -119,6 +123,10 @@ pub(crate) struct AppState {
     pub(crate) daemon_state: Option<PathBuf>,
     daemon_port: u16,
     cwd: PathBuf,
+    /// Set while the app itself stops the daemon (an update, a restart): the supervisor must not call that a death.
+    pub(crate) paused: Arc<AtomicBool>,
+    /// Set when the app exits.
+    exiting: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -128,6 +136,10 @@ impl AppState {
         f(&mut s);
         let text = serde_json::to_string_pretty(&*s).map_err(|e| e.to_string())?;
         std::fs::write(settings_path(&self.dir), text).map_err(|e| e.to_string())
+    }
+
+    fn log_keep(&self) -> usize {
+        self.settings.lock().unwrap().supervisor.clone().unwrap_or_default().log_keep()
     }
 
     fn launch(&self) -> Result<daemon::Launch, String> {
@@ -154,8 +166,15 @@ impl AppState {
     /// Stops the sidecar by its PID and starts it again with the current settings (phone access, after an update).
     pub(crate) fn restart_daemon(&self) -> Result<(), String> {
         let state = self.daemon_state.as_ref().ok_or("this window runs no daemon sidecar")?;
+        self.paused.store(true, Ordering::SeqCst);
+        let r = self.restart_daemon_paused(state);
+        self.paused.store(false, Ordering::SeqCst);
+        r
+    }
+
+    fn restart_daemon_paused(&self, state: &std::path::Path) -> Result<(), String> {
         daemon::stop(state)?;
-        let r = daemon::ensure(state, self.daemon_port, &self.cwd, &self.launch()?);
+        let r = daemon::ensure(state, self.daemon_port, &self.cwd, &self.launch()?, self.log_keep());
         let out = r.as_ref().map(|_| ()).map_err(|e| e.clone());
         let (m, cv) = &*self.sidecar;
         *m.lock().unwrap() = Some(r);
@@ -284,6 +303,9 @@ pub fn run() {
             let cwd = std::env::current_dir().unwrap_or_else(|_| dir.clone());
             let port = env("UI_DAEMON_PORT").and_then(|p| p.parse().ok()).or(settings.daemon_port).unwrap_or(daemon::DEFAULT_PORT);
             let mut daemon_state = None;
+            let paused = Arc::new(AtomicBool::new(false));
+            let exiting = Arc::new(AtomicBool::new(false));
+            let settings_remote = settings.remote_access.unwrap_or(false);
             crate::update::keep_cli_path(settings.add_cli.unwrap_or(false));
             if mode == Mode::Daemon {
                 // INFANTRY_UI_DAEMON_PORT (above) pins the sidecar's port (tests use 189xx; 0 = any free port), else 18990.
@@ -299,17 +321,39 @@ pub fn run() {
                 let cell = sidecar.clone();
                 let cwd = cwd.clone();
                 let launch = launch_for(settings.remote_access.unwrap_or(false), Some(&state));
+                let sup = settings.supervisor.clone().unwrap_or_default();
+                let (paused2, exiting2) = (paused.clone(), exiting.clone());
+                let handle = app.handle().clone();
                 std::thread::spawn(move || {
-                    let r = launch.and_then(|l| daemon::ensure(&state, port, &cwd, &l));
+                    let r = launch.and_then(|l| daemon::ensure(&state, port, &cwd, &l, sup.log_keep()));
                     if let Err(e) = &r {
                         eprintln!("[infantry] daemon mode: {e}");
+                        crate::supervisor::journal(&state, "daemon_start_failed", "app start", e);
                     }
+                    let ok = r.is_ok();
                     let (m, cv) = &*cell;
                     *m.lock().unwrap() = Some(r);
                     cv.notify_all();
+                    if ok {
+                        // RUST-BUG 2617b342: from here the app restarts the daemon if it dies without a clean stop.
+                        let remote = settings_remote;
+                        crate::supervisor::run(crate::supervisor::Watch {
+                            state: state.clone(),
+                            port,
+                            cwd,
+                            settings: sup,
+                            launch: Box::new(move || launch_for(remote, Some(&state))),
+                            cell: cell.clone(),
+                            paused: paused2,
+                            exiting: exiting2,
+                            notify: Box::new(move |n| {
+                                let _ = handle.emit("daemon-notice", n);
+                            }),
+                        });
+                    }
                 });
             }
-            app.manage(AppState { dir: dir.clone(), mode, settings: Mutex::new(settings), sidecar, daemon_state, daemon_port: port, cwd });
+            app.manage(AppState { dir: dir.clone(), mode, settings: Mutex::new(settings), sidecar, daemon_state, daemon_port: port, cwd, paused, exiting });
             crate::update::manage(app);
             app.manage(Local::new(dir));
             Ok(())
@@ -322,6 +366,7 @@ pub fn run() {
         .run(|app, e| {
             // Every session's process tree dies with the app (Job Objects); dropping them first makes it prompt.
             if let tauri::RunEvent::Exit = e {
+                app.state::<AppState>().exiting.store(true, Ordering::SeqCst);
                 app.state::<Local>().shutdown();
             }
         });

@@ -1892,6 +1892,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-proc"
+version = "0.1.0"
+
+[[package]]
 name = "infantry-runner"
 version = "0.1.0"
 dependencies = [
@@ -1914,6 +1918,7 @@ dependencies = [
 name = "infantry-runner-local"
 version = "0.1.0"
 dependencies = [
+ "infantry-proc",
  "infantry-runner",
  "infantry-runner-api",
  "libc",

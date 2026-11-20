@@ -457,7 +457,7 @@ impl Daemon {
     /// Starts the watchdog loop (once).
     pub fn start_watchdog(self: &Arc<Self>, ports: Arc<dyn WatchPorts>, cfg: WatchConfig) {
         let d = self.clone();
-        tokio::spawn(async move {
+        crate::sessions::spawn_bg(async move {
             let mut t = tokio::time::interval(Duration::from_millis(cfg.poll_ms.max(1)));
             t.tick().await;
             loop {

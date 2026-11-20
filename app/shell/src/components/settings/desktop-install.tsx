@@ -34,6 +34,14 @@ function Row({ id, title, hint, children }: { id: string; title: string; hint: R
 }
 
 /** At start (desktop, `updater.autoCheck` on): one check; a newer build posts an "update available" notice. Never installs. */
+/** RUST-BUG 2617b342: the app restarted a daemon that died (or could not); the window posts it as an owner notice. */
+export function listenDaemonNotices(): void {
+  if (!isTauri) return;
+  void import("@tauri-apps/api/event")
+    .then(({ listen }) => listen<{ id: string; title: string; body: string; level: "urgent" }>("daemon-notice", (e) => attentionStore().getState().post(e.payload)))
+    .catch((e) => console.warn(`[infantry] daemon notices: ${message(e)}`));
+}
+
 export function startUpdateCheck(): void {
   if (!updatable()) return;
   void call<{ autoCheck: boolean }>("update_settings_get")
