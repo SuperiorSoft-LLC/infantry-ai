@@ -2,24 +2,22 @@
 // Copyright (c) SuperiorSoft LLC
 // The running app's version for About and the status bar: the Tauri app's own version, or "web client" in a browser.
 import { useSyncExternalStore } from "react";
-import { isTauri } from "@/daemon/daemon";
+import { host } from "@/host";
 
 let version: string | null = null;
 const listeners = new Set<() => void>();
 
-if (isTauri) {
-  void import("@tauri-apps/api/app")
-    .then(({ getVersion }) => getVersion())
-    .then((v) => {
-      version = v;
-      listeners.forEach((l) => l());
-    })
-    .catch(() => {});
-}
+void host
+  .version()
+  .then((v) => {
+    version = v;
+    listeners.forEach((l) => l());
+  })
+  .catch(() => {});
 
-/** "Infantry AI 0.1.0 (desktop)" once known; the web client says so. */
+/** "version 0.2.0 · desktop" once known; the web client says so. */
 export function appVersionLine(): string {
-  return isTauri ? (version ? `version ${version} · desktop` : "desktop") : "web client";
+  return host.kind === "browser" ? "web client" : version ? `version ${version} · desktop` : "desktop";
 }
 
 /** Re-renders when the version arrives. */

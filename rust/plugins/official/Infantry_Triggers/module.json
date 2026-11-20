@@ -106,7 +106,12 @@
     "routes": ["POST /hooks/{id}"],
     "publicRoutes": ["POST /hooks/{id}"]
   },
-  "tabs": [{ "id": "infantry.triggers", "container": "center" }],
+  "ui": {
+    "apiVersion": 1,
+    "entry": "ui/dist/index.js",
+    "styles": ["ui/dist/index.css"],
+    "contributes": [{ "slot": "tab", "id": "infantry.triggers", "label": "Triggers", "hint": "^0", "order": 600 }]
+  },
   "actions": [
     { "id": "triggers.save", "label": "New or edit a trigger", "kind": "write", "frames": ["trigger_save"] },
     { "id": "triggers.fire", "label": "Fire, arm or disable a trigger", "kind": "write", "frames": ["trigger_fire", "trigger_arm", "trigger_disable"] },

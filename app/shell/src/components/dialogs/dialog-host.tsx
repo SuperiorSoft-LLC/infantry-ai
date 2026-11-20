@@ -25,28 +25,30 @@ export function DialogHost() {
   const [agent, setAgent] = useState<NewAgentDraft>(EMPTY_DRAFT);
   const [folder, setFolder] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
+  // UI-RESUME-WEB-1: Resume runs only in the embedded runner; anywhere else no dialog offers it.
+  const dialog = ui.dialog === "resume" && !localMode ? null : ui.dialog;
   useEffect(() => {
-    if (ui.dialog === "new-agent") setAgent(EMPTY_DRAFT);
-    if (ui.dialog === "resume") setPicked(null);
-  }, [ui.dialog]);
-  if (!ui.dialog) return <PluginSettingsDialog />;
-  if (ui.dialog === "new-ticket") return <TicketDialog ticketId={null} creating onClose={() => ui.set("dialog", null)} />;
-  if (ui.dialog === "stats") return <StatsDialog onClose={() => ui.set("dialog", null)} />;
-  if (ui.dialog === "setup") return <SetupWizardDialog onClose={() => ui.set("dialog", null)} />;
-  const c = config[ui.dialog];
+    if (dialog === "new-agent") setAgent(EMPTY_DRAFT);
+    if (dialog === "resume") setPicked(null);
+  }, [dialog]);
+  if (!dialog) return <PluginSettingsDialog />;
+  if (dialog === "new-ticket") return <TicketDialog ticketId={null} creating onClose={() => ui.set("dialog", null)} />;
+  if (dialog === "stats") return <StatsDialog onClose={() => ui.set("dialog", null)} />;
+  if (dialog === "setup") return <SetupWizardDialog onClose={() => ui.set("dialog", null)} />;
+  const c = config[dialog];
   const close = () => ui.set("dialog", null);
-  const blocked = ui.dialog === "new-agent" ? addBlockedReason(agent) : null;
+  const blocked = dialog === "new-agent" ? addBlockedReason(agent) : null;
   const primary = () => {
-    if (ui.dialog === "new-agent") {
+    if (dialog === "new-agent") {
       if (blocked) return;
       addAgent(agent);
-    } else if (ui.dialog === "resume" && picked) {
+    } else if (dialog === "resume" && picked) {
       daemonStore().getState().spawnWith({ resume: picked, cwd: folder ?? undefined });
       ui.set("selectedAgentId", picked);
     }
     close();
   };
-  const disabled = (ui.dialog === "resume" && (!localMode || !picked)) || blocked !== null;
+  const disabled = (dialog === "resume" && !picked) || blocked !== null;
   return (
     <AppDialog
       open
@@ -66,14 +68,9 @@ export function DialogHost() {
         </>
       }
     >
-      {ui.dialog === "settings" && <SettingsBody />}
-      {ui.dialog === "new-agent" && <NewAgentBody draft={agent} onChange={setAgent} onSubmit={primary} />}
-      {ui.dialog === "resume" &&
-        (localMode ? (
-          <ResumeBody folder={folder} onFolder={setFolder} picked={picked} onPick={setPicked} />
-        ) : (
-          <div className="text-sm text-muted-foreground">Resume runs in the embedded runner; this window is connected to a daemon.</div>
-        ))}
+      {dialog === "settings" && <SettingsBody />}
+      {dialog === "new-agent" && <NewAgentBody draft={agent} onChange={setAgent} onSubmit={primary} />}
+      {dialog === "resume" && <ResumeBody folder={folder} onFolder={setFolder} picked={picked} onPick={setPicked} />}
     </AppDialog>
   );
 }

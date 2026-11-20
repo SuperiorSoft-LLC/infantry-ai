@@ -2,7 +2,8 @@
 // Copyright (c) SuperiorSoft LLC
 // Bottom status bar: connection, processes, an update the app found, keyboard hints, version.
 import { Cpu } from "lucide-react";
-import { SHORTCUT_HINTS } from "@infantry/client";
+import { shortcutHints } from "@infantry/client";
+import { localMode } from "@/daemon/daemon";
 import { useAttention } from "@/components/mail/use-mail";
 import { useAppVersionLine } from "./app-version";
 import { KeyHint } from "@infantry/ui";
@@ -47,7 +48,7 @@ export function StatusBar() {
       <UpdatePill />
       <span className="flex-1" />
       <span className="hidden items-center gap-3 xl:flex">
-        {SHORTCUT_HINTS.map((h) => (
+        {shortcutHints({ resume: localMode }).map((h) => (
           <KeyHint key={h}>{h}</KeyHint>
         ))}
       </span>

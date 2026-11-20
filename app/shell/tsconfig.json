@@ -4,7 +4,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@infantry/client": ["../packages/client/src/index.ts"],
-      "@infantry/ui": ["../packages/ui/src/index.ts"]
+      "@infantry/ui": ["../packages/ui/src/index.ts"],
+      "@infantry/ui-plugin-api/contract": ["../packages/ui-plugin-api/src/contract.ts"]
     }
   },
   "include": ["src"],

@@ -5,14 +5,14 @@
 // The page spawns the agents through the same store actions the UI uses, waits for their first turn, holds an idle
 // window, then has every agent stream one reply while it counts animation frames. Each step is one JSON line in the
 // out file ({event, t}); the harness samples memory and CPU outside the process and cuts its samples at these marks.
-import { invoke } from "@tauri-apps/api/core";
+import { host } from "@/host";
 import { daemonStore } from "./daemon";
 
 const FIRST = "Reply with the word ok and nothing else.";
 const STREAM = "Write about 300 words about rivers, in plain prose. Do not use any tools.";
 
 function report(event: string, extra: Record<string, unknown> = {}) {
-  void invoke("perf_report", { line: JSON.stringify({ event, t: Date.now(), ...extra }) }).catch(() => {});
+  void host.call("perf_report", { line: JSON.stringify({ event, t: Date.now(), ...extra }) }).catch(() => {});
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

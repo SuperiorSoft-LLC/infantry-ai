@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": [
+      "node"
+    ],
+    "allowJs": true,
+    "checkJs": false,
+    "paths": {
+      "@infantry/ui-plugin-api": [
+        "./src/index.ts"
+      ],
+      "@infantry/ui": [
+        "../ui/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    "test",
+    "build",
+    "vitest.config.ts"
+  ]
+}

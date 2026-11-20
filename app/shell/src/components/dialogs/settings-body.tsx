@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 // Settings dialog body: a side nav of sections and bordered setting rows.
 import { useEffect, useState } from "react";
-import { isTauri } from "@/daemon/daemon";
+import { host } from "@/host";
 import { RemoteRow } from "@/components/connect/connect-screen";
 import { CliPathRow, PairingRows, UpdaterRows } from "@/components/settings/desktop-install";
 import { cn } from "@infantry/ui";
@@ -27,22 +27,18 @@ function SettingRow({ id, title, hint, children }: { id: string; title: string; 
   );
 }
 
-/** Settings > Daemon: where agents run (`ui.json` `runner`, read at start). Tauri only. */
+/** Settings > Daemon: where agents run (`ui.json` `runner`, read at start). Only where the app has an embedded runner (desktop). */
 function RunnerRow() {
   const [runner, setRunner] = useState<{ saved: string; current: string } | null>(null);
   useEffect(() => {
-    if (!isTauri) return;
-    void import("@tauri-apps/api/core").then(({ invoke }) =>
-      invoke<[string, string]>("ui_runner_get").then(([saved, current]) => setRunner({ saved, current }), () => {}),
-    );
+    if (!host.embedded) return;
+    void host.call<[string, string]>("ui_runner_get").then(([saved, current]) => setRunner({ saved, current }), () => {});
   }, []);
   if (!runner) return null;
   const embedded = runner.saved === "embedded";
   const change = (on: boolean) => {
     const next = on ? "embedded" : "daemon";
-    void import("@tauri-apps/api/core").then(({ invoke }) =>
-      invoke("ui_runner_set", { runner: next }).then(() => setRunner({ ...runner, saved: next }), () => {}),
-    );
+    void host.call("ui_runner_set", { runner: next }).then(() => setRunner({ ...runner, saved: next }), () => {});
   };
   const hint = `Run agents inside this window instead of the infantry daemon. Now: ${runner.current}${runner.saved !== runner.current && runner.current !== "connect" ? " (restart to apply)" : ""}`;
   return (

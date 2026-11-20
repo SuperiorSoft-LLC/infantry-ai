@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 //! The plugin host: loads every installed daemon half (`<plugins>/official/<Module>`, `<plugins>/core/<Module>`),
 //! answers their imports from the daemon ([`DaemonServices`]), registers their frames and hands them bus events.
+//! `plugin_admin` enables and disables them, and the modules with no daemon half (a web UI half, declarations), for good.
 
 use super::Composed;
 use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Refusal};
@@ -28,6 +29,43 @@ pub const PLUGIN_ADMIN: &str = "plugin_admin";
 /// The named event after a module is enabled or disabled: `{"modules": [loaded ids]}`.
 pub const MODULES_CHANGED: &str = "modules.changed";
 
+/// The modules the owner disabled ([DISABLED_FILE] in the state dir): a daemon half is not loaded, any other module is
+/// reported disabled (its tabs leave the app, its web UI half is no longer served).
+pub struct Disabled {
+    path: PathBuf,
+    set: Mutex<BTreeSet<String>>,
+}
+
+impl Disabled {
+    pub fn load(state_dir: &Path) -> Disabled {
+        let path = state_dir.join(DISABLED_FILE);
+        let set = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        Disabled { path, set: Mutex::new(set) }
+    }
+
+    pub fn contains(&self, id: &str) -> bool {
+        self.set.lock().unwrap_or_else(|e| e.into_inner()).contains(id)
+    }
+
+    pub fn snapshot(&self) -> BTreeSet<String> {
+        self.set.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    /// Marks [id] disabled (or not) and writes the file; on a write failure nothing changes.
+    pub fn set(&self, id: &str, disabled: bool) -> Result<(), String> {
+        let mut guard = self.set.lock().unwrap_or_else(|e| e.into_inner());
+        let mut next = guard.clone();
+        if disabled {
+            next.insert(id.to_string());
+        } else {
+            next.remove(id);
+        }
+        std::fs::write(&self.path, serde_json::to_string_pretty(&next).unwrap_or_default()).map_err(|e| format!("{}: {e}", self.path.display()))?;
+        *guard = next;
+        Ok(())
+    }
+}
+
 /// An installed daemon half: its folder and the frames its manifest declares.
 #[derive(Debug, Clone)]
 pub struct Installed {
@@ -41,18 +79,25 @@ pub struct Plugins {
     pub admin: Arc<Admin>,
 }
 
-/// What `plugin_admin` manages: the installed daemon halves and the owner's disabled set.
+/// What `plugin_admin` manages: the installed daemon halves, the modules with none, and the owner's disabled set.
 pub struct Admin {
     host: Arc<PluginHost>,
-    state_dir: PathBuf,
+    plugins_dir: PathBuf,
     installed: BTreeMap<String, Installed>,
-    disabled: Mutex<BTreeSet<String>>,
+    disabled: Arc<Disabled>,
 }
 
 impl Admin {
-    fn save_disabled(&self, set: &BTreeSet<String>) -> Result<(), String> {
-        let path = self.state_dir.join(DISABLED_FILE);
-        std::fs::write(&path, serde_json::to_string_pretty(set).unwrap_or_default()).map_err(|e| format!("{}: {e}", path.display()))
+    /// The official and core modules with no daemon half (a web UI half, or declarations only).
+    fn without_daemon(&self) -> Vec<String> {
+        super::host_frames::scan_modules(&Some(self.plugins_dir.clone())).into_iter().filter(|m| TIERS.contains(&m.tier.as_str()) && !self.installed.contains_key(&m.id)).map(|m| m.id).collect()
+    }
+
+    /// After an enable or disable: the plugins hear `modules.changed`, every client gets `plugins_changed`.
+    fn changed(&self, bus: &EventBus, id: &str, enabled: bool) {
+        let loaded: Vec<String> = self.host.loaded().iter().map(|p| p.id.clone()).collect();
+        bus.emit(MODULES_CHANGED, serde_json::json!({ "modules": loaded }));
+        bus.publish(Envelope::new(infantry_protocol::frames::PLUGINS_CHANGED, serde_json::json!({ "id": id, "enabled": enabled }).to_string()));
     }
 
     /// One `plugin_admin` command: (exit code, out, err).
@@ -63,8 +108,8 @@ impl Admin {
         match op {
             "status" | "list" => {
                 let statuses = self.host.statuses();
-                let disabled = self.disabled.lock().unwrap().clone();
-                let rows: Vec<serde_json::Value> = self
+                let disabled = self.disabled.snapshot();
+                let mut rows: Vec<serde_json::Value> = self
                     .installed
                     .keys()
                     .filter(|m| id.is_empty() || m.as_str() == id)
@@ -80,34 +125,37 @@ impl Admin {
                         })
                     })
                     .collect();
+                rows.extend(self.without_daemon().into_iter().filter(|m| id.is_empty() || m == id).map(|m| {
+                    let off = disabled.contains(&m);
+                    serde_json::json!({ "id": m, "status": if off { "disabled" } else { "ui only" }, "enabled": !off, "fault": null, "cooling": false })
+                }));
                 if !id.is_empty() && rows.is_empty() {
-                    return fail(format!("no daemon plugin '{id}' on this host"));
+                    return fail(format!("no plugin '{id}' on this host"));
                 }
                 (0, serde_json::to_string_pretty(&rows).unwrap_or_default(), String::new())
             }
             "enable" | "disable" => {
-                let Some(m) = self.installed.get(id) else { return fail(format!("no daemon plugin '{id}' on this host")) };
-                let mut set = self.disabled.lock().unwrap().clone();
-                let out = if op == "enable" {
-                    set.remove(id);
-                    if self.host.get(id).is_none() {
-                        if let Err(e) = self.host.load(&m.dir) {
-                            return fail(format!("{id} not loaded: {e}"));
+                let on = op == "enable";
+                match self.installed.get(id) {
+                    Some(m) if on => {
+                        if self.host.get(id).is_none() {
+                            if let Err(e) = self.host.load(&m.dir) {
+                                return fail(format!("{id} not loaded: {e}"));
+                            }
                         }
                     }
-                    format!("{id} enabled")
-                } else {
-                    set.insert(id.to_string());
-                    self.host.unload(id);
-                    format!("{id} disabled")
-                };
-                if let Err(e) = self.save_disabled(&set) {
+                    Some(_) => {
+                        self.host.unload(id);
+                    }
+                    // A module with no daemon half: enabling or disabling it is the mark alone.
+                    None if self.without_daemon().iter().any(|m| m == id) => {}
+                    None => return fail(format!("no plugin '{id}' on this host")),
+                }
+                if let Err(e) = self.disabled.set(id, !on) {
                     return fail(e);
                 }
-                *self.disabled.lock().unwrap() = set;
-                let loaded: Vec<String> = self.host.loaded().iter().map(|p| p.id.clone()).collect();
-                bus.emit(MODULES_CHANGED, serde_json::json!({ "modules": loaded }));
-                (0, out, String::new())
+                self.changed(bus, id, on);
+                (0, format!("{id} {op}d"), String::new())
             }
             "" => fail("usage: plugin <status|enable|disable> [id]".into()),
             other => fail(format!("plugin {other}: not supported by this daemon yet (it serves status, enable, disable)")),
@@ -115,8 +163,8 @@ impl Admin {
     }
 }
 
-/// `plugin_admin` (the Kotlin PluginCli over a frame, owner only): `enable` / `disable` a daemon half on this host,
-/// kept across restarts; `status` (each installed half: load status, the guard's fault, cooling). Other operations
+/// `plugin_admin` (the Kotlin PluginCli over a frame, owner only): `enable` / `disable` a module on this host (its daemon
+/// half is loaded or unloaded; one with none is only marked), kept across restarts; `status` (each installed half: load status, the guard's fault, cooling). Other operations
 /// (install, update, remove, rollback, grants) answer exit code 1: this daemon serves only bundled modules.
 pub struct PluginAdmin {
     admin: Arc<Admin>,
@@ -270,7 +318,7 @@ fn daemon_half(dir: &Path) -> Option<(String, Vec<String>)> {
 }
 
 /// Starts the host and loads every installed daemon half; None when there is no plugins folder or the host failed.
-pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: tokio::runtime::Handle) -> Option<Plugins> {
+pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: tokio::runtime::Handle, disabled: Arc<Disabled>) -> Option<Plugins> {
     let dir = dir.filter(|d| d.is_dir())?;
     let db = match rusqlite::Connection::open(state_dir.join("infantry.db")) {
         Ok(c) => {
@@ -299,7 +347,6 @@ pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: toki
             return None;
         }
     };
-    let disabled: BTreeSet<String> = std::fs::read_to_string(state_dir.join(DISABLED_FILE)).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
     let mut installed = BTreeMap::new();
     for tier in TIERS {
         let Ok(rd) = std::fs::read_dir(dir.join(tier)) else { continue };
@@ -318,7 +365,7 @@ pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: toki
             }
         }
     }
-    let admin = Arc::new(Admin { host: host.clone(), state_dir: state_dir.to_path_buf(), installed, disabled: Mutex::new(disabled) });
+    let admin = Arc::new(Admin { host: host.clone(), plugins_dir: dir, installed, disabled });
     Some(Plugins { host, services, admin })
 }
 

@@ -11,6 +11,7 @@ import { useDaemon } from "@/daemon/daemon";
 import { TabPage } from "@/components/tabs/tab-page";
 import { RefusalBanner, Segmented } from "@/components/knowledge/parts";
 import { pluginsStore, usePlugins } from "@/plugins/use-plugins";
+import { usePluginUiFault } from "@/plugins/web-plugins";
 import { usePluginSettingsDialog } from "./plugin-settings-dialog";
 
 type Filter = "all" | "enabled" | "faults";
@@ -18,14 +19,17 @@ type Filter = "all" | "enabled" | "faults";
 function contributes(p: PluginRow): string[] {
   const u = p.ui;
   if (!u) return [];
-  return [...u.tabs.map((t) => `tab ${t.id}`), ...u.panels.map((t) => `panel ${t.id}`), ...u.fills.map((t) => `fills ${t.id}`), ...u.slots.map((t) => `slot ${t.id}`)];
+  // A web UI half's tabs and panels are among `tabs` (the daemon folds them in); its other slots are listed by name.
+  const web = (u.web?.contributes ?? []).filter((c) => c.slot !== "tab" && c.slot !== "panel").map((c) => `${c.slot} ${c.id}`);
+  return [...u.tabs.map((t) => `tab ${t.id}`), ...u.panels.map((t) => `panel ${t.id}`), ...u.fills.map((t) => `fills ${t.id}`), ...u.slots.map((t) => `slot ${t.id}`), ...web];
 }
 
 function PluginCard({ p, pending }: { p: PluginRow; pending: boolean }) {
   const fault = isFault(p);
   const parts = contributes(p);
   const name = p.ui?.displayName ?? p.id;
-  const hasSettings = !!p.ui && (p.ui.config || p.ui.configNodes.length > 0); // shown even when the plugin is off
+  const hasSettings = !!p.ui && (p.ui.config || p.ui.configNodes.length > 0 || !!p.ui.web?.contributes.some((c) => c.slot === "plugin.config")); // shown even when the plugin is off
+  const uiFault = usePluginUiFault(p.id);
   return (
     <article className={cn("flex flex-col gap-3 rounded-lg border bg-card p-4", fault && "border-danger/60")} aria-label={name}>
       <div className="flex items-start gap-3">
@@ -50,6 +54,11 @@ function PluginCard({ p, pending }: { p: PluginRow; pending: boolean }) {
         <Chip tone={p.tier === "official" ? "red" : "blue"}>{p.tier}</Chip>
         <Chip tone={fault ? "red" : p.status === "loaded" ? "green" : "neutral"}>{pending ? "applying…" : p.status}</Chip>
         {p.updateTo && <Chip tone="green">update {p.updateTo}</Chip>}
+        {uiFault && (
+          <span title={uiFault.message}>
+            <Chip tone="red">UI {uiFault.phase} fault</Chip>
+          </span>
+        )}
         {(p.grants ?? []).map((g) => (
           <Chip key={g} mono>
             {g}

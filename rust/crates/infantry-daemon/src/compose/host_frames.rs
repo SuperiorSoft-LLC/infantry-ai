@@ -12,11 +12,10 @@
 //!   `agents` blocks, under the user's enable/disable overrides (`agent-overrides.json` in the state dir).
 //! - `plugins_op` `{"op": list|status|search|show|import|request, ...}` -> `plugins`: the plugin catalog of this host
 //!   (the plugins folder, the loaded daemon halves and the imported list files). `request` asks the owner and installs
-//!   nothing.
+//!   nothing. A `list` row's `ui.web` is the module's web UI half, served by [super::ui_bundles] (WEBUI-1).
 use crate::sessions::Daemon;
 use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Refusal};
 use infantry_mail::notify::questions::{Asker, OwnerQuestions};
-use infantry_plugin_host::PluginHost;
 use infantry_protocol::prompts::{PromptOption, QuestionAsk};
 use serde_json::{json, Value};
 use std::io::{Read, Seek, SeekFrom};
@@ -47,7 +46,6 @@ pub const DECLINE: &str = "Decline";
 
 pub struct HostFrames {
     pub daemon: Arc<Daemon>,
-    pub plugins: Option<Arc<PluginHost>>,
     pub plugins_dir: Option<PathBuf>,
     /// The agent registry (`agent_registry` and the `infantry_agent_*` tools share it).
     pub registry: Arc<super::agent_registry::AgentRegistry>,
@@ -55,6 +53,8 @@ pub struct HostFrames {
     pub state_dir: PathBuf,
     /// For `project_files` (a plugin's files under `<project>/.infantry/`).
     pub projects: Arc<infantry_projects::store::ProjectStore>,
+    /// The enable rule the list reports, shared with the web UI route (WEBUI-1).
+    pub bundles: Arc<super::ui_bundles::UiBundles>,
 }
 
 /// One module.json found in the plugins folder.
@@ -96,12 +96,15 @@ fn strings(v: Option<&Value>) -> Vec<String> {
 }
 
 /// What a module declares for the client shell (RUST-UI-5): its tabs, panels, fills and slots exactly as module.json
-/// holds them, plus its display name, description and whether it declares settings. The shell renders from this.
+/// holds them (with its web UI half's tab and panel contributions folded into `tabs`), plus its display name,
+/// description and whether it declares settings. The shell renders from this.
 pub fn ui_of(manifest: &Value) -> Value {
     let arr = |k: &str| manifest.get(k).filter(|v| v.is_array()).cloned().unwrap_or_else(|| Value::Array(vec![]));
+    let mut tabs = manifest.get("tabs").and_then(Value::as_array).cloned().unwrap_or_default();
+    super::ui_bundles::fold_tabs(manifest, &mut tabs);
     json!({
         "displayName": s(manifest, "displayName"), "description": s(manifest, "description"),
-        "tabs": arr("tabs"), "panels": arr("panels"), "fills": arr("fills"), "slots": arr("slots"),
+        "tabs": tabs, "panels": arr("panels"), "fills": arr("fills"), "slots": arr("slots"),
         "config": manifest.get("config").is_some_and(|c| !c.is_null()),
         // The settings nodes this module declares, so a client can show one plugin's cards.
         "configNodes": manifest.get("config").and_then(Value::as_array).map(|a| a.iter().filter_map(|g| g.get("node").and_then(Value::as_str)).map(Value::from).collect::<Vec<_>>()).unwrap_or_default(),
@@ -194,18 +197,20 @@ impl HostFrames {
     // ---- plugins ---------------------------------------------------------------------------------------------
 
     fn summary(&self, m: &Module) -> Value {
-        let statuses = self.plugins.as_ref().map(|h| h.statuses()).unwrap_or_default();
+        let statuses = self.bundles.statuses();
         let daemon = m.manifest.get("daemon");
         let status = statuses.get(&m.id).cloned();
-        let has_daemon = daemon.is_some_and(|d| d.get("component").is_some() || d.get("sidecar").is_some());
-        let enabled = if has_daemon { status.as_deref() == Some("loaded") } else { m.tier != "community" };
+        let has_daemon = super::ui_bundles::has_daemon(&m.manifest);
+        let enabled = self.bundles.enabled(m, &statuses);
+        let mut ui = ui_of(&m.manifest);
+        ui["web"] = super::ui_bundles::web_row(m);
         json!({
             "id": m.id, "version": s(&m.manifest, "version"), "class": Some(s(&m.manifest, "class")).filter(|c| !c.is_empty()).unwrap_or("plugin"),
             "tier": m.tier, "bundled": m.tier != "community", "enabled": enabled,
             "grants": strings(daemon.and_then(|d| d.get("needs"))), "requested": strings(daemon.and_then(|d| d.get("wants"))),
             "license": s(&m.manifest, "license"), "source": "bundled", "yanked": false, "updateTo": Value::Null,
-            "status": status.unwrap_or_else(|| if has_daemon { "not loaded".into() } else { "ui only".into() }),
-            "ui": ui_of(&m.manifest),
+            "status": status.unwrap_or_else(|| if has_daemon { "not loaded".into() } else if enabled { "ui only".into() } else { "disabled".into() }),
+            "ui": ui,
         })
     }
 

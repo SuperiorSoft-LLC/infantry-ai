@@ -78,6 +78,8 @@ pub const PROCESSES: &str = "processes";
 pub const PROCESSES_REAP: &str = "processes_reap";
 pub const HEALTH: &str = "health";
 pub const PLUGIN_ADMIN: &str = "plugin_admin";
+/// WEBUI-1: pushed to every client after a plugin is enabled or disabled, `{"id", "enabled"}`: re-read the plugin list.
+pub const PLUGINS_CHANGED: &str = "plugins_changed";
 pub const PROCESS_PRESSURE: &str = "process_pressure";
 pub const MAIL_REFUSED: &str = "mail_refused";
 pub const TEXT_DELTA: &str = "text_delta";
@@ -397,6 +399,7 @@ pub const ALL: &[&str] = &[
     PROCESSES_REAP,
     HEALTH,
     PLUGIN_ADMIN,
+    PLUGINS_CHANGED,
     PROCESS_PRESSURE,
     MAIL_REFUSED,
     TEXT_DELTA,

@@ -1,0 +1,6 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright (c) SuperiorSoft LLC */
+/* What the kit's class names mean beyond Tailwind's own: tw-animate-css's animations and shadcn's state variants
+   (`data-open:`, `data-disabled:`...). Shared with web UI plugins (WEBUI-1), so a class means the same in a plugin. */
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";

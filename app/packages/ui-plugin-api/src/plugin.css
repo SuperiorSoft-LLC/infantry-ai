@@ -1,0 +1,24 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright (c) SuperiorSoft LLC */
+/* WEBUI-1: what a web UI plugin's stylesheet imports first, then names its own sources:
+
+     @import "@infantry/ui-plugin-api/plugin.css";
+     @source "./";
+
+   It gives the plugin Tailwind's utilities with everything the app's classes mean: its theme (bg-panel, text-danger,
+   rounded-lg, dark:...), tw-animate-css's animations and shadcn's state variants, and no preflight: the app has already
+   laid down its base styles. The build helper then scopes every rule to the plugin's own elements
+   (:where([data-ui-plugin="<id>"])), so a plugin's stylesheet styles the plugin and never the app around it. The layer
+   order is the app's, so the plugin's utilities land in the app's own utilities layer.
+
+   Kit components (Button, Select, TabPage...) render inside a plugin's scope, where the plugin's sheet comes after the
+   app's: a class the plugin's sheet has would otherwise beat a kit class that only the app's sheet has, whatever
+   Tailwind's order says (a plugin's `p-4` over a kit element's `pt-0`). So the build helper adds to this sheet's
+   sources the kit files the plugin draws (build/plugin-config.mjs `kitSources`): inside the scope, Tailwind's own order
+   then decides everything, as it does in the app. The kit's hand-written utilities (stripes, pulses) stay in the app's
+   sheet only. */
+@layer properties, theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "../../ui/src/extensions.css";
+@import "./theme.css";

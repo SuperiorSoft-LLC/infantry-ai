@@ -1,0 +1,25 @@
+{
+  "//": "WEBUI-1: type-checks every module's web UI half (rust/plugins/*/*/ui and the template) against this package. Their folders sit outside app/, so their bare imports resolve into app/node_modules here (a package's @types first: react ships no types of its own).",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": [],
+    "paths": {
+      "@infantry/ui-plugin-api": [
+        "./src/index.ts"
+      ],
+      "@infantry/ui": [
+        "../ui/src/index.ts"
+      ],
+      "*": [
+        "../../node_modules/@types/*",
+        "../../node_modules/*"
+      ]
+    }
+  },
+  "include": [
+    "src/env.d.ts",
+    "../../../rust/plugins/*/*/ui/src",
+    "../../../rust/plugins/*/*/ui/test",
+    "../../../plugins/_template/ui/src"
+  ]
+}

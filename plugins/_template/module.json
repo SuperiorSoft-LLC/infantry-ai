@@ -15,6 +15,12 @@
   "tabs": [{ "id": "example.starter", "container": "center" }],
   "panels": [{ "id": "example.starter.side", "panel": "left" }],
   "interceptors": [{ "target": "example.starter", "name": "count", "kind": "around" }],
+  "ui": {
+    "apiVersion": 1,
+    "entry": "ui/dist/index.js",
+    "styles": ["ui/dist/index.css"],
+    "contributes": [{ "slot": "tab", "id": "example.starter.web", "label": "Starter", "order": 2100 }]
+  },
   "daemon": {
     "entry": "com.example.starter.daemon.StarterDaemon",
     "jar": "daemon/build/libs/Example_Starter-daemon.jar",

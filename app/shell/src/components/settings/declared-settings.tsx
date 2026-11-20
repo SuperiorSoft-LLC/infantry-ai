@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// The daemon-declared Settings: a search box, then the matching cards grouped by tab. Loading, empty and refused
-// states are shown, not hidden.
+// The daemon-declared Settings: a search box, then the matching cards grouped by tab, then the cards web UI plugins
+// draw there (the `settings.card` slot, WEBUI-1: a contribution's `tab` names its tab, Plugins when it names none).
+// Loading, empty and refused states are shown, not hidden.
 import { useEffect, useMemo } from "react";
 import { Search, X } from "lucide-react";
-import { byTab, searchGroups, type ConfigGroup } from "@infantry/client";
+import { byTab, declLabel, searchGroups, type ConfigGroup, type SlotFill } from "@infantry/client";
 import { Button, EmptyState, Input } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { usePlugins } from "@/plugins/use-plugins";
+import { PluginSlot, useSlotFills } from "@/plugins/web-plugins";
 import { useUi } from "@/state/ui-state";
 import { usePluginSettingsDialog } from "@/components/plugins/plugin-settings-dialog";
 import { ConfigCard } from "./config-card";
@@ -23,15 +25,27 @@ function useOwners(): Map<string, { id: string; name: string }> {
   }, [plugins]);
 }
 
-/** The tabs the daemon's declarations form, for the dialog's side nav. Core settings only: plugin-owned cards are in the plugin's cog. */
+/** The Settings tab a web UI plugin's card sits in. */
+const cardTab = (f: SlotFill): string => (typeof f.contribution.tab === "string" && f.contribution.tab.trim() ? f.contribution.tab.trim() : "Plugins");
+
+/** Whether a web UI plugin's card answers a search: its label, id or plugin. */
+const cardMatches = (f: SlotFill, q: string): boolean => [declLabel(f.contribution), f.contribution.id, f.plugin].some((s) => s.toLowerCase().includes(q));
+
+/**
+ * The tabs the daemon's declarations form, for the dialog's side nav, then the ones web UI plugins' cards name. Core
+ * settings only: plugin-owned cards are in the plugin's cog.
+ */
 export function useDeclaredTabs(): string[] {
   const owners = useOwners();
   const groups = useSettings((s) => s.groups).filter((g) => !owners.has(g.node));
+  const cards = useSlotFills("settings.card");
   const link = useDaemon((s) => s.connection.state);
   useEffect(() => {
     if (link === "open") settingsStore().getState().ensureLoaded();
   }, [link]);
-  return byTab(groups).map((t) => t.tab);
+  const tabs = byTab(groups).map((t) => t.tab);
+  for (const c of cards) if (!tabs.includes(cardTab(c))) tabs.push(cardTab(c));
+  return tabs;
 }
 
 export function DeclaredSettings({ tab, query }: { tab: string | null; query: string }) {
@@ -46,6 +60,8 @@ export function DeclaredSettings({ tab, query }: { tab: string | null; query: st
 
   const matches: ConfigGroup[] = searchGroups(groups, query);
   const shown = query.trim() ? matches : (byTab(groups).find((t) => t.tab === tab)?.groups ?? []);
+  const q = query.trim().toLowerCase();
+  const cards = useSlotFills("settings.card").filter((f) => (q ? cardMatches(f, q) : cardTab(f) === tab));
   const toCog = (id: string) => {
     ui.set("dialog", null);
     usePluginSettingsDialog.getState().open(id);
@@ -71,7 +87,8 @@ export function DeclaredSettings({ tab, query }: { tab: string | null; query: st
           </Button>
         </div>
       ))}
-      {shown.length === 0 && pointers.length > 0 ? null : shown.length === 0 ? <EmptyState icon={<Search className="size-5" />} title={empty} /> : shown.map((g) => <ConfigCard key={`${g.node}/${g.group}`} group={g} />)}
+      {shown.length === 0 && (pointers.length > 0 || cards.length > 0) ? null : shown.length === 0 ? <EmptyState icon={<Search className="size-5" />} title={empty} /> : shown.map((g) => <ConfigCard key={`${g.node}/${g.group}`} group={g} />)}
+      <PluginSlot fills={cards} frame="card" />
     </div>
   );
 }

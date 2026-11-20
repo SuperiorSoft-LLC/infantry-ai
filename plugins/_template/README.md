@@ -52,6 +52,7 @@ module.json                                   the declarations above
 build.gradle.kts                              builds build/libs/<name>.jar, named after module.json
 src/main/kotlin/com/example/starter/StarterPlugin.kt      the tab and the interceptor
 src/test/kotlin/com/example/starter/StarterPluginTest.kt  registers the module and checks the app accepts it
+ui/src/index.tsx                              the web UI half: one centre tab (see "A web UI half" below)
 ```
 
 ## Tell agents about your tools (optional)
@@ -68,3 +69,22 @@ JSON has no comments, so the example is here; paste it next to `daemon` and dele
 ```
 
 Rules and budget settings: [Plugin knowledge](../../docs/wiki/plugin-knowledge.md).
+
+## A web UI half (optional)
+
+`ui/` is a web UI half: a centre tab that the daemon serves and the app loads at run time, on desktop, web and Android,
+with no app rebuild. Enabling the module shows the tab, and disabling it removes the tab, live. It draws with the app's
+own React and UI kit, which the app lends at run time, so the built file stays small. `module.json` `ui` declares it:
+
+| Field | What it means |
+|---|---|
+| `ui.apiVersion` | The UI API the half is built for (`1`). An app with another UI API refuses it and says why. |
+| `ui.entry` | The built ES module, a path inside the module folder (`ui/dist/index.js`). |
+| `ui.styles` | Its built stylesheets (`ui/dist/index.css`). The build scopes every rule to the plugin. |
+| `ui.assets` | Folders of other files it loads, such as images. They are served under the same path. |
+| `ui.contributes` | `[{ "slot", "id", "label", "hint", "order" }]`: where it draws. The slots are `tab`, `panel`, `settings.card`, `plugin.config` and `card.badge`. `activate` registers a view for each `id`. |
+
+Build it from the repo root with `node app/packages/ui-plugin-api/build/build-plugins.mjs plugins/community/Acme_Notes`.
+It needs `pnpm install` in `app/` first. With no folder, it builds every official and test plugin and this template.
+`rust/plugins/stage.sh` builds and stages the official ones. If the module has no UI, delete `ui/` and the `ui` key.
+The API, the slots, the styles and the trust model are in [Web UI plugins](../../docs/wiki/Web-UI-plugins.md).

@@ -1,26 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// Custom titlebar window buttons (Tauri decorations are off). In a plain browser they render but do nothing.
+// Custom titlebar window buttons (Tauri decorations are off). Only the desktop app has them (HC-1 host.window): a browser
+// and a phone draw their own frame, so nothing renders there (UI-WINCTRL-WEB-1: no dead buttons widening a phone page).
 import { Minus, Square, X } from "lucide-react";
-import { isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { HostWindow } from "@infantry/client";
 import { cn } from "@infantry/ui";
+import { host } from "@/host";
 
-type WindowAction = "minimize" | "toggleMaximize" | "close";
+type WindowAction = keyof HostWindow;
 
-function run(action: WindowAction) {
-  if (!isTauri()) return;
-  const win = getCurrentWindow();
-  void win[action]();
-}
-
-function WinButton({ label, action, danger, children }: { label: string; action: WindowAction; danger?: boolean; children: React.ReactNode }) {
+function WinButton({ frame, label, action, danger, children }: { frame: HostWindow; label: string; action: WindowAction; danger?: boolean; children: React.ReactNode }) {
   return (
     <button
       type="button"
       aria-label={label}
       title={label}
-      onClick={() => run(action)}
+      onClick={() => frame[action]()}
       className={cn(
         "grid h-full w-11 place-items-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground [&_svg]:size-4",
         danger && "hover:bg-danger hover:text-white",
@@ -32,15 +27,17 @@ function WinButton({ label, action, danger, children }: { label: string; action:
 }
 
 export function WindowControls() {
+  const frame = host.window;
+  if (!frame) return null;
   return (
     <div className="flex h-full items-stretch">
-      <WinButton label="Minimize" action="minimize">
+      <WinButton frame={frame} label="Minimize" action="minimize">
         <Minus />
       </WinButton>
-      <WinButton label="Maximize" action="toggleMaximize">
+      <WinButton frame={frame} label="Maximize" action="toggleMaximize">
         <Square className="size-3.5!" />
       </WinButton>
-      <WinButton label="Close" action="close" danger>
+      <WinButton frame={frame} label="Close" action="close" danger>
         <X />
       </WinButton>
     </div>

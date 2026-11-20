@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 import { describe, expect, it } from "vitest";
-import { createHealthStore, createPluginsStore, createTriggersStore, healthSummary, isFault, parsePlugin, slotRegistry, type Envelope } from "../src";
+import { createHealthStore, createPluginsStore, healthSummary, isFault, parsePlugin, slotRegistry, type Envelope } from "../src";
 
 function link(up = true) {
   const sent: Envelope[] = [];
@@ -79,19 +79,5 @@ describe("health and triggers stores", () => {
     const sum = healthSummary(s.getState().report);
     expect(sum.tone).toBe("amber");
     expect(sum.faults).toEqual(["B: failed"]);
-  });
-
-  it("folds trigger pushes and keeps a refusal", () => {
-    const l = link();
-    const s = createTriggersStore(l);
-    s.getState().refresh();
-    const t = { id: "t1", name: "Nightly", kind: "manual", action: { kind: "start_next" }, enabled: true, state: "armed", coalesceMs: 0, ceilingRuns: 6, ceilingWindowMs: 1, createdAt: 1 };
-    l.push({ type: "triggers", requestId: l.sent[0].requestId, data: JSON.stringify([t]) });
-    l.push({ type: "trigger", data: JSON.stringify({ ...t, state: "tripped" }) });
-    expect(s.getState().triggers.map((x) => x.state)).toEqual(["tripped"]);
-    s.getState().fire("t1");
-    expect(l.sent[1]).toMatchObject({ type: "trigger_fire", data: "t1" });
-    l.push({ type: "error", requestId: l.sent[1].requestId, data: "trigger_fire refused: tripped" });
-    expect(s.getState().refusal).toBe("trigger_fire refused: tripped");
   });
 });

@@ -18,6 +18,7 @@
     "@hookform/resolvers": "^7.0.7",
     "@infantry/client": "workspace:*",
     "@infantry/ui": "workspace:*",
+    "@infantry/ui-plugin-api": "workspace:*",
     "@tanstack/react-virtual": "^3.14.26",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-barcode-scanner": "^2.5.3",

@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// The Triggers tab (RUST-UI-5; Kotlin `infantry.triggers`): every trigger as a bordered card with its state, schedule,
-// action and last/next firing; Fire, Arm (a tripped one), Disable, Delete and its event log. A module's trigger (it has an
-// `owner`) is read-only. New trigger asks only for a name; kind and interval are pickers with working defaults.
+// The Triggers tab (RUST-UI-5; Kotlin `infantry.triggers`; a web UI plugin since WEBUI-1, drawn as before): every
+// trigger as a bordered card with its state, schedule, action and last/next firing; Fire, Arm (a tripped one), Disable,
+// Delete and its event log. A module's trigger (it has an `owner`) is read-only. New trigger asks only for a name; kind
+// and interval are pickers with working defaults.
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Lock, Pencil, Play, Plus, Power, RefreshCw, RotateCcw, Trash2, Zap } from "lucide-react";
-import type { TriggerView } from "@infantry/client";
-import { AppDialog, Button, Chip, EmptyState, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea, type Tone } from "@infantry/ui";
-import { useDaemon } from "@/daemon/daemon";
-import { TabPage } from "@/components/tabs/tab-page";
-import { Field, RefusalBanner, ago } from "@/components/knowledge/parts";
-import { triggersStore, useTriggers } from "@/plugins/use-plugins";
+import { AppDialog, Button, Chip, EmptyState, Field, Input, RefusalBanner, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, TabPage, Textarea, ago, type Tone } from "@infantry/ui";
+import { useLinkState } from "@infantry/ui-plugin-api";
+import { triggersStore, useTriggers, type TriggerView } from "./store";
 
 const INTERVALS: { ms: number; label: string }[] = [
   { ms: 900_000, label: "Every 15 minutes" },
@@ -239,7 +237,7 @@ export function TriggersTab() {
   const triggers = useTriggers((s) => s.triggers);
   const loaded = useTriggers((s) => s.loaded);
   const refusal = useTriggers((s) => s.refusal);
-  const link = useDaemon((s) => s.connection.state);
+  const link = useLinkState();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<TriggerView | null>(null);
   useEffect(() => {

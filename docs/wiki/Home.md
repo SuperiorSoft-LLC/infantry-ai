@@ -18,6 +18,7 @@ wins, and the page says so. The full list is in the [wiki index](index.md).
 - [Architecture](Architecture.md): the daemon, the layers, the wire, plugins, a request from the app to the daemon and back.
 - [Command line](CommandLine.md): the `infantry` command.
 - [Plugins](Plugins.md) and [Make a plugin](make-a-plugin.md): the module manifest, the daemon half, building it.
+- [Web UI plugins](Web-UI-plugins.md): a plugin's own tabs, panels and cards, loaded live by the app.
 - [Scripting](Scripting.md): the Lua API, hooks, the process bridge.
 - [Harnesses](Harnesses.md): the agent CLIs the daemon drives.
 - [Settings](Settings.md): scopes and the cost-saving defaults.

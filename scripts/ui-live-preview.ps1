@@ -12,12 +12,19 @@
 # Vite (`pnpm dev` in app/) runs in the foreground from this checkout, so hot reload watches these files. When Vite ends
 # (Ctrl+C, the tab closed, or a process-tree kill) the daemon is stopped by its PID tree and the state dir deleted.
 #   pwsh scripts/ui-live-preview.ps1 -TargetDir D:\x   # another shared cargo target dir
+#   pwsh scripts/ui-live-preview.ps1 -StagePlugins     # WEBUI-1: stage this checkout's official plugins and load them
+#   pwsh scripts/ui-live-preview.ps1 -TestPlugins      # the same, plus the test plugins (rust/plugins/test)
+#   pwsh scripts/ui-live-preview.ps1 -PluginsDir D:\p  # load a folder rust/plugins/stage.sh laid out
+# Plugins: with none of the three, the dev daemon loads no plugins. Staged plugins go into the state dir.
 # Disk: every worktree's preview builds into ONE shared cargo target dir outside the worktrees (default
 # %LOCALAPPDATA%\infantry-dev\preview-target), so N UI workers cost one daemon build, not N copies of rust/target.
 [CmdletBinding()]
 param(
   [switch]$Keep,
-  [string]$TargetDir = (Join-Path $env:LOCALAPPDATA 'infantry-dev\preview-target')
+  [string]$TargetDir = (Join-Path $env:LOCALAPPDATA 'infantry-dev\preview-target'),
+  [string]$PluginsDir,
+  [switch]$StagePlugins,
+  [switch]$TestPlugins
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
@@ -48,7 +55,29 @@ New-Item -ItemType Directory -Force $state | Out-Null
 . (Join-Path $repo 'scripts/rust-build-env.ps1')   # sccache
 $env:CARGO_TARGET_DIR = $TargetDir                   # shared by every worktree's preview (cargo locks it per build)
 $daemon = $null
+$app = Join-Path $repo 'app'
 try {
+  if (-not (Test-Path (Join-Path $app 'node_modules'))) {
+    Write-Host '[preview] installing app dependencies (pnpm install --frozen-lockfile)'
+    pnpm -C $app install --frozen-lockfile
+    if ($LASTEXITCODE -ne 0) { throw "pnpm install failed ($LASTEXITCODE)" }
+  }
+  if ($StagePlugins -or $TestPlugins) {
+    # Git Bash, never C:\Windows\system32\bash.exe (that is WSL: no cargo, no python on its PATH).
+    $gitRoot = Split-Path (Get-Command git).Source -Parent
+    while ($gitRoot -and -not (Test-Path (Join-Path $gitRoot 'bin\bash.exe'))) { $gitRoot = Split-Path $gitRoot -Parent }
+    $PluginsDir = Join-Path $state 'plugins'
+    if ($TestPlugins) { $env:INFANTRY_STAGE_TEST = '1' }
+    Write-Host "[preview] staging this checkout's plugins into $PluginsDir"
+    & (Join-Path $gitRoot 'bin\bash.exe') (Join-Path $repo 'rust/plugins/stage.sh') $PluginsDir
+    $staged = $LASTEXITCODE
+    Remove-Item Env:INFANTRY_STAGE_TEST -ErrorAction SilentlyContinue
+    if ($staged -ne 0) { throw "staging the plugins failed ($staged)" }
+  }
+  if ($PluginsDir) {
+    $env:INFANTRY_PLUGINS_DIR = (Resolve-Path -LiteralPath $PluginsDir).Path
+    Write-Host "[preview] the dev daemon loads the plugins in $env:INFANTRY_PLUGINS_DIR"
+  }
   Write-Host "[preview] building (target $TargetDir) and starting the dev daemon on 127.0.0.1:$daemonPort (state $state)"
   $daemon = Start-Process cargo -ArgumentList 'run', '-q', '-p', 'infantry-daemon', '--', '--port', $daemonPort, '--state-dir', "`"$state`"" `
     -WorkingDirectory (Join-Path $repo 'rust') -NoNewWindow -PassThru
@@ -61,12 +90,7 @@ try {
   }
   Write-Host "[preview] dev daemon up: http://127.0.0.1:$daemonPort/health"
 
-  $app = Join-Path $repo 'app'
-  if (-not (Test-Path (Join-Path $app 'node_modules'))) {
-    Write-Host '[preview] installing app dependencies (pnpm install --frozen-lockfile)'
-    pnpm -C $app install --frozen-lockfile
-    if ($LASTEXITCODE -ne 0) { throw "pnpm install failed ($LASTEXITCODE)" }
-  }
+  Remove-Item Env:INFANTRY_PLUGINS_DIR -ErrorAction SilentlyContinue   # the daemon's alone, not Vite's
   $env:INFANTRY_PORT = "$daemonPort"
   $env:INFANTRY_UI_PORT = "$uiPort"
   Write-Host "[preview] PREVIEW URL: http://localhost:$uiPort/   (daemon :$daemonPort)"
