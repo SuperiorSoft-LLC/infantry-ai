@@ -3,6 +3,7 @@
 .gradle
 **/build/
 !src/**/build/
+!app/packages/ui-plugin-api/build/
 local.properties
 .idea
 .vscode
