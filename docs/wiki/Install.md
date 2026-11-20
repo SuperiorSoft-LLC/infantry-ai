@@ -31,6 +31,19 @@ Check it from any terminal:
 infantry health
 ```
 
+### The guided setup (first start)
+
+On a start where no agent tool can answer, the app opens the guided setup by itself; **Settings > Daemon > Open guided
+setup** opens it again at any time. One choice per screen:
+
+1. **Get Node.js** (only while npm is missing and nothing is installed): the daemon downloads the nodejs.org LTS Windows
+   zip, checks it against the release's `SHASUMS256.txt` and unpacks it into `<state dir>\harness-tools`. No admin prompt.
+2. **Pick your agent tool**: claude, codex, opencode or pi. The daemon runs `npm install -g --prefix <state dir>\harness-tools <package>@latest`.
+3. **Sign in**: skipped when the tool can already answer (a login, a token, or free models). Otherwise start the tool once in a terminal, sign in, press Check again.
+4. **Say hello**: a first agent runs in a starter project (`My first project`) and its reply shows.
+
+The same install works without the window: `infantry harness-status` and `infantry harness-install [id...] [--update]`.
+
 ## Headless daemon (no window)
 
 The daemon is a separate binary, `infantry-daemon`. It runs on its own and needs no launcher script:
