@@ -101,6 +101,8 @@ pub enum HarnessEvent {
     Exited { code: Option<i32> },
     /// A tool call began (its name): counted in the session's stats.
     Tool(String),
+    /// A tool call changed a file: the wire `FileWrite` JSON (path, content / edits / patch), drawn as a change box.
+    Write(String),
     /// Token usage of one model request, as the CLI reported it: the session's stats.
     Usage(TokenUsage),
     /// The CLI's view of the session's own MCP server and of every server it reports (G12).
