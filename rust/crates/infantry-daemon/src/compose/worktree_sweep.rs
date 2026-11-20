@@ -26,6 +26,9 @@ pub const DEFAULT_SWEEP_SECONDS: u64 = 300;
 /// A sweep never removes more than this many worktrees at once (`worktrees.sweepBatch`), so a backlog drains slowly.
 pub const SWEEP_BATCH: &str = "worktrees.sweepBatch";
 pub const DEFAULT_SWEEP_BATCH: usize = 5;
+/// Gap between build-output sweeps (`worktrees.buildSweepSeconds`): a finished ticket's `target` folders go within this.
+pub const BUILD_SWEEP_SECONDS: &str = "worktrees.buildSweepSeconds";
+pub const DEFAULT_BUILD_SWEEP_SECONDS: u64 = 20;
 
 pub struct WorktreeSweep {
     pub board: Arc<TicketBoard>,
@@ -148,12 +151,9 @@ impl WorktreeSweep {
                 let Some(branch) = t.worktree_branch.as_deref() else { continue };
                 let Some(l) = listed.iter().find(|l| l.branch.as_deref() == Some(branch)) else { continue };
                 let is_live = live.iter().any(|d| paths::contains(&l.path, d));
-                // A done ticket's cargo target folders are build output: freed even when the worktree is kept.
+                // A done ticket's build output is freed even when the worktree is kept.
                 if clean_builds && !is_live {
-                    let freed = stale::remove_build_dirs(&l.path);
-                    if freed > 0 {
-                        self.note(&t.id, &format!("[AUTOMATIC] build output removed from {} ({} MB freed)", l.path.display(), freed / (1024 * 1024)));
-                    }
+                    self.clean_one(&t.id, &l.path);
                 }
                 if !enabled {
                     continue;
@@ -178,8 +178,71 @@ impl WorktreeSweep {
         removed
     }
 
-    /// Run `sweep` on its interval for the daemon's life (a blocking thread: it runs git).
+    /// Delete one worktree's build output; a folder that stays locked is logged loudly and noted on the ticket (once).
+    fn clean_one(&self, ticket_id: &str, path: &Path) {
+        let r = stale::remove_build_dirs(path);
+        if r.freed > 0 {
+            eprintln!("[infantry] build output removed from {} ({} MB freed, ticket {ticket_id})", path.display(), r.freed / (1024 * 1024));
+            self.note(ticket_id, &format!("[AUTOMATIC] build output removed from {} ({} MB freed)", path.display(), r.freed / (1024 * 1024)));
+        }
+        for (dir, why) in &r.failed {
+            eprintln!("[infantry] WARNING: could not delete build folder {} after {} tries: {why} (ticket {ticket_id}); disk space is NOT freed", dir.display(), stale::REMOVE_TRIES);
+            if self.told.lock().unwrap_or_else(|e| e.into_inner()).insert(format!("build:{}", dir.display())) {
+                self.note(ticket_id, &format!("[AUTOMATIC] WARNING: build folder {} could not be deleted ({why}); something holds a file open. Close it and the next sweep deletes it.", dir.display()));
+            }
+        }
+    }
+
+    /// Delete build output of every worktree whose ticket is done, or whose ticket is gone from the board (removed
+    /// without a merge). Cheap when nothing is there. Runs at daemon start and every `worktrees.buildSweepSeconds`.
+    pub fn sweep_builds(&self) -> u64 {
+        if !self.removes_build_dirs() {
+            return 0;
+        }
+        let tickets = self.board.list(None, None).unwrap_or_default();
+        let by_branch: HashMap<String, (String, String)> = tickets.iter().filter_map(|t| t.worktree_branch.clone().map(|b| (b, (t.id.clone(), t.status.clone())))).collect();
+        let live = self.live_dirs();
+        let mut freed = 0u64;
+        for (root, _) in self.roots() {
+            for l in stale::list(&self.projects.git, &root) {
+                let Some(branch) = l.branch.as_deref() else { continue };
+                if live.iter().any(|d| paths::contains(&l.path, d)) {
+                    continue;
+                }
+                let id = match by_branch.get(branch) {
+                    Some((id, status)) if status == "done" => id.clone(),
+                    Some(_) => continue,
+                    // A ticket branch with no ticket on the board: the ticket was removed.
+                    None if branch.starts_with("ticket/") => branch.trim_start_matches("ticket/").chars().take(8).collect::<String>(),
+                    None => continue,
+                };
+                let before = stale::BUILD_DIRS.iter().any(|d| l.path.join(d).is_dir());
+                if before {
+                    if by_branch.contains_key(branch) {
+                        self.clean_one(&id, &l.path);
+                    } else {
+                        let r = stale::remove_build_dirs(&l.path);
+                        freed += r.freed;
+                        eprintln!("[infantry] build output removed from {} of removed ticket {id} ({} MB freed)", l.path.display(), r.freed / (1024 * 1024));
+                        for (dir, why) in &r.failed {
+                            eprintln!("[infantry] WARNING: could not delete build folder {} after {} tries: {why}", dir.display(), stale::REMOVE_TRIES);
+                        }
+                    }
+                }
+            }
+        }
+        freed
+    }
+
+    /// Run the sweeps for the daemon's life (blocking threads: they run git): build output at start and every
+    /// `worktrees.buildSweepSeconds`, whole worktrees on `worktrees.sweepSeconds`.
     pub fn spawn(self: Arc<Self>) {
+        let b = self.clone();
+        std::thread::spawn(move || loop {
+            b.sweep_builds();
+            let secs = number(b.settings.app(BUILD_SWEEP_SECONDS)).filter(|n| *n > 0).unwrap_or(DEFAULT_BUILD_SWEEP_SECONDS);
+            std::thread::sleep(Duration::from_secs(secs));
+        });
         std::thread::spawn(move || loop {
             std::thread::sleep(self.interval());
             self.sweep();

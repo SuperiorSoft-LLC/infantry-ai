@@ -92,13 +92,28 @@ pub fn dir_size(path: &Path) -> u64 {
     total
 }
 
-/// The cargo target folders a worktree can hold (relative to its root). They are build output, never source.
-pub const BUILD_DIRS: [&str; 3] = ["rust/target", "app/src-tauri/target", "target"];
+/// The build output folders a worktree can hold (relative to its root): cargo targets and node build output. Never source.
+pub const BUILD_DIRS: [&str; 7] = ["rust/target", "app/src-tauri/target", "target", "app/node_modules", "node_modules", "app/shell/dist", "app/packages/ui/dist"];
 
-/// Delete the cargo target folders under the worktree `path` (the worktree and its branch stay). Returns the bytes freed.
-/// Only a real folder named in [`BUILD_DIRS`] is removed; a symlink (a shared target) is left alone.
-pub fn remove_build_dirs(path: &Path) -> u64 {
-    let mut freed = 0u64;
+/// How many times a locked folder is retried, and the wait between tries.
+pub const REMOVE_TRIES: u32 = 4;
+pub const REMOVE_RETRY_MS: u64 = 750;
+
+/// What [`remove_build_dirs`] did: the bytes freed and the folders it could not delete (with the error), for a loud log.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct BuildClean {
+    pub freed: u64,
+    pub failed: Vec<(PathBuf, String)>,
+}
+
+/// Delete the build folders under the worktree `path` (the worktree and its branch stay) with a plain recursive delete;
+/// a locked file is retried [`REMOVE_TRIES`] times, then reported in `failed`. A symlink is left alone.
+pub fn remove_build_dirs(path: &Path) -> BuildClean {
+    remove_build_dirs_with(path, REMOVE_TRIES, std::time::Duration::from_millis(REMOVE_RETRY_MS))
+}
+
+pub fn remove_build_dirs_with(path: &Path, tries: u32, wait: std::time::Duration) -> BuildClean {
+    let mut out = BuildClean::default();
     for rel in BUILD_DIRS {
         let d = path.join(rel);
         let Ok(meta) = std::fs::symlink_metadata(&d) else { continue };
@@ -106,11 +121,32 @@ pub fn remove_build_dirs(path: &Path) -> u64 {
             continue;
         }
         let size = dir_size(&d);
-        if std::fs::remove_dir_all(&d).is_ok() {
-            freed += size;
+        let mut last = None;
+        for attempt in 0..tries.max(1) {
+            match std::fs::remove_dir_all(&d) {
+                Ok(()) => {
+                    last = None;
+                    break;
+                }
+                Err(e) if !d.exists() => {
+                    let _ = e;
+                    last = None;
+                    break;
+                }
+                Err(e) => {
+                    last = Some(e.to_string());
+                    if attempt + 1 < tries {
+                        std::thread::sleep(wait);
+                    }
+                }
+            }
+        }
+        match last {
+            None => out.freed += size,
+            Some(e) => out.failed.push((d, e)),
         }
     }
-    freed
+    out
 }
 
 /// Report one worktree (git facts and size). `live` and the ticket are the caller's to fill.
@@ -161,10 +197,10 @@ mod tests {
         }
         std::fs::write(root.join("rust/target/debug/a.bin"), vec![0u8; 1000]).unwrap();
         std::fs::write(root.join("rust/src/lib.rs"), "x").unwrap();
-        assert!(remove_build_dirs(&root) >= 1000);
+        assert!(remove_build_dirs(&root).freed >= 1000);
         assert!(!root.join("rust/target").exists() && !root.join("app/src-tauri/target").exists());
         assert!(root.join("rust/src/lib.rs").exists());
-        assert_eq!(remove_build_dirs(&root), 0);
+        assert_eq!(remove_build_dirs(&root), BuildClean::default());
         let _ = std::fs::remove_dir_all(&root);
     }
 
