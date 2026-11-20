@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 // Custom title bar: brand, project, new/quick, avatars, attention, host, connection, window controls.
 // Empty areas carry data-tauri-drag-region so the window moves by dragging the bar.
-import { LifeBuoy, PanelLeft, PanelRight, Plus, Wand2, Moon, Sun, Settings } from "lucide-react";
+import { BarChart3, LifeBuoy, PanelLeft, PanelRight, Plus, Wand2, Moon, Sun, Settings } from "lucide-react";
 import { attentionCount, hostLabel } from "@infantry/client";
 import { useAttention } from "@/components/mail/use-mail";
 import { useDaemon } from "@/daemon/daemon";
@@ -71,6 +71,9 @@ export function TitleBar() {
       <ConnectionBadge showUrl className="hidden font-mono text-xs whitespace-nowrap xl:flex" />
       <IconButton label={ui.theme === "dark" ? "Light theme" : "Dark theme"} className="hidden sm:inline-flex" onClick={ui.toggleTheme}>
         {ui.theme === "dark" ? <Sun /> : <Moon />}
+      </IconButton>
+      <IconButton label="Stats" onClick={() => ui.set("dialog", "stats")}>
+        <BarChart3 />
       </IconButton>
       <IconButton label="Settings" onClick={() => ui.set("dialog", "settings")}>
         <Settings />

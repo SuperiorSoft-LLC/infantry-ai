@@ -30,7 +30,6 @@ import {
   Sparkles,
   SquareTerminal,
   Star,
-  TrendingUp,
   User,
   UserCircle,
   Zap,
@@ -44,7 +43,6 @@ import { SettingsPage } from "@/components/panels/settings-page";
 import { BoardTab } from "@/components/tabs/board-tab";
 import { CalendarTab } from "@/components/tabs/calendar-tab";
 import { StatsTab } from "@/components/tabs/stats-tab";
-import { PaceTab } from "@/components/tabs/pace-tab";
 import { RolesTab } from "@/components/roles/roles-tab";
 import { NotesTab } from "@/components/knowledge/notes-tab";
 import { SkillsTab } from "@/components/library/skills-tab";
@@ -98,7 +96,6 @@ const CENTRE: Def[] = [
   { id: "health", builtin: true, label: "Health", icon: Activity, render: () => <HealthTab /> },
   { id: "plugins", declared: "infantry.settings.plugins", builtin: true, label: "Plugins", icon: Puzzle, render: () => <PluginManager /> },
   { id: "stats", declared: "infantry.stats", label: "Stats", icon: BarChart3, render: () => <StatsTab /> },
-  { id: "pace", declared: "infantry.pace", label: "Pace", icon: TrendingUp, render: () => <PaceTab /> },
   { id: "services", declared: "infantry.account", builtin: true, label: "Services", icon: Server, render: () => <ServicesTab /> },
   { id: "sites", declared: "infantry.sites", label: "Sites", icon: Globe, render: () => <TabPage title="Sites" description="Hosting servers (read-only here)"><SitesPanel /></TabPage> },
   { id: "settings", declared: "infantry.settings", label: "Settings", icon: Settings, render: () => <SettingsPage /> },

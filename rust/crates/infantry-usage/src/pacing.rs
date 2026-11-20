@@ -255,7 +255,7 @@ fn meter_usage(meter: &str, live: Option<&ProviderLimits>, manual: Option<&Manua
 /// The refusal an over-allowance start gets, with what to do about it.
 pub fn refusal(m: &MeterUsage) -> String {
     let pct = m.percent.map(|p| format!("{}% {}", fmt_num(p), m.window.as_deref().unwrap_or("")).trim().to_string()).unwrap_or_else(|| "unknown usage".into());
-    let pace = m.pace_delta.map(|d| format!(" ({}{} vs even pace)", if d >= 0.0 { "+" } else { "" }, fmt_num(d))).unwrap_or_default();
+    let pace = m.pace_delta.map(|d| format!(" ({})", crate::pace::pace_label(d))).unwrap_or_default();
     let by = if m.r#override.is_some() { "override" } else { "rule" };
     let projected = if m.r#override.is_none() { m.projected_percent.map(|p| format!(", projected {}% at reset", fmt_num(p))).unwrap_or_default() } else { String::new() };
     let resets = m.resets_at.map(|r| format!("; resets {}", stamp(r))).unwrap_or_default();
@@ -300,7 +300,7 @@ pub mod text {
                 out.push_str(&format!(" ({w})"));
             }
             if let Some(d) = m.pace_delta {
-                out.push_str(&format!(", {}{} vs even pace", if d >= 0.0 { "+" } else { "" }, fmt_num(d)));
+                out.push_str(&format!(", {}", crate::pace::pace_label(d)));
             }
             if let Some(r) = m.resets_at {
                 out.push_str(&format!(", resets in {}", until(r, now)));
