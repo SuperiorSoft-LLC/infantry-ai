@@ -2,6 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 // Window layout: title bar, sidebar | session | right panel, status bar.
 // Wide: side panels sit inline. Narrow: they become overlay drawers over the session view.
+import { GlobalWorkersHost } from "@/components/agents/global-workers";
 import { useEffect, useRef, type ReactNode } from "react";
 import { panelsToClose, type Layout } from "@infantry/client";
 import { useLayout, useUi } from "@/state/ui-state";
@@ -72,6 +73,7 @@ export function AppShell() {
       <StatusBar />
       <ToastHost />
       <DialogHost />
+      <GlobalWorkersHost />
     </div>
   );
 }

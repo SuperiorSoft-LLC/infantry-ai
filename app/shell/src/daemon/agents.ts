@@ -93,6 +93,7 @@ export function toAgent(
     tokensOut: `${compact(tout)} out`,
     tokensKnown: Object.keys(v.usage).length > 0,
     hue: hueOf(r.id),
+    projectId: r.projectId ?? undefined,
     projectName: r.projectId ? (projects.find((p) => p.id === r.projectId)?.name ?? r.projectId) : undefined,
     heldBy: r.heldBy ?? undefined,
   };
@@ -134,4 +135,15 @@ export function useAgent(id: string): Agent | null {
     useShallow((s) => ({ view: s.sessions[id], agents: s.agents, tickets: s.tickets, projects: s.projects })),
   );
   return view ? cachedAgent(view, agents, tickets, projects) : null;
+}
+
+/** Every session of every project as an Agent, newest first (the Global Workers board). */
+export function useAllAgentList(): Agent[] {
+  const { sessions, agents, tickets, projects } = useDaemon(
+    useShallow((s) => ({ sessions: s.sessions, agents: s.agents, tickets: s.tickets, projects: s.projects })),
+  );
+  return useMemo(
+    () => Object.values(sessions).sort((a, b) => b.record.spawnedAt - a.record.spawnedAt).map((v) => cachedAgent(v, agents, tickets, projects)),
+    [sessions, agents, tickets, projects],
+  );
 }

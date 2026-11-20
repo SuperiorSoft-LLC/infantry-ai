@@ -27,6 +27,10 @@ interface UiState {
   assistantOpen: boolean;
   /** Sessions popped out into their own floating chat window. */
   popouts: string[];
+  /** The Global Workers lanes modal is open. */
+  workersOpen: boolean;
+  /** The Working counter opens the lanes modal (Settings > Appearance; on by default). */
+  globalWorkers: boolean;
 }
 
 interface UiActions {
@@ -47,6 +51,15 @@ function initialTheme(): Theme {
   }
 }
 
+const GLOBAL_WORKERS_STORE = "infantry.globalWorkers";
+function initialGlobalWorkers(): boolean {
+  try {
+    return localStorage.getItem(GLOBAL_WORKERS_STORE) !== "off";
+  } catch {
+    return true;
+  }
+}
+
 export function UiProvider({ children }: { children: ReactNode }) {
   const narrow = typeof window !== "undefined" && window.innerWidth < 1100;
   const [state, setState] = useState<UiState>({
@@ -62,6 +75,8 @@ export function UiProvider({ children }: { children: ReactNode }) {
     chatMax: false,
     assistantOpen: false,
     popouts: [],
+    workersOpen: false,
+    globalWorkers: initialGlobalWorkers(),
   });
 
   useEffect(() => {
@@ -72,6 +87,15 @@ export function UiProvider({ children }: { children: ReactNode }) {
       /* storage unavailable: theme still applies for this run */
     }
   }, [state.theme]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(GLOBAL_WORKERS_STORE, state.globalWorkers ? "on" : "off");
+    } catch {
+      /* storage unavailable */
+    }
+    if (!state.globalWorkers && state.workersOpen) setState((s) => ({ ...s, workersOpen: false }));
+  }, [state.globalWorkers, state.workersOpen]);
 
   const set = useCallback<UiActions["set"]>((key, value) => setState((s) => ({ ...s, [key]: value })), []);
   const toggle = useCallback<UiActions["toggle"]>((key) => setState((s) => ({ ...s, [key]: !s[key] })), []);

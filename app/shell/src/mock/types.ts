@@ -51,6 +51,8 @@ export interface Agent {
   hue: number;
   /** The session's project, by name (RUST-MIGRATE-1). */
   projectName?: string;
+  /** The session's project id; none = global (the Assistant). */
+  projectId?: string;
   /** The other app running this session now ("Infantry (Kotlin)"): shown, and a turn into it is blocked. */
   heldBy?: string;
 }
