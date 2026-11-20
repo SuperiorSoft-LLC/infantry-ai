@@ -562,6 +562,17 @@ The contract between the two (owner OK needed, D-14):
 
 The installer grows from `Infantry_Plugins` (101 lines today). Its code leaves core, so it is Apache-2.0.
 
+**Status (INSTALLER-1 #90, built).** `Infantry_Installer` is a new plugin beside `Infantry_Plugins` (which keeps the agent
+tools); the two can merge later. Two things differ from the split above, and both are for the owner to confirm:
+- A WASM plugin cannot copy files or load another plugin, so the *mechanism* is a generic core seam, `compose/installer.rs`:
+  sources, the `requires` order, copy into `<plugins>/<tier>/<id>`, late frame registration, and the `plugin_admin` ops
+  `available`, `install`, `uninstall`. The *policy and the screen* are the plugin's. Core names no plugin id: the bootstrap
+  plugin is the `plugins.bootstrap` setting, `INFANTRY_BOOTSTRAP_PLUGIN`, or a manifest `"bootstrap": true`.
+- The installer does not hold a `plugins.admin` grant yet. Its web half drives the owner's own `plugin_admin` frames; its
+  daemon half only reads. The grant belongs with the fix for the security note below.
+
+See [Plugins](../wiki/Plugins.md#the-installer-and-the-bootstrap-plugin).
+
 **Security note (filed as a reproduce-first ticket, section 11).** A plugin that holds the `frames` import can read
 another plugin's secrets:
 - Plugin frame requests run as the owner: `compose/plugins.rs:192` ignores the calling module, and `:210` dispatches

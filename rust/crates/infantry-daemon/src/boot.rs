@@ -5,8 +5,11 @@
 //! `boot_progress` frame. Every change is also pushed to the clients as a `boot_progress` frame. Nothing here draws:
 //! the host layer draws the splash from this state, and a plugin only reports its own load progress.
 //!
-//! Steps that have no owner yet (the installer and the UI plugin of the boot chain) finish at once; the chain fills in
-//! as INSTALLER-1 and BOOT-CHAIN-1 land, by calling `finish` / `plugins` from their own code.
+//! INSTALLER-1: a daemon with a bootstrap plugin (the plugin that installs the others, named by the generic
+//! `plugins.bootstrap` setting, never in code) reports it under `bootstrap`: `{plugin, active, error}`. `active` is true
+//! while nothing but that plugin is installed, and the host layer then draws the plugin instead of the app. The
+//! `installer` step finishes when that plugin is done starting (`finish`), or at once when there is none to wait for.
+//! The UI plugin step of the boot chain finishes at once until BOOT-CHAIN-1 lands.
 
 use infantry_core::bus::EventBus;
 use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Refusal};
@@ -24,6 +27,16 @@ struct State {
     done: usize,
     /// Plugins loaded and plugins expected, while the `plugins` step runs.
     plugins: (usize, usize),
+    /// The bootstrap plugin, when the daemon has one.
+    bootstrap: Option<Bootstrap>,
+}
+
+/// The bootstrap plugin's state: its id, whether the daemon is in bootstrap mode, and why it could not start.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Bootstrap {
+    pub plugin: String,
+    pub active: bool,
+    pub error: Option<String>,
 }
 
 pub struct BootState {
@@ -33,10 +46,10 @@ pub struct BootState {
 
 impl BootState {
     pub fn new(bus: Option<EventBus>) -> Arc<Self> {
-        Arc::new(Self { state: Mutex::new(State { done: 0, plugins: (0, 0) }), bus })
+        Arc::new(Self { state: Mutex::new(State { done: 0, plugins: (0, 0), bootstrap: None }), bus })
     }
 
-    /// The report: `{ready, current, label, steps:[{id,label,done,n?,m?}]}`.
+    /// The report: `{ready, current, label, steps:[{id,label,done,n?,m?}], bootstrap:{plugin?,active,error?}}`.
     pub fn report(&self) -> Value {
         let s = self.state.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let ready = s.done >= STEPS.len();
@@ -57,7 +70,30 @@ impl BootState {
         if let (Some(("plugins", _)), true) = (cur, s.plugins.1 > 0) {
             label = format!("{label} ({} of {})", s.plugins.0, s.plugins.1);
         }
-        json!({ "ready": ready, "current": cur.map(|c| c.0).unwrap_or("ready"), "label": label, "steps": steps })
+        let bootstrap = match &s.bootstrap {
+            Some(b) => json!({ "plugin": b.plugin, "active": b.active, "error": b.error }),
+            None => json!({ "active": false }),
+        };
+        json!({ "ready": ready, "current": cur.map(|c| c.0).unwrap_or("ready"), "label": label, "steps": steps, "bootstrap": bootstrap })
+    }
+
+    /// Records the bootstrap plugin (None: the daemon has none) and whether bootstrap mode is on; pushed to the clients
+    /// when it changed, so an install that ends bootstrap mode switches every window to the app with no restart.
+    pub fn set_bootstrap(&self, bootstrap: Option<Bootstrap>) {
+        let changed = {
+            let mut s = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            let changed = s.bootstrap != bootstrap;
+            s.bootstrap = bootstrap;
+            changed
+        };
+        if changed {
+            self.push();
+        }
+    }
+
+    /// The bootstrap plugin's state now.
+    pub fn bootstrap(&self) -> Option<Bootstrap> {
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).bootstrap.clone()
     }
 
     fn push(&self) {
@@ -130,6 +166,18 @@ mod tests {
         let r = b.report();
         assert_eq!(r["ready"], true);
         assert_eq!(r["steps"][3]["n"], 3);
+    }
+
+    #[test]
+    fn the_bootstrap_plugin_is_reported_and_a_change_is_pushed_once() {
+        let b = BootState::new(None);
+        assert_eq!(b.report()["bootstrap"], json!({ "active": false }));
+        let on = Bootstrap { plugin: "Boot_Plugin".into(), active: true, error: None };
+        b.set_bootstrap(Some(on.clone()));
+        assert_eq!(b.report()["bootstrap"], json!({ "plugin": "Boot_Plugin", "active": true, "error": null }));
+        assert_eq!(b.bootstrap(), Some(on));
+        b.set_bootstrap(Some(Bootstrap { plugin: "Boot_Plugin".into(), active: false, error: Some("no".into()) }));
+        assert_eq!(b.report()["bootstrap"]["error"], "no");
     }
 
     #[test]

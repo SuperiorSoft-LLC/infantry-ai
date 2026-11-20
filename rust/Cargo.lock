@@ -1341,6 +1341,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "infantry-installer-daemon"
+version = "1.0.0"
+dependencies = [
+ "infantry-plugin-sdk",
+ "serde_json",
+]
+
+[[package]]
 name = "infantry-jobfeed-daemon"
 version = "1.0.0"
 dependencies = [

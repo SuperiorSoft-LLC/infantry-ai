@@ -30,6 +30,8 @@ A real example is `rust/plugins/official/Infantry_Notes/module.json`. The fields
 | Field | Meaning |
 |---|---|
 | `name`, `version`, `tier` | The module id (same as the folder), its version, and `official` for the bundled ones. The host decides the tier from the install folder, not from this field. |
+| `requires` | `["Vendor_Module", ...]`. The modules this one needs. The installer installs them first, in dependency order, and will not remove one while a module that requires it is installed. |
+| `bootstrap` | `true` on the one plugin that installs the others (the daemon loads it when nothing else is installed). The `plugins.bootstrap` setting names it instead; core names no plugin id. |
 | `tabs` | `[{id, container}]`. Declared for the app: the React shell shows a tab for each enabled plugin that declares one. |
 | `actions` | `[{id, label, kind, frames}]`. `kind` is `read`, `write` or `destructive`. |
 | `ui` | The web UI half: `apiVersion`, `entry`, `styles`, `assets` and `contributes` (the slots `tab`, `panel`, `settings.card`, `plugin.config` and `card.badge`). See [Web UI plugins](Web-UI-plugins.md). |
@@ -77,8 +79,34 @@ builds every official daemon plugin for `wasm32-wasip2` (needs `cargo`, `python`
 
 The daemon loads `official` and `core` folders only. Loading community modules from a folder is not wired yet
 (`TIERS` in `rust/crates/infantry-daemon/src/compose/plugins.rs`). The owner turns a loaded plugin off and on with the
-`plugin_admin` frame (`status`, `enable`, `disable`). Install, update and remove are not served: see
-[Plugin lifecycle](Plugin-lifecycle.md).
+`plugin_admin` frame (`status`, `enable`, `disable`, and `available`, `install`, `uninstall`: see below). Update and
+rollback are not served: see [Plugin lifecycle](Plugin-lifecycle.md).
+
+### The installer and the bootstrap plugin
+
+`plugin_admin` (owner only) installs and removes plugins live, with no restart:
+
+| Op | What it does |
+|---|---|
+| `available` | One row per module a source offers and per module installed: id, name, version, `requires`, `installed`, `enabled`, `status`, `source`. |
+| `install <id>...` | Copies each module, and the modules it `requires`, from the first source that offers it into `<plugins>/<tier>/<id>`, in dependency order. Its daemon half loads, its frames answer, its web UI half is served, and every window gets `plugins_changed`. A missing dependency or a cycle is refused before anything is copied. |
+| `uninstall <id>` | Unloads the module and deletes its folder. Refused for the bootstrap plugin and for a module another installed module `requires`. |
+
+A **source** is a folder laid out like the plugins folder (`<source>/{official,core}/<Module>/module.json`). The bundled
+folder comes first (`plugins.bundled` or `INFANTRY_BUNDLED_PLUGINS_DIR`, else `plugins-bundled` beside the daemon), then
+the folders in `plugins.sources`. A module installs at the tier of the folder it sits in, never by its manifest. Signing
+and verification are not here yet (the marketplace, MARKET-1).
+
+The **bootstrap plugin** is named by data: `INFANTRY_BOOTSTRAP_PLUGIN`, else the `plugins.bootstrap` setting, else the first
+module whose manifest says `"bootstrap": true`. A daemon with nothing installed copies it from the bundled folder and
+reports bootstrap mode in `boot_progress` (`bootstrap: {plugin, active, error}`). `active` is true while nothing but that
+plugin is installed, and the app then shows that plugin's tab as the whole window; the first install ends it and the app
+opens as usual. The owner's disabled mark does not apply to the bootstrap plugin in that state. With other plugins
+installed, nothing changes: the installer is one more plugin, with an Apps tab.
+
+`Infantry_Installer` is that plugin. Its daemon half has one read-only agent tool (`infantry_installer_available`); the
+installing itself is `plugin_admin`, which an agent cannot call as a client. Its web UI half is the Apps tab (Install,
+Install all, Enable, Disable, Remove).
 
 ### The official plugins
 
@@ -91,6 +119,7 @@ Each lives in `rust/plugins/official/<folder>`.
 | `Infantry_Docs` | In-app docs lookup; the wiki pages ship inside the component. |
 | `Infantry_Git` | Registers nothing today. |
 | `Infantry_Health` | The `infantry_health` tool. |
+| `Infantry_Installer` | The bootstrap plugin: installs, enables and removes plugins from the bundled folder and the configured sources, live. See [The installer](#the-installer-and-the-bootstrap-plugin). |
 | `Infantry_JobFeed` | Two pull routes over a session's watched jobs (the Job Feed box). |
 | `Infantry_Mcp` | The `infantry_mcp` tool: the agent face of the MCP registry. |
 | `Infantry_News` | News headlines for agents (Google News RSS, no key). |

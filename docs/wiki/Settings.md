@@ -12,6 +12,7 @@
 - **Scopes:** a scoped value is the row `@scope/<scope>/<target>/<key>`. Resolution is session, then role (target `<project>/<role>`), then project, then app, then the default. Not ported yet: the per-key allowed-scope table and value validation, so every key accepts every scope.
 - **The app's own file** is `<state>/ui.json`, read by the desktop shell at start (a change applies on the next start). Keys seen in code: `runner` (`embedded` or `daemon`), `daemonStateDir`, `daemonPort`, `updater`, `remoteAccess`, `paths.addCli`.
 - **Limits:** named `limits.*` keys, for example `limits.concurrency.maxDepth`, `limits.pacing.maxWorkersCeiling`, `limits.mail.*`, `limits.secrets.*`, `limits.usage.*`, `limits.runners.*`, `limits.mcp.*`, `limits.tools.*`.
+- **Plugin sources and the installer (INSTALLER-1):** `plugins.bootstrap` (the id of the plugin the daemon loads when nothing else is installed; `INFANTRY_BOOTSTRAP_PLUGIN` wins, and a manifest `"bootstrap": true` is the default), `plugins.bundled` (the bundled plugins folder; `INFANTRY_BUNDLED_PLUGINS_DIR` wins; default `plugins-bundled` beside the daemon), `plugins.sources` (more source folders: a JSON array, or one string split on `;`). All are read at daemon start. See [Plugins](Plugins.md#the-installer-and-the-bootstrap-plugin).
 - Not verified in Rust: the cost-saving defaults and every default number below.
 
 ## Legacy (Kotlin) reference
