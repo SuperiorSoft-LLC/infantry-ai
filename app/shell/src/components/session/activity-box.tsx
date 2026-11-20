@@ -1,70 +1,58 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// The Activity box (Kotlin ActivityBox): the session's tool activity, newest first, timestamped, in a panel over the
-// transcript's bottom edge. A chip toggles it (show / minimize); the header button maximizes it to a tall panel.
-// The choice is remembered for the window.
+// The chat's bottom-right float row over the transcript (Kotlin ChatFeedSurface FloatRow + ActivityBox, CHAT-MINIMIZE-5):
+// the host's floaters first (Expand, Minimize, or Restore alone when minimized), then the Search chip (Ctrl+F), then
+// the Activity chip (a clock, icon only, no count; only when the session has activity). The Activity chip toggles the
+// activity lines above the row: newest first, timestamped, monospace, at most ~160px tall, scrolling. It starts
+// collapsed and the choice is remembered for the window.
 import { useState, type ReactNode } from "react";
-import { Activity, Maximize2, Minimize2, X } from "lucide-react";
-import { IconButton, cn } from "@infantry/ui";
+import { Clock, Search } from "lucide-react";
+import { CHAT_SEARCH_EVENT } from "@infantry/client";
 import { useDaemon } from "@/daemon/daemon";
 import { ChangeBoxOfWrite } from "./change-box";
+import { FloatingChip } from "./floating-chip";
 
-type BoxMode = "closed" | "open" | "max";
-let remembered: BoxMode = "closed";
+let remembered = false;
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
 
-/** `actions`: the chat view buttons (Expand, Minimize / Restore) that float in the same bottom-right row as the one chip. */
-export function ActivityBox({ sessionId, actions }: { sessionId: string; actions?: ReactNode }) {
-  const log = useDaemon((s) => s.sessions[sessionId]?.activityLog);
-  const [mode, setModeState] = useState<BoxMode>(remembered);
-  const setMode = (m: BoxMode) => ((remembered = m), setModeState(m));
+/** `floaters`: the host's chips (Expand, Minimize / Restore), drawn first in the row. No session: floaters only. */
+export function ActivityBox({ sessionId, floaters }: { sessionId: string | null; floaters?: ReactNode }) {
+  const log = useDaemon((s) => (sessionId ? s.sessions[sessionId]?.activityLog : undefined));
+  const [open, setOpenState] = useState(remembered);
+  const setOpen = (o: boolean) => ((remembered = o), setOpenState(o));
   const lines = [...(log ?? [])].reverse();
   const has = lines.length > 0;
   return (
-    <div className="pointer-events-none absolute right-2 bottom-1 left-2 z-10 flex flex-col items-end gap-1" data-testid="activity-box">
-      {has && mode !== "closed" && (
-        <div className="pointer-events-auto w-full rounded-lg border bg-card">
-          <div className="flex items-center justify-between border-b px-2 py-1 text-xs text-muted-foreground">
-            <span>Activity · {lines.length}</span>
-            <span className="flex gap-1">
-              <IconButton label={mode === "max" ? "Minimize" : "Maximize"} onClick={() => setMode(mode === "max" ? "open" : "max")}>
-                {mode === "max" ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-              </IconButton>
-              <IconButton label="Hide activity" onClick={() => setMode("closed")}>
-                <X className="size-3.5" />
-              </IconButton>
-            </span>
-          </div>
-          <div className={cn("overflow-y-auto px-2 py-1 font-mono text-[11px]", mode === "max" ? "max-h-[60vh]" : "max-h-40")}>
-            {lines.map((e, i) => (
-              <div key={`${e.at}:${i}`} className="flex gap-2">
-                <span className="shrink-0 text-muted-foreground">{timeFmt.format(e.at)}</span>
-                {e.write ? (
-                  <div className="min-w-0 flex-1 py-0.5">
-                    <ChangeBoxOfWrite write={e.write} />
-                  </div>
-                ) : (
-                  <span className="min-w-0 break-all">{e.label}</span>
-                )}
-              </div>
-            ))}
-          </div>
+    <div className="pointer-events-none absolute right-0 bottom-0 left-2 z-10 flex flex-col items-end" data-testid="activity-box">
+      {has && open && (
+        <div className="pointer-events-auto max-h-40 w-[calc(100%-0.5rem)] overflow-y-auto rounded-lg border bg-card px-3 py-1 font-mono text-[11px]" aria-label="Activity">
+          {lines.map((e, i) => (
+            <div key={`${e.at}:${i}`} className="flex gap-2 py-px">
+              <span className="shrink-0 text-muted-foreground">{timeFmt.format(e.at)}</span>
+              {e.write ? (
+                <div className="min-w-0 flex-1 py-0.5">
+                  <ChangeBoxOfWrite write={e.write} />
+                </div>
+              ) : (
+                <span className="min-w-0 break-all">{e.label}</span>
+              )}
+            </div>
+          ))}
         </div>
       )}
-      <div className="pointer-events-auto flex items-center gap-1" data-testid="chat-float-row">
-        {has && mode === "closed" && (
-          <button
-            type="button"
-            onClick={() => setMode("open")}
-            title="Activity"
-            aria-label="Activity"
-            className="grid size-8 place-items-center rounded-full border bg-card text-muted-foreground hover:text-foreground max-sm:size-12"
-          >
-            <Activity className="size-4" />
-          </button>
+      <div className="pointer-events-auto flex items-center pr-1.5 pb-0.5" data-testid="chat-float-row">
+        {floaters}
+        {sessionId && (
+          <FloatingChip label="Search this chat" shortcut="Ctrl+F" onClick={() => window.dispatchEvent(new Event(CHAT_SEARCH_EVENT))}>
+            <Search />
+          </FloatingChip>
         )}
-        {actions}
+        {has && (
+          <FloatingChip label="Activity" onClick={() => setOpen(!open)}>
+            <Clock />
+          </FloatingChip>
+        )}
       </div>
     </div>
   );
