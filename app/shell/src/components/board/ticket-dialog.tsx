@@ -59,6 +59,7 @@ export function TicketDialog({ ticketId, creating, onClose }: { ticketId: string
   return (
     <AppDialog
       open={open}
+      wide
       onOpenChange={(o) => !o && onClose()}
       title={ticket ? `Ticket ${shortId(ticket.id)}` : "New ticket"}
       description={ticket ? "Edit the ticket. Changes save to the daemon." : "Only a title is needed. Everything else inherits."}
@@ -99,7 +100,7 @@ export function TicketDialog({ ticketId, creating, onClose }: { ticketId: string
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ticket-desc">Description</Label>
-          <Textarea id="ticket-desc" rows={6} {...form.register("description")} />
+          <Textarea id="ticket-desc" rows={8} className="w-full" {...form.register("description")} />
         </div>
         {ticket && <TicketComments ticketId={ticket.id} />}
         <AdvancedSection>
