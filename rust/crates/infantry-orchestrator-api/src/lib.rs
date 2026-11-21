@@ -140,6 +140,11 @@ pub trait Orchestrator: Send + Sync {
         let _ = request;
         unsupported("ticket_done")
     }
+    /// PIPE-CLOSE-1: done, stop and remove the worker, remove the clean merged worktree, start the lane's next ticket.
+    fn close(&self, request: TicketClose) -> BoxFuture<'_, OrchResult<CloseAnswer>> {
+        let _ = request;
+        unsupported("ticket_close")
+    }
 }
 
 fn unsupported<T: Send + 'static>(what: &str) -> BoxFuture<'static, OrchResult<T>> {

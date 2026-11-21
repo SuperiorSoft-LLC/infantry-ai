@@ -217,7 +217,7 @@ pub fn usage_error(p: &Parsed) -> Option<String> {
         }
         // Kotlin's `ticketUsageError` has no branch for these two, so the frozen CLI refuses them with the subcommand
         // line before their own usage checks can run; here they reach their commands, which print their own usage.
-        Some("assign") | Some("unassign") => None,
+        Some("assign") | Some("unassign") | Some("close") => None,
         _ => Some("ticket needs a subcommand: infantry ticket show <id|prefix> | create --title \"...\" | update <id|prefix> ... | move <id|prefix> <status> | start <id|prefix> | link <id|prefix> <otherId|prefix> <type>".into()),
     }
 }
@@ -233,6 +233,7 @@ pub fn run(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
         Some("unassign") => unassign(ctx, p),
         Some("assign") => assign(ctx, p),
         Some("start") => start_ticket(ctx, p),
+        Some("close") => close_ticket(ctx, p),
         Some("link") => link(ctx, p),
         Some("files") => files(ctx, p),
         Some("archive") | Some("restore") => archive_command(ctx, p),
@@ -778,6 +779,32 @@ fn unassign(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
     let answer = ctx.stream().request(&env, "ticket", "ticket_unassign", false)?;
     let moved = decode_ticket(&answer.data)?;
     ctx.out(format!("unassigned {tid} -> {}", s(&moved, "status").unwrap_or_default()));
+    Ok(0)
+}
+
+
+/// PIPE-CLOSE-1: `infantry ticket close <id|prefix> [--summary <text>] [--keep-worktree]`: done, the worker stopped and
+/// removed, the clean merged worktree removed, the lane's next ticket started, all in one call.
+fn close_ticket(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
+    check_contract(ctx)?;
+    let Some(id) = p.arg(1).map(|a| a.trim().to_string()).filter(|a| !a.is_empty()) else {
+        ctx.err("usage: infantry ticket close <id|prefix> [--summary <text>] [--keep-worktree]");
+        return Ok(1);
+    };
+    let project = board_project(p, ctx.getenv);
+    let Some(ticket) = resolve_ticket(ctx, &id, &project)? else { return Ok(1) };
+    let tid = s(&ticket, "id").unwrap_or_default();
+    let req = json!({"ticketId": tid, "summary": p.val("summary"), "keepWorktree": p.flag("keep-worktree"), "closedBy": session_of(ctx)});
+    let env = Envelope::new("ticket_close", req.to_string()).with_session(session_of(ctx));
+    let answer = ctx.stream().request(&env, "ticket_closed", "ticket_close", false)?;
+    let c: Value = serde_json::from_str(&answer.data).map_err(|e| format!("ticket_closed answer is not JSON: {e}"))?;
+    ctx.out(format!("closed {tid} -> {}", c.get("ticket").and_then(|t| s(t, "status")).unwrap_or_default()));
+    ctx.out(format!("  worker:   {}", s(&c, "workerRemoved").map(|w| format!("{w} stopped and removed")).unwrap_or_else(|| "none".into())));
+    ctx.out(format!("  worktree: {}", s(&c, "worktreeRemoved").map(|w| format!("{w} removed")).unwrap_or_else(|| "kept".into())));
+    ctx.out(format!("  next:     {}", c.get("next").filter(|n| !n.is_null()).and_then(|n| s(n, "id")).unwrap_or_else(|| "none started".into())));
+    for w in c.get("warnings").and_then(|w| w.as_array()).into_iter().flatten().filter_map(|w| w.as_str()) {
+        ctx.out(format!("  warning:  {w}"));
+    }
     Ok(0)
 }
 

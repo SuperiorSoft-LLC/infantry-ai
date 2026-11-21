@@ -15,7 +15,7 @@ use infantry_orchestrator_api::dto::{
     decode_strict, AgentSwitch, Epic, EpicBaseRequest, EpicSave, TicketLinkRequest, TicketListQuery, TicketMove, TicketReorder, TicketSave,
 };
 use infantry_orchestrator_api::{
-    AgentQueueRequest, OrchError, StartNextRequest, StartOrigin, TicketAssign, TicketDone, TicketStartRequest, TicketUnassign,
+    AgentQueueRequest, OrchError, StartNextRequest, StartOrigin, TicketAssign, TicketClose, TicketDone, TicketStartRequest, TicketUnassign,
 };
 use infantry_protocol::Envelope;
 
@@ -56,6 +56,7 @@ pub const ALL_FRAMES: &[&str] = &[
     "agent_queue",
     "agent_switch",
     "ticket_done",
+    "ticket_close",
 ];
 
 pub struct BoardUnit {
@@ -132,20 +133,20 @@ impl FrameUnit for BoardUnit {
             "ticket_move" => {
                 let req: TicketMove = decode_strict(&env.data, "ticket_move payload").map_err(|m| r(OrchError::Refused(m)))?;
                 let a = match &self.work {
-                    Some(w) => w.move_lane(req, None),
+                    Some(w) => w.move_lane(req, env.session_id.as_deref()),
                     None => self.board.move_lane(req, &publish),
                 }
                 .map_err(r)?;
                 Ok(answer(a.pushed, ticket_envelope(&a.ticket)))
             }
-            "ticket_start" | "ticket_start_next" | "ticket_assign" | "ticket_unassign" | "agent_queue" | "agent_switch" | "ticket_done" => {
+            "ticket_start" | "ticket_start_next" | "ticket_assign" | "ticket_unassign" | "agent_queue" | "agent_switch" | "ticket_done" | "ticket_close" => {
                 let Some(w) = &self.work else { return Err(r(OrchError::Unsupported(format!("{frame} needs the work half")))) };
                 let bad = |m: String| r(OrchError::Refused(m));
                 let what = format!("{frame} payload");
                 let a = match frame {
                     "ticket_start" => {
                         let q: TicketStartRequest = decode_strict(&env.data, &what).map_err(bad)?;
-                        w.start(&q.id, StartOrigin::Move, q.started_by.as_deref()).map_err(r)?
+                        w.start(&q.id, StartOrigin::Move, q.started_by.as_deref().or(env.session_id.as_deref())).map_err(r)?
                     }
                     "ticket_start_next" => w.start_next(&decode_strict::<StartNextRequest>(&env.data, &what).map_err(bad)?).map_err(r)?,
                     "ticket_assign" => w.assign(&decode_strict::<TicketAssign>(&env.data, &what).map_err(bad)?).map_err(r)?,
@@ -154,6 +155,12 @@ impl FrameUnit for BoardUnit {
                     "agent_queue" => {
                         let s = w.agent_queue(&decode_strict::<AgentQueueRequest>(&env.data, &what).map_err(bad)?).map_err(r)?;
                         return Ok(answer(false, Envelope::new("agent_queue_state", serde_json::to_string(&s).expect("queue json"))));
+                    }
+                    "ticket_close" => {
+                        let c = w.close(&decode_strict::<TicketClose>(&env.data, &what).map_err(bad)?).map_err(r)?;
+                        let mut e = Envelope::new("ticket_closed", serde_json::to_string(&c).expect("close json"));
+                        e.request_id = env.request_id.clone();
+                        return Ok(vec![e]);
                     }
                     _ => {
                         let d = w.done(&decode_strict::<TicketDone>(&env.data, &what).map_err(bad)?).map_err(r)?;

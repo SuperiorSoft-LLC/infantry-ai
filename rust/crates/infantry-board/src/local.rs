@@ -9,7 +9,7 @@ use infantry_orchestrator_api::{
     BoardAnswer, BoxFuture, Comment, CommentAdd, CommentAuthor, CommentQuery, DoneReport, Epic, EpicBaseRequest, EpicSave, Limit,
     NotifyEdit, OrchError, OrchResult, Orchestrator, Ticket, TicketAnswer, TicketAssign, TicketLinkRequest, TicketListQuery,
     TicketMove, TicketReorder, TicketSave, TicketUnassign, AgentQueueRequest, AgentQueueState, DoneAnswer, StartNextRequest,
-    StartOrigin, TicketDone, TicketStartRequest,
+    StartOrigin, TicketClose, CloseAnswer, TicketDone, TicketStartRequest,
 };
 
 use crate::board::Board;
@@ -156,5 +156,9 @@ impl Orchestrator for LocalOrchestrator {
 
     fn done(&self, request: TicketDone) -> BoxFuture<'_, OrchResult<DoneAnswer>> {
         Box::pin(async move { self.work("ticket_done")?.done(&request) })
+    }
+
+    fn close(&self, request: TicketClose) -> BoxFuture<'_, OrchResult<CloseAnswer>> {
+        Box::pin(async move { self.work("ticket_close")?.close(&request) })
     }
 }

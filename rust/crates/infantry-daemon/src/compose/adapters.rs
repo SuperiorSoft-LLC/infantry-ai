@@ -11,7 +11,7 @@ use infantry_board::Dispatcher;
 use infantry_mail::mail::router::{MailRouter, ProjectRef, SessionDirectory, SessionInfo as MailSession, TurnSink};
 use infantry_mail::notify::questions::QuestionHost;
 use infantry_orchestrator_api::{
-    DoneReport, LaunchRequest, LaunchedSession, RoutingRule as OrchRule, SessionLauncher, WorkerState, Workspace, WorkspaceProvider, WorkspaceRequest,
+    DoneReport, LaunchRequest, LaunchedSession, RoutingRule as OrchRule, SessionLauncher, WorkerState, Workspace, WorkspaceProvider, WorkspaceRelease, WorkspaceRequest,
 };
 use infantry_projects::ticket_branches::{TicketBranchOutcome, TicketBranchRequest};
 use infantry_projects::Projects;
@@ -325,6 +325,32 @@ impl WorkspaceProvider for DaemonWorkspaces {
     fn folder(&self, project_id: Option<&str>) -> Result<Option<String>, String> {
         Ok(project_id.and_then(|p| super::project_dir(&self.projects, p)).map(|d| d.to_string_lossy().into_owned()))
     }
+    fn release(&self, req: &WorkspaceRelease) -> Result<Option<String>, String> {
+        use infantry_projects::stale;
+        let Some(repo) = self.repo_of(req.project_id.as_deref()) else { return Ok(None) };
+        let root = self.projects.branches.main_root(&repo);
+        let base = req
+            .base
+            .clone()
+            .filter(|b| !b.trim().is_empty())
+            .or_else(|| req.project_id.as_deref().and_then(|p| self.projects.store.base_branch_of(p)))
+            .unwrap_or_else(|| "HEAD".into());
+        let git = &self.projects.git;
+        let Some(l) = stale::list(git, &root).into_iter().find(|l| l.branch.as_deref() == Some(req.branch.as_str())) else { return Ok(None) };
+        if req.dry_run {
+            if !stale::is_merged(git, &root, &req.branch, &base) {
+                return Err(format!("branch '{}' is not merged into '{base}'", req.branch));
+            }
+            if l.path.join(".git").exists() && stale::is_dirty(git, &l.path) {
+                return Err(format!("{} has uncommitted changes", l.path.display()));
+            }
+            return Ok(Some(l.path.to_string_lossy().into_owned()));
+        }
+        match stale::remove_if_merged(git, &root, &l.path, &req.branch, &base, false) {
+            stale::Removal::Removed => Ok(Some(l.path.to_string_lossy().into_owned())),
+            stale::Removal::Skipped(why) => Err(why),
+        }
+    }
 }
 
 /// Ticket workers through the daemon's session manager.
@@ -377,6 +403,15 @@ impl SessionLauncher for DaemonLauncher {
     fn stop(&self, session_id: &str, reason: &str) {
         let _rt = self.handle.enter();
         let _ = self.daemon.stop_session(session_id, reason);
+    }
+    fn remove(&self, session_id: &str, reason: &str) -> bool {
+        let _rt = self.handle.enter();
+        let _ = self.daemon.stop_session(session_id, reason);
+        match self.daemon.delete_session(session_id) {
+            Ok(()) => true,
+            // Already gone is the goal.
+            Err(_) => self.daemon.record(session_id).is_none(),
+        }
     }
     fn state(&self, session_id: &str) -> WorkerState {
         match self.daemon.record(session_id) {
