@@ -267,6 +267,63 @@ impl Admin {
         (0, format!("installed {}", done.join(", ")), String::new())
     }
 
+    /// Every installed module with its version.
+    fn installed_versions(&self) -> Vec<(String, String)> {
+        super::host_frames::scan_modules(&Some(self.plugins_dir.clone())).into_iter().filter(|m| TIERS.contains(&m.tier.as_str())).map(|m| (m.id.clone(), super::host_frames::s(&m.manifest, "version").to_string())).collect()
+    }
+
+    /// `updates`: what the sources offer newer than what is installed.
+    fn updates_list(&self) -> Vec<serde_json::Value> {
+        installer::updates(&self.installed_versions(), &installer::catalog(&self.all_sources()))
+            .into_iter()
+            .map(|u| serde_json::json!({ "id": u.id, "installed": u.installed, "available": u.available, "source": u.offer.source.display().to_string() }))
+            .collect()
+    }
+
+    /// `update <id>...` (none: every update): verify the new copy, stage it, swap it for the installed folder and load it.
+    /// A copy that fails its check or does not load leaves the old one exactly as it was (and loaded).
+    fn update_ops(&self, want: &[String], bus: &EventBus) -> (i32, String, String) {
+        let fail = |e: String| (1, String::new(), e);
+        let found = installer::updates(&self.installed_versions(), &installer::catalog(&self.all_sources()));
+        let picked: Vec<_> = found.into_iter().filter(|u| want.is_empty() || want.contains(&u.id)).collect();
+        if picked.is_empty() {
+            return (0, "nothing to update".into(), String::new());
+        }
+        let mut done: Vec<String> = Vec::new();
+        for u in picked {
+            let step = (|| -> Result<(), String> {
+                if self.install.config.bootstrap.as_deref() == Some(u.id.as_str()) {
+                    return Err(format!("{} is the installer: it is updated by a new app build", u.id));
+                }
+                super::sources::verify(&u.offer.dir).map_err(|e| format!("{} refused: {e}", u.id))?;
+                let current = self.installed.read().unwrap_or_else(|e| e.into_inner()).get(&u.id).map(|i| i.dir.clone()).or_else(|| super::host_frames::scan_modules(&Some(self.plugins_dir.clone())).into_iter().find(|m| m.id == u.id).map(|m| m.dir)).ok_or_else(|| format!("{} is not installed", u.id))?;
+                let staged = installer::stage(&self.plugins_dir, &u.offer)?;
+                self.forget(&u.id);
+                let aside = match installer::swap_in(&staged, &current) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        let _ = std::fs::remove_dir_all(&staged);
+                        let _ = self.register(&u.id, &current);
+                        return Err(e);
+                    }
+                };
+                if let Err(e) = self.register(&u.id, &current) {
+                    let back = installer::swap_back(&aside, &current).and_then(|_| self.register(&u.id, &current));
+                    return Err(format!("{} {} not loaded: {e}{}", u.id, u.available, back.err().map(|b| format!(" (and the old copy did not come back: {b})")).unwrap_or_default()));
+                }
+                let _ = std::fs::remove_dir_all(&aside);
+                Ok(())
+            })();
+            if let Err(e) = step {
+                let before = if done.is_empty() { String::new() } else { format!(" (updated before it: {})", done.join(", ")) };
+                return fail(format!("{e}{before}"));
+            }
+            done.push(format!("{} {} -> {}", u.id, u.installed, u.available));
+            self.changed(bus, &u.id, true);
+        }
+        (0, format!("updated {}", done.join(", ")), String::new())
+    }
+
     /// `uninstall <id>`: unloads the module and deletes its folder. The bootstrap plugin stays (it is the way back in),
     /// and so does a module another installed module requires.
     fn uninstall_op(&self, id: &str, bus: &EventBus) -> (i32, String, String) {
@@ -387,6 +444,8 @@ impl Admin {
                 (0, format!("{id} {op}d"), String::new())
             }
             "available" => (0, serde_json::to_string_pretty(&self.available()).unwrap_or_default(), String::new()),
+            "updates" => (0, serde_json::to_string_pretty(&self.updates_list()).unwrap_or_default(), String::new()),
+            "update" => self.update_ops(&args[1..].iter().map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect::<Vec<_>>(), bus),
             "sources" => (0, serde_json::to_string_pretty(&self.install.sources.list()).unwrap_or_default(), String::new()),
             "source-add" | "source-remove" | "source-refresh" => {
                 let done = match op {
@@ -413,7 +472,7 @@ impl Admin {
             }
             "install" => self.install_ops(&args[1..].iter().map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect::<Vec<_>>(), bus),
             "uninstall" => self.uninstall_op(id, bus),
-            "" => fail("usage: plugin <status|available|search|sources|source-add|source-remove|source-refresh|install|uninstall|enable|disable> [id]".into()),
+            "" => fail("usage: plugin <status|available|search|updates|update|sources|source-add|source-remove|source-refresh|install|uninstall|enable|disable> [id]".into()),
             other => fail(format!("plugin {other}: not supported by this daemon yet (it serves status, available, install, uninstall, enable, disable)")),
         }
     }

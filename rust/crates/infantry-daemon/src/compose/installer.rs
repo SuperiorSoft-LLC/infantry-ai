@@ -328,6 +328,68 @@ pub fn place(plugins_dir: &Path, offer: &Offer) -> Result<PathBuf, String> {
     result.map(|_| target)
 }
 
+/// Dotted numeric versions compared part by part (`1.10.0` > `1.9.0`); a part that is not a number counts as 0, a missing
+/// part as 0. A pre-release suffix (`-beta`) is dropped.
+pub fn version_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    let parts = |v: &str| -> Vec<u64> { v.trim().trim_start_matches('v').split(['-', '+']).next().unwrap_or("").split('.').map(|p| p.parse().unwrap_or(0)).collect() };
+    let (x, y) = (parts(a), parts(b));
+    (0..x.len().max(y.len())).map(|i| x.get(i).unwrap_or(&0).cmp(y.get(i).unwrap_or(&0))).find(|o| o.is_ne()).unwrap_or(std::cmp::Ordering::Equal)
+}
+
+/// A newer version of an installed package that a source offers.
+#[derive(Debug, Clone)]
+pub struct UpdateOffer {
+    pub id: String,
+    pub installed: String,
+    pub available: String,
+    pub offer: Offer,
+}
+
+/// The update check: every installed package (`installed`: id, version) for which a source offers a higher version. The
+/// first source to offer an id answers for it ([`catalog`] order), so a lower copy in an earlier source hides a newer one
+/// in a later source on purpose.
+pub fn updates(installed: &[(String, String)], offers: &[Offer]) -> Vec<UpdateOffer> {
+    installed
+        .iter()
+        .filter_map(|(id, have)| {
+            let o = offers.iter().find(|o| &o.id == id)?;
+            (version_cmp(&o.version, have).is_gt()).then(|| UpdateOffer { id: id.clone(), installed: have.clone(), available: o.version.clone(), offer: o.clone() })
+        })
+        .collect()
+}
+
+/// Copies `offer` to `<plugins>/.installing/<id>` (cleared first) and returns that folder: the first half of [`place`], for
+/// a swap that needs the new copy ready before the old one moves.
+pub fn stage(plugins_dir: &Path, offer: &Offer) -> Result<PathBuf, String> {
+    if !safe_name(&offer.id) || !TIERS.contains(&offer.tier.as_str()) {
+        return Err(format!("{}: not a name or tier a module installs under", offer.id));
+    }
+    let staging = plugins_dir.join(".installing").join(&offer.id);
+    let _ = std::fs::remove_dir_all(&staging);
+    copy_dir(&offer.dir, &staging).map(|_| staging.clone()).inspect_err(|_| {
+        let _ = std::fs::remove_dir_all(&staging);
+    })
+}
+
+/// Swaps the staged copy in for the installed folder `current`: the old folder moves aside, the new one takes its name.
+/// Returns the folder the old copy now sits in, so the caller can put it back ([`swap_back`]) or delete it.
+pub fn swap_in(staged: &Path, current: &Path) -> Result<PathBuf, String> {
+    let aside = staged.with_extension("old");
+    let _ = std::fs::remove_dir_all(&aside);
+    std::fs::rename(current, &aside).map_err(|e| format!("{}: {e}", current.display()))?;
+    if let Err(e) = std::fs::rename(staged, current) {
+        let _ = std::fs::rename(&aside, current);
+        return Err(format!("{}: {e}", current.display()));
+    }
+    Ok(aside)
+}
+
+/// Undoes a [`swap_in`]: the new copy at `current` is deleted and the old one comes back.
+pub fn swap_back(aside: &Path, current: &Path) -> Result<(), String> {
+    let _ = std::fs::remove_dir_all(current);
+    std::fs::rename(aside, current).map_err(|e| format!("{}: {e}", current.display()))
+}
+
 /// Removes an installed module folder, only when it sits where `place` puts one (`<plugins>/<tier>/<id>`).
 pub fn remove(plugins_dir: &Path, dir: &Path) -> Result<(), String> {
     let canon = |p: &Path| std::fs::canonicalize(p).map_err(|e| format!("{}: {e}", p.display()));
@@ -526,5 +588,19 @@ mod tests {
         let ids: Vec<String> = catalog(&[src.clone()]).into_iter().map(|o| o.id).collect();
         assert_eq!(ids, ["Fine_One"]);
         let _ = std::fs::remove_dir_all(&src);
+    }
+}
+
+#[cfg(test)]
+mod update_tests {
+    use super::*;
+    use std::cmp::Ordering::*;
+
+    #[test]
+    fn versions_compare_by_number_not_text() {
+        assert_eq!(version_cmp("1.10.0", "1.9.0"), Greater);
+        assert_eq!(version_cmp("v2", "2.0.0"), Equal);
+        assert_eq!(version_cmp("1.0.0-beta", "1.0.0"), Equal);
+        assert_eq!(version_cmp("0.9", "1.0.0"), Less);
     }
 }
