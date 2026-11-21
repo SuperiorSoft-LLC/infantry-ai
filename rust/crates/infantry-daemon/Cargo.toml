@@ -12,15 +12,10 @@ publish = false
 name = "infantry_daemon"
 path = "src/lib.rs"
 
-[[bin]]
-name = "infantry-daemon"
-path = "src/main.rs"
-
 [dependencies]
 infantry-proc = { path = "../infantry-proc" }
 infantry-protocol = { path = "../infantry-protocol" }
 infantry-harness = { path = "../infantry-harness" }
-infantry-harness-claude = { path = "../infantry-harness-claude" }
 infantry-runner = { path = "../infantry-runner" }
 infantry-runner-local = { path = "../infantry-runner-local" }
 infantry-core = { path = "../infantry-core" }
@@ -32,9 +27,6 @@ infantry-mail = { path = "../infantry-mail" }
 infantry-scripting = { path = "../infantry-scripting" }
 infantry-plugin-host = { path = "../infantry-plugin-host" }
 infantry-plugin-wit = { path = "../infantry-plugin-wit" }
-infantry-harness-codex = { path = "../infantry-harness-codex" }
-infantry-harness-opencode = { path = "../infantry-harness-opencode" }
-infantry-harness-pi = { path = "../infantry-harness-pi" }
 infantry-knowledge = { path = "../infantry-knowledge" }
 infantry-vault = { path = "../infantry-vault" }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }

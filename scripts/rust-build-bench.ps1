@@ -3,7 +3,7 @@
 # BUILD-SPEED-1 (#78): measures ONE build or test command and appends a CSV row: wall time, peak RAM of the processes
 # the command started (working set and private bytes, summed over every new process, sampled), the machine's lowest
 # available RAM during the run, and what a folder gained on disk. Use it to compare a build setting before and after.
-#   scripts/rust-build-bench.ps1 -Name dev-clean -Command 'cargo build -p infantry-daemon' -Cwd rust -SizeDir <target>
+#   scripts/rust-build-bench.ps1 -Name dev-clean -Command 'cargo build -p infantry-distribution' -Cwd rust -SizeDir <target>
 # The command inherits this shell's environment (CARGO_TARGET_DIR, RUSTC_WRAPPER...): set those first.
 # AGENTS.md rule 7: it first waits until no other cargo or rustc runs on the machine (-IdleWaitSeconds, default 1 h).
 param(

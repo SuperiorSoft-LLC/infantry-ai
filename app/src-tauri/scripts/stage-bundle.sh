@@ -12,7 +12,7 @@ profile="${INFANTRY_BUNDLE_PROFILE:-debug}"
 flag=""; [ "$profile" = "release" ] && flag="--release"
 out="$here/bundle-stage"
 rm -rf "$out"; mkdir -p "$out"
-( cd "$rust" && cargo build -p infantry-daemon -p infantry-cli -p infantry-migrate $flag )
+( cd "$rust" && cargo build -p infantry-distribution -p infantry-cli -p infantry-migrate $flag )
 target_dir="$(cd "$rust" && cargo metadata --format-version 1 --no-deps | python -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')"
 ext=""; case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ext=".exe";; esac
 for b in infantry-daemon infantry infantry-migrate; do cp "$target_dir/$profile/$b$ext" "$out/$b$ext"; done

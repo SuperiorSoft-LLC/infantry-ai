@@ -8,7 +8,7 @@
 - `infantry-runner-link` is the remote link: pairing (one-time codes, a long-lived bearer), the `LinkClient` on the orchestrator and the runner agent on the far side. Contract version 1.11.0, byte-compatible with the Kotlin link.
 - A runner-only daemon: `infantry-daemon --mode runner` (or `INFANTRY_MODE=runner`). It holds no board and refuses orchestration frames. Other modes: `both` (default) and `orchestrator`.
 - CLI: `infantry runner` (subcommands in code include `pair`, `up`, `list`, `check`, `test`, `rotate`, `audit`; exact options not verified, run `infantry runner` for usage).
-- Build from `rust/`: `cargo build -p infantry-daemon`. The default port is 18990.
+- Build from `rust/`: `cargo build -p infantry-distribution`. The default port is 18990.
 
 The setup steps below use the Kotlin app and Gradle.
 

@@ -116,11 +116,6 @@ pub const BASELINE: &[(&str, &[&str], &str)] = &[
     ("crates/infantry-daemon/src/compose/worktree_sweep.rs", &["\"worktree", "infantry_board", "infantry_orchestrator_api", "infantry_projects::stale"], "DECOUPLE-10"),
     ("crates/infantry-daemon/src/health.rs", &["\"worktree"], "DECOUPLE-7"),
     ("crates/infantry-daemon/src/pods.rs", &["\"pod_"], "DECOUPLE-10"),
-    (
-        "crates/infantry-daemon/src/main.rs",
-        &["infantry_harness_claude", "infantry_harness_codex", "infantry_harness_opencode", "infantry_harness_pi"],
-        "DECOUPLE-6",
-    ),
     // The Run tab (AUDIT-1a A2) stays in the distribution crate at DECOUPLE-12, out of core; it becomes a plugin later.
     ("crates/infantry-daemon/src/run/mod.rs", &["\"worktree"], "DECOUPLE-12"),
     ("crates/infantry-daemon/src/run/prep.rs", &["\"worktree", "infantry_projects::git", "infantry_projects::service"], "DECOUPLE-12"),
@@ -131,10 +126,6 @@ pub const BASELINE: &[(&str, &[&str], &str)] = &[
 /// Today's `core crate -> feature crate` edges, `(from, to, the moves that remove it)`. Shrinks to zero.
 pub const EDGE_BASELINE: &[(&str, &str, &str)] = &[
     ("infantry-daemon", "infantry-board", "DECOUPLE-10, -12"),
-    ("infantry-daemon", "infantry-harness-claude", "DECOUPLE-6, -12"),
-    ("infantry-daemon", "infantry-harness-codex", "DECOUPLE-6, -12"),
-    ("infantry-daemon", "infantry-harness-opencode", "DECOUPLE-6, -12"),
-    ("infantry-daemon", "infantry-harness-pi", "DECOUPLE-6, -12"),
     ("infantry-daemon", "infantry-knowledge", "DECOUPLE-4, -9, -10, -11"),
     ("infantry-daemon", "infantry-mail", "DECOUPLE-8 (notify into core), -9"),
     ("infantry-daemon", "infantry-orchestrator-api", "DECOUPLE-10"),

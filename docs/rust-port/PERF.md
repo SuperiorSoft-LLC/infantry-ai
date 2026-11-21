@@ -162,7 +162,7 @@ Differences from the fixtures, and how they are handled:
 Reproduce:
 
 ```
-cargo build --release -p infantry-daemon -p infantry-conformance --example spawn_sessions   # in rust/
+cargo build --release -p infantry-distribution -p infantry-conformance --example spawn_sessions   # in rust/
 # from any folder, with a temp state dir:
 infantry-daemon --port 18961 --provider stub --state-dir %TEMP%\rd1
 infantry-conformance compare --url ws://127.0.0.1:18961 [--token T]

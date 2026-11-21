@@ -23,7 +23,7 @@ $gitRoot = Split-Path (Get-Command git).Source -Parent; while ($gitRoot -and -no
 $gitBash = Join-Path $gitRoot 'bin\bash.exe'
 if (-not (Test-Path $gitBash)) { throw "BUILD REFUSED: Git Bash not found at $gitBash" }
 if ($SkipMsi) {
-    cargo build --profile owner-test --manifest-path (Join-Path $repo 'rust\Cargo.toml') -p infantry-daemon -p infantry-cli -p infantry-migrate
+    cargo build --profile owner-test --manifest-path (Join-Path $repo 'rust\Cargo.toml') -p infantry-distribution -p infantry-cli -p infantry-migrate
     cargo build --profile owner-test --features custom-protocol --manifest-path (Join-Path $repo 'app\src-tauri\Cargo.toml')
     $out = Join-Path $env:CARGO_TARGET_DIR 'owner-test'; $tauriExe = 'infantry-tauri.exe'
 } else {

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 //! ```text
 //! infantry-daemon [--port N] [--host H] [--state-dir DIR] [--provider NAME]

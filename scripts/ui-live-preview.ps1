@@ -6,7 +6,7 @@
 #   pwsh scripts/ui-live-preview.ps1 -Keep            # keep the temp state dir after it stops
 #
 # Saved in AgentsRoom as the dev command "Infantry live preview"; start and stop it there (commands_run / commands_stop).
-# Isolation: the daemon is `cargo run -p infantry-daemon` built from this checkout, on a free loopback port, with a new
+# Isolation: the daemon is `cargo run -p infantry-distribution` built from this checkout, on a free loopback port, with a new
 # state dir under %TEMP%\infantry-ui-preview\<stamp>. It never uses :18990, the live state dir, ~/.infantry, or the
 # owner ports 8787/8788/8797/8798. INFANTRY_* / AGENTHQ_* are removed from the children's environment first.
 # Vite (`pnpm dev` in app/) runs in the foreground from this checkout, so hot reload watches these files. When Vite ends
