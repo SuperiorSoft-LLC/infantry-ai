@@ -44,8 +44,9 @@ if ($SkipMsi) {
     foreach ($d in (Join-Path $env:CARGO_TARGET_DIR 'release/bundle/msi'), (Join-Path $repo 'app/src-tauri/target/release/bundle/msi')) {
         if (Test-Path $d) { Remove-Item (Join-Path $d '*.msi*') -Force }
     }
+    $upd = Join-Path $env:TEMP "infantry-msi-upd-$sha.json"; Set-Content $upd '{"bundle":{"createUpdaterArtifacts":true}}'
     Push-Location (Join-Path $repo 'app')
-    try { pnpm tauri build --bundles msi @cfg --config '{"bundle":{"createUpdaterArtifacts":true}}'; if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' } } finally { Pop-Location }
+    try { pnpm tauri build --bundles msi @cfg --config $upd; if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' } } finally { Pop-Location }
     $out = Join-Path $env:CARGO_TARGET_DIR 'release'; $tauriExe = 'InfantryAI-Rust.exe'  # tauri build names the exe after the product
 }
 # RUST-BUG dd10c3bb: stage every official daemon plugin (WASM) into $out\plugins. Without this the package has no
