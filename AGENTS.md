@@ -43,6 +43,7 @@ The Kotlin/Gradle version is kept on the `legacy-java` branch. Every section bel
 |---|---|
 | `rust/` | The Cargo workspace. `rust/crates/*` holds the core crates; `rust/plugins/official/*` holds the official plugins. |
 | `rust/crates/infantry-daemon` | The daemon: tokio and axum, serves `/ws` (v1 WebSocket) and `/health`. Composition root. |
+| `rust/crates/infantry-distribution` | The `infantry-daemon` binary (`main.rs`): links the daemon library and the concrete harnesses. |
 | `rust/crates/infantry-cli` | The native `infantry` binary: serves `infantry mcp serve` and most other commands itself. A command it does not have is handed to the Kotlin launcher (see [Command line](docs/wiki/CommandLine.md)). |
 | `rust/crates/infantry-protocol` | The wire contract: `Envelope`, DTOs and frame names. |
 | `rust/crates/infantry-core` | Platform core: the `FrameUnit` registry, event bus, db handle, settings. |
@@ -69,10 +70,10 @@ Rust commands run from `rust/`. App commands run from `app/`. Use the PowerShell
 
 ```
 # daemon and crates (from rust/)
-cargo build -p infantry-daemon
-cargo run -p infantry-daemon -- --port 18990        # a daemon on ws://127.0.0.1:18990/ws
+cargo build -p infantry-distribution
+cargo run -p infantry-distribution -- --port 18990        # a daemon on ws://127.0.0.1:18990/ws
 curl http://127.0.0.1:18990/health                    # the health answer
-cargo build --profile owner-test -p infantry-daemon   # quick owner build: no LTO, incremental
+cargo build --profile owner-test -p infantry-distribution   # quick owner build: no LTO, incremental
 cargo test -p infantry-guards                         # the layer and rule guards
 cargo test -p <crate>                                 # one crate, e.g. -p infantry-board
 

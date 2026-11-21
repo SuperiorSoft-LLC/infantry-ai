@@ -148,7 +148,7 @@ $vite = $null
 try {
   if (-not $SkipBuild) {
     Write-Host "[shell-only] building infantry-daemon ($Profile) into $env:CARGO_TARGET_DIR"
-    cargo build --profile $Profile --manifest-path (Join-Path $repoRoot 'rust\Cargo.toml') -p infantry-daemon 2>&1 | Select-Object -Last 5 | ForEach-Object { Write-Host "  $_" }
+    cargo build --profile $Profile --manifest-path (Join-Path $repoRoot 'rust\Cargo.toml') -p infantry-distribution 2>&1 | Select-Object -Last 5 | ForEach-Object { Write-Host "  $_" }
     if ($LASTEXITCODE -ne 0) { throw "cargo build failed ($LASTEXITCODE)" }
   }
   if (-not (Test-Path $daemonExe)) { throw "no daemon at $daemonExe (drop -SkipBuild)" }

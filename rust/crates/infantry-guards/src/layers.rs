@@ -88,6 +88,7 @@ pub const LAYERS: &[(&str, Layer, u8)] = &[
     ("infantry-news-daemon", Layer::Plugin, 0),
     ("infantry-health-daemon", Layer::Plugin, 0),
     ("infantry-daemon", Layer::Top, 0),
+    ("infantry-distribution", Layer::Top, 0),
     ("infantry-cli", Layer::Top, 0),
     ("infantry-migrate", Layer::Top, 0),
     // app/src-tauri is its own cargo workspace today; registered so it is known if it joins.

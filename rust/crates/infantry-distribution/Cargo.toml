@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-distribution"
+version.workspace = true
+edition = "2021"
+license = "Apache-2.0"
+description = "The Infantry AI distribution: the infantry-daemon binary, which links the daemon library and the concrete harnesses"
+publish = false
+
+[[bin]]
+name = "infantry-daemon"
+path = "src/main.rs"
+
+[dependencies]
+infantry-daemon = { path = "../infantry-daemon" }
+infantry-harness-claude = { path = "../infantry-harness-claude" }
+infantry-harness-codex = { path = "../infantry-harness-codex" }
+infantry-harness-opencode = { path = "../infantry-harness-opencode" }
+infantry-harness-pi = { path = "../infantry-harness-pi" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }

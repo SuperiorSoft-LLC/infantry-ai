@@ -4,7 +4,7 @@
 
 > **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](../Architecture.md).
 
-> **Rust daemon:** on main, start a throwaway daemon with `cargo run -p infantry-daemon -- --port <free port> --state-dir <scratch dir>` from `rust/`. Use a free port, never 8787, 8788, 8797 or 8798. The Gradle steps below are the Kotlin ones.
+> **Rust daemon:** on main, start a throwaway daemon with `cargo run -p infantry-distribution -- --port <free port> --state-dir <scratch dir>` from `rust/`. Use a free port, never 8787, 8788, 8797 or 8798. The Gradle steps below are the Kotlin ones.
 
 ## Legacy (Kotlin) reference
 

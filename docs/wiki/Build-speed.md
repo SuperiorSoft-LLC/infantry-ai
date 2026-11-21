@@ -23,17 +23,17 @@ folder, so switching rebuilds the workspace crates once, not the dependencies.
 
 `scripts/rust-build-bench.ps1` measured every loop: the wall time, the peak RAM of the processes the build started, and
 the disk added. It waits until no other cargo build runs. A one-line edit is a body change in the crate's `lib.rs`, and
-the rebuild is `cargo build -p infantry-daemon` unless named.
+the rebuild is `cargo build -p infantry-distribution` unless named.
 
 | Loop | Before | After | Gain |
 |---|---|---|---|
-| Clean `cargo build -p infantry-daemon` | 469 s, peak 5.6 GB, +6.2 GB disk | 296 s, peak 5.1 GB, +4.8 GB disk | 1.6x |
+| Clean `cargo build -p infantry-distribution` | 469 s, peak 5.6 GB, +6.2 GB disk | 296 s, peak 5.1 GB, +4.8 GB disk | 1.6x |
 | Edit in `infantry-daemon` | 14.0 to 15.6 s, peak 3.5 GB | 7.2 to 8.7 s, peak 0.9 GB | 1.9x |
 | Edit in `infantry-core` (9 crates and the daemon rebuild) | 17.0 to 21.7 s, peak 3.5 GB | 9.5 to 11.7 s, peak 1.5 GB | 1.9x |
 | Edit in `infantry-protocol` | 14.6 to 17.2 s | (same path as core) | |
 | Edit in a plugin, `cargo build -p infantry-notes --lib --target wasm32-wasip2` | 1.8 s | 1.8 s | none needed |
 | Edit in `infantry-board`, then `cargo test -p infantry-board` | 5.5 s (2.0 s of it runs the tests) | 4.7 to 5.3 s | none needed |
-| No-op `cargo build -p infantry-daemon` | 1.1 s | 1.1 s | |
+| No-op `cargo build -p infantry-distribution` | 1.1 s | 1.1 s | |
 | The daemon's PDB | 547 MB | 132 MB | |
 
 The clean build "after" is measured with dependency debug info off and full workspace debug info; line tables only make
@@ -80,10 +80,10 @@ build at a time** (AGENTS.md rule 7). Two workers are fine because their builds 
 ```
 # PowerShell, from the repo root. Measure in a separate target folder so the shared one is untouched.
 $env:CARGO_TARGET_DIR = "$env:LOCALAPPDATA\infantry-dev\bench-target"
-scripts/rust-build-bench.ps1 -Name clean-daemon -Command 'cargo build -p infantry-daemon' -Cwd rust -SizeDir $env:CARGO_TARGET_DIR
-scripts/rust-build-bench.ps1 -Name noop-daemon -Command 'cargo build -p infantry-daemon' -Cwd rust
+scripts/rust-build-bench.ps1 -Name clean-daemon -Command 'cargo build -p infantry-distribution' -Cwd rust -SizeDir $env:CARGO_TARGET_DIR
+scripts/rust-build-bench.ps1 -Name noop-daemon -Command 'cargo build -p infantry-distribution' -Cwd rust
 ```
 
 Each run appends one row to `%TEMP%\infantry-build-bench.csv` (`-Csv` to change it). To try a lever without editing
-`Cargo.toml`, pass a config file: `cargo --config lever.toml build -p infantry-daemon` (config profiles override the
+`Cargo.toml`, pass a config file: `cargo --config lever.toml build -p infantry-distribution` (config profiles override the
 manifest). Delete the bench folder afterwards.

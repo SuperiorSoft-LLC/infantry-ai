@@ -78,7 +78,7 @@ Tauri prerequisites.
 
 ```
 # daemon and CLI (from rust/)
-cargo build --release -p infantry-daemon -p infantry-cli
+cargo build --release -p infantry-distribution -p infantry-cli
 
 # app (from app/)
 pnpm install --frozen-lockfile

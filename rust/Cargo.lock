@@ -1222,10 +1222,6 @@ dependencies = [
  "infantry-conformance",
  "infantry-core",
  "infantry-harness",
- "infantry-harness-claude",
- "infantry-harness-codex",
- "infantry-harness-opencode",
- "infantry-harness-pi",
  "infantry-knowledge",
  "infantry-mail",
  "infantry-orchestrator-api",
@@ -1250,6 +1246,18 @@ dependencies = [
  "ureq",
  "uuid",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "infantry-distribution"
+version = "0.2.0"
+dependencies = [
+ "infantry-daemon",
+ "infantry-harness-claude",
+ "infantry-harness-codex",
+ "infantry-harness-opencode",
+ "infantry-harness-pi",
+ "tokio",
 ]
 
 [[package]]
