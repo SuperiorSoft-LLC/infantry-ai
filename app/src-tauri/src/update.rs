@@ -45,6 +45,10 @@ fn install_dir() -> Option<PathBuf> {
 #[derive(Default)]
 pub struct Pending(Mutex<Option<Update>>);
 
+/// ARMORY-3: an update whose files are already downloaded and verified, waiting for the user's "Relaunch to update" click.
+#[derive(Default)]
+pub struct Staged(Mutex<Option<(Update, Vec<u8>)>>);
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdaterView {
@@ -173,16 +177,46 @@ pub async fn update_check(app: AppHandle, state: State<'_, AppState>, pending: S
     Ok(info)
 }
 
-/// Installs the update the last check found: download and verify, stop the daemon by PID, run the installer.
+/// ARMORY-3: downloads (and verifies) the update the last check found, in the background, and keeps it. Nothing is
+/// installed and nothing restarts: [`update_install`] does that, on the user's click.
 #[tauri::command]
-pub async fn update_install(app: AppHandle, state: State<'_, AppState>, pending: State<'_, Pending>) -> Result<(), String> {
+pub async fn update_download(app: AppHandle, pending: State<'_, Pending>, staged: State<'_, Staged>) -> Result<String, String> {
     if !signed(pubkey(&app).as_deref()) {
         return Err("this build has no updater public key, so an update cannot be verified; see UPDATER.md".into());
     }
     let Some(update) = pending.0.lock().unwrap().take() else {
-        return Err("no update to install: check for updates first".into());
+        return Err("no update to download: check for updates first".into());
     };
-    let bytes = update.download(|_, _| {}, || {}).await.map_err(|e| format!("download failed: {e}"))?;
+    let bytes = match update.download(|_, _| {}, || {}).await {
+        Ok(b) => b,
+        Err(e) => {
+            *pending.0.lock().unwrap() = Some(update);
+            return Err(format!("download failed: {e}"));
+        }
+    };
+    let version = update.version.clone();
+    *staged.0.lock().unwrap() = Some((update, bytes));
+    Ok(version)
+}
+
+/// Installs the update: the one [`update_download`] kept, or (no download yet) the one the last check found, downloaded
+/// now. Stops the daemon by PID, runs the installer.
+#[tauri::command]
+pub async fn update_install(app: AppHandle, state: State<'_, AppState>, pending: State<'_, Pending>, staged: State<'_, Staged>) -> Result<(), String> {
+    if !signed(pubkey(&app).as_deref()) {
+        return Err("this build has no updater public key, so an update cannot be verified; see UPDATER.md".into());
+    }
+    let kept = staged.0.lock().unwrap().take();
+    let (update, bytes) = match kept {
+        Some(k) => k,
+        None => {
+            let Some(update) = pending.0.lock().unwrap().take() else {
+                return Err("no update to install: check for updates first".into());
+            };
+            let bytes = update.download(|_, _| {}, || {}).await.map_err(|e| format!("download failed: {e}"))?;
+            (update, bytes)
+        }
+    };
     // The app stops the daemon itself here: the supervisor must not call that a death.
     state.paused.store(true, std::sync::atomic::Ordering::SeqCst);
     let stopped = match state.daemon_state.as_ref() {
@@ -260,6 +294,7 @@ pub fn keep_cli_path(on: bool) {
 
 pub fn manage(app: &tauri::App) {
     app.manage(Pending::default());
+    app.manage(Staged::default());
 }
 
 #[cfg(test)]

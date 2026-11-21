@@ -7,10 +7,11 @@
 // Plugins tab. The same view is the app's whole window while nothing else is installed.
 // Built from the kit only: TabPage, ListRow, Switch, Button, EmptyState, RefusalBanner.
 import { useEffect, useState } from "react";
-import { ArrowLeft, Download, PackageOpen, Power, RefreshCw, Trash2 } from "lucide-react";
-import { Button, EmptyState, ListRow, RefusalBanner, Switch, TabPage, type Tone } from "@infantry/ui";
+import { ArrowLeft, Download, PackageOpen, Power, RefreshCw, RotateCw, Trash2 } from "lucide-react";
+import { Button, EmptyState, ListRow, Progress, RefusalBanner, Switch, TabPage, type Tone } from "@infantry/ui";
 import { useLinkState } from "@infantry/ui-plugin-api";
-import { findApp, groupRows, installerStore, membersOf, routeApp, rowActions, useInstaller, type PluginRow } from "./store";
+import { isBusy, progressOf } from "./armory";
+import { armoryStore, findApp, groupRows, installerStore, membersOf, routeApp, rowActions, useArmory, useInstaller, type PluginRow } from "./store";
 
 function tone(r: PluginRow): Tone {
   if (!r.installed) return "neutral";
@@ -96,6 +97,41 @@ function AppEntry({ app, rows, busy }: { app: PluginRow; rows: PluginRow[]; busy
   );
 }
 
+/** ARMORY-3: the version line, the Update button and its progress for one app (or the shell). Nothing shows without an update. */
+function UpdateBar({ id }: { id: string }) {
+  const update = useArmory((s) => s.updates.find((u) => u.id === id));
+  const p = useArmory((s) => progressOf(s, id));
+  if (!update && p.phase === "idle") return null;
+  const a = armoryStore().getState();
+  const shell = update ? update.kind === "shell" || update.restart === "relaunch" : false;
+  return (
+    <div className="space-y-2 rounded-lg border bg-card px-3 py-2" data-testid="update-bar">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1 text-sm">
+          {update ? `Update available: ${update.installed || "?"} → ${update.available}` : p.phase === "done" ? `Updated to ${p.version ?? "the new version"}` : "Update"}
+          {update?.notes && <div className="truncate text-xs text-muted-foreground">{update.notes}</div>}
+        </div>
+        {p.phase === "ready" ? (
+          <Button size="sm" onClick={() => a.relaunch()}>
+            <RotateCw /> Relaunch to update
+          </Button>
+        ) : (
+          update && (
+            <Button size="sm" disabled={isBusy(p)} onClick={() => a.update(id)}>
+              <Download /> Update
+            </Button>
+          )
+        )}
+      </div>
+      {isBusy(p) && p.phase !== "reconnecting" && <Progress value={p.phase === "downloading" ? undefined : p.percent} aria-label="Update progress" />}
+      {p.phase === "downloading" && <p className="text-xs text-muted-foreground" role="status">Downloading the update in the background…</p>}
+      {p.phase === "reconnecting" && <p className="text-xs text-muted-foreground" role="status">Restarting the daemon, reconnecting…</p>}
+      {p.phase === "ready" && <p className="text-xs text-muted-foreground" role="status">{shell ? "Downloaded. Relaunch when you are ready; nothing restarts until you click." : "Ready."}</p>}
+      <RefusalBanner text={p.phase === "failed" ? p.error : null} onDismiss={() => undefined} />
+    </div>
+  );
+}
+
 /** A route opens one app's page (ARMORY-2: the taskbar's Updates item): that app's entry, and a way back to the whole list. */
 function AppPage({ id, rows, busy, onBack }: { id: string; rows: PluginRow[]; busy: boolean; onBack: () => void }) {
   const row = findApp(rows, id);
@@ -104,6 +140,7 @@ function AppPage({ id, rows, busy, onBack }: { id: string; rows: PluginRow[]; bu
       <Button size="sm" variant="ghost" onClick={onBack}>
         <ArrowLeft /> All apps
       </Button>
+      <UpdateBar id={id} />
       {row ? (
         row.app ? (
           <AppEntry app={row} rows={rows} busy={busy} />
@@ -124,6 +161,7 @@ export function InstallerTab({ route }: { route?: string }) {
   const pageId = left === route ? null : routeApp(route);
   const link = useLinkState();
   const { rows, loaded, busy, refusal, notice } = useInstaller((s) => s);
+  const reopenKey = useArmory((s) => s.reopenKey);
   useEffect(() => {
     if (link === "open") installerStore().getState().refresh();
   }, [link]);
@@ -154,7 +192,7 @@ export function InstallerTab({ route }: { route?: string }) {
       {!loaded ? (
         <p className="text-xs text-muted-foreground">Reading the app list…</p>
       ) : pageId ? (
-        <AppPage id={pageId} rows={rows} busy={busy !== null} onBack={() => setLeft(route)} />
+        <AppPage key={reopenKey} id={pageId} rows={rows} busy={busy !== null} onBack={() => setLeft(route)} />
       ) : rows.length === 0 ? (
         <EmptyState icon={<PackageOpen className="size-6" />} title="No apps to install" hint="No source offers one. Set the bundled folder (plugins.bundled) or add a folder to plugins.sources." />
       ) : (

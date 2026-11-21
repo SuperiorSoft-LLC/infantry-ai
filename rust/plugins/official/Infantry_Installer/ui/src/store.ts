@@ -7,6 +7,7 @@
 // plugin and tells every window (`plugins_changed`), so nothing restarts.
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
+import type { ArmoryActions, ArmoryState, ArmoryStore } from "./armory";
 import { json, type Envelope, type FrameLink } from "@infantry/ui-plugin-api";
 
 /** One module as `plugin_admin available` reports it. */
@@ -178,5 +179,19 @@ export function installerStore(): InstallerStore {
   if (!current) throw new Error("Infantry_Installer: the store is used before the plugin is activated");
   return current;
 }
+
+// ARMORY-3: the Update button's store, made with the Installer's and dropped with it.
+let armory: ArmoryStore | null = null;
+
+export function bindArmoryStore(s: ArmoryStore | null): void {
+  armory = s;
+}
+
+export function armoryStore(): ArmoryStore {
+  if (!armory) throw new Error("Infantry_Installer: the armory store is used before the plugin is activated");
+  return armory;
+}
+
+export const useArmory = <T,>(select: (s: ArmoryState & ArmoryActions) => T): T => useStore(armoryStore(), select);
 
 export const useInstaller = <T,>(select: (s: InstallerState & InstallerActions) => T): T => useStore(installerStore(), select);

@@ -604,6 +604,19 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         let settings = settings::SettingsUnit { db: db.clone() };
         armory::ArmoryUnit::new(state_dir, Arc::new(move |k: &str| settings.app(k)), bus.clone())
     };
+    // The `daemon` restart class: the daemon exits shortly after the answer; the app's supervisor starts it again and the window reconnects.
+    armory.set_restart(Arc::new(|| {
+        std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_millis(800));
+            std::process::exit(0);
+        });
+    }));
+    {
+        let hub = hub.clone();
+        armory.set_notifier(Arc::new(move |title, body| {
+            hub.post(infantry_mail::notify::hub::Notification { title: title.into(), body: body.into(), level: infantry_mail::notify::hub::NotificationLevel::Error, ..Default::default() }, "armory");
+        }));
+    }
     armory.clone().spawn();
     let mut units: Vec<Arc<dyn FrameUnit>> = vec![
         Arc::new(projects_unit),

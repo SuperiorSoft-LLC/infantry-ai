@@ -37,6 +37,11 @@ pub const CHECK_SECONDS_KEY: &str = "armory.checkSeconds";
 pub const INSTALLED_FILE: &str = "armory-installed.json";
 pub const ARMORY_UPDATES: &str = "armory_updates";
 pub const ARMORY_CHECK: &str = "armory_check";
+/// ARMORY-3: `armory_update {id}` starts the install of one app's update; `armory_progress` tells how it goes.
+pub const ARMORY_UPDATE: &str = "armory_update";
+pub const ARMORY_PROGRESS: &str = "armory_progress";
+/// Where installed apps live, under the state dir.
+pub const APPS_DIR: &str = "armory-apps";
 const RESTARTS: [&str; 3] = ["none", "daemon", "relaunch"];
 
 /// An entry of the apps catalog.
@@ -51,6 +56,9 @@ pub struct AppEntry {
     pub feed: Option<String>,
     pub public_key: String,
     pub restart: String,
+    /// Where the app's files are: a folder (or `file://`), or an http(s) base holding `package.json` (`{"files":[..]}`).
+    /// `{version}` is replaced by the version being installed.
+    pub package: Option<String>,
 }
 
 /// What a check found: the updates and the reasons something could not be checked.
@@ -84,7 +92,7 @@ pub fn parse_catalog(doc: &Value) -> (Vec<AppEntry>, Vec<String>) {
         let kind = if text(a, "kind") == "shell" { "shell" } else { "app" };
         let restart = Some(text(a, "restart")).filter(|r| RESTARTS.contains(&r.as_str())).unwrap_or_else(|| (if kind == "shell" { "relaunch" } else { "none" }).into());
         let some = |s: String| Some(s).filter(|s| !s.is_empty());
-        out.push(AppEntry { name: some(text(a, "name")).unwrap_or_else(|| id.clone()), id, kind: kind.into(), version: some(text(a, "version")), notes: text(a, "notes"), feed: some(text(a, "feed")), public_key: text(a, "publicKey"), restart });
+        out.push(AppEntry { name: some(text(a, "name")).unwrap_or_else(|| id.clone()), id, kind: kind.into(), version: some(text(a, "version")), notes: text(a, "notes"), feed: some(text(a, "feed")), public_key: text(a, "publicKey"), restart, package: some(text(a, "package")) });
     }
     (out, warnings)
 }
@@ -158,7 +166,7 @@ pub fn check(catalog_location: &str, channel: &str, installed: &BTreeMap<String,
             continue;
         };
         if version_cmp(&available, &have).is_gt() {
-            report.updates.push(json!({ "id": e.id, "name": e.name, "kind": e.kind, "installed": have, "available": available, "notes": notes, "restart": e.restart, "publicKey": e.public_key }));
+            report.updates.push(json!({ "id": e.id, "name": e.name, "kind": e.kind, "installed": have, "available": available, "notes": notes, "restart": e.restart, "publicKey": e.public_key, "package": e.package }));
         }
     }
     report
@@ -172,6 +180,110 @@ fn read_installed(state_dir: &Path) -> BTreeMap<String, String> {
         .unwrap_or_default()
 }
 
+fn write_installed(state_dir: &Path, id: &str, version: &str) -> Result<(), String> {
+    let mut m = read_installed(state_dir);
+    m.insert(id.to_string(), version.to_string());
+    super::host_frames::write_json(&state_dir.join(INSTALLED_FILE), &json!(m))
+}
+
+fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(to).map_err(|e| format!("{}: {e}", to.display()))?;
+    for e in std::fs::read_dir(from).map_err(|e| format!("{}: {e}", from.display()))?.flatten() {
+        let (src, dst) = (e.path(), to.join(e.file_name()));
+        if src.is_dir() {
+            copy_tree(&src, &dst)?;
+        } else {
+            std::fs::copy(&src, &dst).map_err(|e| format!("{}: {e}", src.display()))?;
+        }
+    }
+    Ok(())
+}
+
+/// Brings an app's package into `dest`: a folder is copied; an http(s) base is read file by file from its `package.json`.
+pub fn fetch_package(location: &str, dest: &Path, max_bytes: u64) -> Result<(), String> {
+    let _ = std::fs::remove_dir_all(dest);
+    if location.starts_with("http://") || location.starts_with("https://") {
+        let base = location.trim_end_matches('/');
+        let list: Value = serde_json::from_slice(&fetch_any(&format!("{base}/package.json"), max_bytes)?).map_err(|e| format!("{base}/package.json is not JSON ({e})"))?;
+        let files = list.get("files").and_then(Value::as_array).ok_or("package.json has no `files` array")?;
+        for f in files.iter().filter_map(Value::as_str) {
+            if f.split('/').any(|p| p.is_empty() || p == ".." || p.contains(['\\', ':'])) {
+                return Err(format!("package file '{f}' is not a safe relative path"));
+            }
+            let bytes = fetch_any(&format!("{base}/{f}"), max_bytes)?;
+            let to = dest.join(f);
+            std::fs::create_dir_all(to.parent().unwrap_or(dest)).map_err(|e| e.to_string())?;
+            std::fs::write(&to, bytes).map_err(|e| format!("{}: {e}", to.display()))?;
+        }
+        return Ok(());
+    }
+    let from = Path::new(location.strip_prefix("file://").unwrap_or(location));
+    if !from.is_dir() {
+        return Err(format!("{location}: not a folder"));
+    }
+    copy_tree(from, dest)
+}
+
+/// What the client does after an update: `reopen` (close and reopen the app's window), `reconnect` (the daemon restarts
+/// alone, the window stays), `relaunch` (the shell: the app's own updater, on a click).
+pub fn action_of(restart: &str) -> &'static str {
+    match restart {
+        "daemon" => "reconnect",
+        "relaunch" => "relaunch",
+        _ => "reopen",
+    }
+}
+
+/// Installs one app update: fetch into a staging folder, check the signature against the catalog's key (nothing else is
+/// trusted; an unsigned or wrongly signed package is refused), swap it in, record the version. On any failure the old
+/// version stays in place.
+pub fn install(update: &Value, state_dir: &Path, max_bytes: u64, progress: &dyn Fn(u8)) -> Result<(), String> {
+    let s = |k: &str| update.get(k).and_then(Value::as_str).unwrap_or("").trim().to_string();
+    let (id, version, key) = (s("id"), s("available"), s("publicKey"));
+    if !super::installer::safe_name(&id) || version.is_empty() || version.contains(['/', '\\']) {
+        return Err(format!("'{id}' {version}: not an installable app update"));
+    }
+    if s("restart") == "relaunch" || s("kind") == "shell" {
+        return Err("the shell updates through the app's own updater, not here".into());
+    }
+    if key.is_empty() {
+        return Err(format!("{id}: the catalog gives no public key, so the package cannot be verified"));
+    }
+    let package = Some(s("package")).filter(|p| !p.is_empty()).ok_or_else(|| format!("{id}: the catalog entry has no `package`"))?.replace("{version}", &version);
+    let apps = state_dir.join(APPS_DIR);
+    let stage = apps.join(".installing").join(&id);
+    let cleanup = |e: String| {
+        let _ = std::fs::remove_dir_all(&stage);
+        e
+    };
+    progress(10);
+    fetch_package(&package, &stage, max_bytes).map_err(&cleanup)?;
+    progress(60);
+    let trusted = BTreeMap::from([(id.clone(), key)]);
+    match sources::vet(&stage, &trusted).map_err(&cleanup)?.status.as_str() {
+        "signed" => {}
+        other => return Err(cleanup(format!("{id}: refused, the package is {other} (it must be signed with the catalog's key)"))),
+    }
+    progress(80);
+    let current = apps.join(&id);
+    if current.exists() {
+        let aside = super::installer::swap_in(&stage, &current).map_err(&cleanup)?;
+        if let Err(e) = write_installed(state_dir, &id, &version) {
+            let _ = super::installer::swap_back(&aside, &current);
+            return Err(e);
+        }
+        let _ = std::fs::remove_dir_all(&aside);
+    } else {
+        std::fs::rename(&stage, &current).map_err(|e| cleanup(format!("{}: {e}", current.display())))?;
+        if let Err(e) = write_installed(state_dir, &id, &version) {
+            let _ = std::fs::remove_dir_all(&current);
+            return Err(e);
+        }
+    }
+    progress(100);
+    Ok(())
+}
+
 pub type Setting = Arc<dyn Fn(&str) -> Option<Value> + Send + Sync>;
 
 /// The unit: the last report, the background check and the two frames.
@@ -180,6 +292,11 @@ pub struct ArmoryUnit {
     setting: Setting,
     bus: EventBus,
     last: Mutex<Option<(Report, u64)>>,
+    /// Restarts the daemon alone (the `daemon` class); the composition root sets it.
+    restart: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    me: std::sync::Weak<ArmoryUnit>,
+    /// Tells the owner a failed update (title, body) on the notification bus; the composition root sets it.
+    notifier: Mutex<Option<Arc<dyn Fn(&str, &str) + Send + Sync>>>,
 }
 
 fn now() -> u64 {
@@ -188,7 +305,7 @@ fn now() -> u64 {
 
 impl ArmoryUnit {
     pub fn new(state_dir: &Path, setting: Setting, bus: EventBus) -> Arc<ArmoryUnit> {
-        Arc::new(ArmoryUnit { state_dir: state_dir.to_path_buf(), setting, bus, last: Mutex::new(None) })
+        Arc::new_cyclic(|me| ArmoryUnit { state_dir: state_dir.to_path_buf(), setting, bus, last: Mutex::new(None), restart: Mutex::new(None), me: me.clone(), notifier: Mutex::new(None) })
     }
 
     fn string(&self, key: &str, default: &str) -> String {
@@ -215,6 +332,57 @@ impl ArmoryUnit {
         }
     }
 
+    pub fn set_notifier(&self, f: Arc<dyn Fn(&str, &str) + Send + Sync>) {
+        *self.notifier.lock().unwrap_or_else(|e| e.into_inner()) = Some(f);
+    }
+
+    pub fn set_restart(&self, f: Arc<dyn Fn() + Send + Sync>) {
+        *self.restart.lock().unwrap_or_else(|e| e.into_inner()) = Some(f);
+    }
+
+    fn progress(&self, id: &str, stage: &str, percent: u8, extra: Value) {
+        let mut d = json!({ "id": id, "stage": stage, "percent": percent });
+        if let (Some(o), Some(x)) = (d.as_object_mut(), extra.as_object()) {
+            o.extend(x.clone());
+        }
+        self.bus.publish(Envelope::new(ARMORY_PROGRESS, d.to_string()));
+    }
+
+    /// Starts the update of app `id` on a background thread; progress and the end are pushed as `armory_progress`.
+    pub fn start_update(&self, id: &str) -> Result<(), String> {
+        let update = self.last.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|(r, _)| r.updates.iter().find(|u| u["id"] == id).cloned()).ok_or_else(|| format!("{id} has no update to install (check first)"))?;
+        if update["kind"] == "shell" || update["restart"] == "relaunch" {
+            return Err("the shell updates through the app's own updater (download, then a Relaunch click)".into());
+        }
+        let me = self.me.upgrade().ok_or("the armory unit is gone")?;
+        let id = id.to_string();
+        std::thread::spawn(move || me.run_update(&id, &update));
+        Ok(())
+    }
+
+    /// The install and what follows it, by restart class. Public so a test can run it without a thread.
+    pub fn run_update(&self, id: &str, update: &Value) {
+        let max = sources::limit_of((self.setting)(sources::MAX_FILE_BYTES_KEY));
+        match install(update, &self.state_dir, max, &|p| self.progress(id, "installing", p, json!({}))) {
+            Ok(()) => {
+                let restart = update["restart"].as_str().unwrap_or("none");
+                self.check_now();
+                self.progress(id, "done", 100, json!({ "version": update["available"], "action": action_of(restart) }));
+                if restart == "daemon" {
+                    if let Some(f) = self.restart.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+                        f();
+                    }
+                }
+            }
+            Err(e) => {
+                self.progress(id, "failed", 0, json!({ "error": e }));
+                if let Some(f) = self.notifier.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+                    f(&format!("{id} was not updated"), &format!("{e}. The version you had keeps running."));
+                }
+            }
+        }
+    }
+
     /// The background check: at start, then every `armory.checkSeconds` when that is above 0.
     pub fn spawn(self: Arc<Self>) {
         std::thread::spawn(move || loop {
@@ -233,9 +401,16 @@ impl FrameUnit for ArmoryUnit {
         "armory"
     }
     fn frames(&self) -> &'static [&'static str] {
-        &[ARMORY_UPDATES, ARMORY_CHECK]
+        &[ARMORY_UPDATES, ARMORY_CHECK, ARMORY_UPDATE]
     }
     fn handle(&self, env: &Envelope, _ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
+        if env.r#type == ARMORY_UPDATE {
+            let id = serde_json::from_str::<Value>(&env.data).ok().and_then(|d| d.get("id").and_then(Value::as_str).map(str::to_string)).unwrap_or_default();
+            self.start_update(&id).map_err(|e| Refusal::new(ARMORY_UPDATE, e))?;
+            let mut e = Envelope::new(ARMORY_PROGRESS, json!({ "id": id, "stage": "installing", "percent": 0 }).to_string());
+            e.request_id = env.request_id.clone();
+            return Ok(vec![e]);
+        }
         if env.r#type == ARMORY_CHECK {
             self.check_now();
         }
@@ -333,5 +508,140 @@ mod tests {
         assert_eq!(sources::limit_of(None), sources::DEFAULT_MAX_FILE_BYTES);
         assert_eq!(sources::limit_of(Some(json!(0))), sources::DEFAULT_MAX_FILE_BYTES);
         assert_eq!(sources::limit_of(Some(json!("1024"))), 1024);
+    }
+
+    // ---- ARMORY-3: the update install, by restart class ----
+    use base64::Engine;
+    use ring::signature::{Ed25519KeyPair, KeyPair};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn key() -> (Ed25519KeyPair, String) {
+        let pkcs8 = Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new()).unwrap();
+        let kp = Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).unwrap();
+        let b64 = base64::engine::general_purpose::STANDARD.encode(kp.public_key().as_ref());
+        (kp, b64)
+    }
+
+    fn scratch() -> PathBuf {
+        let d = std::env::temp_dir().join(format!("armory-install-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// A package folder with one file, signed by `kp` (the signature file is written last, over the folder digest).
+    fn package(body: &str, kp: &Ed25519KeyPair, claimed_key: &str) -> PathBuf {
+        let dir = scratch().join("p");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("app.js"), body).unwrap();
+        let digest = sources::folder_digest(&dir).unwrap();
+        let sig = base64::engine::general_purpose::STANDARD.encode(kp.sign(digest.as_bytes()).as_ref());
+        std::fs::write(dir.join(sources::SIG_FILE), json!({ "publicKey": claimed_key, "digest": digest, "signature": sig }).to_string()).unwrap();
+        dir
+    }
+
+    /// The installed v1.0 of "tower" plus an update entry whose package is `pkg`.
+    fn world(restart: &str, pkg: &Path, pubkey: &str) -> (PathBuf, Value) {
+        let state = scratch();
+        std::fs::create_dir_all(state.join(APPS_DIR).join("tower")).unwrap();
+        std::fs::write(state.join(APPS_DIR).join("tower/app.js"), "v1.0").unwrap();
+        std::fs::write(state.join(INSTALLED_FILE), r#"{"tower":"1.0.0"}"#).unwrap();
+        let update = json!({ "id": "tower", "kind": "app", "installed": "1.0.0", "available": "1.1.0", "restart": restart, "publicKey": pubkey, "package": pkg.display().to_string() });
+        (state, update)
+    }
+
+    fn unit_for(state: &Path) -> (Arc<ArmoryUnit>, tokio::sync::broadcast::Receiver<Envelope>, Arc<AtomicUsize>) {
+        let bus = EventBus::new(64);
+        let rx = bus.subscribe();
+        let unit = ArmoryUnit::new(state, Arc::new(|_| None), bus);
+        let restarted = Arc::new(AtomicUsize::new(0));
+        let r = restarted.clone();
+        unit.set_restart(Arc::new(move || {
+            r.fetch_add(1, Ordering::SeqCst);
+        }));
+        (unit, rx, restarted)
+    }
+
+    /// The last `armory_progress` frame the bus carried.
+    fn last_progress(rx: &mut tokio::sync::broadcast::Receiver<Envelope>) -> Value {
+        let mut last = None;
+        while let Ok(e) = rx.try_recv() {
+            if e.r#type == ARMORY_PROGRESS {
+                last = serde_json::from_str(&e.data).ok();
+            }
+        }
+        last.expect("a progress frame")
+    }
+
+    #[test]
+    fn a_none_class_update_installs_signed_files_and_the_window_reopens() {
+        let (kp, k) = key();
+        let (state, update) = world("none", &package("v1.1", &kp, &k), &k);
+        let (unit, mut rx, restarted) = unit_for(&state);
+        unit.run_update("tower", &update);
+        assert_eq!(std::fs::read_to_string(state.join(APPS_DIR).join("tower/app.js")).unwrap(), "v1.1");
+        assert_eq!(read_installed(&state)["tower"], "1.1.0");
+        let end = last_progress(&mut rx);
+        assert_eq!((end["stage"].as_str(), end["action"].as_str(), end["version"].as_str()), (Some("done"), Some("reopen"), Some("1.1.0")));
+        assert_eq!(restarted.load(Ordering::SeqCst), 0, "no daemon restart for the none class");
+        assert!(!state.join(APPS_DIR).join("tower.old").exists() && !state.join(APPS_DIR).join(".installing/tower").exists());
+    }
+
+    #[test]
+    fn a_daemon_class_update_restarts_the_daemon_once_and_tells_the_window_to_reconnect() {
+        let (kp, k) = key();
+        let (state, update) = world("daemon", &package("v1.1", &kp, &k), &k);
+        let (unit, mut rx, restarted) = unit_for(&state);
+        unit.run_update("tower", &update);
+        assert_eq!(restarted.load(Ordering::SeqCst), 1);
+        assert_eq!(last_progress(&mut rx)["action"], "reconnect");
+        assert_eq!(read_installed(&state)["tower"], "1.1.0");
+    }
+
+    #[test]
+    fn a_bad_signature_is_refused_and_the_old_version_keeps_running() {
+        let (kp, k) = key();
+        let (other, other_k) = key();
+        // Signed by a key that is not the catalog's.
+        let (state, update) = world("none", &package("v1.1", &other, &other_k), &k);
+        let (unit, mut rx, restarted) = unit_for(&state);
+        let told: Arc<Mutex<Vec<String>>> = Arc::default();
+        let t = told.clone();
+        unit.set_notifier(Arc::new(move |title, _| t.lock().unwrap().push(title.to_string())));
+        unit.run_update("tower", &update);
+        let end = last_progress(&mut rx);
+        assert_eq!(end["stage"], "failed");
+        assert_eq!(told.lock().unwrap().len(), 1, "the failure reaches the notification bus once");
+        assert!(end["error"].as_str().unwrap().contains("refused"), "{end}");
+        assert_eq!(std::fs::read_to_string(state.join(APPS_DIR).join("tower/app.js")).unwrap(), "v1.0");
+        assert_eq!(read_installed(&state)["tower"], "1.0.0");
+        assert!(!state.join(APPS_DIR).join(".installing/tower").exists(), "the staged copy is deleted");
+        assert_eq!(restarted.load(Ordering::SeqCst), 0);
+
+        // Tampered after signing.
+        let tampered = package("v1.1", &kp, &k);
+        std::fs::write(tampered.join("app.js"), "evil").unwrap();
+        let (state, update) = world("none", &tampered, &k);
+        let err = install(&update, &state, 1 << 20, &|_| {}).unwrap_err();
+        assert!(err.contains("signature check failed"), "{err}");
+        assert_eq!(std::fs::read_to_string(state.join(APPS_DIR).join("tower/app.js")).unwrap(), "v1.0");
+
+        // Unsigned, and a catalog with no key.
+        let unsigned = scratch().join("u");
+        std::fs::create_dir_all(&unsigned).unwrap();
+        std::fs::write(unsigned.join("app.js"), "v1.1").unwrap();
+        let (state, update) = world("none", &unsigned, &k);
+        assert!(install(&update, &state, 1 << 20, &|_| {}).unwrap_err().contains("unsigned"));
+        let (state, update) = world("none", &unsigned, "");
+        assert!(install(&update, &state, 1 << 20, &|_| {}).unwrap_err().contains("no public key"));
+    }
+
+    #[test]
+    fn the_shell_is_refused_here_and_left_to_the_apps_updater() {
+        let (state, mut update) = world("relaunch", Path::new("."), "K");
+        update["kind"] = json!("shell");
+        assert!(install(&update, &state, 1 << 20, &|_| {}).unwrap_err().contains("own updater"));
+        assert_eq!((action_of("relaunch"), action_of("none"), action_of("daemon")), ("relaunch", "reopen", "reconnect"));
+        let (unit, _, _) = unit_for(&state);
+        assert!(unit.start_update("tower").is_err(), "nothing was checked yet");
     }
 }
