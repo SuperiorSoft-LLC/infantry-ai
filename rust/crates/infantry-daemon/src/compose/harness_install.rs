@@ -46,13 +46,16 @@ pub struct HarnessInstall {
     versions: Arc<Mutex<HashMap<PathBuf, Option<String>>>>,
     /// Runs after an install, before it reports done: the daemon's harness list is rebuilt so it shows the new CLI.
     on_changed: Arc<dyn Fn() + Send + Sync>,
+    /// Runs when the install is over and the report no longer says busy: the daemon pushes it to every client, so a window that
+    /// did not start the install (another window, the CLI) re-reads the report.
+    on_done: Arc<dyn Fn() + Send + Sync>,
 }
 
 impl HarnessInstall {
-    pub fn new(state_dir: &Path, on_changed: Arc<dyn Fn() + Send + Sync>) -> Arc<HarnessInstall> {
+    pub fn new(state_dir: &Path, on_changed: Arc<dyn Fn() + Send + Sync>, on_done: Arc<dyn Fn() + Send + Sync>) -> Arc<HarnessInstall> {
         let prefix = state_dir.join("harness-tools");
         add_to_path(&prefix);
-        Arc::new(HarnessInstall { prefix, log: Arc::default(), busy: Arc::default(), versions: Arc::default(), on_changed })
+        Arc::new(HarnessInstall { prefix, log: Arc::default(), busy: Arc::default(), versions: Arc::default(), on_changed, on_done })
     }
 
     fn note(log: &Mutex<Vec<String>>, line: impl Into<String>) {
@@ -109,13 +112,14 @@ impl HarnessInstall {
             return Err("an install is already running".into());
         }
         let (prefix, log, busy) = (self.prefix.clone(), self.log.clone(), self.busy.clone());
-        let (versions, on_changed) = (self.versions.clone(), self.on_changed.clone());
+        let (versions, on_changed, on_done) = (self.versions.clone(), self.on_changed.clone(), self.on_done.clone());
         std::thread::spawn(move || {
             run_install(&prefix, &log, &ids, update, runtime);
             add_to_path(&prefix);
             versions.lock().unwrap_or_else(|e| e.into_inner()).clear();
             on_changed();
             busy.store(false, Ordering::SeqCst);
+            on_done();
         });
         Ok(())
     }
@@ -411,7 +415,7 @@ mod tests {
     #[test]
     fn a_status_lists_every_known_harness_and_refuses_an_unknown_id() {
         let dir = std::env::temp_dir().join(format!("inf-hi-{}", std::process::id()));
-        let u = HarnessInstall::new(&dir, Arc::new(|| {}));
+        let u = HarnessInstall::new(&dir, Arc::new(|| {}), Arc::new(|| {}));
         let r = u.report();
         assert_eq!(r["harnesses"].as_array().unwrap().len(), KNOWN.len());
         assert_eq!(r["busy"], false);

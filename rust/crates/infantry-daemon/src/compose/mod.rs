@@ -694,6 +694,12 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     units.push(harness_install::HarnessInstall::new(state_dir, {
         let h = harness_list.clone();
         Arc::new(move || h.rebuild_now())
+    }, {
+        // An install that ends is told to every client (no request id): another window or the CLI re-reads the report.
+        let b = bus.clone();
+        Arc::new(move || {
+            b.publish(Envelope::new(infantry_protocol::frames::HARNESS_INSTALL_RESULT, serde_json::json!({ "done": true }).to_string()));
+        })
     }));
     units.push(harness_list);
     units.push(Arc::new(host_frames::HostFrames {

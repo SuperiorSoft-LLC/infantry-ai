@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// The guided first-time setup (RUST PARITY of Kotlin ShellSetupWizard). Opens by itself on every app start while nothing
-// can answer (`needed`), and from Settings > Daemon at any time. One choice per screen:
+// The guided first-time setup (RUST PARITY of Kotlin ShellSetupWizard). It comes back until Node.js, an agent tool AND a signed-in
+// provider are all there (`needed`): on every app start, and again whenever that turns true after being false. "Not now" closes it
+// until then; Settings > Daemon opens it at any time. One choice per screen:
 //  1. Node.js (only while npm is missing and nothing is installed): the daemon installs it into the app's own folder.
 //  2. Pick an agent tool the daemon's installer offers and install it (plain failure + retry).
 //  3. Sign in (skipped when the tool can already answer: a login, a key or free models).
@@ -16,6 +17,9 @@ import {
   defaultPick,
   credentialOk,
   firstModel,
+  followInstalled,
+  keyRow,
+  opensNow,
   firstStep,
   HELLO_PROMPT,
   installHarnesses,
@@ -29,10 +33,12 @@ import {
   type CatalogGroup,
   type HarnessInfo,
   type HarnessInstallReport,
+  type SecretRow,
   type SetupStep,
 } from "@infantry/client";
-import { AppDialog, Button, cn } from "@infantry/ui";
+import { AppDialog, Button, cn, Input } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
+import { secretsStore } from "@/daemon/secrets-store";
 import { useUi } from "@/state/ui-state";
 
 let installStore: ReturnType<typeof createHarnessInstallStore> | null = null;
@@ -65,7 +71,10 @@ function stores() {
 export function useSetupData() {
   const open = useDaemon((s) => s.connection.state) === "open";
   const s = stores();
+  const secrets = secretsStore();
   const report = useStore(s.install, (x) => x.data);
+  const secretsLoaded = useStore(secrets, (x) => x.loaded);
+  const rows = useStore(secrets, (x) => x.builtIns);
   const providersLoaded = useStore(s.providers, (x) => x.loaded);
   const providers = useStore(s.providers, (x) => x.data);
   const catalog = useStore(s.catalog, (x) => x.data);
@@ -73,23 +82,27 @@ export function useSetupData() {
     s.install.getState().refresh();
     s.providers.getState().refresh();
     s.catalog.getState().refresh();
-  }, [s.install, s.providers, s.catalog]);
+    secrets.getState().refresh();
+  }, [s.install, s.providers, s.catalog, secrets]);
   useEffect(() => {
     if (open) recheck();
   }, [open, recheck]);
-  return { report, providers: providersLoaded ? providers : null, catalog, recheck };
+  return { report, secrets: secretsLoaded ? rows : null, providers: providersLoaded ? providers : null, catalog, recheck };
 }
 
-/** Opens the setup by itself, once per app start, when nothing can answer. Never on a guess (null = not answered yet). */
+/**
+ * Opens the setup by itself whenever it becomes needed: the first answer of an app start, and again if a tool or a sign-in goes
+ * missing later. "Not now" keeps it closed until the answer changes or the app restarts. Never on a guess (null = not answered yet).
+ */
 export function useAutoSetup(): void {
   const ui = useUi();
-  const { report, providers, catalog } = useSetupData();
-  const decided = useRef(false);
-  const want = needed(report, providers, catalog);
+  const { report, secrets, providers, catalog } = useSetupData();
+  const before = useRef<boolean | null>(null);
+  const want = needed(report, secrets, providers, catalog);
   useEffect(() => {
-    if (decided.current || want === null) return;
-    decided.current = true;
-    if (want && !ui.dialog) ui.set("dialog", "setup");
+    if (opensNow(before.current, want) && !ui.dialog) ui.set("dialog", "setup");
+    // Another dialog was open: the next render tries again, so the setup is not lost behind it.
+    if (want !== true || !ui.dialog || ui.dialog === "setup") before.current = want;
   }, [want, ui]);
 }
 
@@ -182,13 +195,74 @@ function HarnessStep({ report, pick, onPick }: { report: HarnessInstallReport; p
   );
 }
 
-function SignInStep({ id, label, provider, recheck }: { id: string; label: string; provider?: HarnessInfo; recheck: () => void }) {
+function SignInStep({ id, label, row, provider, recheck }: { id: string; label: string; row?: SecretRow; provider?: HarnessInfo; recheck: () => void }) {
+  const [code, setCode] = useState("");
+  const [key, setKey] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const running = row?.loginState === "running";
+  // The sign-in runs on the daemon and its state is not pushed: read the key rows again while it runs.
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => secretsStore().getState().refresh(), 1500);
+    return () => clearInterval(t);
+  }, [running]);
+  const act = (action: "start" | "input" | "cancel", text = "") => {
+    if (!row) return;
+    setError(null);
+    secretsStore().getState().login(row.name, action, text).catch((why) => setError(String(why)));
+  };
+  const failed = row?.loginState === "failed" ? row.loginMessage : null;
   return (
     <div className="space-y-2.5">
       <p className="text-[13px]">Connect {label} so your agent can answer.</p>
       <p className="text-xs text-muted-foreground">{provider?.unavailableReason ?? "It is not signed in yet."}</p>
       {/* Whatever sign-in the harness declares (a browser login that gives a token); nothing here names a harness. */}
       <SubscriptionSignIn id={id} label={label} onSignedIn={recheck} />
+      {row?.canLogin && (
+        <div className="space-y-2 rounded-lg border bg-card p-3">
+          <p className="text-[13px] font-semibold">Sign in with your account</p>
+          {running ? (
+            <>
+              <p className="text-xs text-muted-foreground">{row.loginMessage || "Finish in the browser window. If the page shows a code, paste it here."}</p>
+              {row.loginUrl ? (
+                <Button size="sm" variant="outline" onClick={() => window.open(row.loginUrl, "_blank")}>
+                  Open the sign-in page
+                </Button>
+              ) : null}
+              <div className="flex gap-2">
+                <Input aria-label="Code from the sign-in page" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Code from the sign-in page" />
+                <Button size="sm" disabled={!code.trim()} onClick={() => (act("input", code), setCode(""))}>
+                  Send code
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => act("cancel")}>
+                  Cancel
+                </Button>
+              </div>
+            </>
+          ) : (
+            <Button size="sm" onClick={() => act("start")}>
+              Sign in
+            </Button>
+          )}
+        </div>
+      )}
+      {row && !row.canLogin && row.authModes?.includes("api-key") && (
+        <div className="flex gap-2">
+          <Input aria-label="API key" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Paste your API key" />
+          <Button
+            size="sm"
+            disabled={!key.trim()}
+            onClick={() => secretsStore().getState().setField(row.name, "value", key.trim()).then(() => (setKey(""), recheck()), (why: unknown) => setError(String(why)))}
+          >
+            Save key
+          </Button>
+        </div>
+      )}
+      {failed || error ? (
+        <p role="alert" className="text-xs text-danger">
+          {failed || error}
+        </p>
+      ) : null}
       <Button size="sm" variant="outline" onClick={recheck}>
         Check
       </Button>
@@ -197,7 +271,7 @@ function SignInStep({ id, label, provider, recheck }: { id: string; label: strin
 }
 
 /** The project the first agent runs in: the first there is, else a starter the daemon makes (zero typing). */
-function FirstAgentStep({ id, providers, catalog }: { id: string; providers: HarnessInfo[]; catalog: CatalogGroup[] }) {
+function FirstAgentStep({ id, secrets, providers, catalog }: { id: string; secrets: SecretRow[]; providers: HarnessInfo[]; catalog: CatalogGroup[] }) {
   const projects = useDaemon((s) => s.projects);
   const sessions = useDaemon((s) => s.sessions);
   const before = useRef(new Set(Object.keys(daemonStore().getState().sessions)));
@@ -216,11 +290,11 @@ function FirstAgentStep({ id, providers, catalog }: { id: string; providers: Har
     }
     asked.current = "agent";
     const opts: Record<string, unknown> = { provider: id, name: "First agent", prompt: HELLO_PROMPT };
-    const model = firstModel(id, providers, catalog);
+    const model = firstModel(id, secrets, providers, catalog);
     if (model) opts.model = model;
     if (project.directory) opts.cwd = project.directory;
     if (!store.spawnWith(opts)) setError("the daemon link is down");
-  }, [projects, id, providers, catalog]);
+  }, [projects, id, secrets, providers, catalog]);
   const mine = Object.values(sessions).find((v) => !before.current.has(v.record.id) && v.record.provider === id);
   const reply = mine?.items.filter((i) => i.kind === "text").map((i) => (i as { text: string }).text).join("").trim() ?? "";
   const failed = error ?? (mine?.record.state === "FAILED" ? (mine.record.lastError ?? "the agent failed") : mine?.items.find((i) => i.kind === "note" && i.tone === "danger") && "the agent reported an error");
@@ -242,18 +316,18 @@ function FirstAgentStep({ id, providers, catalog }: { id: string; providers: Har
 }
 
 export function SetupWizardDialog({ onClose }: { onClose: () => void }) {
-  const { report, providers, catalog, recheck } = useSetupData();
+  const { report, secrets, providers, catalog, recheck } = useSetupData();
   if (!report) return <AppDialog open onOpenChange={(o) => !o && onClose()} title="Setup" description="Asking the daemon what is installed..." footer={null}>{null}</AppDialog>;
-  return <Wizard report={report} providers={providers ?? []} catalog={catalog} recheck={recheck} onClose={onClose} />;
+  return <Wizard report={report} secrets={secrets ?? []} providers={providers ?? []} catalog={catalog} recheck={recheck} onClose={onClose} />;
 }
 
-function Wizard({ report, providers, catalog, recheck, onClose }: { report: HarnessInstallReport; providers: HarnessInfo[]; catalog: CatalogGroup[]; recheck: () => void; onClose: () => void }) {
+function Wizard({ report, secrets, providers, catalog, recheck, onClose }: { report: HarnessInstallReport; secrets: SecretRow[]; providers: HarnessInfo[]; catalog: CatalogGroup[]; recheck: () => void; onClose: () => void }) {
   const [step, setStep] = useState<SetupStep>(() => firstStep(report));
   const [pick, setPick] = useState<string | null>(() => defaultPick(report));
   const picked = report.harnesses.find((h) => h.id === pick);
   const pickedInstalled = !!picked && installed(picked);
-  const wasBusy = useRef(false);
   const sawMissing = useRef(false);
+  const installedKey = report.harnesses.filter(installed).map((h) => h.id).join(",");
 
   // While an install runs the daemon's log is the progress: read it again every 1.5 s.
   useEffect(() => {
@@ -261,14 +335,20 @@ function Wizard({ report, providers, catalog, recheck, onClose }: { report: Harn
     const t = setInterval(() => stores().install.getState().refresh(), 1500);
     return () => clearInterval(t);
   }, [report.busy]);
-  // An install finished: re-read the harness list and models (they show the new tool and its free models).
+  // An install finished, here, in another window or in the CLI (the report is re-read on the daemon's push): what is installed
+  // changed, so the sign-in rows, the harness list and the models are read again.
+  const seenInstalled = useRef(installedKey);
   useEffect(() => {
-    if (wasBusy.current && !report.busy) {
-      stores().providers.getState().refresh();
-      stores().catalog.getState().refresh();
-    }
-    wasBusy.current = report.busy;
-  }, [report.busy]);
+    if (seenInstalled.current === installedKey) return;
+    seenInstalled.current = installedKey;
+    stores().providers.getState().refresh();
+    stores().catalog.getState().refresh();
+    secretsStore().getState().refresh();
+  }, [installedKey]);
+  // The pick follows what is really installed.
+  useEffect(() => {
+    setPick((p) => followInstalled(p, report));
+  }, [report]);
   // Step changes follow the daemon's answers, never a guess: Node found -> the pick; installed -> sign-in; can answer -> first agent.
   useEffect(() => {
     if (step === "node" && report.npmPath && !report.busy) setStep("harness");
@@ -278,8 +358,8 @@ function Wizard({ report, providers, catalog, recheck, onClose }: { report: Harn
     else if (step === "harness" && sawMissing.current && !report.busy) setStep("sign-in");
   }, [pickedInstalled, step, report.busy]);
   useEffect(() => {
-    if (step === "sign-in" && pick && credentialOk(pick, providers, catalog)) setStep("first-agent");
-  }, [step, pick, providers, catalog]);
+    if (step === "sign-in" && pick && pickedInstalled && credentialOk(pick, secrets, providers, catalog)) setStep("first-agent");
+  }, [step, pick, pickedInstalled, secrets, providers, catalog]);
 
   const idx = SETUP_STEPS.findIndex((s) => s.id === step);
   const footer = (
@@ -301,11 +381,11 @@ function Wizard({ report, providers, catalog, recheck, onClose }: { report: Harn
     </>
   );
   return (
-    <AppDialog open onOpenChange={(o) => !o && onClose()} title={SETUP_STEPS[idx].title} description={`Step ${idx + 1} of ${SETUP_STEPS.length}`} footer={footer}>
+    <AppDialog open onOpenChange={() => {}} title={SETUP_STEPS[idx].title} description={`Step ${idx + 1} of ${SETUP_STEPS.length}`} footer={footer}>
       {step === "node" && <NodeStep report={report} recheck={recheck} />}
       {step === "harness" && <HarnessStep report={report} pick={pick} onPick={setPick} />}
-      {step === "sign-in" && pick && <SignInStep id={pick} label={picked?.label || pick} provider={providers.find((p) => p.id === pick)} recheck={recheck} />}
-      {step === "first-agent" && pick && <FirstAgentStep id={pick} providers={providers} catalog={catalog} />}
+      {step === "sign-in" && pick && <SignInStep id={pick} label={picked?.label || pick} row={keyRow(pick, secrets)} provider={providers.find((p) => p.id === pick)} recheck={recheck} />}
+      {step === "first-agent" && pick && <FirstAgentStep id={pick} secrets={secrets} providers={providers} catalog={catalog} />}
     </AppDialog>
   );
 }
