@@ -327,6 +327,15 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             crate::sessions::AssistantSpec { provider: pick(|b| &b.provider), model: pick(|b| &b.model), effort: pick(|b| &b.effort), role }
         }));
     }
+    {
+        // WORKSPACE-1: the OS home folder (`workspace.root`) where a no-project session gets its own folder.
+        let app_settings = settings::SettingsUnit { db: db.clone() };
+        daemon.set_workspace_spec(Arc::new(move || {
+            let root = app_settings.app(crate::sessions::WORKSPACE_ROOT_KEY).and_then(|v| v.as_str().map(str::to_string));
+            let keep = app_settings.app(crate::sessions::WORKSPACE_KEEP_KEY).and_then(|v| v.as_bool());
+            crate::sessions::workspace::spec_from(root, keep)
+        }));
+    }
     let vault_projects = projects.clone();
     let vault = Arc::new(infantry_vault::unit::VaultUnit::open(
         state_dir,
