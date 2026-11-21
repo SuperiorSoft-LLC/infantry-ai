@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 //! `hook-channel` as a harness sees it: an [`HookEndpoint`] (a loopback URL for blocking hook calls and an events file for
 //! command hooks, both on the runner's host) and the pure helpers to write and read the events file. No vendor names.

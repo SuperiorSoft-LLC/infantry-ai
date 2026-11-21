@@ -634,8 +634,6 @@ Today's exceptions, each with the move that removes it. Both lists only shrink:
 | `infantry-daemon` → `infantry-board` | 1 | LIC-6 to LIC-10: the board wiring becomes a module in its own Apache crate, which the distribution registers |
 | `infantry-daemon` → `infantry-harness-claude`, `-codex`, `-opencode`, `-pi` (4 crossings) | 1 | LIC-4 and LIC-5: the distribution builds the harness registry |
 | `infantry-daemon` → `infantry-plugin-host` | 1 | LIC-2. The plugin host is part of the kernel in the owner's boot model, but its crate is Apache. Proposed: MPL-2.0. |
-| `infantry-harness` → `infantry-runner-api` | 2 | LIC-1. Proposed: `runner-api` becomes Apache-2.0 and joins `API_CRATES`; it has no workspace dependency. |
-| 5 test files with no SPDX header (`tests/all/main.rs` of board, daemon, harness-claude, harness-codex, scripting) | header | LIC-1 |
 
 Edges the line allows, so no move removes them:
 - **Apache to MPL:** `infantry-board` → `infantry-core` and `infantry-protocol`; `infantry-conformance` →
@@ -1111,7 +1109,7 @@ and the licence guard only on a new crossing.
 | # | Call | Proposal | Needed before |
 |---|---|---|---|
 | 1 | The seam shapes: `DaemonModule` (first cut in LIC-6), `WorkHooks` (LIC-7), `ToolSource` and tool precedence (LIC-8, D-4), the plugin admin contract, the orchestrator ABI, the device ABI, the model-call seam | As in sections 2b, 5, 6, 7a and 8 | LIC-6 to LIC-8, D-3, D-4, D-14, D-15, D-19, D-21 |
-| 2 | Licences | `plugin-host` becomes MPL (kernel). `runner-api` becomes an Apache API crate. `infantry-agents`, the orchestrator crates, `infantry-board-module` and the installer are Apache. The distribution crate is `infantry-distribution` (Apache) and builds the `infantry-daemon` binary. The `infantry-daemon` library stays core (MPL), which keeps every import, path and baseline that names it. | LIC-1, LIC-2, LIC-5, D-9, D-12 |
+| 2 | Licences | `plugin-host` becomes MPL (kernel). `runner-api` becomes an Apache API crate. `infantry-agents`, the orchestrator crates, `infantry-board-module` and the installer are Apache. The distribution crate is `infantry-distribution` (Apache) and builds the `infantry-daemon` binary. The `infantry-daemon` library stays core (MPL), which keeps every import, path and baseline that names it. | LIC-1, LIC-2, LIC-5, D-9, D-12 **Approved 2026-11-20: `runner-api` is Apache-2.0 and an API crate (LIC-1 done). The rest of this call (`plugin-host` to MPL, LIC-2) is still open.** |
 | 3 | The old session fields | Send them beside `context` for one minor version | D-7 |
 | 4 | Builtin modules in the Plugins screen | Show them with a "built in" badge. Agents cannot be disabled in the default flavour. | D-13 |
 | 5 | Board storage under WASM | Grant the board its existing table names rather than rename tables | D-16 |
