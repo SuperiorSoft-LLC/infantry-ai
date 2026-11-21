@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 import { describe, expect, it } from "vitest";
-import { createUsageStore, overrideLine, paceWords, ruleLine, workersLine, type Envelope, type MeterUsage } from "../src";
+import { createUsageStore, overrideLine, paceWords, ruleLine, unmeteredHarnesses, workersLine, type Envelope, type HarnessInfo, type MeterUsage } from "../src";
 
 function link(up = true) {
   const sent: Envelope[] = [];
@@ -49,6 +49,23 @@ describe("usage store", () => {
     const s = createUsageStore(link(false));
     expect(s.getState().clearOverride("claude")).toBe(false);
     expect(s.getState().refusal).toContain("link is down");
+  });
+});
+
+describe("harnesses without a meter", () => {
+  const harnesses: HarnessInfo[] = [
+    { id: "claude", available: true },
+    { id: "pi", available: true, usageNote: "pi has no plan of its own." },
+    { id: "codex", available: true, usageNote: "   " },
+    { id: "gone", available: false, usageNote: "not installed, so not listed" },
+    { id: "other", usageNote: "availability not stated: listed" },
+  ];
+
+  it("lists the installed ones that say why, unless a meter already carries their name", () => {
+    expect(unmeteredHarnesses(harnesses, [meter()]).map((h) => h.id)).toEqual(["pi", "other"]);
+    // a worker running on pi adds its own meter card, so the note card steps aside
+    expect(unmeteredHarnesses(harnesses, [meter(), meter({ meter: "pi", source: "none", percent: null })]).map((h) => h.id)).toEqual(["other"]);
+    expect(unmeteredHarnesses([], [meter()])).toEqual([]);
   });
 });
 

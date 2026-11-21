@@ -7,6 +7,7 @@
 // store is tested with recorded frames and no socket.
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { json, type Envelope } from "../wire";
+import type { HarnessInfo } from "./launcher";
 
 export interface LimitWindow {
   provider: string;
@@ -299,4 +300,14 @@ export function meterName(meter: string): string {
   if (meter === "claude") return "Claude";
   if (meter === "opencode-go") return "OpenCode Go";
   return meter.charAt(0).toUpperCase() + meter.slice(1);
+}
+
+/**
+ * The harnesses the Usage tab has no meter card for but can still list: installed, saying in `usageNote` why the daemon
+ * reads no plan limit for them, and not already a meter (a worker running on one adds its own card). The daemon decides
+ * which harness has a note; nothing here names a harness.
+ */
+export function unmeteredHarnesses(harnesses: HarnessInfo[], meters: MeterUsage[]): HarnessInfo[] {
+  const metered = new Set(meters.map((m) => m.meter));
+  return harnesses.filter((h) => h.available !== false && !!h.usageNote?.trim() && !metered.has(h.id));
 }

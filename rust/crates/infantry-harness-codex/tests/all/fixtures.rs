@@ -58,6 +58,13 @@ fn real_resumed_turn_keeps_the_thread_and_reports_the_failed_command() {
 }
 
 #[test]
+fn codex_tells_the_usage_tab_why_it_has_no_meter() {
+    let note = CodexHarness::default().usage_note().expect("codex has no plan-limit reader, so it says why");
+    assert!(note.contains("not read yet") && note.contains("not counted in Stats"), "{note}");
+    assert!(!note.contains('\n'), "one paragraph for a card: {note}");
+}
+
+#[test]
 fn every_documented_item_kind_maps() {
     let ev = translate("handwritten_items.jsonl");
     assert!(ev.contains(&HarnessEvent::Reasoning("**Planning the edit**".into())));

@@ -3,10 +3,11 @@
 // Usage tab: the pacing rule, then one card per plan account (live from the daemon's usage_report).
 import { useEffect, useState } from "react";
 import { Gauge, RefreshCw, X } from "lucide-react";
-import { ruleLine, updatedLine } from "@infantry/client";
-import { EmptyState, IconButton, SectionLabel, cn } from "@infantry/ui";
+import { meterName, ruleLine, unmeteredHarnesses, updatedLine } from "@infantry/client";
+import { EmptyState, IconButton, PanelCard, SectionLabel, cn } from "@infantry/ui";
 import { PacingCard } from "./pacing-card";
 import { daemonNote } from "@/daemon/daemon";
+import { useLauncher } from "@/components/dialogs/new-agent-dialog";
 import { useNow, useUsage } from "./use-usage";
 
 /** How long the first usage report may take before the panel says the daemon is not answering. */
@@ -16,6 +17,7 @@ export function UsageMeters({ grid }: { grid?: boolean }) {
   const report = useUsage((s) => s.report);
   const ensureLoaded = useUsage((s) => s.ensureLoaded);
   const now = useNow();
+  const { harnesses } = useLauncher();
   useEffect(() => ensureLoaded(), [ensureLoaded]);
   const [waited, setWaited] = useState(false);
   useEffect(() => {
@@ -32,11 +34,19 @@ export function UsageMeters({ grid }: { grid?: boolean }) {
       />
     );
   if (!report) return <EmptyState icon={<Gauge className="size-5" />} title="Reading usage" hint="Waiting for the daemon's first usage report." />;
-  if (report.meters.length === 0) return <EmptyState icon={<Gauge className="size-5" />} title="No plan accounts" hint="No live usage source answered and no ticket worker is running." />;
+  // Harnesses with no plan-limit meter still get a card that says why (their `usageNote` on the `providers` row).
+  const unmetered = unmeteredHarnesses(harnesses, report.meters);
+  if (report.meters.length === 0 && unmetered.length === 0)
+    return <EmptyState icon={<Gauge className="size-5" />} title="No plan accounts" hint="No live usage source answered and no ticket worker is running." />;
   return (
     <div className={grid ? "grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3" : "space-y-3"}>
       {report.meters.map((m) => (
         <PacingCard key={m.meter} m={m} now={now} />
+      ))}
+      {unmetered.map((h) => (
+        <PanelCard key={h.id} title={meterName(h.id)} action={<span className="text-xs text-muted-foreground">no plan limit read</span>}>
+          <p className="text-xs leading-5 text-muted-foreground">{h.usageNote}</p>
+        </PanelCard>
       ))}
     </div>
   );

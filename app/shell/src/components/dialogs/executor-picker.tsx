@@ -3,7 +3,7 @@
 // The one executor picker: Harness -> Provider -> Model -> Effort dropdowns filled from the daemon's harness
 // configurations (the `providers` and `models` frames). Used by the New agent form and the Switch provider/model dialog.
 // Only valid combinations: the provider and model lists follow the harness; "default" stays an option.
-import { modelsFor, type HarnessInfo, type ModelGroup } from "@infantry/client";
+import { modelsFor, unavailableLine, type HarnessInfo, type ModelGroup } from "@infantry/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@infantry/ui";
 import { Field } from "@/components/knowledge/parts";
 
@@ -42,7 +42,7 @@ export function ExecutorPicker({
   const efforts = harnesses.find((h) => h.id === value.harness)?.efforts ?? EFFORTS;
   return (
     <div className="space-y-3">
-      <Field id={`${idPrefix}-harness`} label="Harness">
+      <Field id={`${idPrefix}-harness`} label="Harness" hint={unavailableLine(harnesses) ?? undefined}>
         <Select value={value.harness ?? undefined} onValueChange={(v) => onChange(pickHarness(value, v, harnesses))}>
           <SelectTrigger id={`${idPrefix}-harness`} className="w-full">
             <SelectValue placeholder={harnesses.length ? "Pick a harness" : "Loading harnesses..."} />
