@@ -66,7 +66,7 @@ fn a_user_added_source_is_searched_installed_from_and_removed() {
     let found: Value = serde_json::from_str(&admin(&second, &["search", "test plugin"]).1).unwrap();
     let ids: Vec<&str> = found.as_array().unwrap().iter().map(|r| r["id"].as_str().unwrap()).collect();
     assert_eq!(ids, ["Ps_Bad", "Ps_Good"]);
-    assert_eq!(found[1]["signed"], true);
+    assert_eq!(found[1]["signed"], "digest", "the check result: digest, signed, untrusted, unsigned or bad");
 
     // A module whose files do not match its signature file is refused, and nothing is left behind.
     let (code, _, err) = admin(&c, &["install", "Ps_Bad"]);
@@ -97,6 +97,45 @@ fn a_user_added_source_is_searched_installed_from_and_removed() {
     assert_eq!(admin(&c, &["uninstall", "Ps_Good"]).0, 0);
     assert!(!plugins.join("official/Ps_Good").exists());
 
+    // ---- ed25519: a signed module is checked against the trusted signers ----
+    use base64::Engine;
+    use ring::signature::{Ed25519KeyPair, KeyPair};
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let pair = Ed25519KeyPair::from_seed_unchecked(&[7u8; 32]).unwrap();
+    let sign = |dir: &Path| {
+        let digest = sources::folder_digest(dir).unwrap();
+        let sig = pair.sign(digest.as_bytes());
+        std::fs::write(dir.join(sources::SIG_FILE), json!({ "publicKey": b64.encode(pair.public_key().as_ref()), "digest": digest, "signature": b64.encode(sig.as_ref()), "license": "Apache-2.0" }).to_string()).unwrap();
+    };
+    let signed = module(&src, "Ps_Signed");
+    sign(&signed);
+    let shown: Value = serde_json::from_str(&admin(&c, &["show", "Ps_Signed"]).1).unwrap();
+    assert_eq!((shown["check"].as_str(), shown["license"].as_str()), (Some("untrusted"), Some("Apache-2.0")));
+    let (code, _, err) = admin(&c, &["install", "Ps_Signed"]);
+    assert_eq!(code, 1);
+    assert!(err.contains("not a trusted signer"), "{err}");
+    assert!(!plugins.join("official/Ps_Signed").exists());
+    assert_eq!(admin(&c, &["signer-add", "acme", &b64.encode(pair.public_key().as_ref())]).0, 0);
+    assert!(admin(&composed(&rt, &tmp, &state), &["signers"]).1.contains("acme"), "the signer is kept on the daemon");
+    let shown: Value = serde_json::from_str(&admin(&c, &["show", "Ps_Signed"]).1).unwrap();
+    assert_eq!((shown["check"].as_str(), shown["signer"].as_str()), (Some("signed"), Some("acme")));
+    // A file changed after signing is refused even from a trusted signer.
+    std::fs::write(signed.join("ui/dist/index.js"), "export default { evil: 1 };").unwrap();
+    let (code, _, err) = admin(&c, &["install", "Ps_Signed"]);
+    assert_eq!(code, 1);
+    assert!(err.contains("changed after they were signed"), "{err}");
+    sign(&signed);
+    assert_eq!(admin(&c, &["install", "Ps_Signed"]).0, 0);
+    // An untrusted key installs only with the owner's --approve.
+    assert_eq!(admin(&c, &["signer-remove", "acme"]).0, 0);
+    let other = module(&src, "Ps_Other");
+    sign(&other);
+    assert_eq!(admin(&c, &["install", "Ps_Other"]).0, 1);
+    assert_eq!(admin(&c, &["install", "Ps_Other", "--approve"]).0, 0);
+
+    for m in ["Ps_Signed", "Ps_Other"] {
+        assert_eq!(admin(&c, &["uninstall", m]).0, 0);
+    }
     let id = list[0]["id"].as_str().unwrap();
     assert_eq!(admin(&c, &["source-remove", id]).0, 0);
     assert_eq!(admin(&c, &["search", "test plugin"]).1.trim(), "[]");

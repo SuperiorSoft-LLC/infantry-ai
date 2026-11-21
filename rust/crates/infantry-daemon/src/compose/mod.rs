@@ -567,7 +567,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         }
         config
     };
-    let plugin_set = plugins::start(state_dir, plugins_dir(), bus.clone(), handle.clone(), disabled.clone(), plugins::InstallSeam { config: install_config, boot: boot.clone(), late: late.clone(), sources: Arc::new(sources::SourceStore::load(state_dir)) });
+    let plugin_set = plugins::start(state_dir, plugins_dir(), bus.clone(), handle.clone(), disabled.clone(), plugins::InstallSeam { config: install_config, boot: boot.clone(), late: late.clone(), sources: Arc::new(sources::SourceStore::load(state_dir)), signers: Arc::new(sources::Signers::load(state_dir)) });
     let plugin_host = plugin_set.as_ref().map(|p| p.host.clone());
     let bundles = Arc::new(ui_bundles::UiBundles { plugins_dir: plugins_dir(), plugins: plugin_host.clone(), disabled });
     tools.set_plugins(plugin_host.clone());

@@ -186,7 +186,7 @@ pub fn folder_digest(dir: &Path) -> Result<String, String> {
             let p = e.map_err(|e| e.to_string())?.path();
             if p.is_dir() {
                 walk(root, &p, out)?;
-            } else if p.file_name().and_then(|n| n.to_str()) != Some(DIGEST_FILE) || p.parent() != Some(root) {
+            } else if !(p.parent() == Some(root) && matches!(p.file_name().and_then(|n| n.to_str()), Some(DIGEST_FILE | SIG_FILE))) {
                 out.push(p);
             }
         }
@@ -221,6 +221,78 @@ pub fn verify(dir: &Path) -> Result<bool, String> {
     } else {
         Err(format!("{}: signature check failed: the files do not match {DIGEST_FILE}", dir.display()))
     }
+}
+
+/// A module (or any package) may ship `module.sig.json`: `{ "publicKey": b64, "digest": hex, "signature": b64, "license": text }`.
+/// `digest` is [`folder_digest`] of the other files and `signature` is an ed25519 signature over those hex characters.
+pub const SIG_FILE: &str = "module.sig.json";
+
+/// What a folder's checks say about it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Vetted {
+    /// `unsigned` (no check file), `digest` (matches `module.sha256`), `signed` (valid signature, key trusted),
+    /// `untrusted` (valid signature, key not in the trusted signers).
+    pub status: String,
+    pub signer: Option<String>,
+    pub license: String,
+}
+
+/// The trusted signers: a name -> base64 ed25519 public key map, stored on the daemon in `plugin-signers.json`.
+pub struct Signers {
+    file: PathBuf,
+    items: Mutex<std::collections::BTreeMap<String, String>>,
+}
+
+impl Signers {
+    pub fn load(state_dir: &Path) -> Signers {
+        let file = state_dir.join("plugin-signers.json");
+        let items = std::fs::read_to_string(&file).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        Signers { file, items: Mutex::new(items) }
+    }
+
+    pub fn snapshot(&self) -> std::collections::BTreeMap<String, String> {
+        self.items.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    pub fn add(&self, name: &str, key: &str) -> Result<(), String> {
+        use base64::Engine;
+        let raw = base64::engine::general_purpose::STANDARD.decode(key.trim()).map_err(|_| "the key must be base64".to_string())?;
+        if raw.len() != 32 || !installer::safe_name(name) {
+            return Err("usage: signer-add <name> <base64 ed25519 public key (32 bytes)>".into());
+        }
+        let mut items = self.items.lock().unwrap_or_else(|e| e.into_inner());
+        items.insert(name.into(), key.trim().into());
+        super::host_frames::write_json(&self.file, &json!(&*items))
+    }
+
+    pub fn remove(&self, name: &str) -> Result<(), String> {
+        let mut items = self.items.lock().unwrap_or_else(|e| e.into_inner());
+        if items.remove(name).is_none() {
+            return Err(format!("no signer '{name}'"));
+        }
+        super::host_frames::write_json(&self.file, &json!(&*items))
+    }
+}
+
+/// Checks a folder: a signature file is verified against the folder's digest and the trusted signers (a bad one is an
+/// error, never a downgrade to unsigned); otherwise `module.sha256` is checked as in [`verify`].
+pub fn vet(dir: &Path, trusted: &std::collections::BTreeMap<String, String>) -> Result<Vetted, String> {
+    use base64::Engine;
+    let Ok(text) = std::fs::read_to_string(dir.join(SIG_FILE)) else {
+        let digest = verify(dir)?;
+        return Ok(Vetted { status: if digest { "digest" } else { "unsigned" }.into(), signer: None, license: String::new() });
+    };
+    let bad = |why: &str| format!("{}: signature check failed: {why}", dir.display());
+    let doc: Value = serde_json::from_str(&text).map_err(|_| bad(&format!("{SIG_FILE} is not JSON")))?;
+    let s = |k: &str| doc.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+    let b64 = base64::engine::general_purpose::STANDARD;
+    if !s("digest").eq_ignore_ascii_case(&folder_digest(dir)?) {
+        return Err(bad("the files changed after they were signed"));
+    }
+    let (key, sig) = (b64.decode(s("publicKey")).map_err(|_| bad("publicKey is not base64"))?, b64.decode(s("signature")).map_err(|_| bad("signature is not base64"))?);
+    ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, &key).verify(s("digest").to_lowercase().as_bytes(), &sig).map_err(|_| bad("the signature does not match the key"))?;
+    let signer = trusted.iter().find(|(_, k)| b64.decode(k).is_ok_and(|k| k == key)).map(|(n, _)| n.clone());
+    Ok(Vetted { status: if signer.is_some() { "signed" } else { "untrusted" }.into(), signer, license: s("license") })
 }
 
 #[cfg(test)]

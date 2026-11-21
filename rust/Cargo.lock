@@ -1239,6 +1239,7 @@ dependencies = [
  "infantry-usage",
  "infantry-vault",
  "native-tls",
+ "ring",
  "rusqlite",
  "serde",
  "serde_json",
