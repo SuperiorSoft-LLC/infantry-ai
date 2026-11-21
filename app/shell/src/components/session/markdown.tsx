@@ -8,6 +8,7 @@ import { Check, Copy } from "lucide-react";
 import { cardOf, foldCards, parseMarkdown, type Block, type Span } from "@infantry/client";
 import { CardUpdateLine, ChatCardView } from "./chat-cards";
 import { cn } from "@infantry/ui";
+import { ExternalLink } from "@/components/external-link";
 
 function Spans({ spans }: { spans: Span[] }): ReactNode {
   return spans.map((s, i) => {
@@ -34,9 +35,9 @@ function Spans({ spans }: { spans: Span[] }): ReactNode {
         );
       case "link":
         return (
-          <a key={i} href={s.href} target="_blank" rel="noreferrer noopener" className="text-info underline underline-offset-2">
+          <ExternalLink key={i} href={s.href} className="text-info underline underline-offset-2">
             <Spans spans={s.spans} />
-          </a>
+          </ExternalLink>
         );
     }
   });

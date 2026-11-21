@@ -7,7 +7,8 @@ import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
-import { daemonGetRefusal, type Host, type HostEndpoint, type HostWindow, type QrScanner } from "@infantry/client";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { browserHost, daemonGetRefusal, externalOpener, type Host, type HostEndpoint, type HostWindow, type QrScanner } from "@infantry/client";
 import { tauriTransport } from "./transport";
 import { embeddedRunner } from "./embedded";
 
@@ -44,6 +45,8 @@ const scanner: QrScanner = {
     await bs.cancel().catch(() => undefined);
   },
 };
+
+const browser = browserHost();
 
 export function tauriHost(): Host {
   // A phone build connects to a remote daemon and runs none; its `endpoint` says mode `remote` (mobile.rs), which settles
@@ -87,5 +90,28 @@ export function tauriHost(): Host {
       }
     },
     reload: () => location.reload(),
+    // The system browser on the desktop; the phone keeps the page's own tab.
+    openExternal: externalOpener(() => !phone, openUrl),
+    async openLoginWindow(url, watch, handlers) {
+      // Desktop only: the app opens a window of its own (src-tauri login_window.rs) and tells us the watched addresses it
+      // reaches. Anywhere else the page opens a popup and the caller keeps its paste field.
+      if (phone) return browser.openLoginWindow(url, watch, handlers);
+      const off: Array<() => void> = [];
+      const done = () => off.splice(0).forEach((f) => f());
+      off.push(await listen<string>("login-window-url", (e) => handlers.onUrl(e.payload)));
+      off.push(
+        await listen("login-window-closed", () => {
+          done();
+          handlers.onClosed();
+        }),
+      );
+      try {
+        await invoke("login_window_open", { url, watch: [...watch] });
+      } catch (e) {
+        done();
+        throw new Error(message(e));
+      }
+      return { close: () => void invoke("login_window_close").catch(() => undefined) };
+    },
   };
 }

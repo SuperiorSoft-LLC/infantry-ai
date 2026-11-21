@@ -4,7 +4,8 @@
 // registered for its type. A type with no renderer draws as the generic card (title, text, link, fields, item list) with
 // a "JSON" toggle for the raw body, instead of a bare code block. A renderer that throws falls back to the generic card.
 import { Component, useState, type ComponentType, type ReactNode } from "react";
-import { Braces, ExternalLink, RefreshCw } from "lucide-react";
+import { Braces, ExternalLink as ExternalLinkIcon, RefreshCw } from "lucide-react";
+import { ExternalLink } from "@/components/external-link";
 import type { ChatCard } from "@infantry/client";
 import { cn } from "@infantry/ui";
 
@@ -36,9 +37,9 @@ function Item({ v }: { v: unknown }) {
     const title = pick(o, TITLE) ?? pick(o, TEXT) ?? JSON.stringify(o);
     const url = safeUrl(o.url ?? o.link ?? o.href);
     return url ? (
-      <a href={url} target="_blank" rel="noreferrer" className="text-info hover:underline">
+      <ExternalLink href={url} className="text-info hover:underline">
         {title}
-      </a>
+      </ExternalLink>
     ) : (
       <span>{title}</span>
     );
@@ -64,9 +65,9 @@ export function GenericCard({ card }: { card: ChatCard }) {
           {title && <div className="font-semibold">{title}</div>}
         </div>
         {url && (
-          <a href={url} target="_blank" rel="noreferrer" aria-label="Open link" className="text-muted-foreground hover:text-foreground">
-            <ExternalLink className="size-4" />
-          </a>
+          <ExternalLink href={url} aria-label="Open link" className="text-muted-foreground hover:text-foreground">
+            <ExternalLinkIcon className="size-4" />
+          </ExternalLink>
         )}
         <button type="button" onClick={() => setRaw((r) => !r)} aria-pressed={raw} aria-label="Show JSON" className="text-muted-foreground hover:text-foreground">
           <Braces className="size-4" />

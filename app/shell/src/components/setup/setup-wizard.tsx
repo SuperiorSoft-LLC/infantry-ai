@@ -43,6 +43,7 @@ import { AppDialog, Button, cn, Input, ProgressLine } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { secretsStore } from "@/daemon/secrets-store";
 import { useUi } from "@/state/ui-state";
+import { host } from "@/host";
 
 let installStore: ReturnType<typeof createHarnessInstallStore> | null = null;
 let providersStore: ReturnType<typeof createQueryStore<HarnessInfo[]>> | null = null;
@@ -184,7 +185,7 @@ function NodeStep({ report, recheck }: { report: HarnessInstallReport; recheck: 
         <>
           <p className="text-xs text-muted-foreground">{nodeNote(report)}</p>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => window.open("https://nodejs.org/en/download", "_blank")}>
+            <Button size="sm" variant="outline" onClick={() => void host.openExternal("https://nodejs.org/en/download")}>
               Open nodejs.org
             </Button>
             <Button size="sm" onClick={recheck}>
@@ -239,7 +240,7 @@ function SignInStep({ id, label, rows, recheck }: { id: string; label: string; r
       <p className="text-[13px] font-semibold">{label}</p>
       <p className="text-xs text-muted-foreground">{login && showKey ? `Choose one way to connect ${label}.` : `Connect ${label} so your agent can answer.`}</p>
       {login && (
-        <ChoiceCard title={`Log in with your ${label} subscription`} subtitle={`Your browser opens so you can log in to your ${label} account.`}>
+        <ChoiceCard title={`Log in with your ${label} subscription`} subtitle={`A login window opens so you can log in to your ${label} account.`}>
           <SubscriptionSignIn id={id} label={label} onSignedIn={recheck} />
         </ChoiceCard>
       )}

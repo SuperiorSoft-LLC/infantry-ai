@@ -17,6 +17,8 @@ mod desktop;
 #[cfg(desktop)]
 mod local;
 #[cfg(desktop)]
+mod login_window;
+#[cfg(desktop)]
 mod pairing;
 #[cfg(desktop)]
 mod supervisor;

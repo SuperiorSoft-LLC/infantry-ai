@@ -286,6 +286,10 @@ impl Harness for ClaudeHarness {
             token_env: OAUTH_TOKEN_ENV.into(),
             token_argv: vec![self.program.clone(), "setup-token".into()],
             token_prefix: "sk-ant-oat".into(),
+            login_code_urls: vec![
+                "https://platform.claude.com/oauth/code/callback".into(),
+                "https://console.anthropic.com/oauth/code/callback".into(),
+            ],
         })
     }
 

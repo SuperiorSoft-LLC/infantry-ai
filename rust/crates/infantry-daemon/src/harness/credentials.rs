@@ -209,6 +209,7 @@ impl HarnessCredentials {
                     t.signed_in = h.sign_in_problem(&probe).is_none().to_string();
                     let login = self.state(&token_name(&id));
                     (t.login_state, t.login_url, t.login_message) = (login.state, login.url, login.message);
+                    t.login_code_urls = c.login_code_urls.clone();
                     rows.push(t);
                 }
                 let login = self.state(&id);
@@ -222,6 +223,7 @@ impl HarnessCredentials {
                 k.login_state = login.state;
                 k.login_url = login.url;
                 k.login_message = login.message;
+                k.login_code_urls = c.login_code_urls.clone();
                 rows.push(k);
                 rows
             })
@@ -598,6 +600,7 @@ mod tests {
             token_env: "FAKE_OAUTH".into(),
             token_argv: vec!["fake".into(), "setup-token".into()],
             token_prefix: "sk-fake-".into(),
+            login_code_urls: vec!["https://login.example/callback".into()],
         };
         let hc = HarnessCredentials::new(vec![Arc::new(Fake(Some(c))), Arc::new(Fake(None))], ks, Arc::new(move |_| setting.map(String::from)));
         (dir, hc)
@@ -614,6 +617,7 @@ mod tests {
         assert!(k[1].can_login);
         assert_eq!(k[1].login_command, "fake auth login");
         assert_eq!(k[1].signed_in, "false");
+        assert_eq!(k[0].login_code_urls, vec!["https://login.example/callback".to_string()], "the harness declares where the code shows; the wire carries it");
         assert_eq!(k[1].auth_modes, vec![AUTH_API_KEY.to_string(), AUTH_SUBSCRIPTION.to_string()]);
     }
 

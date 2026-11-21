@@ -514,6 +514,9 @@ pub struct Credential {
     pub token_argv: Vec<String>,
     /// What the printed token starts with, so the app can take it from the output by itself (`sk-ant-oat`); empty = never.
     pub token_prefix: String,
+    /// Address prefixes (scheme, host, path) of the page the login ends on, which carries the code in its `code=` query (and `state=`).
+    /// The app watches its own login window and reads the code from such an address; empty = the owner pastes the code.
+    pub login_code_urls: Vec<String>,
 }
 
 /// The auth mode that passes the stored API key to the CLI.

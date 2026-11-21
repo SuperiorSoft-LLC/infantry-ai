@@ -152,6 +152,7 @@ fn claude_declares_the_token_sign_in_the_app_shows() {
     assert_eq!(c.token_env, "CLAUDE_CODE_OAUTH_TOKEN");
     assert_eq!(&c.token_argv[1..], ["setup-token"]);
     assert_eq!(c.env, "ANTHROPIC_API_KEY");
+    assert!(c.login_code_urls.iter().all(|u| u.starts_with("https://") && u.contains("/oauth/code/callback")) && !c.login_code_urls.is_empty(), "claude declares the page that shows its login code");
     // A stored token (the daemon's probe puts it under that variable) counts as signed in, with no credentials file.
     assert!(ClaudeHarness::default().sign_in_problem(&Token).is_none());
 }

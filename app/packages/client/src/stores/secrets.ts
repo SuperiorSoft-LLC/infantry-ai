@@ -35,6 +35,8 @@ export interface SecretRow {
   /** "" | running | done | failed. */
   loginState?: string;
   loginUrl?: string;
+  /** Address prefixes of the page that carries the login code (the harness declares them); empty = paste only. */
+  loginCodeUrls?: string[];
   /** One short line for the owner; never a token. */
   loginMessage?: string;
   /** 0 = the daemon never probed this sign-in. */
