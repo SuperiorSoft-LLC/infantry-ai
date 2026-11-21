@@ -108,12 +108,14 @@ mod write_tests {
 
     #[test]
     fn a_claude_edit_tool_use_becomes_a_write() {
-        let line: Value = serde_json::from_str(
-            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Edit","input":{"file_path":"a.rs","old_string":"x","new_string":"y"}}]}}"#,
-        )
-        .unwrap();
-        let ev = infantry_harness_claude::stream::events(&line);
-        let infantry_harness::HarnessEvent::ToolStarted { name, input, .. } = &ev[0] else { panic!("no tool") };
+        // The daemon no longer links the Claude harness (it is a separate crate behind the harness seam), so the
+        // event the Claude stream parser emits for an Edit tool call is built here: its input is the tool's JSON.
+        let ev = infantry_harness::HarnessEvent::ToolStarted {
+            id: "t1".into(),
+            name: "Edit".into(),
+            input: r#"{"file_path":"a.rs","old_string":"x","new_string":"y"}"#.into(),
+        };
+        let infantry_harness::HarnessEvent::ToolStarted { name, input, .. } = &ev else { panic!("no tool") };
         let w = infantry_harness::writes::file_writes(name, input, infantry_harness::writes::WRITE_MAX_BYTES);
         assert_eq!(w[0]["path"], "a.rs");
         assert_eq!(w[0]["edits"][0]["oldText"], "x");
