@@ -363,6 +363,24 @@ pub fn finish_run(c: &Connection, ticket_id: &str, session_id: &str, ended_at: i
     Ok(n > 0)
 }
 
+/// PIPE-RESTART-1: opens a run that ended again (its dead session was resumed), so the resumed session's own end is
+/// recorded and handled like any run's. False when there is no ended run to reopen.
+pub fn reopen_run(c: &Connection, ticket_id: &str, session_id: &str) -> rusqlite::Result<bool> {
+    let n = c
+        .prepare_cached("UPDATE ticket_runs SET ended_at = NULL, outcome = NULL, detail = NULL WHERE ticket_id = ?1 AND session_id = ?2 AND ended_at IS NOT NULL")?
+        .execute(params![ticket_id, session_id])?;
+    Ok(n > 0)
+}
+
+/// PIPE-RESTART-1: rewrites how an already ended run ended (a clean end whose session died in a later turn).
+/// False when the run is not ended or there is none.
+pub fn amend_run(c: &Connection, ticket_id: &str, session_id: &str, outcome: &str, detail: &str) -> rusqlite::Result<bool> {
+    let n = c
+        .prepare_cached("UPDATE ticket_runs SET outcome = ?3, detail = ?4 WHERE ticket_id = ?1 AND session_id = ?2 AND ended_at IS NOT NULL")?
+        .execute(params![ticket_id, session_id, outcome, detail])?;
+    Ok(n > 0)
+}
+
 /// One ticket's runs, oldest first.
 pub fn runs_of(c: &Connection, ticket_id: &str) -> rusqlite::Result<Vec<RunRow>> {
     let mut st = c.prepare_cached(

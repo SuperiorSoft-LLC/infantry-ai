@@ -82,14 +82,7 @@ impl WatchPorts for Ports {
         // The lead (the session that spawned this worker) is told by mail; no lead = the attention item is the notice.
         if let Some(lead) = rec.spawner_session_id.as_deref().filter(|l| *l != rec.id) {
             let ticket = rec.ticket_id.as_deref().map(|t| format!(" (ticket {t})")).unwrap_or_default();
-            let m = MailSendRequest {
-                from: SYSTEM.into(),
-                to: lead.into(),
-                subject: format!("Worker {} is {}{ticket}", label_of(rec), reason_of(outcome)),
-                body: detail.into(),
-                ..Default::default()
-            };
-            let _ = self.mail.send(&m, true);
+            mail_lead(&self.mail, lead, &format!("Worker {} is {}{ticket}", label_of(rec), reason_of(outcome)), detail);
         }
     }
 
@@ -97,6 +90,42 @@ impl WatchPorts for Ports {
         infantry_mail::mail::watch_meter::WATCH_METER.stall();
         self.daemon.deliver(&rec.id, &format!("[infantry watchdog] {body}")).is_ok()
     }
+}
+
+/// The one path that tells a lead about a worker that is down (a stall, a failed run): a SYSTEM mail, delivered at once.
+/// True when the mail was accepted.
+pub fn mail_lead(mail: &MailRouter, lead: &str, subject: &str, body: &str) -> bool {
+    let m = MailSendRequest { from: SYSTEM.into(), to: lead.into(), subject: subject.into(), body: body.into(), ..Default::default() };
+    matches!(mail.send(&m, true), infantry_mail::mail::mailbox::MailResult::Sent(_))
+}
+
+/// A worker that ended badly, as the host tells it (no board type: the caller maps its own).
+#[derive(Debug, Clone, Copy)]
+pub struct WorkerDown<'a> {
+    pub ticket_id: &'a str,
+    pub session_id: &'a str,
+    /// The session to mail; None = the owner started it and only the attention item tells.
+    pub lead: Option<&'a str>,
+    pub outcome: &'a str,
+    pub subject: &'a str,
+    pub detail: &'a str,
+}
+
+/// Everything a worker's bad end tells the host, through the paths the stall watchdog uses: an attention item for the
+/// owner (kind `session_failed`) and a mail to the lead. Returns true when the lead was mailed.
+pub fn worker_down(attention: &AttentionStore, mail: &MailRouter, f: &WorkerDown<'_>) -> bool {
+    let r = AttentionRaise {
+        kind: "session_failed".into(),
+        ticket_id: Some(f.ticket_id.to_string()),
+        session_id: Some(f.session_id.to_string()),
+        outcome: f.outcome.to_string(),
+        detail: f.detail.to_string(),
+        ..Default::default()
+    };
+    if let Err(e) = attention.raise(&r) {
+        eprintln!("[infantry] could not raise attention for the failed worker {}: {e}", f.session_id);
+    }
+    f.lead.is_some_and(|lead| mail_lead(mail, lead, f.subject, f.detail))
 }
 
 fn label_of(rec: &SessionRecord) -> String {
@@ -140,6 +169,29 @@ mod tests {
         assert_eq!((ev.name.as_str(), ev.payload["reason"].as_str(), ev.payload["leadSessionId"].as_str()), (SESSION_STALLED, Some("blocked"), Some(lead.as_str())));
         let mail = c.mail.mailbox().inbox(&lead);
         assert!(mail.iter().any(|m| m.subject.contains("blocked") && m.body.contains("Bash")), "{mail:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// PIPE-RESTART-1: a worker that dies is told through the stall watchdog's own paths: a `session_failed` attention
+    /// item for the owner and a SYSTEM mail to the lead; no lead means the attention item alone.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_dead_worker_raises_attention_and_mails_its_lead() {
+        use crate::sessions::{Config, NewOpts};
+        let dir = std::env::temp_dir().join(format!("infantry-pipe-down-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let daemon = Daemon::new(Arc::new(crate::harness::stub::Stub { start_ms: 5_000, line_ms: 25 }), Config::new(dir.clone(), dir.clone())).unwrap();
+        let c = crate::compose::build(&daemon, &dir).unwrap();
+        let lead = daemon.launch(NewOpts::default()).unwrap();
+        let attention = Arc::new(AttentionStore::new(c.db.clone(), Arc::new(crate::sessions::now_ms)).unwrap());
+        let f = |lead: Option<&'static str>| WorkerDown { ticket_id: "t1", session_id: "w1", lead, outcome: "FAILED", subject: "worker of t1 is down", detail: "Recover it: infantry ticket restart t1" };
+        let lead_ref: &'static str = Box::leak(lead.clone().into_boxed_str());
+        assert!(worker_down(&attention, &c.mail, &f(Some(lead_ref))), "the lead was mailed");
+        let mail = c.mail.mailbox().inbox(&lead);
+        assert!(mail.iter().any(|m| m.subject == "worker of t1 is down" && m.body.contains("infantry ticket restart t1")), "{mail:?}");
+        let items = attention.list(true);
+        assert!(items.iter().any(|i| i.kind == "session_failed" && i.ticket_id.as_deref() == Some("t1") && i.session_id.as_deref() == Some("w1") && i.outcome == "FAILED"), "{items:?}");
+        assert!(!worker_down(&attention, &c.mail, &f(None)), "no lead = not mailed, but the owner still has the attention item");
+        assert_eq!(attention.list(true).len(), 2);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -15,7 +15,7 @@ use infantry_orchestrator_api::dto::{
     decode_strict, AgentSwitch, Epic, EpicBaseRequest, EpicSave, TicketLinkRequest, TicketListQuery, TicketMove, TicketReorder, TicketSave,
 };
 use infantry_orchestrator_api::{
-    AgentQueueRequest, OrchError, StartNextRequest, StartOrigin, TicketAssign, TicketClose, TicketDone, TicketStartRequest, TicketUnassign,
+    AgentQueueRequest, OrchError, StartNextRequest, StartOrigin, TicketAssign, TicketClose, TicketDone, TicketRestart, TicketStartRequest, TicketUnassign,
 };
 use infantry_protocol::Envelope;
 
@@ -57,6 +57,7 @@ pub const ALL_FRAMES: &[&str] = &[
     "agent_switch",
     "ticket_done",
     "ticket_close",
+    "ticket_restart",
 ];
 
 pub struct BoardUnit {
@@ -139,7 +140,7 @@ impl FrameUnit for BoardUnit {
                 .map_err(r)?;
                 Ok(answer(a.pushed, ticket_envelope(&a.ticket)))
             }
-            "ticket_start" | "ticket_start_next" | "ticket_assign" | "ticket_unassign" | "agent_queue" | "agent_switch" | "ticket_done" | "ticket_close" => {
+            "ticket_start" | "ticket_start_next" | "ticket_assign" | "ticket_unassign" | "agent_queue" | "agent_switch" | "ticket_done" | "ticket_close" | "ticket_restart" => {
                 let Some(w) = &self.work else { return Err(r(OrchError::Unsupported(format!("{frame} needs the work half")))) };
                 let bad = |m: String| r(OrchError::Refused(m));
                 let what = format!("{frame} payload");
@@ -159,6 +160,16 @@ impl FrameUnit for BoardUnit {
                     "ticket_close" => {
                         let c = w.close(&decode_strict::<TicketClose>(&env.data, &what).map_err(bad)?).map_err(r)?;
                         let mut e = Envelope::new("ticket_closed", serde_json::to_string(&c).expect("close json"));
+                        e.request_id = env.request_id.clone();
+                        return Ok(vec![e]);
+                    }
+                    "ticket_restart" => {
+                        let mut req = decode_strict::<TicketRestart>(&env.data, &what).map_err(bad)?;
+                        if req.restarted_by.is_none() {
+                            req.restarted_by = env.session_id.clone();
+                        }
+                        let c = w.restart(&req).map_err(r)?;
+                        let mut e = Envelope::new("ticket_restarted", serde_json::to_string(&c).expect("restart json"));
                         e.request_id = env.request_id.clone();
                         return Ok(vec![e]);
                     }

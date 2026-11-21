@@ -229,6 +229,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             b.publish(Envelope::new(infantry_protocol::frames::ATTENTION, serde_json::to_string(item).unwrap_or_default()));
         });
     }
+    env.set_lead_notice(mail.clone(), attention.clone());
     let questions = Arc::new(
         OwnerQuestions::new(db.clone(), Arc::new(adapters::Questions { daemon: daemon.clone(), handle: handle.clone() }), Arc::new(QuestionLimits::default), clock())
             .map_err(|e| format!("questions: {e}"))?,

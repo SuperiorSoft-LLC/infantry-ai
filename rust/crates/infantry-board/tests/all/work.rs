@@ -14,7 +14,7 @@ use infantry_board::dispatch::reason;
 use infantry_board::env::StaticEnv;
 use infantry_board::Dispatcher;
 use infantry_orchestrator_api::{
-    LaunchRequest, LaunchedSession, NoWorkspaces, Orchestrator, SessionLauncher, StartOrigin, TicketClose, TicketDone, TicketStartRequest, WorkerState,
+    LaunchRequest, LaunchedSession, NoWorkspaces, Orchestrator, SessionLauncher, StartOrigin, TicketClose, TicketDone, TicketRestart, TicketStartRequest, WorkerState,
     Workspace, WorkspaceProvider, WorkspaceRelease, WorkspaceRequest,
 };
 
@@ -26,6 +26,11 @@ struct FakeLauncher {
     live: Mutex<HashMap<String, WorkerState>>,
     briefs: Mutex<Vec<(String, String)>>,
     removed: Mutex<Vec<String>>,
+    /// PIPE-RESTART-1: the workspace path each launch was given, and the turns delivered into a session (a resume).
+    paths: Mutex<Vec<Option<String>>>,
+    prompts: Mutex<Vec<(String, String)>>,
+    /// Whether a delivered turn brings a dead session back (a real resume); false = the session cannot take a turn.
+    resumable: std::sync::atomic::AtomicBool,
 }
 
 impl SessionLauncher for FakeLauncher {
@@ -34,7 +39,16 @@ impl SessionLauncher for FakeLauncher {
         let id = format!("s{}", self.n.fetch_add(1, Ordering::SeqCst) + 1);
         self.live.lock().unwrap().insert(id.clone(), WorkerState::Busy);
         self.briefs.lock().unwrap().push((req.ticket_id.clone(), req.brief.clone()));
+        self.paths.lock().unwrap().push(req.workspace.as_ref().map(|w| w.path.clone()));
         Ok(LaunchedSession { session_id: id, note: None, workspace: None })
+    }
+    fn prompt(&self, session_id: &str, text: &str) -> bool {
+        self.prompts.lock().unwrap().push((session_id.to_string(), text.to_string()));
+        if !self.resumable.load(Ordering::SeqCst) {
+            return false;
+        }
+        self.live.lock().unwrap().insert(session_id.to_string(), WorkerState::Busy);
+        true
     }
     fn stop(&self, session_id: &str, _reason: &str) {
         self.live.lock().unwrap().insert(session_id.to_string(), WorkerState::Ended);
@@ -297,4 +311,226 @@ fn close_of_a_backlog_ticket_is_refused() {
     f.env.push_ids(&["ticket-00000001"]);
     save(&f.orch, r#"{"title":"Later","projectId":"p1","status":"backlog"}"#);
     assert!(block_on(o.close(close("ticket-00000001"))).is_err());
+}
+
+// ---- PIPE-RESTART-1: a dead worker is told to the lead; restart resumes, or starts a fresh session on the same worktree ----
+
+fn restart_setup(tag: &str, env: StaticEnv) -> (Fixture, Arc<FakeLauncher>, infantry_board::LocalOrchestrator) {
+    let (f, l, _d, o) = restart_setup_d(tag, env);
+    (f, l, o)
+}
+
+fn restart_setup_d(tag: &str, env: StaticEnv) -> (Fixture, Arc<FakeLauncher>, Arc<Dispatcher>, infantry_board::LocalOrchestrator) {
+    let f = fixture(tag, StaticEnv { lane_cap: 10, max_in_progress: 10, ..env });
+    let launcher = Arc::new(FakeLauncher::default());
+    let ws = Arc::new(FakeWorkspaces { verdict: Mutex::new(Ok(())), released: Mutex::new(Vec::new()) });
+    let d = Dispatcher::new(f.board.clone(), ws, launcher.clone(), f.bus.clone());
+    let o = infantry_board::LocalOrchestrator::with_dispatcher(d.clone(), f.bus.clone());
+    (f, launcher, d, o)
+}
+
+fn restart(id: &str, fresh: bool) -> TicketRestart {
+    TicketRestart { ticket_id: id.into(), fresh, restarted_by: Some("lead-1".into()) }
+}
+
+/// The worker is killed: its run ends FAILED, as the daemon reports it.
+fn kill(launcher: &FakeLauncher, o: &infantry_board::LocalOrchestrator, ticket: &str, session: &str, detail: &str) {
+    use infantry_orchestrator_api::DoneReport;
+    launcher.live.lock().unwrap().insert(session.to_string(), WorkerState::Ended);
+    block_on(o.on_done(DoneReport { ticket_id: ticket.into(), session_id: session.into(), outcome: "FAILED".into(), detail: Some(detail.into()) })).unwrap();
+}
+
+fn ticket_notes(o: &infantry_board::LocalOrchestrator, id: &str) -> Vec<String> {
+    use infantry_orchestrator_api::CommentQuery;
+    block_on(o.comments(CommentQuery { ticket_id: id.into(), which: None, kind: None, limit: None })).unwrap().into_iter().map(|c| c.body).collect()
+}
+
+#[test]
+fn a_dead_worker_is_mailed_to_the_lead_with_the_command_that_recovers_it() {
+    let (f, l, o) = restart_setup("restart-mail", StaticEnv { lead_mail: true, ..kotlin_daemon_env() });
+    let ids = tickets(&f, 1);
+    start_by(&o, &ids[0], "lead-1");
+    kill(&l, &o, &ids[0], "s1", "the interactive claude exited (code 1)");
+    let failed = f.env.failed.lock().unwrap().clone();
+    assert_eq!(failed.len(), 1, "{failed:?}");
+    assert!(failed[0].starts_with(&format!("lead-1 {} s1 FAILED", ids[0])), "{failed:?}");
+    assert!(notes(&f).is_empty(), "a lead that was mailed gets no second urgent line: {:?}", notes(&f));
+    assert!(ticket_notes(&o, &ids[0]).iter().any(|b| b.contains("[AUTOMATIC FAILURE]") && b.contains("ticket_restart")), "the ticket comment names the way back");
+    assert_eq!(block_on(o.get(ids[0].clone())).unwrap().status, "in_progress", "a dead worker leaves the ticket where it was");
+}
+
+/// A worker whose process dies while it is at rest (no turn running) has no turn end to carry the news.
+#[test]
+fn a_worker_that_dies_at_rest_is_told_to_the_lead_and_can_be_restarted() {
+    use infantry_orchestrator_api::DoneReport;
+    let (f, l, d, o) = restart_setup_d("restart-atrest", StaticEnv { lead_mail: true, ..kotlin_daemon_env() });
+    let ids = tickets(&f, 1);
+    start_by(&o, &ids[0], "lead-1");
+    // The worker finished a turn (clean end, no done report), then its process is killed while it waits.
+    block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "SUCCEEDED".into(), detail: None })).unwrap();
+    let clean = f.env.failed.lock().unwrap().clone();
+    assert!(clean[0].contains("SUCCEEDED"), "{clean:?}");
+    l.live.lock().unwrap().insert("s1".into(), WorkerState::Ended);
+    let died = DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "FAILED".into(), detail: Some("the worker's process died while it was idle (exit code -1)".into()) };
+    d.on_worker_died(&died).unwrap();
+    let failed = f.env.failed.lock().unwrap().clone();
+    assert_eq!(failed.len(), 2, "{failed:?}");
+    assert!(failed[1].starts_with(&format!("lead-1 {} s1 FAILED", ids[0])), "{failed:?}");
+    // Not the ticket's current worker (another ticket, or an unknown session): nothing is said.
+    d.on_worker_died(&DoneReport { session_id: "s9".into(), ..died.clone() }).unwrap();
+    d.on_worker_died(&DoneReport { ticket_id: "ticket-00000099".into(), ..died.clone() }).unwrap();
+    assert_eq!(f.env.failed.lock().unwrap().len(), 2);
+    // The restart works on it: the session reads gone, so it is not refused as live.
+    let a = block_on(o.restart(restart(&ids[0], true))).unwrap();
+    assert_eq!((a.mode.as_str(), a.session_id.as_deref()), ("fresh", Some("s2")), "{a:?}");
+}
+
+/// Found live: a worker ended a turn clean (its run closed), the lead prompted it again, and it died mid-turn.
+#[test]
+fn a_worker_that_ended_clean_and_dies_in_a_later_turn_is_told_once() {
+    use infantry_orchestrator_api::DoneReport;
+    let (f, _l, o) = restart_setup("restart-later", StaticEnv { lead_mail: true, ..kotlin_daemon_env() });
+    let ids = tickets(&f, 1);
+    start_by(&o, &ids[0], "lead-1");
+    let end = |outcome: &str, detail: Option<&str>| {
+        block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: outcome.into(), detail: detail.map(String::from) })).unwrap()
+    };
+    end("SUCCEEDED", None);
+    assert_eq!(f.env.failed.lock().unwrap().len(), 1);
+    end("FAILED", Some("the interactive claude exited (code -1)"));
+    let ended = block_on(o.get(ids[0].clone())).unwrap().last_run.unwrap();
+    assert_eq!(ended.outcome.as_deref(), Some("FAILED"), "the run that read SUCCEEDED now records how the session really ended: {ended:?}");
+    let failed = f.env.failed.lock().unwrap().clone();
+    assert_eq!(failed.len(), 2, "{failed:?}");
+    assert!(failed[1].starts_with(&format!("lead-1 {} s1 FAILED", ids[0])), "{failed:?}");
+    assert!(failed[1].contains("is down"), "{failed:?}");
+    let notes = ticket_notes(&o, &ids[0]);
+    assert!(notes.iter().any(|b| b.contains("died in a later turn") && b.contains("ticket_restart")), "{notes:?}");
+    // The same death reported again says nothing more; a stop the board asked for (KILLED_*) says nothing either.
+    end("FAILED", Some("the interactive claude exited (code -1)"));
+    end("KILLED_GRACEFUL", None);
+    assert_eq!(f.env.failed.lock().unwrap().len(), 2);
+}
+
+#[test]
+fn a_clean_end_without_a_done_report_does_not_say_the_worker_is_down() {
+    use infantry_orchestrator_api::DoneReport;
+    let (f, _l, o) = restart_setup("restart-clean", StaticEnv { lead_mail: true, ..kotlin_daemon_env() });
+    let ids = tickets(&f, 1);
+    start_by(&o, &ids[0], "lead-1");
+    block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "SUCCEEDED".into(), detail: None })).unwrap();
+    let notes = ticket_notes(&o, &ids[0]);
+    assert!(notes.iter().any(|b| b.contains("without a done comment") && b.contains("Message it to finish")), "{notes:?}");
+    assert!(!notes.iter().any(|b| b.contains("ticket_restart")), "a live idle worker cannot be restarted, so the comment must not offer it: {notes:?}");
+}
+
+#[test]
+fn a_dead_worker_with_no_mail_path_still_reaches_the_lead_by_the_urgent_line() {
+    let (f, l, o) = restart_setup("restart-nomail", kotlin_daemon_env());
+    let ids = tickets(&f, 1);
+    start_by(&o, &ids[0], "lead-1");
+    kill(&l, &o, &ids[0], "s1", "gone");
+    assert_eq!(f.env.failed.lock().unwrap().len(), 1);
+    assert!(notes(&f).iter().any(|n| n.starts_with("lead-1 ") && n.contains(&ids[0])), "{:?}", notes(&f));
+}
+
+#[test]
+fn restart_resumes_the_dead_session_in_place() {
+    let (f, l, o) = restart_setup("restart-resume", StaticEnv { lead_mail: true, resume_window_ms: 60_000, ..kotlin_daemon_env() });
+    l.resumable.store(true, Ordering::SeqCst);
+    let ids = tickets(&f, 1);
+    start_by(&o, &ids[0], "lead-1");
+    kill(&l, &o, &ids[0], "s1", "killed");
+    let a = block_on(o.restart(restart(&ids[0], false))).unwrap();
+    assert_eq!((a.mode.as_str(), a.session_id.as_deref(), a.previous_session_id.as_deref()), ("resumed", Some("s1"), Some("s1")), "{a:?}");
+    let prompts = l.prompts.lock().unwrap().clone();
+    assert_eq!(prompts.len(), 1);
+    assert!(prompts[0].1.contains("[RESTART]") && prompts[0].1.contains("git log"), "{}", prompts[0].1);
+    assert_eq!(l.n.load(Ordering::SeqCst), 1, "no second session was launched");
+    assert_eq!(a.ticket.session_id.as_deref(), Some("s1"));
+    assert!(ticket_notes(&o, &ids[0]).iter().any(|b| b.contains("resumed session s1")), "{:?}", ticket_notes(&o, &ids[0]));
+    // The resumed session finishes with a done comment: its end closes the ticket like any run's.
+    use infantry_orchestrator_api::dto::{CommentAdd, CommentAuthor};
+    use infantry_orchestrator_api::DoneReport;
+    let author = CommentAuthor { kind: CommentAuthor::SESSION.into(), session_id: Some("s1".into()), agent_id: None };
+    block_on(o.comment_add(CommentAdd { ticket_id: ids[0].clone(), body: "commit abc: finished".into(), kind: Some("done".into()), state: None, author })).unwrap();
+    block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "SUCCEEDED".into(), detail: None })).unwrap();
+    assert_eq!(block_on(o.get(ids[0].clone())).unwrap().status, "done", "the resumed run was open again, so its end was handled");
+}
+
+#[test]
+fn a_resume_that_dies_inside_the_window_starts_a_fresh_session_on_the_same_worktree() {
+    let (f, l, o) = restart_setup("restart-fallback", StaticEnv { lead_mail: true, resume_window_ms: 60_000, ..kotlin_daemon_env() });
+    l.resumable.store(true, Ordering::SeqCst);
+    let ids = tickets(&f, 1);
+    start_by(&o, &ids[0], "lead-1");
+    kill(&l, &o, &ids[0], "s1", "killed");
+    let a = block_on(o.restart(restart(&ids[0], false))).unwrap();
+    assert_eq!(a.mode, "resumed");
+    // The resumed session dies at once (the harness exits 1): a fresh session replaces it.
+    kill(&l, &o, &ids[0], "s1", "the interactive claude exited (code 1)");
+    let t = block_on(o.get(ids[0].clone())).unwrap();
+    assert_eq!((t.status.as_str(), t.session_id.as_deref()), ("in_progress", Some("s2")), "a fresh session took over");
+    assert_eq!(l.state("s1"), WorkerState::Ended);
+    assert_eq!(l.state("s2"), WorkerState::Busy);
+    let paths = l.paths.lock().unwrap().clone();
+    assert_eq!(paths.len(), 2);
+    assert_eq!(paths[0], paths[1], "the fresh session runs in the SAME worktree: {paths:?}");
+    assert_eq!(paths[1].as_deref(), Some(format!("/wt/{}", ids[0]).as_str()));
+    let briefs = l.briefs.lock().unwrap().clone();
+    assert!(briefs[1].1.contains("Work 1") && briefs[1].1.contains("Continue from your last commit"), "the ticket brief plus the continue note: {}", briefs[1].1);
+    assert_eq!(f.env.failed.lock().unwrap().len(), 1, "only the original death was reported as a failure; the dead resume was replaced, not mailed");
+    assert!(ticket_notes(&o, &ids[0]).iter().any(|b| b.contains("fresh session s2") && b.contains("resumed session s1 died")), "{:?}", ticket_notes(&o, &ids[0]));
+}
+
+#[test]
+fn a_resume_that_dies_after_the_window_is_a_plain_failure() {
+    let (f, l, o) = restart_setup("restart-late", StaticEnv { lead_mail: true, resume_window_ms: 1, ..kotlin_daemon_env() });
+    l.resumable.store(true, Ordering::SeqCst);
+    let ids = tickets(&f, 1);
+    start_by(&o, &ids[0], "lead-1");
+    kill(&l, &o, &ids[0], "s1", "killed");
+    block_on(o.restart(restart(&ids[0], false))).unwrap();
+    std::thread::sleep(Duration::from_millis(30));
+    kill(&l, &o, &ids[0], "s1", "died later");
+    assert_eq!(block_on(o.get(ids[0].clone())).unwrap().session_id.as_deref(), Some("s1"), "no fresh session: the resume had worked for a while");
+    assert_eq!(l.n.load(Ordering::SeqCst), 1);
+    assert_eq!(f.env.failed.lock().unwrap().len(), 2, "the lead is told again");
+}
+
+#[test]
+fn a_session_that_cannot_take_a_turn_falls_back_to_a_fresh_session_at_once() {
+    let (f, l, o) = restart_setup("restart-noresume", StaticEnv { lead_mail: true, ..kotlin_daemon_env() });
+    let ids = tickets(&f, 1);
+    start_by(&o, &ids[0], "lead-1");
+    kill(&l, &o, &ids[0], "s1", "killed");
+    let a = block_on(o.restart(restart(&ids[0], false))).unwrap();
+    assert_eq!((a.mode.as_str(), a.session_id.as_deref(), a.previous_session_id.as_deref()), ("fresh", Some("s2"), Some("s1")), "{a:?}");
+    assert_eq!(block_on(o.get(ids[0].clone())).unwrap().session_id.as_deref(), Some("s2"));
+    assert!(l.briefs.lock().unwrap()[1].1.contains("Continue from your last commit"));
+}
+
+#[test]
+fn fresh_skips_the_resume() {
+    let (f, l, o) = restart_setup("restart-fresh", StaticEnv { lead_mail: true, ..kotlin_daemon_env() });
+    l.resumable.store(true, Ordering::SeqCst);
+    let ids = tickets(&f, 1);
+    start_by(&o, &ids[0], "lead-1");
+    kill(&l, &o, &ids[0], "s1", "killed");
+    let a = block_on(o.restart(restart(&ids[0], true))).unwrap();
+    assert_eq!((a.mode.as_str(), a.session_id.as_deref()), ("fresh", Some("s2")), "{a:?}");
+    assert!(l.prompts.lock().unwrap().is_empty(), "the dead session was not asked to resume");
+}
+
+#[test]
+fn restart_refuses_a_live_worker_a_todo_ticket_and_an_unknown_ticket() {
+    let (f, l, o) = restart_setup("restart-refuse", StaticEnv { lead_mail: true, ..kotlin_daemon_env() });
+    let ids = tickets(&f, 2);
+    start_by(&o, &ids[0], "lead-1");
+    let live = block_on(o.restart(restart(&ids[0], false))).unwrap_err().to_string();
+    assert!(live.contains("live worker") && live.contains("s1"), "{live}");
+    let todo = block_on(o.restart(restart(&ids[1], false))).unwrap_err().to_string();
+    assert!(todo.contains("only an in_progress ticket restarts"), "{todo}");
+    assert!(block_on(o.restart(restart("nope-nope", false))).is_err());
+    assert_eq!(l.n.load(Ordering::SeqCst), 1, "a refusal launches nothing");
 }

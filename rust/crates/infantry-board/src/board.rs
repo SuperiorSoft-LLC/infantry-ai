@@ -254,6 +254,18 @@ impl Board {
             .map_err(|e| failed(e))
     }
 
+    /// PIPE-RESTART-1: opens an ended run again (its session was resumed).
+    pub(crate) fn reopen_run(&self, ticket_id: &str, session_id: &str) -> Result<bool, OrchError> {
+        let _g = self.guard();
+        self.db.write(|c| store::reopen_run(c, ticket_id, session_id)).map_err(|e| failed(e))
+    }
+
+    /// PIPE-RESTART-1: a run that ended clean and whose session then died in a later turn ends FAILED after all.
+    pub(crate) fn amend_run(&self, ticket_id: &str, session_id: &str, outcome: &str, detail: &str) -> Result<bool, OrchError> {
+        let _g = self.guard();
+        self.db.write(|c| store::amend_run(c, ticket_id, session_id, outcome, detail)).map_err(|e| failed(e))
+    }
+
     pub(crate) fn env(&self) -> &Arc<dyn BoardEnv> {
         &self.env
     }

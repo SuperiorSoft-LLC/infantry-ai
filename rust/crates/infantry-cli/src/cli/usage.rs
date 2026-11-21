@@ -36,6 +36,8 @@ Tickets:
   ticket assign <id|prefix> <agent> [--queue] [--at n]   Give a todo ticket to an existing agent (start now, or --queue behind its work)
   agent switch <agent> <ticketId> [--now]   The agent leaves its ticket (handoff, todo) for another; the worker ends, the new ticket starts on exit
   ticket unassign <id|prefix> [--now] [--note <text>]   Take an in_progress ticket off its worker: back to todo (top), branch and work kept, with a handoff comment
+  ticket restart <id|prefix> [--fresh]   Put a worker back on an in_progress ticket whose worker died: resumes the session; if that dies within board.restartResumeSeconds (or with --fresh)
+                      a fresh session starts on the SAME worktree and branch with the brief and a continue-from-your-last-commit note
   ticket start <id|prefix>       (an id, full or the 8 chars `ticket create` prints; not a title) Start ticket work this way, never with a spawn: the worker runs the ticket's
                       role, provider and model on its own ticket/<short-id>-<slug> branch; the ticket goes
                       In Progress. A refused or held start exits 1 with the reason

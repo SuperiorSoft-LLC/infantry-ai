@@ -158,6 +158,9 @@ pub trait SessionObserver: Send + Sync {
     fn on_turn_end(&self, _rec: &SessionRecord, _outcome: &str, _detail: &str) {}
     /// The session's process is gone (killed, deleted, crashed or exited).
     fn on_exit(&self, _rec: &SessionRecord) {}
+    /// PIPE-RESTART-1: the process died (a non-zero exit code, or none) while NO turn was running, so no turn end tells
+    /// it. Not called for a stop the daemon asked for (that session is already Exited).
+    fn on_rest_exit(&self, _rec: &SessionRecord, _code: Option<i32>) {}
 }
 
 /// The other frame units beside the session manager (the composition root's registry): the server sends a frame
@@ -1251,6 +1254,9 @@ impl Daemon {
                     e.rec.child_pid = None;
                     e.rec.last_exit_code = code;
                     self.push(&mut e);
+                    if code != Some(0) {
+                        self.notify(|o| o.on_rest_exit(&e.rec, code));
+                    }
                 }
             }
             _ => {}

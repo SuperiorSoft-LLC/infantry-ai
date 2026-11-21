@@ -26,16 +26,16 @@ use std::time::{Duration, Instant};
 use infantry_core::bus::EventBus;
 use infantry_orchestrator_api::dto::{link_type, status, AgentSwitch, CommentAdd, CommentAuthor, TicketMove, TicketStart};
 use infantry_orchestrator_api::{
-    hooks, AgentQueueEntry, AgentQueueRequest, AgentQueueState, DoneAnswer, DoneReport, LaunchRequest, Limit, OrchError,
-    SessionLauncher, StartNextRequest, StartOrigin, TicketAnswer, TicketAssign, TicketClose, CloseAnswer, TicketDone, TicketUnassign, WorkerState,
-    WorkspaceProvider, WorkspaceRelease, WorkspaceRequest,
+    hooks, restart_mode, AgentQueueEntry, AgentQueueRequest, AgentQueueState, DoneAnswer, DoneReport, LaunchRequest, Limit, OrchError,
+    RestartAnswer, SessionLauncher, StartNextRequest, StartOrigin, TicketAnswer, TicketAssign, TicketClose, CloseAnswer, TicketDone, TicketRestart,
+    TicketUnassign, WorkerState, WorkspaceProvider, WorkspaceRelease, WorkspaceRequest,
 };
 use infantry_protocol::Envelope;
 use serde_json::{json, Value};
 
 use crate::board::{ticket_envelope, Board};
 use crate::brief::{self, BriefInput};
-use crate::env::{BoardAgent, BoardEnv};
+use crate::env::{BoardAgent, BoardEnv, WorkerFailed};
 use crate::rules::{self, board_order, holders, take};
 use crate::store::{self, LinkRow, TicketRow};
 use crate::views::{executor_of, effort_of, resolve_context_limit, routing_choice};
@@ -52,6 +52,8 @@ pub mod reason {
 
 /// The run outcome of a clean exit (`FinishedPayload.Outcome.SUCCEEDED`).
 pub const SUCCEEDED: &str = "SUCCEEDED";
+/// The run outcome of a turn that failed or whose process died (`FinishedPayload.Outcome.FAILED`).
+pub const FAILED: &str = "FAILED";
 /// How often a pending unassign looks whether the busy worker's turn ended.
 pub const UNASSIGN_POLL: Duration = Duration::from_millis(500);
 /// Candidates `ticket_start_next` names in its refusal.
@@ -89,6 +91,20 @@ struct Flight {
     running: HashMap<String, Seat>,
     /// Workers reported ended (they hold no seat even if the launcher still lists them).
     ended: HashSet<String>,
+    /// PIPE-RESTART-1: dead sessions a restart resumed, by session id. One that ends badly inside its window is
+    /// replaced by a fresh session on the same worktree.
+    resuming: HashMap<String, Resuming>,
+    /// PIPE-RESTART-1: failures already told to the lead ("<session>:<clean|died>"), so one death is announced once
+    /// even when two signals (a turn end, a process exit) carry it. A resume of that session clears its keys.
+    told: HashSet<String>,
+}
+
+/// A resume `ticket_restart` made and has not yet seen succeed.
+struct Resuming {
+    since: Instant,
+    window: Duration,
+    /// Who the replacement worker reports to.
+    started_by: Option<String>,
 }
 
 struct Deferred {
@@ -96,6 +112,8 @@ struct Deferred {
     origin: StartOrigin,
     started_by: Option<String>,
     seat: Seat,
+    /// A restart's "continue from your last commit" text, appended to the brief.
+    continuation: Option<String>,
 }
 
 /// One live worker of an in_progress ticket.
@@ -366,6 +384,11 @@ impl Dispatcher {
 
     /// Start one ticket. Answers at once whether it started, queued, was deferred, is held or was refused.
     pub fn start(&self, ticket_id: &str, origin: StartOrigin, started_by: Option<&str>) -> Result<TicketAnswer, OrchError> {
+        self.start_with(ticket_id, origin, started_by, None)
+    }
+
+    /// [`start`](Self::start) with a `continuation`: text appended to the brief (a restart's "continue from your last commit").
+    fn start_with(&self, ticket_id: &str, origin: StartOrigin, started_by: Option<&str>, continuation: Option<&str>) -> Result<TicketAnswer, OrchError> {
         let id = rules::check_id(ticket_id).map_err(OrchError::Refused)?;
         let (rows, links, _) = self.board.rows()?;
         let row = rows.get(&id).ok_or_else(|| OrchError::Refused(format!("no ticket '{}'", take(&id, 80))))?.clone();
@@ -416,7 +439,7 @@ impl Dispatcher {
             Lane::Free(seat) => seat,
         };
         if f.slots >= self.env.max_parallel_starts().max(1) {
-            f.deferred.push_back(Deferred { id: id.clone(), origin, started_by: started_by.map(str::to_string), seat });
+            f.deferred.push_back(Deferred { id: id.clone(), origin, started_by: started_by.map(str::to_string), seat, continuation: continuation.map(str::to_string) });
             drop(f);
             let detail = "every start slot is busy: it starts when one frees (limits: max parallel starts)";
             return Ok(TicketAnswer { ticket: self.board.view_with_start(&id, not_started(reason::DEFERRED, detail))?, pushed: false });
@@ -424,7 +447,7 @@ impl Dispatcher {
         f.slots += 1;
         f.starting.insert(id.clone(), seat.clone());
         drop(f);
-        let answer = self.launch(&id, origin, started_by, &seat);
+        let answer = self.launch(&id, origin, started_by, &seat, continuation);
         self.release(&id);
         answer
     }
@@ -449,7 +472,7 @@ impl Dispatcher {
             std::thread::Builder::new()
                 .name("board-start-deferred".into())
                 .spawn(move || {
-                    let _ = me.launch(&d.id, d.origin, d.started_by.as_deref(), &d.seat);
+                    let _ = me.launch(&d.id, d.origin, d.started_by.as_deref(), &d.seat, d.continuation.as_deref());
                     me.release(&d.id);
                 })
                 .map(|_| ())
@@ -490,7 +513,7 @@ impl Dispatcher {
     }
 
     /// Phase 2 and 3: worktree, brief, launch (no lock), then the commit.
-    fn launch(&self, id: &str, origin: StartOrigin, started_by: Option<&str>, seat: &Seat) -> Result<TicketAnswer, OrchError> {
+    fn launch(&self, id: &str, origin: StartOrigin, started_by: Option<&str>, seat: &Seat, continuation: Option<&str>) -> Result<TicketAnswer, OrchError> {
         let (rows, links, runs) = self.board.rows()?;
         let Some(row) = rows.get(id).cloned() else { return Err(OrchError::Refused(format!("no ticket '{}'", take(id, 80)))) };
         let project = row.project_id.clone();
@@ -559,6 +582,10 @@ impl Dispatcher {
                 .unwrap_or(true),
         };
         let composed = brief::compose(self.env.as_ref(), &input);
+        let prompt = match continuation {
+            Some(c) => format!("{}\n\n{c}", composed.prompt),
+            None => composed.prompt,
+        };
         let request = LaunchRequest {
             ticket_id: id.to_string(),
             project_id: project.clone(),
@@ -572,7 +599,7 @@ impl Dispatcher {
             runner: exec.runner.clone(),
             workspace: workspace.clone(),
             folder,
-            brief: composed.prompt,
+            brief: prompt,
             brief_sources: composed.sources,
             origin,
         };
@@ -1239,9 +1266,132 @@ impl Dispatcher {
         Ok(CloseAnswer { ticket, worker_removed, worktree_removed, next, warnings })
     }
 
+    /// PIPE-RESTART-1, the lead's one-call recovery of an in_progress ticket whose worker is gone. First a RESUME: the
+    /// dead session gets a turn ("continue"), which brings its conversation back (`claude --resume`) in the same
+    /// worktree; its run is opened again and `board.restartResumeSeconds` starts counting. If that resumed session dies
+    /// inside the window (see [`on_done`](Self::on_done)), or the resume cannot be tried, or `fresh` is asked, a FRESH
+    /// session starts on the SAME worktree and branch with the ticket brief and a "continue from your last commit" note.
+    /// Either way the ticket gets a comment saying which one happened and why.
+    pub fn restart(&self, req: &TicketRestart) -> Result<RestartAnswer, OrchError> {
+        let t = self.board.find(&req.ticket_id)?;
+        let (rows, _, runs) = self.board.rows()?;
+        let row = rows.get(&t.id).cloned().ok_or_else(|| OrchError::Refused(format!("no ticket '{}'", t.id)))?;
+        if row.status != status::IN_PROGRESS {
+            return Err(OrchError::Refused(format!(
+                "ticket {} is {}: only an in_progress ticket restarts (a todo ticket starts with ticket start)",
+                row.id, row.status
+            )));
+        }
+        let previous = row.session_id.clone();
+        if let Some(s) = previous.as_deref() {
+            let reported_ended = self.flight().ended.contains(s);
+            if self.sessions.state(s) != WorkerState::Ended && !reported_ended {
+                return Err(OrchError::Refused(format!(
+                    "ticket {} has a live worker ({s}): there is nothing to restart. To replace a worker that is still running, unassign the ticket with --now and start it again",
+                    row.id
+                )));
+            }
+        }
+        let by = req.restarted_by.clone().or_else(|| row.started_by.clone()).filter(|b| !b.trim().is_empty() && b != "owner");
+        let died = previous
+            .as_deref()
+            .and_then(|s| runs.iter().filter(|r| r.ticket_id == row.id && r.session_id == s).last())
+            .map(|r| match (r.outcome.as_deref(), r.detail.as_deref().filter(|d| !d.is_empty())) {
+                (Some(o), Some(d)) => format!("{o}: {d}"),
+                (Some(o), None) => o.to_string(),
+                _ => "its worker ended".to_string(),
+            })
+            .unwrap_or_else(|| "its worker ended".to_string());
+        let who = by.as_deref().map(|b| self.env.session_label(b).unwrap_or_else(|| b.to_string())).unwrap_or_else(|| "the owner".to_string());
+        let p = row.project_id.as_deref();
+        if !req.fresh {
+            if let Some(prev) = previous.as_deref() {
+                let window = Duration::from_millis(self.env.restart_resume_window_ms());
+                let text = format!(
+                    "[RESTART] Your session ended before this ticket was done ({}) and {who} resumed it. Everything you committed is kept in this worktree. Run `git status` and `git log --oneline -10`, then continue from where you stopped and finish with the done report.",
+                    take(&died, 200)
+                );
+                // The run opens and the seat is taken BEFORE the turn is delivered: if the resume dies at once, its end is
+                // already handled as a run's end (and replaced by a fresh session).
+                if self.board.reopen_run(&row.id, prev).unwrap_or(false) {
+                    {
+                        let mut f = self.flight();
+                        f.ended.remove(prev);
+                        f.told.retain(|k| !k.starts_with(&format!("{prev}:")));
+                        f.running.insert(prev.to_string(), seat_of_row(self.env.as_ref(), &row));
+                        f.resuming.insert(prev.to_string(), Resuming { since: Instant::now(), window, started_by: by.clone() });
+                    }
+                    if self.sessions.prompt(prev, &text) {
+                        let detail = format!(
+                            "restart: resumed session {prev} (same conversation, same worktree{}); if it dies within {}s a fresh session replaces it",
+                            row.branch.as_deref().map(|b| format!(", branch {b}")).unwrap_or_default(),
+                            window.as_secs()
+                        );
+                        let _ = self.comment(&row.id, &format!("[AUTOMATIC] {detail}. It had ended: {died}."), "note", CommentAuthor::daemon());
+                        self.hook(hooks::RUN_RESTARTED, &row.id, p, json!({ "mode": restart_mode::RESUMED, "sessionId": prev, "previousSessionId": prev, "detail": detail }));
+                        if let Ok(t) = self.board.get(&row.id) {
+                            self.bus.publish(ticket_envelope(&t));
+                        }
+                        let ticket = self.board.get(&row.id)?;
+                        return Ok(RestartAnswer { ticket, mode: restart_mode::RESUMED.into(), session_id: Some(prev.to_string()), previous_session_id: Some(prev.to_string()), detail });
+                    }
+                    // The session refused the turn (its record is gone): undo, and start the fresh one.
+                    {
+                        let mut f = self.flight();
+                        f.resuming.remove(prev);
+                        f.running.remove(prev);
+                        f.ended.insert(prev.to_string());
+                    }
+                    let _ = self.board.finish_run(&row.id, prev, "FAILED", "the resume was refused: the session cannot take a turn");
+                }
+            }
+        }
+        let why = if req.fresh { format!("a fresh session was asked for; the last worker had ended: {died}") } else { format!("the dead session could not be resumed: {died}") };
+        self.restart_fresh(&row, by.as_deref(), &why, previous.as_deref())
+    }
+
+    /// The fresh half of a restart: the dead session ends for good, and a new session starts on the ticket's own
+    /// worktree and branch (`ensure` reuses what the ticket recorded) with the brief and a continue-from-your-last-commit note.
+    fn restart_fresh(&self, row: &TicketRow, by: Option<&str>, why: &str, previous: Option<&str>) -> Result<RestartAnswer, OrchError> {
+        if let Some(prev) = previous {
+            {
+                let mut f = self.flight();
+                f.resuming.remove(prev);
+                f.ended.insert(prev.to_string());
+            }
+            self.sessions.stop(prev, "ticket restart: replaced by a fresh session");
+        }
+        let note = format!(
+            "[RESTART] Your previous session on this ticket ended before the work was done ({}). You continue in the SAME worktree and branch{}: run `git status` and `git log --oneline -10` first. Everything already committed is yours and is kept. Continue from your last commit, do not redo finished work, and finish with the done report as the brief says.",
+            take(why, 300),
+            row.branch.as_deref().map(|b| format!(" ({b})")).unwrap_or_default()
+        );
+        let a = self.start_with(&row.id, StartOrigin::Move, by, Some(&note))?;
+        let s = a.ticket.start.clone();
+        if !s.as_ref().is_some_and(|s| s.ok) {
+            let m = s.map(|s| format!("{}: {}", s.reason, s.detail.unwrap_or_default())).unwrap_or_else(|| "not started".into());
+            return Err(OrchError::Refused(format!("the fresh session of {} was not started ({m}); its ticket stays in_progress", row.id)));
+        }
+        let sid = a.ticket.session_id.clone();
+        let detail = format!(
+            "restart: started a fresh session {} on the same worktree{} ({why})",
+            sid.as_deref().unwrap_or("?"),
+            row.branch.as_deref().map(|b| format!(" and branch {b}")).unwrap_or_default()
+        );
+        let _ = self.comment(&row.id, &format!("[AUTOMATIC] {detail}."), "note", CommentAuthor::daemon());
+        self.hook(
+            hooks::RUN_RESTARTED,
+            &row.id,
+            row.project_id.as_deref(),
+            json!({ "mode": restart_mode::FRESH, "sessionId": sid, "previousSessionId": previous, "detail": detail }),
+        );
+        Ok(RestartAnswer { ticket: a.ticket, mode: restart_mode::FRESH.into(), session_id: sid, previous_session_id: previous.map(str::to_string), detail })
+    }
+
     /// A worker's run ended. A clean end after a done comment closes the ticket (the done protocol); any other end
-    /// leaves it in_progress with a failure notice (an issue comment that wakes its notify list, a line to its
-    /// starter, the `ticket.run_failed` hook). Either way the lane's next ticket starts.
+    /// leaves it in_progress with a failure notice (an issue comment that wakes its notify list, a mail to its lead,
+    /// an attention item, the `ticket.run_failed` hook). Either way the lane's next ticket starts. A session that a
+    /// restart resumed and that dies inside the resume window is replaced by a fresh one instead (PIPE-RESTART-1).
     pub fn on_done(&self, report: &DoneReport) -> Result<(), OrchError> {
         let (rows, _, runs) = self.board.rows()?;
         let Some(row) = rows.get(&report.ticket_id).cloned() else { return Ok(()) };
@@ -1250,9 +1400,17 @@ impl Dispatcher {
         let p = row.project_id.as_deref();
         self.hook(hooks::RUN_ENDED, &row.id, p, json!({ "sessionId": report.session_id, "outcome": report.outcome, "detail": detail }));
         if !first {
-            return Ok(()); // already ended (a done, an unassign): the lane was drained then
+            // Already ended (a done, an unassign): the lane was drained then. PIPE-RESTART-1: but a worker that ended a
+            // turn clean stays alive, and may die in its next one; that FAILED end is told like any dead worker. A
+            // stop the board asked for ends KILLED_*, never FAILED.
+            if report.outcome == FAILED {
+                let died = DoneReport { detail: Some(format!("the worker died in a later turn: {}", report.detail.as_deref().unwrap_or("no reason given"))), ..report.clone() };
+                return self.on_worker_died(&died);
+            }
+            return Ok(());
         }
         let seat = self.leave(&report.session_id, &row);
+        let resumed = self.flight().resuming.remove(&report.session_id);
         let current = row.status == status::IN_PROGRESS && row.session_id.as_deref() == Some(report.session_id.as_str());
         if current {
             let since = runs.iter().find(|r| r.ticket_id == row.id && r.session_id == report.session_id).map(|r| r.started_at).unwrap_or(0);
@@ -1282,13 +1440,47 @@ impl Dispatcher {
                     self.report_done(&row, Some(&c.body));
                 }
                 (true, None) => self.failure(&row, report, "the worker ended cleanly without a done comment, so the ticket stays in_progress"),
-                (false, _) => self.failure(&row, report, &format!("the worker's run ended {}{}", report.outcome, if detail.is_empty() { String::new() } else { format!(": {detail}") })),
+                (false, _) => {
+                    let what = format!("the worker's run ended {}{}", report.outcome, if detail.is_empty() { String::new() } else { format!(": {detail}") });
+                    // PIPE-RESTART-1: a resume that dies inside its window did not work; a fresh session takes over.
+                    match resumed.filter(|r| r.since.elapsed() < r.window) {
+                        Some(r) => {
+                            let why = format!("the resumed session {} died after {}s ({what})", report.session_id, r.since.elapsed().as_secs());
+                            if let Err(e) = self.restart_fresh(&row, r.started_by.as_deref(), &why, Some(&report.session_id)) {
+                                self.failure(&row, report, &format!("{what}; the fresh session that replaces a dead resume could not start: {e}"));
+                            }
+                        }
+                        None => self.failure(&row, report, &what),
+                    }
+                }
             }
         }
         if let Ok(t) = self.board.get(&row.id) {
             self.bus.publish(ticket_envelope(&t));
         }
         self.drain(&seat);
+        Ok(())
+    }
+
+    /// PIPE-RESTART-1: a worker's process died while NO turn was running (killed or crashed at rest), so no turn end
+    /// carried it and its run already ended. The ticket's current worker is told to its lead like any failed run, with
+    /// the way back (`ticket restart`). One that is not the ticket's current worker any more is ignored.
+    pub fn on_worker_died(&self, report: &DoneReport) -> Result<(), OrchError> {
+        let (rows, _, _) = self.board.rows()?;
+        let Some(row) = rows.get(&report.ticket_id).cloned() else { return Ok(()) };
+        let current = row.status == status::IN_PROGRESS && row.session_id.as_deref() == Some(report.session_id.as_str());
+        // A stop the board asked for never gets here (the daemon marks that session Exited first), and an unassigned,
+        // closed or replaced worker is no longer the ticket's current one.
+        if !current || self.flight().resuming.contains_key(&report.session_id) {
+            return Ok(());
+        }
+        let what = report.detail.clone().unwrap_or_else(|| "the worker's process died".into());
+        // The run read "ended clean" until now; how it really ended is what a restart tells the resumed worker.
+        let _ = self.board.amend_run(&row.id, &report.session_id, FAILED, &what);
+        self.failure(&row, report, &what);
+        if let Ok(t) = self.board.get(&row.id) {
+            self.bus.publish(ticket_envelope(&t));
+        }
         Ok(())
     }
 
@@ -1317,13 +1509,48 @@ impl Dispatcher {
     }
 
     fn failure(&self, row: &TicketRow, report: &DoneReport, what: &str) {
-        let body = format!(
-            "[AUTOMATIC FAILURE] {what}. Worker {}. Restart it with ticket_start, unassign it, or move it.",
-            report.session_id
-        );
+        let key = format!("{}:{}", report.session_id, if report.outcome == SUCCEEDED { "clean" } else { "died" });
+        if !self.flight().told.insert(key) {
+            return; // this session's failure was already told
+        }
+        let next = if report.outcome == SUCCEEDED {
+            "Message it to finish and report done, unassign it, or move it."
+        } else {
+            "Restart it with ticket_restart (it resumes the session, or starts a fresh one on the same worktree), unassign it, or move it."
+        };
+        let body = format!("[AUTOMATIC FAILURE] {what}. Worker {}. {next}", report.session_id);
         let _ = self.comment(&row.id, &body, "issue", CommentAuthor::daemon());
-        if let Some(starter) = row.started_by.clone().or_else(|| self.starter_of(&row.id)).filter(|_| self.auto_report()) {
-            self.env.alert_session(&starter, "[AUTOMATIC FAILURE] ticket run", &format!("{} \"{}\": {what}", row.id, take(&row.title, 60)), &row.id);
+        // PIPE-RESTART-1: the lead is MAILED and the owner gets an attention item (one path in the host, shared with the
+        // stall watchdog). A host with no mail path, or a mail the lead cannot take, falls back to the urgent line.
+        let lead = row.started_by.clone().or_else(|| self.starter_of(&row.id)).filter(|s| !s.trim().is_empty() && s != "owner").filter(|_| self.auto_report());
+        let line = format!("{} \"{}\": {what}", row.id, take(&row.title, 60));
+        // A clean end with no done comment leaves a live worker (restart would be refused): the way back is a message.
+        let clean = report.outcome == SUCCEEDED;
+        let way_back = if clean {
+            format!("The worker session is still there: message it to finish and report done (`infantry send`), or `infantry ticket unassign {} --now` to put the ticket back in todo.", row.id)
+        } else {
+            format!(
+                "Recover it: `infantry ticket restart {id}` (tool infantry_ticket_restart) resumes the session and, if the resume dies, starts a fresh session on the same worktree and branch. Or `infantry ticket unassign {id} --now` to put it back in todo.",
+                id = row.id
+            )
+        };
+        let mail = format!("{line}.\nWorker session: {}. Branch: {}. Everything it committed is kept in its worktree.\n{way_back}", report.session_id, row.branch.as_deref().unwrap_or("-"));
+        let subject = if clean {
+            format!("[AUTOMATIC FAILURE] worker of {} \"{}\" ended without a done report", row.id, take(&row.title, 40))
+        } else {
+            format!("[AUTOMATIC FAILURE] worker of {} \"{}\" is down", row.id, take(&row.title, 40))
+        };
+        let mailed = self.env.worker_failed(&WorkerFailed {
+            ticket_id: &row.id,
+            project_id: row.project_id.as_deref(),
+            session_id: &report.session_id,
+            lead: lead.as_deref(),
+            outcome: &report.outcome,
+            subject: &subject,
+            detail: &mail,
+        });
+        if let (false, Some(starter)) = (mailed, lead.as_deref()) {
+            self.env.alert_session(starter, "[AUTOMATIC FAILURE] ticket run", &line, &row.id);
         }
         // A worker blocked by a permission dialog nobody answered: the owner hears it too, never a silent No.
         if what.contains("permission dialog") {

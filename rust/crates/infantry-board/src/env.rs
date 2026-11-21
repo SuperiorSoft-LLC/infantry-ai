@@ -77,6 +77,22 @@ pub fn normalize_role(id: &str) -> &str {
     }
 }
 
+/// What [`BoardEnv::worker_failed`] is told: one ticket worker's bad end.
+#[derive(Debug, Clone, Copy)]
+pub struct WorkerFailed<'a> {
+    pub ticket_id: &'a str,
+    pub project_id: Option<&'a str>,
+    /// The worker session that ended.
+    pub session_id: &'a str,
+    /// The ticket's lead: the session that started it. None = the owner started it.
+    pub lead: Option<&'a str>,
+    /// The run outcome (`FAILED`, `SUCCEEDED` for a clean end with no done comment, ...).
+    pub outcome: &'a str,
+    /// The mail subject and body: what happened and the command that recovers it.
+    pub subject: &'a str,
+    pub detail: &'a str,
+}
+
 /// The board's view of its host. Every method has the answer of a host that offers nothing (no
 /// profiles, no sessions, no settings), which is Kotlin's `TicketBoard` with its defaults.
 pub trait BoardEnv: Send + Sync {
@@ -198,6 +214,18 @@ pub trait BoardEnv: Send + Sync {
     fn alert_session(&self, session_id: &str, subject: &str, line: &str, _ticket_id: &str) -> bool {
         self.notify_session(session_id, subject, line)
     }
+    /// PIPE-RESTART-1: a ticket worker's run ended badly (failed, killed, or ended without a done comment). The host
+    /// raises an attention item for the owner and MAILS the ticket's lead (`failure.lead`, its starter session, when
+    /// there is one). True = the lead was mailed; false (no lead, no mail path, mail refused) leaves the caller to fall
+    /// back to [`alert_session`](Self::alert_session).
+    fn worker_failed(&self, _failure: &WorkerFailed<'_>) -> bool {
+        false
+    }
+    /// `board.restartResumeSeconds`, in ms: a resumed worker that dies sooner than this after a restart counts as a
+    /// failed resume, and a fresh session replaces it on the same worktree. 0 = never fall back.
+    fn restart_resume_window_ms(&self) -> u64 {
+        20_000
+    }
 
     // ---- the work-running half (starts, lanes, briefs, done) ---------------------------------------------
 
@@ -315,6 +343,12 @@ pub struct StaticEnv {
     pub rules: Vec<infantry_orchestrator_api::RoutingRule>,
     /// Slow-start slots (0 = the default 4).
     pub start_slots: usize,
+    /// PIPE-RESTART-1: whether `worker_failed` mails a lead (a host with a mail path); every call is recorded in `failed`.
+    pub lead_mail: bool,
+    /// Every `worker_failed` call, as "<lead or -> <ticket> <session> <outcome>: <subject>".
+    pub failed: Mutex<Vec<String>>,
+    /// `board.restartResumeSeconds` in ms (0 = the default 20 s).
+    pub resume_window_ms: u64,
 }
 
 impl StaticEnv {
@@ -392,6 +426,13 @@ impl BoardEnv for StaticEnv {
     fn notify_session(&self, session_id: &str, _subject: &str, line: &str) -> bool {
         self.notified.lock().unwrap_or_else(|p| p.into_inner()).push(format!("{session_id} {line}"));
         true
+    }
+    fn worker_failed(&self, f: &WorkerFailed<'_>) -> bool {
+        self.failed.lock().unwrap_or_else(|p| p.into_inner()).push(format!("{} {} {} {}: {}", f.lead.unwrap_or("-"), f.ticket_id, f.session_id, f.outcome, f.subject));
+        self.lead_mail && f.lead.is_some()
+    }
+    fn restart_resume_window_ms(&self) -> u64 {
+        if self.resume_window_ms == 0 { 20_000 } else { self.resume_window_ms }
     }
     fn lane_cap(&self, _project_id: Option<&str>, _role: &str) -> u32 {
         self.lane_cap.max(1)

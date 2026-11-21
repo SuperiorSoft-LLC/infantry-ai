@@ -328,6 +328,28 @@
   }
  },
  {
+  "name": "infantry_ticket_restart",
+  "readOnly": false,
+  "description": "Put a worker back on an in_progress ticket whose worker died or ended (the lead gets a mail when one dies). It first RESUMES the dead session (the same conversation, in the same worktree). If that resume dies within board.restartResumeSeconds (default 20) or cannot be tried, it starts a FRESH session on the SAME worktree and branch with the ticket brief and a 'continue from your last commit' note. Everything the worker committed is kept. Refused when the ticket is not in_progress or its worker is still alive. fresh=true skips the resume.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticketId": {
+     "type": "string",
+     "description": "Full ticket id, or its 8-char suffix."
+    },
+    "fresh": {
+     "type": "boolean",
+     "description": "true = skip the resume and start the fresh session at once."
+    }
+   },
+   "required": [
+    "ticketId"
+   ],
+   "additionalProperties": false
+  }
+ },
+ {
   "name": "infantry_ticket_comment",
   "readOnly": false,
   "description": "Comment on a ticket (the extra channel next to mail): every agent on the ticket's notify list gets ONE short mail line at once. kind done = the work is finished (say the commit), issue = a problem to answer, note = anything else (default). With commentId and no ticketId/body, RESOLVES that comment (no mail). Read them with infantry_ticket_comments.",

@@ -7,7 +7,7 @@
 //!
 //! Answers are short text (one line per ticket); `verbose` / `detail=full` add the stored ticket as JSON.
 use infantry_orchestrator_api::dto::{status, AgentSwitch, CommentAdd, EpicBaseRequest, CommentAuthor, CommentQuery, NotifyEdit, Ticket, TicketMove, TicketSave};
-use infantry_orchestrator_api::{AgentQueueRequest, OrchError, StartOrigin, TicketClose};
+use infantry_orchestrator_api::{AgentQueueRequest, OrchError, StartOrigin, TicketClose, TicketRestart};
 use infantry_protocol::Envelope;
 use serde_json::{Map, Value};
 
@@ -373,6 +373,22 @@ pub fn call(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> Opti
             }
             Ok(out)
         })(),
+        "infantry_ticket_restart" => (|| {
+            let t = board.find(&s(a, "ticketId").ok_or("ticketId is required")?).map_err(err)?;
+            if who.session_id.is_some() && who.session_id == t.session_id && !who.privileged() {
+                return Err("a worker does not restart itself: its lead restarts it with infantry_ticket_restart".to_string());
+            }
+            let req = TicketRestart { ticket_id: t.id.clone(), fresh: b(a, "fresh"), restarted_by: who.session_id.clone() };
+            let r = ctx.work.restart(&req).map_err(err)?;
+            Ok(format!(
+                "restarted {} ({}): session {} (was {}); {}",
+                r.ticket.id,
+                r.mode,
+                r.session_id.as_deref().unwrap_or("-"),
+                r.previous_session_id.as_deref().unwrap_or("-"),
+                r.detail
+            ))
+        })(),
         "infantry_ticket_comment" => (|| {
             let (tid, body) = (s(a, "ticketId"), a.get("body").and_then(|v| v.as_str()).map(str::to_string).filter(|x| !x.trim().is_empty()));
             if let (Some(cid), None, None) = (s(a, "commentId"), &tid, &body) {
@@ -471,7 +487,7 @@ mod tests {
     #[test]
     fn descriptors_name_the_pm_tools() {
         let n = names();
-        for t in ["infantry_agent_switch", "infantry_agent_queue", "infantry_ticket_create", "infantry_ticket_get", "infantry_ticket_update", "infantry_ticket_move", "infantry_ticket_start", "infantry_ticket_close", "infantry_ticket_comment", "infantry_ticket_comments", "infantry_board", "infantry_epic_base"] {
+        for t in ["infantry_agent_switch", "infantry_agent_queue", "infantry_ticket_create", "infantry_ticket_get", "infantry_ticket_update", "infantry_ticket_move", "infantry_ticket_start", "infantry_ticket_close", "infantry_ticket_restart", "infantry_ticket_comment", "infantry_ticket_comments", "infantry_board", "infantry_epic_base"] {
             assert!(n.iter().any(|x| x == t), "{t}");
         }
         assert_eq!(short("0123456789abcdef"), "89abcdef");

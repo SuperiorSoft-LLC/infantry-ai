@@ -145,6 +145,12 @@ pub trait Orchestrator: Send + Sync {
         let _ = request;
         unsupported("ticket_close")
     }
+    /// PIPE-RESTART-1: put a worker back on an in_progress ticket whose worker died: resume it, else a fresh session on
+    /// the same worktree and branch.
+    fn restart(&self, request: TicketRestart) -> BoxFuture<'_, OrchResult<RestartAnswer>> {
+        let _ = request;
+        unsupported("ticket_restart")
+    }
 }
 
 fn unsupported<T: Send + 'static>(what: &str) -> BoxFuture<'static, OrchResult<T>> {
