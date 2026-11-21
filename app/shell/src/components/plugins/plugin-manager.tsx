@@ -5,7 +5,7 @@
 // shell, and its own settings cards. Filter by all / enabled / faults. Live from the daemon's plugin list.
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Puzzle, RefreshCw, Settings } from "lucide-react";
-import { isFault, type OptionalPlugin, type PluginRow } from "@infantry/client";
+import { isFault, type OptionalPlugin, type PluginRow, type PluginUpdate } from "@infantry/client";
 import { Button, Chip, EmptyState, IconButton, Input, Switch, cn } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { TabPage } from "@/components/tabs/tab-page";
@@ -13,8 +13,9 @@ import { RefusalBanner, Segmented } from "@/components/knowledge/parts";
 import { pluginsStore, usePlugins } from "@/plugins/use-plugins";
 import { usePluginUiFault } from "@/plugins/web-plugins";
 import { usePluginSettingsDialog } from "./plugin-settings-dialog";
+import { ApprovalDialog, BrowseGrid, SourcesPanel, UninstallDialog, type Approval } from "./plugin-sources";
 
-type Filter = "all" | "enabled" | "faults";
+type Filter = "all" | "enabled" | "faults" | "browse" | "sources";
 
 function contributes(p: PluginRow): string[] {
   const u = p.ui;
@@ -49,7 +50,7 @@ function OptionalCard({ o, pending }: { o: OptionalPlugin; pending: boolean }) {
   );
 }
 
-function PluginCard({ p, pending, kind }: { p: PluginRow; pending: boolean; kind?: "core" | "optional" }) {
+function PluginCard({ p, pending, kind, update, onApprove, onUninstall }: { p: PluginRow; pending: boolean; kind?: "core" | "optional"; update?: PluginUpdate; onApprove: (a: Approval) => void; onUninstall: (p: PluginRow) => void }) {
   const fault = isFault(p);
   const parts = contributes(p);
   const name = p.ui?.displayName ?? p.id;
@@ -84,7 +85,17 @@ function PluginCard({ p, pending, kind }: { p: PluginRow; pending: boolean; kind
             Remove
           </Button>
         )}
-        {p.updateTo && <Chip tone="green">update {p.updateTo}</Chip>}
+        {update && (
+          <Button variant="outline" size="sm" disabled={pending} onClick={() => onApprove({ kind: "update", row: p, update })} aria-label={`Update ${name} to ${update.available}`}>
+            Update to {update.available}
+          </Button>
+        )}
+        {!update && p.updateTo && <Chip tone="green">update {p.updateTo}</Chip>}
+        {!kind && !p.bundled && (
+          <Button variant="ghost" size="sm" disabled={pending} onClick={() => onUninstall(p)} aria-label={`Uninstall ${name}`}>
+            Uninstall
+          </Button>
+        )}
         {uiFault && (
           <span title={uiFault.message}>
             <Chip tone="red">UI {uiFault.phase} fault</Chip>
@@ -112,9 +123,14 @@ export function PluginManager() {
   const optional = usePlugins((s) => s.optional);
   const memberKind = usePlugins((s) => s.memberKind);
   const refusal = usePlugins((s) => s.refusal);
+  const sources = usePlugins((s) => s.sources);
+  const catalog = usePlugins((s) => s.catalog);
+  const updates = usePlugins((s) => s.updates);
+  const [approval, setApproval] = useState<Approval | null>(null);
+  const [uninstalling, setUninstalling] = useState<PluginRow | null>(null);
   const link = useDaemon((s) => s.connection.state);
   useEffect(() => {
-    if (link === "open") pluginsStore().getState().readOptional();
+    if (link === "open") pluginsStore().getState().readManager();
   }, [link, plugins]);
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -150,24 +166,40 @@ export function PluginManager() {
             { id: "all", label: "All" },
             { id: "enabled", label: "Enabled" },
             { id: "faults", label: `Faults${faults ? ` (${faults})` : ""}` },
+            { id: "browse", label: "Browse" },
+            { id: "sources", label: `Sources${sources.length ? ` (${sources.length})` : ""}` },
           ]}
         />
         <Input aria-label="Search plugins" placeholder="Search plugins" className="h-8 max-w-60 text-xs" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
-      {!loaded ? (
+      {filter === "sources" ? (
+        <SourcesPanel sources={sources} pending={pending} />
+      ) : filter === "browse" ? (
+        <BrowseGrid rows={catalog} query={query} pending={pending} onApprove={setApproval} />
+      ) : !loaded ? (
         <EmptyState icon={<Puzzle className="size-6" />} title={link === "open" ? "Loading plugins…" : "Waiting for the daemon…"} />
       ) : shown.length === 0 && offered.length === 0 ? (
         <EmptyState icon={<Puzzle className="size-6" />} title={plugins.length === 0 ? "No plugins on this host" : "No plugin matches"} />
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
           {shown.map((p) => (
-            <PluginCard key={p.id} p={p} pending={pending.includes(p.id)} kind={memberKind[p.id]} />
+            <PluginCard
+              key={p.id}
+              p={p}
+              pending={pending.includes(p.id)}
+              kind={memberKind[p.id]}
+              update={updates.find((u) => u.id === p.id)}
+              onUninstall={setUninstalling}
+              onApprove={(a) => setApproval(a.kind === "update" ? { ...a, catalog: catalog.find((c) => c.id === p.id) } : a)}
+            />
           ))}
           {offered.map((o) => (
             <OptionalCard key={o.id} o={o} pending={pending.includes(o.id)} />
           ))}
         </div>
       )}
+      {approval && <ApprovalDialog a={approval} onClose={() => setApproval(null)} />}
+      {uninstalling && <UninstallDialog p={uninstalling} onClose={() => setUninstalling(null)} />}
     </TabPage>
   );
 }

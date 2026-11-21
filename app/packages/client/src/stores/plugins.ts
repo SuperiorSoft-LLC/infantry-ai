@@ -88,7 +88,44 @@ export interface OptionalPlugin {
   app: string;
 }
 
+/** One plugin source of this host (`plugin_admin sources`): a folder or a git repository. */
+export interface PluginSource {
+  id: string;
+  kind: string;
+  location: string;
+  /** How many plugins it offers; -1 when its folder is missing. */
+  offers: number;
+}
+
+/** One plugin any source offers or that is installed (`plugin_admin available`), with what the approval dialog shows. */
+export interface CatalogRow {
+  id: string;
+  displayName: string;
+  description: string;
+  version: string;
+  tier: string;
+  source: string | null;
+  installed: boolean;
+  enabled: boolean;
+  /** `unsigned`, `digest`, `signed`, `untrusted` or `bad` (the daemon's check of the offered copy); empty when installed from nowhere. */
+  signed: string;
+  requires: string[];
+  license: string;
+  grants: string[];
+}
+
+/** A newer version a source offers for an installed plugin (`plugin_admin updates`). */
+export interface PluginUpdate {
+  id: string;
+  installed: string;
+  available: string;
+  source: string;
+}
+
 export interface PluginsState {
+  sources: PluginSource[];
+  catalog: CatalogRow[];
+  updates: PluginUpdate[];
   plugins: PluginRow[];
   /** Optional members of installed apps that can be installed (from `plugin_admin available`; empty when none or not the owner). */
   optional: OptionalPlugin[];
@@ -108,8 +145,16 @@ export interface PluginsActions {
   /** Install an optional member / remove one (owner only; `plugin_admin install|uninstall`). */
   /** Read which optional members of installed apps can be installed (owner only; an answer of "not the owner" is silent). */
   readOptional(): void;
-  install(id: string): void;
+  /** `approve` accepts a copy signed by a key that is not a trusted signer (the dialog asks first). */
+  install(id: string, approve?: boolean): void;
   uninstall(id: string): void;
+  /** Update [id] to the newer version a source offers. */
+  update(id: string, approve?: boolean): void;
+  /** Read the sources, what they offer and the updates (owner only; silent when refused). */
+  readManager(): void;
+  addSource(location: string): void;
+  removeSource(id: string): void;
+  refreshSource(id: string): void;
   clearRefusal(): void;
   dispose(): void;
 }
@@ -124,6 +169,52 @@ interface AvailableRow {
   source?: string | null;
   installed?: boolean;
   memberOf?: { app: string; kind: string }[];
+}
+
+const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+
+/** Reads a `plugin_admin available` answer into every row the sources offer or the host has installed. */
+export function parseCatalog(out: string): CatalogRow[] {
+  const rows = json<Record<string, unknown>[]>(out);
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .filter((r) => r && typeof r.id === "string" && r.id)
+    .map((r) => ({
+      id: r.id as string,
+      displayName: typeof r.displayName === "string" && r.displayName ? r.displayName : (r.id as string),
+      description: typeof r.description === "string" ? r.description : "",
+      version: typeof r.version === "string" ? r.version : "",
+      tier: typeof r.tier === "string" ? r.tier : "community",
+      source: typeof r.source === "string" ? r.source : null,
+      installed: r.installed === true,
+      enabled: r.enabled === true,
+      signed: typeof r.signed === "string" ? r.signed : "",
+      requires: strs(r.requires),
+      license: typeof r.license === "string" ? r.license : "",
+      grants: strs(r.grants),
+    }));
+}
+
+export function parseSources(out: string): PluginSource[] {
+  const rows = json<Record<string, unknown>[]>(out);
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .filter((r) => r && typeof r.id === "string" && typeof r.location === "string")
+    .map((r) => ({ id: r.id as string, kind: typeof r.kind === "string" ? r.kind : "folder", location: r.location as string, offers: typeof r.offers === "number" ? r.offers : 0 }));
+}
+
+export function parseUpdates(out: string): PluginUpdate[] {
+  const rows = json<Record<string, unknown>[]>(out);
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .filter((r) => r && typeof r.id === "string" && typeof r.available === "string")
+    .map((r) => ({ id: r.id as string, installed: String(r.installed ?? ""), available: r.available as string, source: String(r.source ?? "") }));
+}
+
+/** Search across every source: the plugins whose id, name or description holds [query] (all of them when it is empty). */
+export function searchCatalog(rows: CatalogRow[], query: string): CatalogRow[] {
+  const q = query.trim().toLowerCase();
+  return rows.filter((r) => !q || [r.id, r.displayName, r.description].some((v) => v.toLowerCase().includes(q)));
 }
 
 /** Reads a `plugin_admin available` answer into the optional members to offer and the kind of each installed member. */
@@ -274,7 +365,11 @@ export function createPluginsStore(link: FrameLink): PluginsStore {
         const r = json<{ code?: number | string; out?: string; err?: string }>(env.data) ?? {};
         const code = Number(r.code ?? 1);
         if (o.op === "available") {
-          if (code === 0) set(parseAvailable(r.out ?? ""));
+          if (code === 0) set({ ...parseAvailable(r.out ?? ""), catalog: parseCatalog(r.out ?? "") });
+          return;
+        }
+        if (o.op === "sources" || o.op === "updates") {
+          if (code === 0) set(o.op === "sources" ? { sources: parseSources(r.out ?? "") } : { updates: parseUpdates(r.out ?? "") });
           return;
         }
         set({
@@ -283,6 +378,7 @@ export function createPluginsStore(link: FrameLink): PluginsStore {
           ...(code !== 0 ? { refusal: (r.err || r.out || `plugin ${o.op} ${o.id} failed (exit ${code})`).trim() } : {}),
         });
         get().refresh();
+        get().readManager();
         return;
       }
       if (env.type === "error") {
@@ -290,7 +386,7 @@ export function createPluginsStore(link: FrameLink): PluginsStore {
         if (rid && ops.has(rid)) {
           const o = ops.get(rid)!;
           ops.delete(rid);
-          if (o.op === "available") return; // not the owner: no optional list, no banner
+          if (o.op === "available" || o.op === "sources" || o.op === "updates") return; // not the owner: no optional list, no banner
           set({ pending: get().pending.filter((x) => x !== o.id), refusal: env.data });
         } else if (req.settle(env) || env.data.startsWith("plugins_op") || env.data.startsWith("plugin_admin")) {
           set({ refusal: env.data, loaded: true });
@@ -298,12 +394,12 @@ export function createPluginsStore(link: FrameLink): PluginsStore {
       }
     });
 
-    const admin = (op: string, id: string, track: boolean): void => {
+    const admin = (op: string, id: string, track: boolean, more: string[] = []): void => {
       adminCounter += 1;
       const requestId = `plugin-admin:${Date.now().toString(36)}-${adminCounter.toString(36)}`;
       ops.set(requestId, { id, op });
       if (track) set({ pending: [...get().pending.filter((x) => x !== id), id] });
-      if (!link.sendFrame({ type: "plugin_admin", data: JSON.stringify({ args: op === "available" ? [op] : [op, id] }), requestId })) {
+      if (!link.sendFrame({ type: "plugin_admin", data: JSON.stringify({ args: !id ? [op, ...more] : [op, id, ...more] }), requestId })) {
         ops.delete(requestId);
         if (track) set({ pending: get().pending.filter((x) => x !== id), refusal: "plugin_admin not sent: the daemon link is down" });
       }
@@ -311,6 +407,9 @@ export function createPluginsStore(link: FrameLink): PluginsStore {
 
     return {
       plugins: [],
+      sources: [],
+      catalog: [],
+      updates: [],
       optional: [],
       memberKind: {},
       loaded: false,
@@ -321,8 +420,17 @@ export function createPluginsStore(link: FrameLink): PluginsStore {
         req.send("plugins_op", JSON.stringify({ op: "list" }));
       },
       readOptional: () => admin("available", "", false),
-      install: (id) => admin("install", id, true),
+      install: (id, approve) => admin("install", id, true, approve ? ["--approve"] : []),
       uninstall: (id) => admin("uninstall", id, true),
+      update: (id, approve) => admin("update", id, true, approve ? ["--approve"] : []),
+      readManager() {
+        admin("available", "", false);
+        admin("sources", "", false);
+        admin("updates", "", false);
+      },
+      addSource: (location) => admin("source-add", location.trim(), true),
+      removeSource: (id) => admin("source-remove", id, true),
+      refreshSource: (id) => admin("source-refresh", id, true),
       setEnabled(id, enabled) {
         const op = enabled ? "enable" : "disable";
         adminCounter += 1;

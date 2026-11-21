@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 import { describe, expect, it } from "vitest";
-import { createHealthStore, createPluginsStore, healthSummary, isFault, parsePlugin, slotRegistry, type Envelope } from "../src";
+import { createHealthStore, createPluginsStore, healthSummary, isFault, parseCatalog, parsePlugin, searchCatalog, slotRegistry, type Envelope } from "../src";
 
 function link(up = true) {
   const sent: Envelope[] = [];
@@ -79,5 +79,66 @@ describe("health and triggers stores", () => {
     const sum = healthSummary(s.getState().report);
     expect(sum.tone).toBe("amber");
     expect(sum.faults).toEqual(["B: failed"]);
+  });
+});
+
+describe("plugin manager: sources, catalog, install, update", () => {
+  const answer = (l: ReturnType<typeof link>, i: number, out: unknown, code = 0) => {
+    const sent = l.sent[i];
+    l.push({ type: "plugin_admin", requestId: sent.requestId, data: JSON.stringify({ code, out: typeof out === "string" ? out : JSON.stringify(out), err: "" }) } as Envelope);
+  };
+  const argsOf = (e: Envelope) => (JSON.parse(e.data) as { args: string[] }).args;
+
+  it("readManager asks for the catalog, the sources and the updates and keeps each answer", () => {
+    const l = link();
+    const s = createPluginsStore(l);
+    s.getState().readManager();
+    expect(l.sent.map((e) => argsOf(e))).toEqual([["available"], ["sources"], ["updates"]]);
+    answer(l, 0, [{ id: "Acme", displayName: "Acme", version: "1.0", signed: "untrusted", requires: ["http"], source: "/src/a", installed: false }]);
+    answer(l, 1, [{ id: "src-a", kind: "git", location: "https://x/y.git", offers: 2 }, { nope: 1 }]);
+    answer(l, 2, [{ id: "Acme", installed: "1.0", available: "1.1", source: "/src/a" }]);
+    const st = s.getState();
+    expect(st.catalog[0]).toMatchObject({ id: "Acme", signed: "untrusted", requires: ["http"], installed: false });
+    expect(st.sources).toEqual([{ id: "src-a", kind: "git", location: "https://x/y.git", offers: 2 }]);
+    expect(st.updates).toEqual([{ id: "Acme", installed: "1.0", available: "1.1", source: "/src/a" }]);
+  });
+
+  it("sends add/remove/refresh source, install, update (with --approve) and uninstall as plugin_admin args", () => {
+    const l = link();
+    const s = createPluginsStore(l);
+    s.getState().addSource(" /plugins ");
+    s.getState().removeSource("src-a");
+    s.getState().refreshSource("src-a");
+    s.getState().install("Acme");
+    s.getState().install("Acme", true);
+    s.getState().update("Acme", true);
+    s.getState().uninstall("Acme");
+    expect(l.sent.map(argsOf)).toEqual([
+      ["source-add", "/plugins"],
+      ["source-remove", "src-a"],
+      ["source-refresh", "src-a"],
+      ["install", "Acme"],
+      ["install", "Acme", "--approve"],
+      ["update", "Acme", "--approve"],
+      ["uninstall", "Acme"],
+    ]);
+    expect(s.getState().pending).toContain("Acme");
+  });
+
+  it("shows the daemon's refusal and frees the card", () => {
+    const l = link();
+    const s = createPluginsStore(l);
+    s.getState().install("Acme");
+    l.push({ type: "plugin_admin", requestId: l.sent[0].requestId, data: JSON.stringify({ code: 1, out: "", err: "Acme is signed by a key that is not a trusted signer" }) } as Envelope);
+    expect(s.getState().pending).toEqual([]);
+    expect(s.getState().refusal).toContain("not a trusted signer");
+    expect(l.sent.map(argsOf).slice(1)).toEqual(expect.arrayContaining([["available"], ["sources"], ["updates"]]));
+  });
+
+  it("searches the catalog by id, name and description", () => {
+    const rows = parseCatalog(JSON.stringify([{ id: "Kanban", displayName: "Board", description: "Tickets" }, { id: "Mail", displayName: "Inbox", description: "Letters" }]));
+    expect(searchCatalog(rows, "tick").map((r) => r.id)).toEqual(["Kanban"]);
+    expect(searchCatalog(rows, "  ").length).toBe(2);
+    expect(searchCatalog(rows, "zzz")).toEqual([]);
   });
 });
