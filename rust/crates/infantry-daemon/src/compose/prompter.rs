@@ -95,6 +95,90 @@ impl Prompter for SessionPrompter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::settings::SETTINGS_SET;
+    use infantry_core::bus::EventBus;
+    use infantry_core::db::Db;
+    use infantry_core::frames::{Envelope, FrameCtx, FrameUnit};
+    use infantry_mail::notify::prompts::{Decision, TimeoutPolicy};
+    use infantry_protocol::prompts::{PromptRequest, PromptResponse};
+    use std::sync::Mutex;
+    use std::time::Duration;
+
+    type Frames = Arc<Mutex<Vec<(String, String)>>>;
+
+    /// A prompter over a throwaway settings db and a prompt store with no timer; the frames the store emits are collected.
+    fn prompter() -> (SessionPrompter, Frames, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("infantry-prompter-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = Arc::new(Db::open(dir.join("infantry.db")).unwrap());
+        db.write(|c| c.execute_batch("CREATE TABLE IF NOT EXISTS settings (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL)")).unwrap();
+        let prompts = Arc::new(PendingPrompts::new(None, Arc::new(|_| None), Arc::new(|_| TimeoutPolicy { timeout_ms: 0, on_timeout: Decision::Deny }), Arc::new(|| 0)));
+        let frames: Frames = Arc::default();
+        let sink = frames.clone();
+        prompts.set_sink(move |ty, data, _session| sink.lock().unwrap().push((ty.to_string(), data)));
+        (SessionPrompter { prompts, settings: SettingsUnit { db }, handle: tokio::runtime::Handle::current() }, frames, dir)
+    }
+
+    /// A `settings_set` through the unit's own frame, as a client sends it.
+    fn set(p: &SessionPrompter, body: Value) {
+        let ctx = FrameCtx { conn_id: 1, owner: true, bus: EventBus::new(8) };
+        p.settings.handle(&Envelope::new(SETTINGS_SET, body.to_string()), &ctx).unwrap();
+    }
+
+    fn mode(p: &SessionPrompter, session: &str, project: Option<&str>, env: Option<&str>) -> ApprovalMode {
+        p.resolve(session, project, None, |k| env.filter(|_| k == MODE_ENV[0]).map(String::from))
+    }
+
+    async fn frame(frames: &Frames, ty: &str) -> String {
+        for _ in 0..300 {
+            if let Some((_, data)) = frames.lock().unwrap().iter().find(|(t, _)| t == ty) {
+                return data.clone();
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        panic!("no {ty} frame was emitted");
+    }
+
+    /// APPROVAL-ASK-1: QA set `toolApproval.mode=ask` on a scratch daemon; the value is the one a session launches with.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_session_asks_unless_a_setting_or_the_environment_says_otherwise() {
+        let (p, _, dir) = prompter();
+        assert_eq!(mode(&p, "s1", Some("proj"), None), ApprovalMode::Ask, "nothing set: the fresh-install default asks");
+        assert_eq!(mode(&p, "s1", Some("proj"), Some("allowAll")), ApprovalMode::AllowAll, "the environment comes after the settings, before the default");
+        set(&p, json!({"key": MODE_KEY, "value": "ask"}));
+        assert_eq!(mode(&p, "s1", Some("proj"), Some("allowAll")), ApprovalMode::Ask, "the stored app value beats the environment");
+        set(&p, json!({"key": MODE_KEY, "value": "allowEdits", "scope": "project", "project": "proj"}));
+        assert_eq!(mode(&p, "s1", Some("proj"), None), ApprovalMode::AllowEdits, "the project beats the app");
+        assert_eq!(mode(&p, "s1", Some("other"), None), ApprovalMode::Ask, "another project keeps the app value");
+        set(&p, json!({"key": MODE_KEY, "value": "deny", "scope": "session", "session": "s1"}));
+        assert_eq!(mode(&p, "s1", Some("proj"), None), ApprovalMode::Deny, "the session beats the project");
+        assert_eq!(mode(&p, "s2", Some("proj"), None), ApprovalMode::AllowEdits, "a sibling session keeps the project's");
+        set(&p, json!({"key": MODE_KEY, "value": "yolo"}));
+        assert_eq!(mode(&p, "s3", None, None), ApprovalMode::Ask, "an unknown stored value is no setting: the default applies");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// APPROVAL-ASK-1: in ask mode a tool call that reaches the harness's approval raises ONE owner card, the CLI is held
+    /// (nothing answers it), the open card is what `session.blockedMinutes` reads, and the owner's answer releases it.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_approval_raises_a_card_and_holds_the_cli_until_the_owner_answers() {
+        for (decision, allowed) in [("allow_once", true), ("deny", false)] {
+            let (p, frames, dir) = prompter();
+            let (tx, rx) = std::sync::mpsc::channel();
+            p.approve("s1", "Bash", r#"{"command":"mkdir x"}"#, Box::new(move |allow| tx.send(allow).unwrap()));
+            let card: PromptRequest = serde_json::from_str(&frame(&frames, "prompt_request").await).unwrap();
+            assert_eq!((card.kind.as_str(), card.tool.as_deref(), card.session_id.as_str()), ("tool_approval", Some("Bash"), "s1"), "{decision}");
+            assert!(card.input.as_deref().is_some_and(|i| i.contains("mkdir x")), "the card shows what would run: {card:?}");
+            assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "{decision}: the CLI is held while the card is open");
+            let open = p.prompts.snapshot();
+            assert_eq!(open.iter().map(|c| c.session_id.as_str()).collect::<Vec<_>>(), vec!["s1"], "{decision}: the open card is the blocked-minutes input");
+            let reply: PromptResponse = serde_json::from_value(json!({"promptId": card.prompt_id, "decision": decision})).unwrap();
+            p.prompts.respond(&reply, "owner").unwrap();
+            assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), allowed, "{decision}");
+            assert!(p.prompts.snapshot().is_empty(), "{decision}: an answered card closes");
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
 
     #[test]
     fn modes_parse_from_their_wire_names() {
