@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import * as Kit from "../../ui/src/index";
 import host from "../src/host.json";
-import type { HostApi, LayoutViewProps, ShellProps, ShellWindowControls, WindowFrame } from "../src/contract";
+import type { HostApi, LayoutViewProps, ShellProps, WindowFrame } from "../src/contract";
 import { HOST_GLOBAL, HOST_MODULES, SCOPE_ATTRIBUTE, SLOTS, UI_API_VERSION, UI_EXPORTS } from "../src/contract";
 
 describe("the UI API contract", () => {
@@ -21,28 +21,20 @@ describe("the UI API contract", () => {
     expect([...SLOTS]).toEqual(["tab", "panel", "settings.card", "plugin.config", "card.badge", "layout"]);
   });
 
-  it("lets a layout hand the shell header actions, status-line entries and its own window controls, all optional", () => {
-    // Additive (DESK-4, DESK-5): a layout that passes none of them draws the shell as it always was.
+  it("lets a layout hand the shell header actions and status-line entries, both optional", () => {
+    // Additive (DESK-4): a layout that passes neither draws the shell as it always was.
     const none: ShellProps = {};
-    const all: ShellProps = {
-      className: "x",
-      headerActions: "menu",
-      statusLeading: "taskbar",
-      windowControls: { minimize: () => undefined, toggleMaximize: () => undefined, close: () => undefined, maximized: true },
-    };
+    const both: ShellProps = { className: "x", headerActions: "menu", statusLeading: "taskbar" };
     const shell: LayoutViewProps["Shell"] = () => null;
     expect(Object.keys(none)).toEqual([]);
-    expect(Object.keys(all).sort()).toEqual(["className", "headerActions", "statusLeading", "windowControls"]);
-    expect(Object.keys(all.windowControls!).sort()).toEqual(["close", "maximized", "minimize", "toggleMaximize"]);
+    expect(Object.keys(both).sort()).toEqual(["className", "headerActions", "statusLeading"]);
     expect(shell).toBeTypeOf("function");
   });
 
   it("lends a plugin the real window's frame through HostApi.windowFrame (DESK-5: the Start menu)", () => {
-    // `maximized` is optional: the real window's own frame (host.window) has no such notion and still satisfies the shape.
     const frame: WindowFrame = { minimize: () => undefined, toggleMaximize: () => undefined, close: () => undefined };
-    const controls: ShellWindowControls = frame;
     const api: Pick<HostApi, "windowFrame"> = { windowFrame: () => null };
-    expect(controls.maximized).toBeUndefined();
+    expect(Object.keys(frame).sort()).toEqual(["close", "minimize", "toggleMaximize"]);
     expect(api.windowFrame()).toBeNull();
   });
 });

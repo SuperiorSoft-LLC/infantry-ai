@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 // Custom title bar: brand, project, new/quick, avatars, attention, host, connection, window controls.
 // Empty areas carry data-tauri-drag-region so the window moves by dragging the bar.
-import type { ShellProps } from "@infantry/ui-plugin-api/contract";
+import type { ReactNode } from "react";
 import { BarChart3, LifeBuoy, PanelLeft, PanelRight, Plus, Wand2, Moon, Sun, Settings } from "lucide-react";
 import { attentionCount, hostLabel } from "@infantry/client";
 import { useAttention } from "@/components/mail/use-mail";
@@ -15,7 +15,7 @@ import { Brand } from "./brand";
 import { ProjectPicker } from "./project-picker";
 import { WindowControls } from "./window-controls";
 
-export function TitleBar({ headerActions, windowControls }: Pick<ShellProps, "headerActions" | "windowControls"> = {}) {
+export function TitleBar({ headerActions }: { headerActions?: ReactNode } = {}) {
   const ui = useUi();
   const attention = useAttention(attentionCount);
   const host = useDaemon((s) => hostLabel(s.connection.url));
@@ -80,7 +80,7 @@ export function TitleBar({ headerActions, windowControls }: Pick<ShellProps, "he
       </IconButton>
       {/* Desktop app only (HC-1 host.window); a browser or a phone renders nothing here (UI-WINCTRL-WEB-1). */}
       {headerActions}
-      <WindowControls controls={windowControls} />
+      <WindowControls />
     </header>
   );
 }

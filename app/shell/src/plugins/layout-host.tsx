@@ -36,7 +36,7 @@ function View({ plugin, id }: { plugin: string; id: string }) {
 function useShellOutlet(Shell: ComponentType<ShellProps>): ComponentType<ShellProps> {
   return useMemo(
     () =>
-      function ShellOutlet({ className, headerActions, statusLeading, windowControls }: ShellProps) {
+      function ShellOutlet({ className, headerActions, statusLeading }: ShellProps) {
         const place = useRef<HTMLDivElement>(null);
         const [host] = useState(() => {
           const el = document.createElement("div");
@@ -73,7 +73,7 @@ function useShellOutlet(Shell: ComponentType<ShellProps>): ComponentType<ShellPr
         return (
           <>
             <div ref={place} className={className} data-shell-outlet />
-            {createPortal(<Shell headerActions={headerActions} statusLeading={statusLeading} windowControls={windowControls} />, host)}
+            {createPortal(<Shell headerActions={headerActions} statusLeading={statusLeading} />, host)}
           </>
         );
       },
