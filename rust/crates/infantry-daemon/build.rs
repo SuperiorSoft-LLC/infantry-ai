@@ -6,7 +6,10 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 fn main() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+    // Read at RUN time: `env!` would bake the checkout that compiled this script into the cached build-script binary in
+    // the shared target dir, and break the next build from another worktree once the first one is removed.
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR");
+    let dir = Path::new(&manifest_dir)
         .join("../../../superiorSoftLibrary/infantryCore/src/main/sqldelight/com/superiorsoftllc/infantry/db");
     println!("cargo:rerun-if-changed={}", dir.display());
     let mut files: Vec<_> = std::fs::read_dir(&dir)
