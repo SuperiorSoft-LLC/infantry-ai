@@ -104,7 +104,7 @@ export interface PacingProvider {
   limit: string;
   freeSlot: boolean;
   warning?: string;
-  setLabel: "Type %" | "Set %";
+  setLabel: "Set %";
 }
 
 export interface AttentionItem {

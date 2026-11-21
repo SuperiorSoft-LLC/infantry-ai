@@ -196,7 +196,7 @@ impl Admin {
                 serde_json::json!({
                     "id": o.id, "displayName": o.display_name, "description": o.description, "version": o.version, "tier": o.tier,
                     "requires": o.requires, "bootstrap": bootstrap == Some(o.id.as_str()), "daemon": o.daemon, "ui": o.ui,
-                    "source": o.source.display().to_string(), "installed": false, "enabled": false, "status": "available",
+                    "source": installer::plain(&o.source).display().to_string(), "installed": false, "enabled": false, "status": "available",
                 }),
             );
             if let (Some(row), Some(extra)) = (rows.get_mut(&o.id), self.offer_check(&o.dir).as_object()) {
