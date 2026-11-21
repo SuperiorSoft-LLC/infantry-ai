@@ -120,8 +120,80 @@ fn lock(m: &Mutex<Connection>) -> MutexGuard<'_, Connection> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
+/// The schema statements (CREATE TABLE / INDEX / TRIGGER / VIEW) of one `.sq` file, labelled queries dropped.
+pub fn schema_statements(sq: &str) -> Vec<String> {
+    // Strip `--` comments (no .sq string literal holds `--`).
+    let text: String = sq
+        .lines()
+        .map(|l| match l.find("--") {
+            Some(i) => &l[..i],
+            None => l,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut in_trigger = false;
+    for ch in text.chars() {
+        cur.push(ch);
+        if ch != ';' {
+            continue;
+        }
+        let head = strip_label(&cur);
+        let upper = head.to_uppercase();
+        if upper.starts_with("CREATE TRIGGER") || in_trigger {
+            in_trigger = true;
+            if !upper.trim_end_matches(';').trim_end().ends_with("END") {
+                continue;
+            }
+            in_trigger = false;
+        }
+        if upper.starts_with("CREATE ") {
+            out.push(strip_type_adapters(head));
+        }
+        cur.clear();
+    }
+    out
+}
+
+/// Drops SQLDelight's column type adapters (`INTEGER AS kotlin.Int`): not SQL, absent from the real file.
+fn strip_type_adapters(stmt: &str) -> String {
+    let mut out = stmt.to_string();
+    for ty in ["INTEGER", "TEXT", "REAL", "BLOB"] {
+        let pat = format!("{ty} AS ");
+        while let Some(i) = out.find(&pat) {
+            let start = i + ty.len();
+            let after = start + " AS ".len();
+            let end = out[after..].find(|c: char| c.is_whitespace() || c == ',' || c == ')').map_or(out.len(), |j| after + j);
+            out.replace_range(start..end, "");
+        }
+    }
+    out
+}
+
+/// A statement without the SQLDelight `label:` line in front of it.
+fn strip_label(stmt: &str) -> &str {
+    let t = stmt.trim();
+    if let Some((first, rest)) = t.split_once('\n') {
+        let f = first.trim();
+        if f.ends_with(':') && f[..f.len() - 1].chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            return rest.trim();
+        }
+    }
+    t
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn labels_and_queries_are_dropped_triggers_kept() {
+        let sq = "-- c;\nCREATE TABLE a (x TEXT); -- tail\n\nq:\nSELECT * FROM a;\n\
+                  CREATE TRIGGER t BEFORE DELETE ON a BEGIN SELECT RAISE(ABORT, 'no'); END;\nins:\nINSERT INTO a VALUES (?);";
+        let s = super::schema_statements(sq);
+        assert_eq!(s.len(), 2, "{s:?}");
+        assert!(s[1].starts_with("CREATE TRIGGER") && s[1].ends_with("END;"));
+    }
+
     use super::*;
 
     fn temp_db(tag: &str) -> PathBuf {

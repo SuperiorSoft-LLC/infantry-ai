@@ -114,7 +114,6 @@ pub const BASELINE: &[(&str, &[&str], &str)] = &[
     ("crates/infantry-daemon/src/compose/tools.rs", &["infantry_knowledge", "infantry_scripting"], "DECOUPLE-4"),
     ("crates/infantry-daemon/src/compose/watch.rs", &["infantry_mail::mail", "infantry_orchestrator_api"], "DECOUPLE-9, -10"),
     ("crates/infantry-daemon/src/compose/worktree_sweep.rs", &["\"worktree", "infantry_board", "infantry_orchestrator_api", "infantry_projects::stale"], "DECOUPLE-10"),
-    ("crates/infantry-daemon/src/fresh_schema.rs", &["infantry_board"], "DECOUPLE-5"),
     ("crates/infantry-daemon/src/health.rs", &["\"worktree"], "DECOUPLE-7"),
     ("crates/infantry-daemon/src/pods.rs", &["\"pod_"], "DECOUPLE-10"),
     (
