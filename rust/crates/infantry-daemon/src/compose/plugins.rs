@@ -88,6 +88,8 @@ pub struct InstallSeam {
     pub config: InstallConfig,
     pub boot: Arc<BootState>,
     pub late: Arc<LateUnits>,
+    /// the sources the user added, kept on the daemon.
+    pub sources: Arc<super::sources::SourceStore>,
 }
 
 /// What `plugin_admin` manages: the installed daemon halves, the modules with none, and the owner's disabled set.
@@ -100,6 +102,22 @@ pub struct Admin {
 }
 
 impl Admin {
+    /// The built-in sources (bundled folder, `plugins.sources`) then the ones the user added.
+    fn all_sources(&self) -> Vec<PathBuf> {
+        let mut v = self.install.config.sources.clone();
+        for d in self.install.sources.dirs() {
+            if !v.contains(&d) {
+                v.push(d);
+            }
+        }
+        v
+    }
+
+    /// After a source is added, removed or refreshed: every client re-reads `available`.
+    fn catalog_changed(&self, bus: &EventBus) {
+        bus.publish(Envelope::new(infantry_protocol::frames::PLUGINS_CHANGED, serde_json::json!({ "sources": true }).to_string()));
+    }
+
     fn has_daemon_half(&self, id: &str) -> bool {
         self.installed.read().unwrap_or_else(|e| e.into_inner()).contains_key(id)
     }
@@ -153,7 +171,7 @@ impl Admin {
 
     /// `available`: every module a source offers and every module installed, one row each.
     fn available(&self) -> Vec<serde_json::Value> {
-        let offers = installer::catalog(&self.install.config.sources);
+        let offers = installer::catalog(&self.all_sources());
         let installed = super::host_frames::scan_modules(&Some(self.plugins_dir.clone()));
         let disabled = self.disabled.snapshot();
         let statuses = self.host.statuses();
@@ -165,7 +183,7 @@ impl Admin {
                 serde_json::json!({
                     "id": o.id, "displayName": o.display_name, "description": o.description, "version": o.version, "tier": o.tier,
                     "requires": o.requires, "bootstrap": bootstrap == Some(o.id.as_str()), "daemon": o.daemon, "ui": o.ui,
-                    "source": o.source.display().to_string(), "installed": false, "enabled": false, "status": "available",
+                    "source": o.source.display().to_string(), "signed": super::sources::verify(&o.dir).is_ok_and(|s| s), "installed": false, "enabled": false, "status": "available",
                 }),
             );
         }
@@ -220,7 +238,7 @@ impl Admin {
         if want.is_empty() {
             return fail("usage: plugin install <id>...".into());
         }
-        let offers = installer::catalog(&self.install.config.sources);
+        let offers = installer::catalog(&self.all_sources());
         let want = installer::expand_apps(want, &offers);
         let order = match installer::plan(&want, &offers, &installer::installed_ids(&self.plugins_dir)) {
             Ok(o) => o,
@@ -231,7 +249,7 @@ impl Admin {
         }
         let mut done: Vec<String> = Vec::new();
         for offer in order {
-            let step = installer::place(&self.plugins_dir, &offer).and_then(|dir| {
+            let step = super::sources::verify(&offer.dir).map_err(|e| format!("{} refused: {e}", offer.id)).and_then(|_| installer::place(&self.plugins_dir, &offer)).and_then(|dir| {
                 self.register(&offer.id, &dir).map_err(|e| {
                     let _ = installer::remove(&self.plugins_dir, &dir);
                     format!("{} not loaded: {e}", offer.id)
@@ -369,9 +387,33 @@ impl Admin {
                 (0, format!("{id} {op}d"), String::new())
             }
             "available" => (0, serde_json::to_string_pretty(&self.available()).unwrap_or_default(), String::new()),
+            "sources" => (0, serde_json::to_string_pretty(&self.install.sources.list()).unwrap_or_default(), String::new()),
+            "source-add" | "source-remove" | "source-refresh" => {
+                let done = match op {
+                    "source-add" => self.install.sources.add(id).map(|s| format!("added {} source {} ({})", s.kind, s.id, s.location)),
+                    "source-remove" => self.install.sources.remove(id).map(|s| format!("removed source {} ({})", s.id, s.location)),
+                    _ => self.install.sources.refresh(id).map(|l| l.join("\n")),
+                };
+                match done {
+                    Ok(out) => {
+                        self.catalog_changed(bus);
+                        (0, out, String::new())
+                    }
+                    Err(e) => fail(e),
+                }
+            }
+            "search" => {
+                let q = args[1..].join(" ").to_lowercase();
+                let rows: Vec<serde_json::Value> = self
+                    .available()
+                    .into_iter()
+                    .filter(|r| q.is_empty() || ["id", "displayName", "description"].iter().any(|k| r[*k].as_str().unwrap_or("").to_lowercase().contains(&q)))
+                    .collect();
+                (0, serde_json::to_string_pretty(&rows).unwrap_or_default(), String::new())
+            }
             "install" => self.install_ops(&args[1..].iter().map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect::<Vec<_>>(), bus),
             "uninstall" => self.uninstall_op(id, bus),
-            "" => fail("usage: plugin <status|available|install|uninstall|enable|disable> [id]".into()),
+            "" => fail("usage: plugin <status|available|search|sources|source-add|source-remove|source-refresh|install|uninstall|enable|disable> [id]".into()),
             other => fail(format!("plugin {other}: not supported by this daemon yet (it serves status, available, install, uninstall, enable, disable)")),
         }
     }
