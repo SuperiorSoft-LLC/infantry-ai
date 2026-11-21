@@ -3,8 +3,8 @@ name: Infantry AI
 tagline: Run a whole team of coding agents from one ticket board.
 sub: Every agent works on its own git branch, and you stay in charge of the merge. On your own machine, with no third-party cloud in between.
 pitch: Infantry AI is a command post for coding agents: a ticket board, agents on their own git branches, mail, shared project knowledge, Lua scripts that automate your process, and plugins that build the app itself.
-license_line: The core (the daemon) is the foundation: it is licensed MPL-2.0 to protect its integrity, so apps and plugins can rely on a stable base that does not break, with backward compatibility as the promise. Everything built on top (the SDKs, the UI core, the apps and every plugin) is free under Apache-2.0: build, fork, sell and extend it without copyleft.
-license_footer: The core is a community effort; the rest is yours.
+license_line: BattalionOS, the core and shell (the daemon, protocol, runner and desktop shell), is the foundation: it is licensed MPL-2.0 to protect its integrity, so apps and plugins can rely on a stable base that does not break, with backward compatibility as the promise. Everything built on top (the SDKs, the UI core, the apps and every plugin) is free under Apache-2.0: build, fork, sell and extend it without copyleft.
+license_footer: BattalionOS is a community effort; the rest is yours.
 version: 1.6.0
 platforms: Windows: desktop app (MSI and NSIS installer) + headless daemon. Android: APK (arm64). Linux and macOS: desktop app builds (best-effort, unsigned, from the release workflow). Built with Rust (Tauri 2, React).
 downloads_url: https://github.com/SuperiorSoft-LLC/infantry-ai/releases/latest
@@ -19,7 +19,7 @@ plugins_page: https://github.com/SuperiorSoft-LLC/infantry-ai/blob/main/docs/wik
 licensing_page: https://github.com/SuperiorSoft-LLC/infantry-ai/blob/main/docs/wiki/licensing.md
 sponsor_url:
 donate_url:
-support_line: The core (MPL-2.0) is the community foundation. Sponsorship and donations pay for keeping it stable and backward compatible.
+support_line: BattalionOS (MPL-2.0) is the community foundation. Sponsorship and donations pay for keeping it stable and backward compatible.
 features:
   - account_tree | One branch per ticket | Lanes To Do, In Progress, Pending and Done. Role, type and weight per ticket.
   - extension | Plugins inside plugins | Tabs, panels, daemon tools and harnesses are plugins with a module.json.

@@ -4,6 +4,8 @@
 Read this first. It is a map, not a manual: every section links to the page that holds the detail. Facts here come
 from the code; where a page and the code disagree, the code wins.
 
+Infantry AI runs on **BattalionOS**, the MPL-2.0 core and shell (daemon core, protocol, runner, desktop shell); code, crate and CLI names keep the `infantry` prefix for now.
+
 Infantry AI is a command post for coding agents: a daemon (ticket board, agents on their own git branches, mail, shared
 project knowledge, Lua scripts and hooks) and clients (the Tauri desktop app, the Android app, the CLI) that talk to it
 over a WebSocket. The main branch is the **Rust framework**: the daemon is a Rust binary, the app is Tauri 2 with a React
