@@ -10,7 +10,7 @@ import "./index.css";
 export default definePlugin({
   apiVersion: UI_API_VERSION,
   activate(ctx) {
-    ctx.register<LayoutViewProps>("infantry.desktop", { icon: LayoutDashboard, render: ({ Shell, View }) => <Desktop Shell={Shell} View={View} /> });
+    ctx.register<LayoutViewProps>("infantry.desktop", { icon: LayoutDashboard, render: ({ Shell, View }) => <Desktop plugin={ctx.id} Shell={Shell} View={View} /> });
     ctx.register<{ plugin: string }>("infantry.desktop.config", { render: () => <DesktopSettings plugin={ctx.id} /> });
   },
 });

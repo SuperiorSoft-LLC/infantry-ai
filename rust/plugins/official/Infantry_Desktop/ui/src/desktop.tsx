@@ -4,9 +4,9 @@
 // Minimize (back to the desktop, the app stays open and keeps its state) and Close (the app ends; agents keep running because
 // they live in the daemon). The orchestrator is today's whole shell, drawn untouched. Built from the kit only.
 import { useReducer, useState, type ComponentType, type ReactNode } from "react";
-import { ChevronsDown, LayoutDashboard, PackageOpen, X } from "lucide-react";
-import { AppDialog, cn, IconButton, PanelCard, Switch, Tooltip, TooltipContent, TooltipTrigger } from "@infantry/ui";
-import { AgentAvatar, useAgentActivity, usePreference } from "@infantry/ui-plugin-api";
+import { ChevronsDown, LayoutDashboard, MoreVertical, PackageOpen, X } from "lucide-react";
+import { AppDialog, cn, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, IconButton, PanelCard, Switch, Tooltip, TooltipContent, TooltipTrigger } from "@infantry/ui";
+import { AgentAvatar, SCOPE_ATTRIBUTE, useAgentActivity, usePreference, type ShellProps } from "@infantry/ui-plugin-api";
 import { initialState, reduce, toggle, type AppId, type DesktopState } from "./state";
 
 /** What the "About" of an app says: the owner's legibility rule (an app is a plugin under Apache-2.0, not core). */
@@ -87,6 +87,36 @@ function AppBar({ app, onMinimize, onClose }: { app: AppInfo; onMinimize: () => 
   );
 }
 
+/**
+ * The app menu of the orchestrator: it sits in the shell's own header (the layout hands it over as `headerActions`), so an open
+ * app needs no title bar of its own. Minimize goes back to the desktop, Close ends the app, About opens the app's About.
+ */
+function AppMenu({ app, onMinimize, onClose, onAbout }: { app: AppInfo; onMinimize: () => void; onClose: () => void; onAbout: () => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <IconButton label={`${app.name} app menu`} data-testid="app-menu">
+          <MoreVertical />
+        </IconButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={onMinimize}>Minimize</DropdownMenuItem>
+        <DropdownMenuItem onSelect={onClose}>Close</DropdownMenuItem>
+        <DropdownMenuItem onSelect={onAbout}>About</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** What the shell draws is outside this plugin's style scope; slot content that carries our classes is wrapped in it again. */
+function Scoped({ plugin, children }: { plugin: string; children: ReactNode }) {
+  return (
+    <div {...{ [SCOPE_ATTRIBUTE]: plugin }} style={{ display: "contents" }}>
+      {children}
+    </div>
+  );
+}
+
 /** Hidden, not unmounted, while minimized: the app keeps running and reopens as it was. */
 function Window({ show, children }: { show: boolean; children: ReactNode }) {
   return (
@@ -145,13 +175,13 @@ function TaskbarAvatars() {
 function Taskbar({ state, onToggle }: { state: DesktopState; onToggle: (app: AppInfo) => void }) {
   const open = APPS.filter((a) => state.windows[a.id] !== "closed");
   return (
-    <nav aria-label="Taskbar" data-testid="taskbar" className="flex h-16 shrink-0 items-center justify-center gap-1 border-t bg-card px-2 sm:h-10 sm:justify-start">
-      {open.length === 0 && <span className="px-2 text-xs text-muted-foreground">No apps open</span>}
+    <nav aria-label="Taskbar" data-testid="taskbar" className="flex h-full min-w-0 items-center gap-1">
+      {open.length === 0 && <span className="px-1 text-xs text-muted-foreground">No apps open</span>}
       {open.map((a) => {
         const Icon = a.icon;
         const front = state.front === a.id;
         return (
-          <div key={a.id} className="flex items-center gap-2">
+          <div key={a.id} className="flex items-center gap-2 max-sm:gap-1">
             <button
               type="button"
               onClick={() => onToggle(a)}
@@ -161,11 +191,11 @@ function Taskbar({ state, onToggle }: { state: DesktopState; onToggle: (app: App
               data-state={front ? "open" : "minimized"}
               title={front ? `Minimize ${a.name}` : `Restore ${a.name}`}
               className={cn(
-                "flex h-12 items-center gap-2 rounded-lg border px-3 text-xs hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:h-8 sm:px-2.5",
+                "flex h-5 items-center gap-2 rounded border px-2 text-xs hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none max-sm:h-12 max-sm:min-w-12 max-sm:justify-center max-sm:rounded-lg max-sm:px-3",
                 front ? "border-foreground/40 bg-accent font-medium" : "bg-background",
               )}
             >
-              <Icon className="size-4" />
+              <Icon className="size-3.5 max-sm:size-4" />
               <span className="hidden sm:inline">{a.name}</span>
               {a.id === "orchestrator" && <AgentBadge />}
             </button>
@@ -177,11 +207,30 @@ function Taskbar({ state, onToggle }: { state: DesktopState; onToggle: (app: App
   );
 }
 
-export function Desktop({ Shell, View }: { Shell: ComponentType<{ className?: string }>; View: ComponentType<{ plugin: string; id: string }> }) {
+export function Desktop({ plugin, Shell, View }: { plugin: string; Shell: ComponentType<ShellProps>; View: ComponentType<{ plugin: string; id: string }> }) {
   const [openAtStart] = usePreference("desktop.openAtStart", false);
   const [state, dispatch] = useReducer(reduce, openAtStart, initialState);
   const [about, setAbout] = useState<AppInfo | null>(null);
-  const body = (id: AppId): ReactNode => (id === "orchestrator" ? <Shell className="min-h-0 flex-1" /> : <View plugin="Infantry_Installer" id="infantry.installer" />);
+  const taskbar = (
+    <Scoped plugin={plugin}>
+      <Taskbar state={state} onToggle={(a) => dispatch(toggle(state, a.id))} />
+    </Scoped>
+  );
+  const orchestrator = APPS[0]!;
+  const body = (id: AppId): ReactNode =>
+    id === "orchestrator" ? (
+      <Shell
+        className="min-h-0 flex-1"
+        statusLeading={taskbar}
+        headerActions={
+          <Scoped plugin={plugin}>
+            <AppMenu app={orchestrator} onMinimize={() => dispatch({ type: "minimize", app: "orchestrator" })} onClose={() => dispatch({ type: "close", app: "orchestrator" })} onAbout={() => setAbout(orchestrator)} />
+          </Scoped>
+        }
+      />
+    ) : (
+      <View plugin="Infantry_Installer" id="infantry.installer" />
+    );
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-gradient-to-br from-background via-muted to-background">
      <div className="relative min-h-0 flex-1 overflow-hidden">
@@ -196,7 +245,7 @@ export function Desktop({ Shell, View }: { Shell: ComponentType<{ className?: st
         (a) =>
           state.windows[a.id] !== "closed" && (
             <Window key={a.id} show={state.front === a.id}>
-              <AppBar app={a} onMinimize={() => dispatch({ type: "minimize", app: a.id })} onClose={() => dispatch({ type: "close", app: a.id })} />
+              {a.id !== "orchestrator" && <AppBar app={a} onMinimize={() => dispatch({ type: "minimize", app: a.id })} onClose={() => dispatch({ type: "close", app: a.id })} />}
               <div className="relative min-h-0 flex-1">
                 <div className="absolute inset-0 flex flex-col">{body(a.id)}</div>
               </div>
@@ -204,7 +253,8 @@ export function Desktop({ Shell, View }: { Shell: ComponentType<{ className?: st
           ),
       )}
      </div>
-      <Taskbar state={state} onToggle={(a) => dispatch(toggle(state, a.id))} />
+      {/* The orchestrator's status line carries the taskbar; with another app or the wallpaper in front, a strip of the same height does. */}
+      {state.front !== "orchestrator" && <footer className="flex h-6 shrink-0 items-center border-t bg-background px-3 max-sm:h-14">{taskbar}</footer>}
       <About app={about} onClose={() => setAbout(null)} />
     </div>
   );

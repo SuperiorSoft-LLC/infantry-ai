@@ -65,6 +65,18 @@ export interface SlotProps {
   layout: LayoutViewProps;
 }
 
+/**
+ * What a layout may hand the shell it draws (additive; both optional, and a layout that passes neither gets the shell as it
+ * always was). `headerActions` sit at the right end of the shell's header, just left of the window controls (or at the far
+ * right where there are none). `statusLeading` sits at the left of the shell's bottom status line, which then keeps its own
+ * status text on the right. Both are plain nodes; the shell names no plugin.
+ */
+export interface ShellProps {
+  className?: string;
+  headerActions?: ReactNode;
+  statusLeading?: ReactNode;
+}
+
 /** What a `layout` view is drawn with: today's whole app, and a way to draw another plugin's page contribution. */
 export interface LayoutViewProps {
   /**
@@ -73,7 +85,7 @@ export interface LayoutViewProps {
    * Hide the placeholder (display:none on it or an ancestor) to hide the shell while it keeps running and keeps its state;
    * unmount it to close the shell.
    */
-  Shell: ComponentType<{ className?: string }>;
+  Shell: ComponentType<ShellProps>;
   /** Draws contribution [id] of plugin [plugin] as a page (an installed plugin's tab), with the app's loading and fault states. */
   View: ComponentType<{ plugin: string; id: string }>;
 }

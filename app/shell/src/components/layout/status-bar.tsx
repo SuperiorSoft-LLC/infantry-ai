@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // Bottom status bar: connection, processes, an update the app found, keyboard hints, version.
+import type { ReactNode } from "react";
 import { Cpu } from "lucide-react";
 import { shortcutHints } from "@infantry/client";
 import { localMode } from "@/daemon/daemon";
@@ -39,14 +40,25 @@ function UpdatePill() {
   );
 }
 
-export function StatusBar() {
+/**
+ * `leading`: a layout's entries for the left end (the Desktop's taskbar). Then the strip is one bar: those entries on the left,
+ * the status text (connection, processes, hints, version) on the right; and on a phone it is tall enough for touch targets.
+ */
+export function StatusBar({ leading }: { leading?: ReactNode } = {}) {
   const version = useAppVersionLine();
-  return (
-    <footer className="flex h-6 shrink-0 items-center gap-4 border-t bg-background px-3 text-[11px] whitespace-nowrap">
+  const status = (
+    <>
       <ConnectionBadge />
       <ProcessesBadge />
       <UpdatePill />
+    </>
+  );
+  return (
+    <footer className={`flex shrink-0 items-center gap-4 border-t bg-background px-3 text-[11px] whitespace-nowrap ${leading ? "h-6 max-sm:h-14" : "h-6"}`}>
+      {leading}
+      {!leading && status}
       <span className="flex-1" />
+      {leading && <span className="flex min-w-0 items-center gap-3">{status}</span>}
       <span className="hidden items-center gap-3 xl:flex">
         {shortcutHints({ resume: localMode }).map((h) => (
           <KeyHint key={h}>{h}</KeyHint>

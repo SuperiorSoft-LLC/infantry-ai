@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import * as Kit from "../../ui/src/index";
 import host from "../src/host.json";
+import type { LayoutViewProps, ShellProps } from "../src/contract";
 import { HOST_GLOBAL, HOST_MODULES, SCOPE_ATTRIBUTE, SLOTS, UI_API_VERSION, UI_EXPORTS } from "../src/contract";
 
 describe("the UI API contract", () => {
@@ -18,5 +19,15 @@ describe("the UI API contract", () => {
     expect(SCOPE_ATTRIBUTE).toBe(host.scopeAttribute);
     expect([...HOST_MODULES]).toEqual(["react", "react/jsx-runtime", "react-dom", "@infantry/ui"]);
     expect([...SLOTS]).toEqual(["tab", "panel", "settings.card", "plugin.config", "card.badge", "layout"]);
+  });
+
+  it("lets a layout hand the shell header actions and status-line entries, both optional", () => {
+    // Additive (DESK-4): a layout that passes neither draws the shell as it always was.
+    const none: ShellProps = {};
+    const both: ShellProps = { className: "x", headerActions: "menu", statusLeading: "taskbar" };
+    const shell: LayoutViewProps["Shell"] = () => null;
+    expect(Object.keys(none)).toEqual([]);
+    expect(Object.keys(both).sort()).toEqual(["className", "headerActions", "statusLeading"]);
+    expect(shell).toBeTypeOf("function");
   });
 });

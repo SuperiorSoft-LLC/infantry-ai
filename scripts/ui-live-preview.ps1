@@ -79,7 +79,7 @@ try {
     Write-Host "[preview] the dev daemon loads the plugins in $env:INFANTRY_PLUGINS_DIR"
   }
   Write-Host "[preview] building (target $TargetDir) and starting the dev daemon on 127.0.0.1:$daemonPort (state $state)"
-  $daemon = Start-Process cargo -ArgumentList 'run', '-q', '-p', 'infantry-daemon', '--', '--port', $daemonPort, '--state-dir', "`"$state`"" `
+  $daemon = Start-Process cargo -ArgumentList 'run', '-q', '-p', 'infantry-distribution', '--', '--port', $daemonPort, '--state-dir', "`"$state`"" `
     -WorkingDirectory (Join-Path $repo 'rust') -NoNewWindow -PassThru
   $deadline = (Get-Date).AddMinutes(30)
   while ($true) {
