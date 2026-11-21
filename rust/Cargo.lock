@@ -1305,6 +1305,7 @@ version = "0.3.0"
 dependencies = [
  "infantry-harness",
  "infantry-runner-local",
+ "serde",
  "serde_json",
  "tokio",
  "uuid",

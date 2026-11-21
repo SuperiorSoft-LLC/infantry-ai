@@ -17,6 +17,11 @@ pub struct Headless {
 }
 
 impl Headless {
+    pub fn with_policy(mut self, p: Option<crate::policy::Policy>) -> Self {
+        self.answers = self.answers.with_policy(p);
+        self
+    }
+
     pub fn new(approval: ApprovalMode) -> Self {
         Headless { answers: Answers::new(approval), out: Vec::new(), ended: false, started: false, last_stderr: None }
     }

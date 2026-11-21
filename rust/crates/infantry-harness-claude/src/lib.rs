@@ -13,6 +13,7 @@
 pub mod headless;
 pub mod hooks;
 pub mod interactive;
+pub mod policy;
 pub mod screen;
 pub mod store;
 pub mod stream;
@@ -163,6 +164,7 @@ impl ClaudeHarness {
             approval: req.approval,
             timeout_sec: self.hook_timeout_sec,
             watch_url: hooks::watch_url(&req.env),
+            policy_matcher: policy::Policy::from_env(&req.env).map(|p| p.matcher()),
         });
         a.extend(["--settings".into(), hooks::settings(wiring.as_ref(), req.approval == ApprovalMode::AllowAll)]);
         if req.mcp.delivered().next().is_some() {
@@ -275,7 +277,7 @@ impl Harness for ClaudeHarness {
                 Ok(LaunchPlan {
                     spec,
                     stdin: Some(prompt.as_bytes().to_vec()),
-                    translator: Box::new(headless::Headless::new(req.approval)),
+                    translator: Box::new(headless::Headless::new(req.approval).with_policy(policy::Policy::from_env(&req.env))),
                     tail: Vec::new(),
                 })
             }
@@ -292,7 +294,7 @@ impl Harness for ClaudeHarness {
                 Ok(LaunchPlan {
                     spec: spec.pty(self.pty),
                     stdin: None,
-                    translator: Box::new(interactive::Interactive::new(&session_id, req.approval, self.timings)),
+                    translator: Box::new(interactive::Interactive::new(&session_id, req.approval, self.timings).with_policy(policy::Policy::from_env(&req.env))),
                     tail,
                 })
             }

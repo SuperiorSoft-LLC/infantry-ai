@@ -8,5 +8,6 @@
   "tier": "official",
   "tabs": [{ "id": "infantry.roles", "container": "center" }],
   "roleCatalog": "roles/index.json",
+  "rolePolicy": "roles/policy.json",
   "data": ["roles"]
 }

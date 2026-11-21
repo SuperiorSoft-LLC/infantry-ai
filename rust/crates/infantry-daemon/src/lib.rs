@@ -6,6 +6,7 @@ pub mod account;
 pub mod auth;
 pub mod gateway;
 pub mod board;
+pub mod role_policy;
 pub mod compose;
 pub mod fresh_schema;
 pub mod harness;

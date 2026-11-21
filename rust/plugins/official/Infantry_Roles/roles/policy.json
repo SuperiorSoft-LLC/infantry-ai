@@ -1,0 +1,13 @@
+{
+  "_comment": "PM-ENFORCE-1: what a role may not do by hand. The daemon hands a session of a listed role this entry as INFANTRY_ROLE_POLICY and the harness refuses the call. Each role has a boolean setting (default on) that turns its entry off, per app or per project.",
+  "version": 1,
+  "roles": {
+    "pm": {
+      "setting": "policy.pm.handsOff",
+      "denyTools": ["Write", "Edit", "MultiEdit", "NotebookEdit"],
+      "denyGit": ["commit", "merge", "rebase", "reset", "checkout", "switch", "cherry-pick", "revert", "push"],
+      "denyCommands": ["cargo build", "cargo test", "cargo check", "cargo clippy", "pnpm test", "pnpm build", "pnpm typecheck", "npm test", "npm run build", "yarn test", "yarn build", "gradlew", "./gradlew", "gradle", "pytest", "go test", "go build", "dotnet build", "dotnet test", "mvn test", "mvn package", "make"],
+      "message": "A PM delegates: it does not edit files, run git history commands or run builds and tests itself. Spawn a worker with the agents_spawn tool instead: fullstack, backend or frontend for code and tests, version-control (git) for merges, rebases and conflicts. Reading files and diffs, the board, mail and status checks stay allowed. The owner can turn this off with the setting policy.pm.handsOff."
+    }
+  }
+}

@@ -52,6 +52,8 @@ pub struct HookWiring<'a> {
     pub timeout_sec: u64,
     /// The STALL-2 watch URL (None = off).
     pub watch_url: Option<String>,
+    /// PM-ENFORCE-1: the tools a role policy inspects (None = no policy); they reach the same blocking hook.
+    pub policy_matcher: Option<String>,
 }
 
 /// The watch URL a session's env asks for: `<INFANTRY_MAIL_BASE>/watch/rewrite/claude` when `INFANTRY_WATCH=on`.
@@ -98,6 +100,9 @@ pub fn settings(hooks: Option<&HookWiring<'_>>, bypass: bool) -> String {
             h.insert(PERMISSION_REQUEST.into(), json!([{"hooks": [http(w.url, w.timeout_sec)]}]));
         }
         let mut pre = vec![json!({"matcher": QUESTION_TOOL, "hooks": [http(w.url, w.timeout_sec)]})];
+        if let Some(m) = &w.policy_matcher {
+            pre.push(json!({"matcher": m, "hooks": [http(w.url, w.timeout_sec)]}));
+        }
         if let Some(url) = &w.watch_url {
             pre.push(json!({"matcher": WATCH_MATCHER, "hooks": [watch_hook(url)]}));
             h.insert(POST_TOOL_USE.into(), json!([{"matcher": WATCH_MATCHER, "hooks": [watch_hook(&format!("{url}-post"))]}]));
@@ -124,6 +129,8 @@ pub enum Call {
     Permission { tool: String, input: String },
     /// An AskUserQuestion call: its tool input.
     Question { input: Value },
+    /// A `PreToolUse` call of a tool a role policy inspects: (tool, input).
+    Tool { tool: String, input: Value },
     /// Anything else (answered with no decision).
     Other,
 }
@@ -136,6 +143,7 @@ pub fn read_call(body: &str) -> Call {
         Some(PERMISSION_REQUEST) => Call::Permission { tool, input },
         Some(PRE_TOOL_USE) if tool == QUESTION_TOOL => Call::Question { input: v.get("tool_input").cloned().unwrap_or(Value::Null) },
         // An older CLI that does not name the event: a permission request carries a tool, a question names its tool.
+        Some(PRE_TOOL_USE) => Call::Tool { tool, input: v.get("tool_input").cloned().unwrap_or(Value::Null) },
         None if tool == QUESTION_TOOL => Call::Question { input: v.get("tool_input").cloned().unwrap_or(Value::Null) },
         None if !tool.is_empty() => Call::Permission { tool, input },
         _ => Call::Other,
@@ -226,11 +234,17 @@ pub struct Answers {
     pending: std::collections::HashMap<String, u64>,
     /// Question id -> (hook call, tool input, each question's own text).
     questions: std::collections::HashMap<String, (u64, Value, Vec<String>)>,
+    policy: Option<crate::policy::Policy>,
 }
 
 impl Answers {
     pub fn new(approval: ApprovalMode) -> Self {
-        Answers { approval, pending: Default::default(), questions: Default::default() }
+        Answers { approval, pending: Default::default(), questions: Default::default(), policy: None }
+    }
+
+    pub fn with_policy(mut self, p: Option<crate::policy::Policy>) -> Self {
+        self.policy = p;
+        self
     }
 
     /// Permission requests waiting for the host.
@@ -262,6 +276,16 @@ impl Answers {
                 self.questions.insert(key.clone(), (id, input, raws));
                 vec![HarnessEvent::QuestionAsked { id: key, questions }]
             }
+            Call::Tool { tool, input } => match self.policy.as_ref().and_then(|p| p.refuse(&tool, &input)) {
+                Some(why) => {
+                    outbound.push(Outbound::HookReply { id, body: question_deny(&why) });
+                    vec![HarnessEvent::Warning(format!("claude: role policy refused {tool}"))]
+                }
+                None => {
+                    outbound.push(Outbound::HookReply { id, body: "{}".into() });
+                    Vec::new()
+                }
+            },
             Call::Other => {
                 outbound.push(Outbound::HookReply { id, body: "{}".into() });
                 Vec::new()
