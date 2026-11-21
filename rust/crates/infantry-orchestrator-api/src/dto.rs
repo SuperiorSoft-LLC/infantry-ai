@@ -359,6 +359,14 @@ pub struct Ticket {
     pub mcp: Option<TicketMcp>,
 }
 
+impl Ticket {
+    /// The git branch a ticket works on: the `branch` a start records, else the `worktree_branch` a save set. The one
+    /// rule shared by `ticket close` and the worktree sweep, so both find the same worktree.
+    pub fn work_branch(&self) -> Option<&str> {
+        self.branch.as_deref().or(self.worktree_branch.as_deref()).filter(|b| !b.trim().is_empty())
+    }
+}
+
 fn default_skills_mode() -> String {
     skills_mode::MERGE.to_string()
 }
@@ -667,6 +675,19 @@ mod tests {
         assert_eq!(m.to_stored(), r#"{"require":[{"server":"gh","purpose":"prs"}]}"#);
         assert_eq!(TicketMcp::stored(Some(&m.to_stored())), Some(m));
         assert_eq!(TicketMcp::stored(Some("{}")), None);
+    }
+
+    #[test]
+    fn work_branch_is_the_start_branch_else_the_saved_worktree_branch() {
+        // A started ticket records `branch` only; the sweep and `ticket close` must both find it.
+        let mk = |extra: &str| -> Ticket {
+            serde_json::from_str(&format!(r#"{{"id":"t1","title":"x","status":"done","position":0,"createdAt":1,"updatedAt":1{extra}}}"#)).expect("ticket json")
+        };
+        assert_eq!(mk(r#","branch":"ticket/a""#).work_branch(), Some("ticket/a"));
+        assert_eq!(mk(r#","worktreeBranch":"ticket/b""#).work_branch(), Some("ticket/b"));
+        assert_eq!(mk(r#","branch":"ticket/a","worktreeBranch":"ticket/b""#).work_branch(), Some("ticket/a"));
+        assert_eq!(mk(r#","branch":" ""#).work_branch(), None);
+        assert_eq!(mk("").work_branch(), None);
     }
 
     #[test]
