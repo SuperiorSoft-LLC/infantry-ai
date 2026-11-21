@@ -26,20 +26,21 @@ export function loginCodeFromUrl(url: string, prefixes: readonly string[] | unde
   return state ? `${code}#${state}` : code;
 }
 
-/** True when [url] is a page of one of [hosts] (exact host, so a look-alike suffix does not count). */
-export function isExternalOnlyHost(url: string, hosts: readonly string[] | undefined): boolean {
+/**
+ * True when [url] is a web page on a host outside [hosts] (a host or any subdomain of it is inside), so the login must move to the
+ * system browser: Google, Apple and every company SSO refuse or break in an embedded window. Never true without a declaration.
+ */
+export function isOutsideAllowedHosts(url: string, hosts: readonly string[] | undefined): boolean {
   if (!hosts?.length) return false;
+  let u: URL;
   try {
-    const h = new URL(url).hostname.toLowerCase();
-    return hosts.some((x) => x.toLowerCase() === h);
+    u = new URL(url);
   } catch {
     return false;
   }
-}
-
-/** The addresses the host window reports: the declared code pages plus a bare origin per external-only host. */
-export function loginWatchList(prefixes: readonly string[] | undefined, hosts: readonly string[] | undefined): string[] {
-  return [...(prefixes ?? []), ...(hosts ?? []).map((h) => `https://${h}`)];
+  if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+  const h = u.hostname.toLowerCase();
+  return !hosts.some((x) => h === x.toLowerCase() || h.endsWith(`.${x.toLowerCase()}`));
 }
 
 /**
@@ -70,7 +71,7 @@ export async function watchLoginWindow(
   prefixes: readonly string[] | undefined,
   submit: (code: string) => void,
   onClosed: () => void = () => undefined,
-  externalHosts?: readonly string[],
+  allowedHosts?: readonly string[],
   onExternal: () => void = () => undefined,
 ): Promise<{ close(): void }> {
   let win: LoginWindow | null = null;
@@ -78,7 +79,7 @@ export async function watchLoginWindow(
   const handlers: LoginWindowHandlers = {
     onUrl(u) {
       if (sent) return;
-      if (isExternalOnlyHost(u, externalHosts)) {
+      if (isOutsideAllowedHosts(u, allowedHosts)) {
         // The page refuses an embedded window: the same login page opens in the system browser, the paste field takes the code.
         sent = true;
         win?.close();
@@ -95,7 +96,7 @@ export async function watchLoginWindow(
     onClosed,
   };
   try {
-    win = await host.openLoginWindow(url, loginWatchList(prefixes, externalHosts), handlers);
+    win = await host.openLoginWindow(url, prefixes ?? [], handlers);
   } catch {
     win = null;
   }

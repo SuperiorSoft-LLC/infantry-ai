@@ -517,9 +517,9 @@ pub struct Credential {
     /// Address prefixes (scheme, host, path) of the page the login ends on, which carries the code in its `code=` query (and `state=`).
     /// The app watches its own login window and reads the code from such an address; empty = the owner pastes the code.
     pub login_code_urls: Vec<String>,
-    /// Hosts whose sign-in page refuses an embedded window (a Google sign-in, for one). The app opens the login page in the system
-    /// browser when its own login window reaches one of these hosts; empty = never hands off.
-    pub login_external_hosts: Vec<String>,
+    /// Hosts (and their subdomains) the login may stay on in the app's own window. A navigation to any other host (Google, Apple, a
+    /// company SSO) hands the login to the system browser; empty = never hands off.
+    pub login_allowed_hosts: Vec<String>,
 }
 
 /// The auth mode that passes the stored API key to the CLI.

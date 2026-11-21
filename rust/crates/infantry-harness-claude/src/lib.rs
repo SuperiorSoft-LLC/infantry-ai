@@ -211,9 +211,13 @@ fn config_file(probe: &dyn Probe) -> Option<PathBuf> {
 
 /// Before an interactive launch with a subscription token (Kotlin `ClaudeSignIn.prepare`): a CLI that holds a login but never
 /// finished its first-run setup opens on the theme picker, where a turn would wait forever. Marks the setup done, merged into its
-/// config (made when missing). Touches nothing without a token, with a finished setup or a file it cannot parse. True = written.
+/// config (made when missing). A login is a subscription token in [env] or the CLI's own credentials file (`claude auth login`).
+/// Touches nothing without a login, with a finished setup (onboarding done and a theme chosen) or a file it cannot parse.
+/// True = written. The theme picker is the first screen of an unseeded config, so a `theme` is seeded next to the flag.
 pub fn prepare_onboarding(env: &[(String, String)], probe: &dyn Probe) -> bool {
-    if !env.iter().any(|(k, v)| k == OAUTH_TOKEN_ENV && !v.trim().is_empty()) {
+    let token = env.iter().any(|(k, v)| k == OAUTH_TOKEN_ENV && !v.trim().is_empty());
+    let credentials = config_dir(probe).map(|d| d.join(CREDENTIALS_FILE)).and_then(|p| probe.read_to_string(&p)).is_some_and(|t| !t.trim().is_empty());
+    if !token && !credentials {
         return false;
     }
     let Some(file) = config_file(probe) else { return false };
@@ -225,10 +229,11 @@ pub fn prepare_onboarding(env: &[(String, String)], probe: &dyn Probe) -> bool {
             _ => return false,
         },
     };
-    if config.get("hasCompletedOnboarding").and_then(|v| v.as_bool()) == Some(true) {
+    if config.get("hasCompletedOnboarding").and_then(|v| v.as_bool()) == Some(true) && config.contains_key("theme") {
         return false;
     }
     config.insert("hasCompletedOnboarding".into(), serde_json::Value::Bool(true));
+    config.entry("theme").or_insert_with(|| serde_json::Value::String("dark".into()));
     let Ok(text) = serde_json::to_string(&config) else { return false };
     if let Some(dir) = file.parent() {
         let _ = std::fs::create_dir_all(dir);
@@ -290,7 +295,13 @@ impl Harness for ClaudeHarness {
                 "https://platform.claude.com/oauth/code/callback".into(),
                 "https://console.anthropic.com/oauth/code/callback".into(),
             ],
-            login_external_hosts: vec!["accounts.google.com".into()],
+            login_allowed_hosts: vec![
+                "claude.ai".into(),
+                "claude.com".into(),
+                "anthropic.com".into(),
+                "console.anthropic.com".into(),
+                "platform.claude.com".into(),
+            ],
         })
     }
 

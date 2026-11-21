@@ -106,7 +106,7 @@ export function tauriHost(): Host {
         }),
       );
       try {
-        await invoke("login_window_open", { url, watch: [...watch] });
+        await invoke("login_window_open", { url });
       } catch (e) {
         done();
         throw new Error(message(e));

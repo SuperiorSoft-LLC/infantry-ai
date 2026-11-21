@@ -2,8 +2,8 @@
 // Copyright (c) SuperiorSoft LLC
 //! The login window: a window of the app that shows a harness's login page (claude.ai refuses framing, so it is a window of its
 //! own, not an iframe). The window carries no capability, so the page can call none of the app's commands. The app watches its
-//! navigation and tells the main window every address that starts with a prefix the harness declared; the page's code is read
-//! from that address by the UI (`loginCodeFromUrl`). Nothing here names a harness.
+//! navigation and tells the main window every web address it reaches; the UI reads the page's code from the harness's declared
+//! address (`loginCodeFromUrl`) and hands the login to the system browser when the address leaves the declared hosts. Nothing here names a harness.
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 const LABEL: &str = "login-window";
@@ -14,18 +14,8 @@ pub const CLOSED_EVENT: &str = "login-window-closed";
 const WIDTH: f64 = 520.0;
 const HEIGHT: f64 = 760.0;
 
-/// True when [url] is an address the harness declared: same origin and path (a trailing slash does not matter), any query. An entry
-/// that is a bare origin (`https://host`) matches every page of that host (the hosts that refuse an embedded window).
-pub fn watched(url: &str, watch: &[String]) -> bool {
-    let Ok(u) = tauri::Url::parse(url) else { return false };
-    let here = format!("{}{}", u.origin().ascii_serialization(), u.path());
-    let here = here.trim_end_matches('/');
-    let origin = u.origin().ascii_serialization();
-    watch.iter().any(|w| w.trim_end_matches('/') == here || w.trim_end_matches('/') == origin)
-}
-
 #[tauri::command]
-pub async fn login_window_open(app: tauri::AppHandle, url: String, watch: Vec<String>) -> Result<(), String> {
+pub async fn login_window_open(app: tauri::AppHandle, url: String) -> Result<(), String> {
     let target = tauri::Url::parse(&url).map_err(|e| format!("not a web address: {e}"))?;
     if target.scheme() != "https" && target.scheme() != "http" {
         return Err("only web addresses open in the login window".into());
@@ -39,7 +29,7 @@ pub async fn login_window_open(app: tauri::AppHandle, url: String, watch: Vec<St
         .inner_size(WIDTH, HEIGHT)
         .center()
         .on_navigation(move |u| {
-            if watched(u.as_str(), &watch) {
+            if matches!(u.scheme(), "http" | "https") {
                 let _ = seen.emit(URL_EVENT, u.to_string());
             }
             true
@@ -61,35 +51,4 @@ pub async fn login_window_close(app: tauri::AppHandle) -> Result<(), String> {
         w.close().map_err(|e| e.to_string())?;
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::watched;
-
-    fn w() -> Vec<String> {
-        vec!["https://platform.claude.com/oauth/code/callback".into()]
-    }
-
-    #[test]
-    fn a_declared_address_is_watched_with_or_without_a_query_or_slash() {
-        assert!(watched("https://platform.claude.com/oauth/code/callback?code=a&state=b", &w()));
-        assert!(watched("https://platform.claude.com/oauth/code/callback/", &w()));
-    }
-
-    #[test]
-    fn a_bare_origin_watches_every_page_of_that_host() {
-        let host = vec!["https://accounts.google.com".to_string()];
-        assert!(watched("https://accounts.google.com/o/oauth2/v2/auth?x=1", &host));
-        assert!(!watched("https://accounts.google.com.evil.example/o", &host));
-    }
-
-    #[test]
-    fn other_pages_and_look_alikes_are_not() {
-        assert!(!watched("https://platform.claude.com/oauth/authorize?x=1", &w()));
-        assert!(!watched("https://platform.claude.com/oauth/code/callback-evil?code=a", &w()));
-        assert!(!watched("https://evil.example/oauth/code/callback?code=a", &w()));
-        assert!(!watched("not a url", &w()));
-        assert!(!watched("https://platform.claude.com/oauth/code/callback", &[]));
-    }
 }
