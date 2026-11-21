@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 //! `loopback-http`: how a harness talks to a server process it started on the runner's host (`opencode serve`). The
 //! request is made BY THE RUNNER, on its host, because that server listens on the runner host's loopback: a remote runner

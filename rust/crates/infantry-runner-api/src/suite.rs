@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 //! The conformance suite every [`Runner`] passes (local, remote link): `suite(&runner, scratch_dir).await` panics on the
 //! first failed check. [scratch_dir] is an existing, writable directory on the RUNNER's host, without spaces (the checks

@@ -22,7 +22,7 @@ pub const MPL: &str = "MPL-2.0";
 pub const APACHE: &str = "Apache-2.0";
 
 /// The Apache crates an MPL crate may depend on: the contracts that plugins, harnesses and orchestrators build against.
-pub const API_CRATES: &[&str] = &["infantry-plugin-wit", "infantry-plugin-sdk", "infantry-harness", "infantry-orchestrator-api"];
+pub const API_CRATES: &[&str] = &["infantry-plugin-wit", "infantry-plugin-sdk", "infantry-harness", "infantry-orchestrator-api", "infantry-runner-api"];
 
 /// Tolerated crossings, `(from, to, the move that removes it)`. The LIC-N moves are in DECOUPLE-PLAN.md section 7a.
 /// Shrinks to zero.
@@ -31,18 +31,10 @@ pub const CROSSINGS: &[(&str, &str, &str)] = &[
     ("infantry-daemon", "infantry-board", "LIC-6 to LIC-10: the board wiring becomes a module in its own Apache crate, registered by the distribution"),
     // Rule 1: the plugin loader is part of the kernel (the owner's boot model), but its crate is Apache.
     ("infantry-daemon", "infantry-plugin-host", "LIC-2: owner decides the loader's side (proposed: MPL-2.0)"),
-    // Rule 2: the harness API uses the MPL runner contract.
-    ("infantry-harness", "infantry-runner-api", "LIC-1: owner decides runner-api's side (proposed: Apache-2.0, an API crate)"),
 ];
 
 /// `.rs` files with no SPDX header, `(path from rust/, the move that adds it)`.
-pub const HEADERLESS: &[(&str, &str)] = &[
-    ("crates/infantry-board/tests/all/main.rs", "LIC-1"),
-    ("crates/infantry-daemon/tests/all/main.rs", "LIC-1"),
-    ("crates/infantry-harness-claude/tests/all/main.rs", "LIC-1"),
-    ("crates/infantry-harness-codex/tests/all/main.rs", "LIC-1"),
-    ("crates/infantry-scripting/tests/all/main.rs", "LIC-1"),
-];
+pub const HEADERLESS: &[(&str, &str)] = &[];
 
 /// Every licence-line violation as a human-readable line (empty = clean), against `allowed` crossings.
 pub fn check_crossings(crates: &[Crate], allowed: &[(&str, &str, &str)]) -> Vec<String> {
