@@ -3,7 +3,7 @@
 // The login window: the declared address carries the code, the watcher submits it once and closes the window, and the link seam
 // picks the system opener in the app and window.open on the web.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { browserHost, externalOpener, loginCodeFromUrl, watchLoginWindow, type LoginWindowHandlers } from "../src";
+import { browserHost, externalOpener, friendlyLoginError, isExternalOnlyHost, loginCodeFromUrl, loginWatchList, watchLoginWindow, type LoginWindowHandlers } from "../src";
 
 const DECLARED = ["https://platform.claude.com/oauth/code/callback", "https://console.anthropic.com/oauth/code/callback"];
 
@@ -61,6 +61,35 @@ describe("watchLoginWindow", () => {
     };
     await watchLoginWindow(broken, "https://claude.ai/login", DECLARED, () => undefined);
     expect(broken.log.external).toEqual(["https://claude.ai/login"]);
+  });
+});
+
+describe("external-only hosts and friendly errors", () => {
+  const GOOGLE = ["accounts.google.com"];
+  it("a Google page closes the window, opens the same login page in the system browser and shows the hint once", async () => {
+    const h = fakeHost();
+    const got: string[] = [];
+    let hinted = 0;
+    await watchLoginWindow(h, "https://claude.ai/login", DECLARED, (c) => got.push(c), undefined, GOOGLE, () => hinted++);
+    expect(h.log.opened[0]![1]).toEqual([...DECLARED, "https://accounts.google.com"]);
+    h.log.handlers!.onUrl("https://accounts.google.com/o/oauth2/v2/auth?x=1");
+    h.log.handlers!.onUrl("https://accounts.google.com/o/oauth2/v2/auth?x=2");
+    expect(h.log.external).toEqual(["https://claude.ai/login"]);
+    expect(h.log.closed).toBe(1);
+    expect(hinted).toBe(1);
+    expect(got).toEqual([]);
+  });
+  it("matches the exact host only, and never without a declaration", () => {
+    expect(isExternalOnlyHost("https://accounts.google.com/x", GOOGLE)).toBe(true);
+    expect(isExternalOnlyHost("https://accounts.google.com.evil.example/x", GOOGLE)).toBe(false);
+    expect(isExternalOnlyHost("https://accounts.google.com/x", undefined)).toBe(false);
+    expect(loginWatchList(undefined, undefined)).toEqual([]);
+  });
+  it("never shows the daemon's frame text, and drops a refusal when the login is already over", () => {
+    expect(friendlyLoginError("secret_login refused: no sign-in is running; start it again", true)).toBeNull();
+    const shown = friendlyLoginError("secret_login refused: no sign-in is running; start it again", false)!;
+    expect(shown).not.toContain("secret_login");
+    expect(friendlyLoginError("secret_login refused: paste the code the sign-in page shows", false)).toBe("paste the code the sign-in page shows");
   });
 });
 

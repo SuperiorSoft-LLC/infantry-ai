@@ -37,6 +37,8 @@ export interface SecretRow {
   loginUrl?: string;
   /** Address prefixes of the page that carries the login code (the harness declares them); empty = paste only. */
   loginCodeUrls?: string[];
+  /** Hosts whose page refuses an embedded window (a harness declaration): the login moves to the system browser there. */
+  loginExternalHosts?: string[];
   /** One short line for the owner; never a token. */
   loginMessage?: string;
   /** 0 = the daemon never probed this sign-in. */

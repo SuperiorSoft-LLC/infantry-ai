@@ -35,6 +35,8 @@ pub struct KnownSecret {
     pub login_url: String,
     pub login_message: String,
     pub login_code_urls: Vec<String>,
+    /// Hosts whose page refuses an embedded window (a harness declaration); the app hands the login to the system browser there.
+    pub login_external_hosts: Vec<String>,
 }
 
 impl KnownSecret {
@@ -81,6 +83,9 @@ pub struct SecretRow {
     /// Address prefixes of the page that shows the login code (a harness declaration); empty = paste only.
     #[serde(default)]
     pub login_code_urls: Vec<String>,
+    /// Hosts whose page refuses an embedded window (a harness declaration); the app hands the login to the system browser there.
+    #[serde(default)]
+    pub login_external_hosts: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -302,6 +307,7 @@ impl KeystoreHandler {
                     login_url: k.login_url.clone(),
                     login_message: k.login_message.clone(),
                     login_code_urls: k.login_code_urls.clone(),
+                    login_external_hosts: k.login_external_hosts.clone(),
                 }
             })
             .collect();

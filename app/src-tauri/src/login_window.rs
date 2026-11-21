@@ -14,12 +14,14 @@ pub const CLOSED_EVENT: &str = "login-window-closed";
 const WIDTH: f64 = 520.0;
 const HEIGHT: f64 = 760.0;
 
-/// True when [url] is an address the harness declared: same origin and path (a trailing slash does not matter), any query.
+/// True when [url] is an address the harness declared: same origin and path (a trailing slash does not matter), any query. An entry
+/// that is a bare origin (`https://host`) matches every page of that host (the hosts that refuse an embedded window).
 pub fn watched(url: &str, watch: &[String]) -> bool {
     let Ok(u) = tauri::Url::parse(url) else { return false };
     let here = format!("{}{}", u.origin().ascii_serialization(), u.path());
     let here = here.trim_end_matches('/');
-    watch.iter().any(|w| w.trim_end_matches('/') == here)
+    let origin = u.origin().ascii_serialization();
+    watch.iter().any(|w| w.trim_end_matches('/') == here || w.trim_end_matches('/') == origin)
 }
 
 #[tauri::command]
@@ -73,6 +75,13 @@ mod tests {
     fn a_declared_address_is_watched_with_or_without_a_query_or_slash() {
         assert!(watched("https://platform.claude.com/oauth/code/callback?code=a&state=b", &w()));
         assert!(watched("https://platform.claude.com/oauth/code/callback/", &w()));
+    }
+
+    #[test]
+    fn a_bare_origin_watches_every_page_of_that_host() {
+        let host = vec!["https://accounts.google.com".to_string()];
+        assert!(watched("https://accounts.google.com/o/oauth2/v2/auth?x=1", &host));
+        assert!(!watched("https://accounts.google.com.evil.example/o", &host));
     }
 
     #[test]
