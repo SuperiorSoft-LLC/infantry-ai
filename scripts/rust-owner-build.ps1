@@ -25,7 +25,7 @@ if (-not (Test-Path $gitBash)) { throw "BUILD REFUSED: Git Bash not found at $gi
 if ($SkipMsi) {
     cargo build --profile owner-test --manifest-path (Join-Path $repo 'rust\Cargo.toml') -p infantry-daemon -p infantry-cli -p infantry-migrate
     cargo build --profile owner-test --features custom-protocol --manifest-path (Join-Path $repo 'app\src-tauri\Cargo.toml')
-    $out = Join-Path $env:CARGO_TARGET_DIR 'owner-test'
+    $out = Join-Path $env:CARGO_TARGET_DIR 'owner-test'; $tauriExe = 'infantry-tauri.exe'
 } else {
     # RUST-INSTALLER (60bc4e42): the per-user MSI. Release-profile exes are staged by stage-bundle.sh; the MSI is signed
     # with the TEST updater key unless TAURI_SIGNING_PRIVATE_KEY is set.
@@ -46,7 +46,7 @@ if ($SkipMsi) {
     }
     Push-Location (Join-Path $repo 'app')
     try { pnpm tauri build --bundles msi @cfg --config '{"bundle":{"createUpdaterArtifacts":true}}'; if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' } } finally { Pop-Location }
-    $out = Join-Path $env:CARGO_TARGET_DIR 'release'
+    $out = Join-Path $env:CARGO_TARGET_DIR 'release'; $tauriExe = 'InfantryAI-Rust.exe'  # tauri build names the exe after the product
 }
 # RUST-BUG dd10c3bb: stage every official daemon plugin (WASM) into $out\plugins. Without this the package has no
 # plugins folder and every plugin frame (Triggers, Notes, image_upload) answers "does not serve that frame yet".
@@ -60,18 +60,18 @@ if ($nWasm -lt 1) { throw 'BUILD REFUSED: no daemon plugin was staged (no .wasm 
 Write-Output "staged $nWasm daemon plugin component(s) of $nMods module(s)"
 # STATIC CHECK: a dev-mode exe has no embedded assets; an embedded one carries the dist asset paths.
 $asset = (Get-ChildItem (Join-Path $repo 'app\shell\dist\assets') -Filter '*.js' | Select-Object -First 1).Name
-$bytes = [IO.File]::ReadAllBytes((Join-Path $out 'infantry-tauri.exe'))
+$bytes = [IO.File]::ReadAllBytes((Join-Path $out $tauriExe))
 $text = [Text.Encoding]::Latin1.GetString($bytes)
 if (-not $text.Contains($asset)) { throw "BUILD REFUSED: InfantryAI-Rust.exe (infantry-tauri.exe) does not embed the UI ($asset not found); it would load devUrl localhost:1420. Build with --features custom-protocol." }
 # STATIC CHECK: a clean Windows has no VC++ redistributable; every packaged exe must link the CRT statically
 # (repo-root .cargo/config.toml, +crt-static). An exe that imports vcruntime140.dll names it in its import table.
-foreach ($f in 'infantry-tauri.exe','infantry-daemon.exe','infantry-migrate.exe','infantry.exe') {
+foreach ($f in $tauriExe,'infantry-daemon.exe','infantry-migrate.exe','infantry.exe') {
     $t = [Text.Encoding]::Latin1.GetString([IO.File]::ReadAllBytes((Join-Path $out $f)))
     if ($t.IndexOf('vcruntime140', [StringComparison]::OrdinalIgnoreCase) -ge 0) { throw "BUILD REFUSED: $f imports vcruntime140.dll (dynamic CRT): it will not start on a clean Windows" }
 }
 $dest = Join-Path $DistRoot ("builds\{0}-rust-{1}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $sha)
 New-Item -ItemType Directory -Force $dest | Out-Null
-Copy-Item (Join-Path $out 'infantry-tauri.exe') (Join-Path $dest 'InfantryAI-Rust.exe')
+Copy-Item (Join-Path $out $tauriExe) (Join-Path $dest 'InfantryAI-Rust.exe')
 foreach ($f in 'infantry-daemon.exe','infantry-migrate.exe','infantry.exe') { Copy-Item (Join-Path $out $f) $dest }
 Copy-Item $stagedPlugins $dest -Recurse
 Set-Content (Join-Path $dest 'start.cmd') "@echo off`r`nrem Rust app, default port 18990, own state dir (%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust)`r`nset INFANTRY_PORT=18990`r`nset INFANTRY_PLUGINS_DIR=%~dp0plugins`r`nstart `"`" `"%~dp0InfantryAI-Rust.exe`""
