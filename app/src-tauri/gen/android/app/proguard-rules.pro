@@ -19,3 +19,9 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# Scan QR: R8 breaks ML Kit's init in the release build (NPE in mlkit_vision_common.zzkx.<init> when the scanner starts).
+# Keep the scanner stack as shipped.
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.internal.mlkit_** { *; }
+-keep class com.google.firebase.components.** { *; }
+-keep class app.tauri.barcodescanner.** { *; }
