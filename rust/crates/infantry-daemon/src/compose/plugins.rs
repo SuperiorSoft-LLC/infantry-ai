@@ -170,6 +170,18 @@ impl Admin {
         self.installed.write().unwrap_or_else(|e| e.into_inner()).remove(id);
     }
 
+    /// What the approval dialog shows about an offered copy, read at listing time from `module.sig.json` and module.json:
+    /// `check` (unsigned, digest, signed, untrusted or bad), `signer`, `license`, `grants` (the daemon `needs`) and, when
+    /// the check fails, `error`. The same fields `show <id>` prints.
+    fn offer_check(&self, dir: &Path) -> serde_json::Value {
+        let manifest: serde_json::Value = std::fs::read_to_string(dir.join("module.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        let grants = manifest.pointer("/daemon/needs").cloned().unwrap_or_else(|| serde_json::json!([]));
+        match super::sources::vet(dir, &self.install.signers.snapshot()) {
+            Ok(v) => serde_json::json!({ "check": v.status, "signer": v.signer, "license": v.license, "grants": grants }),
+            Err(e) => serde_json::json!({ "check": "bad", "error": e, "license": "", "grants": grants }),
+        }
+    }
+
     /// `available`: every module a source offers and every module installed, one row each.
     fn available(&self) -> Vec<serde_json::Value> {
         let offers = installer::catalog(&self.all_sources());
@@ -184,9 +196,15 @@ impl Admin {
                 serde_json::json!({
                     "id": o.id, "displayName": o.display_name, "description": o.description, "version": o.version, "tier": o.tier,
                     "requires": o.requires, "bootstrap": bootstrap == Some(o.id.as_str()), "daemon": o.daemon, "ui": o.ui,
-                    "source": o.source.display().to_string(), "signed": super::sources::vet(&o.dir, &self.install.signers.snapshot()).map(|v| v.status).unwrap_or_else(|_| "bad".into()), "installed": false, "enabled": false, "status": "available",
+                    "source": o.source.display().to_string(), "installed": false, "enabled": false, "status": "available",
                 }),
             );
+            if let (Some(row), Some(extra)) = (rows.get_mut(&o.id), self.offer_check(&o.dir).as_object()) {
+                for (k, v) in extra {
+                    row[k] = v.clone();
+                }
+                row["signed"] = row["check"].clone();
+            }
         }
         for m in installed.iter().filter(|m| TIERS.contains(&m.tier.as_str())) {
             let off = disabled.contains(&m.id);
@@ -287,7 +305,15 @@ impl Admin {
     fn updates_list(&self) -> Vec<serde_json::Value> {
         installer::updates(&self.installed_versions(), &installer::catalog(&self.all_sources()))
             .into_iter()
-            .map(|u| serde_json::json!({ "id": u.id, "installed": u.installed, "available": u.available, "source": u.offer.source.display().to_string() }))
+            .map(|u| {
+                let mut row = serde_json::json!({ "id": u.id, "installed": u.installed, "available": u.available, "source": u.offer.source.display().to_string() });
+                if let Some(extra) = self.offer_check(&u.offer.dir).as_object() {
+                    for (k, v) in extra {
+                        row[k] = v.clone();
+                    }
+                }
+                row
+            })
             .collect()
     }
 
@@ -411,13 +437,12 @@ impl Admin {
             "show" => match installer::catalog(&self.all_sources()).into_iter().find(|o| o.id == id) {
                 None => fail(format!("no source offers {id}")),
                 Some(o) => {
-                    let v = super::sources::vet(&o.dir, &self.install.signers.snapshot());
-                    let manifest: serde_json::Value = std::fs::read_to_string(o.dir.join("module.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
-                    let grants = manifest.pointer("/daemon/needs").cloned().unwrap_or_else(|| serde_json::json!([]));
-                    let row = match v {
-                        Ok(v) => serde_json::json!({ "id": o.id, "version": o.version, "check": v.status, "signer": v.signer, "license": v.license, "grants": grants, "requires": o.requires }),
-                        Err(e) => serde_json::json!({ "id": o.id, "version": o.version, "check": "bad", "error": e, "grants": grants }),
-                    };
+                    let mut row = serde_json::json!({ "id": o.id, "version": o.version, "requires": o.requires });
+                    if let Some(extra) = self.offer_check(&o.dir).as_object() {
+                        for (k, v) in extra {
+                            row[k] = v.clone();
+                        }
+                    }
                     (0, serde_json::to_string_pretty(&row).unwrap_or_default(), String::new())
                 }
             },

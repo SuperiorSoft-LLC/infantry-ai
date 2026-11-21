@@ -120,6 +120,10 @@ export interface PluginUpdate {
   installed: string;
   available: string;
   source: string;
+  /** The daemon's check of the offered copy, its licence and grants, read at listing time (empty when the daemon sends none). */
+  signed: string;
+  license: string;
+  grants: string[];
 }
 
 export interface PluginsState {
@@ -208,7 +212,12 @@ export function parseUpdates(out: string): PluginUpdate[] {
   if (!Array.isArray(rows)) return [];
   return rows
     .filter((r) => r && typeof r.id === "string" && typeof r.available === "string")
-    .map((r) => ({ id: r.id as string, installed: String(r.installed ?? ""), available: r.available as string, source: String(r.source ?? "") }));
+    .map((r) => ({ id: r.id as string, installed: String(r.installed ?? ""), available: r.available as string,
+      source: String(r.source ?? ""),
+      signed: typeof r.check === "string" ? r.check : typeof r.signed === "string" ? r.signed : "",
+      license: typeof r.license === "string" ? r.license : "",
+      grants: strs(r.grants),
+    }));
 }
 
 /** Search across every source: the plugins whose id, name or description holds [query] (all of them when it is empty). */
