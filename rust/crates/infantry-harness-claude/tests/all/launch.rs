@@ -155,3 +155,38 @@ fn claude_declares_the_token_sign_in_the_app_shows() {
     // A stored token (the daemon's probe puts it under that variable) counts as signed in, with no credentials file.
     assert!(ClaudeHarness::default().sign_in_problem(&Token).is_none());
 }
+
+#[test]
+fn a_token_launch_marks_the_first_run_setup_done_and_keeps_the_rest_of_the_config() {
+    use infantry_harness::Probe;
+    use infantry_harness_claude::{prepare_onboarding, CONFIG_DIR_ENV, OAUTH_TOKEN_ENV};
+    let dir = std::env::temp_dir().join(format!("infantry-claude-onb-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    struct P(std::path::PathBuf);
+    impl Probe for P {
+        fn env(&self, n: &str) -> Option<String> {
+            (n == CONFIG_DIR_ENV).then(|| self.0.display().to_string())
+        }
+        fn home(&self) -> Option<std::path::PathBuf> {
+            None
+        }
+        fn read_to_string(&self, p: &std::path::Path) -> Option<String> {
+            std::fs::read_to_string(p).ok()
+        }
+        fn exists(&self, p: &std::path::Path) -> bool {
+            p.exists()
+        }
+    }
+    let probe = P(dir.clone());
+    let token = vec![(OAUTH_TOKEN_ENV.to_string(), "sk-ant-oat01-x".to_string())];
+    assert!(!prepare_onboarding(&[], &probe), "no token: nothing touched");
+    std::fs::write(dir.join(".claude.json"), r#"{"theme":"dark"}"#).unwrap();
+    assert!(prepare_onboarding(&token, &probe));
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(".claude.json")).unwrap()).unwrap();
+    assert_eq!((v["hasCompletedOnboarding"].as_bool(), v["theme"].as_str()), (Some(true), Some("dark")));
+    assert!(!prepare_onboarding(&token, &probe), "already done: not rewritten");
+    std::fs::write(dir.join(".claude.json"), "not json").unwrap();
+    assert!(!prepare_onboarding(&token, &probe), "a file it cannot parse is left alone");
+    let _ = std::fs::remove_dir_all(&dir);
+}
