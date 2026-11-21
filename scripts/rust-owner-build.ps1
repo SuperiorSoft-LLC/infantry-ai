@@ -59,6 +59,15 @@ $nWasm = @(Get-ChildItem $stagedPlugins -Recurse -Include *.wasm,*.component -Er
 $nMods = @(Get-ChildItem (Join-Path $repo 'rust\plugins\official') -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'module.json') }).Count
 if ($nWasm -lt 1) { throw 'BUILD REFUSED: no daemon plugin was staged (no .wasm under plugins)' }
 Write-Output "staged $nWasm daemon plugin component(s) of $nMods module(s)"
+# PIPE-ROLE-1: say which modules are NOT staged and why, and refuse a package without the role catalog (Infantry_Roles
+# is data only: it ships no .wasm, so the component count above never shows it).
+foreach ($m in (Get-ChildItem (Join-Path $repo 'rust\plugins\official') -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'module.json') })) {
+    if (Test-Path (Join-Path $stagedPlugins "official\$($m.Name)\module.json")) { continue }
+    $why = if (-not ((Test-Path (Join-Path $m.FullName 'daemon\Cargo.toml')) -or (Test-Path (Join-Path $m.FullName 'Cargo.toml')))) { 'no daemon crate and no data folder (nothing to stage)' } else { 'module.json names no daemon component' }
+    Write-Output "NOT staged: $($m.Name) ($why)"
+}
+if (-not (Test-Path (Join-Path $stagedPlugins 'official\Infantry_Roles\roles\index.json'))) { throw 'BUILD REFUSED: Infantry_Roles (the role catalog) was not staged: agents would get no role text' }
+Write-Output "staged core set: $((Get-ChildItem (Join-Path $stagedPlugins 'official') -Directory | ForEach-Object Name) -join ', ')"
 # STATIC CHECK: a dev-mode exe has no embedded assets; an embedded one carries the dist asset paths.
 $asset = (Get-ChildItem (Join-Path $repo 'app\shell\dist\assets') -Filter '*.js' | Select-Object -First 1).Name
 $bytes = [IO.File]::ReadAllBytes((Join-Path $out $tauriExe))

@@ -566,3 +566,20 @@ fn a_worker_moving_its_ticket_to_done_mails_the_starter() {
     block_on(o.move_lane(infantry_orchestrator_api::dto::TicketMove { id: ids[0].clone(), status: Some("done".into()), position: None, wont_fix: None })).unwrap();
     assert!(notes(&f).iter().any(|n| n.starts_with("lead-1 ") && n.contains(&ids[0]) && n.contains("is done")), "{:?}", notes(&f));
 }
+/// PIPE-ROLE-1: a ticket with no role is refused without a default role, and starts with it when one is set.
+#[test]
+fn a_ticket_with_no_role_starts_with_the_default_role() {
+    for (tag, default, ok) in [("work-norole-refused", None, false), ("work-norole-default", Some("custom".to_string()), true)] {
+        let env = StaticEnv { default_role: default, ..kotlin_daemon_env() };
+        let (f, _l, _d, o) = setup(tag, env, Duration::ZERO);
+        f.env.push_ids(&["ticket-00000001"]);
+        save(&f.orch, r#"{"title":"No role","projectId":"p1"}"#);
+        let a = start(&o, "ticket-00000001");
+        let s = a.ticket.start.as_ref().map(|s| s.reason.as_str());
+        if ok {
+            assert_eq!(s, Some(reason::STARTED), "{:?}", a.ticket.start);
+        } else {
+            assert_ne!(s, Some(reason::STARTED), "{:?}", a.ticket.start);
+        }
+    }
+}

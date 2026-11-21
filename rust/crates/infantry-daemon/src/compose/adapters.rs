@@ -85,6 +85,11 @@ pub const BOARD_RESTART_RESUME_SECONDS: &str = "board.restartResumeSeconds";
 /// `lanes.maxInProgress`: scopes app, project, role; default = the usage pacing allowance.
 pub const LANES_MAX_IN_PROGRESS: &str = "lanes.maxInProgress";
 
+/// PIPE-ROLE-1: `tickets.defaultRole` (scopes app, project): the role of a ticket that has none.
+pub const TICKETS_DEFAULT_ROLE: &str = "tickets.defaultRole";
+/// The generic default when the setting is unset: the catalog's role for work with no specialty.
+pub const GENERIC_DEFAULT_ROLE: &str = "custom";
+
 impl DaemonBoardEnv {
     pub fn new(daemon: Arc<Daemon>, projects: Arc<Projects>, state_dir: &Path, usage: Arc<UsageService>, db: Arc<infantry_core::db::Db>) -> DaemonBoardEnv {
         DaemonBoardEnv {
@@ -253,6 +258,12 @@ impl BoardEnv for DaemonBoardEnv {
         // An explicit setting wins; unset, the cap is the usage pacing allowance (`infantry usage`), so workers of a role
         // wait on the owner's pacing and on nothing else.
         v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok())).filter(|n| *n >= 1).map(|n| n as u32).unwrap_or_else(|| self.pacing_allowance(project_id, role))
+    }
+    fn default_role(&self, project_id: Option<&str>) -> Option<String> {
+        let d = serde_json::json!({ "project": project_id });
+        let v = self.settings.resolve(TICKETS_DEFAULT_ROLE, &d)["value"].clone();
+        let set = v.as_str().map(str::trim).filter(|s| !s.is_empty() && !s.contains(char::is_whitespace));
+        Some(set.unwrap_or(GENERIC_DEFAULT_ROLE).to_string())
     }
     fn auto_start_next(&self, project_id: Option<&str>) -> bool {
         let off = |v: Option<&serde_json::Value>| match v {
