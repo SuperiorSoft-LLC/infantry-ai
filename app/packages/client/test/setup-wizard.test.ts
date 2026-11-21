@@ -3,7 +3,7 @@
 // Ports Kotlin SetupWizardTest. The key-row and "unprobed sign-in" cases have no Rust twin: the Rust daemon reads a
 // harness's sign-in straight from its files (providers[].available), so there is no probe state to wait for.
 import { describe, expect, it } from "vitest";
-import { createHarnessInstallStore, installHarnesses, type Envelope, action, defaultPick, firstModel, firstStep, installed, needed, nodeNote, outcomeFor, statusText, type HarnessInstallReport, type HarnessInstallStatus } from "../src";
+import { createHarnessInstallStore, installHarnesses, type Envelope, action, defaultPick, signInPhase, signInRow, tokenSecretName, firstModel, firstStep, installed, needed, nodeNote, outcomeFor, statusText, type HarnessInstallReport, type HarnessInstallStatus } from "../src";
 
 const h = (id: string, isInstalled: boolean): HarnessInstallStatus => ({ id, label: id, npmPackage: `pkg-${id}`, state: isInstalled ? "installed" : "missing", path: isInstalled ? `/bin/${id}` : null });
 const report = (hs: HarnessInstallStatus[], npm: string | null = "/usr/bin/npm"): HarnessInstallReport => ({ harnesses: hs, prefixDir: "/p", npmPath: npm, nodeInstallable: false, busy: false, log: [] });
@@ -81,5 +81,20 @@ describe("harness install store", () => {
     const before = sent.filter((e) => e.type === "harness_install_status").length;
     push({ type: "harness_install_result", data: JSON.stringify({ started: true }), requestId: sent[sent.length - 1].requestId });
     expect(sent.filter((e) => e.type === "harness_install_status").length).toBe(before + 1);
+  });
+
+  it("reads the browser sign-in a harness declares, and opens no matter which harness", () => {
+    const row = (name: string, extra: Record<string, unknown> = {}) => ({ name, label: "X", set: false, tail: "", importable: false, overriddenByEnv: false, canLogin: true, ...extra });
+    expect(tokenSecretName("claude")).toBe("harness.claude.token");
+    expect(signInRow("claude", [row("harness.claude.key"), row("harness.claude.token")])?.name).toBe("harness.claude.token");
+    expect(signInRow("opencode", [row("harness.claude.token")])).toBeNull();
+    expect(signInRow("claude", [row("harness.claude.token", { canLogin: false })])).toBeNull();
+    expect(signInPhase(null)).toBe("idle");
+    expect(signInPhase(row("t", { loginState: "running" }))).toBe("running");
+    expect(signInPhase(row("t", { loginState: "done" }))).toBe("done");
+    expect(signInPhase(row("t", { loginState: "failed" }))).toBe("failed");
+    // The token saved: the daemon lists the provider as available and the setup is no longer needed.
+    expect(needed(report([h("claude", true)]), [{ id: "claude", available: false }])).toBe(true);
+    expect(needed(report([h("claude", true)]), [{ id: "claude", available: true }])).toBe(false);
   });
 });

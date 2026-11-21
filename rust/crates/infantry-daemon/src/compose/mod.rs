@@ -365,12 +365,39 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         }));
     }
     let vault_projects = projects.clone();
+    // The harness keys and sign-ins (api key, subscription token) live in the vault; the closures reach the credentials
+    // once they exist (they need the vault's keystore).
+    let creds_cell: Arc<std::sync::OnceLock<Arc<crate::harness::credentials::HarnessCredentials>>> = Arc::default();
+    let vault_deps = {
+        let (known, login) = (creds_cell.clone(), creds_cell.clone());
+        infantry_vault::handler::HandlerDeps {
+            extra_known: Arc::new(move || known.get().map(|c| c.known()).unwrap_or_default()),
+            login: Arc::new(move |name, action, text| match login.get() {
+                Some(c) => c.login(name, action, text),
+                None => Err("the daemon is still starting".into()),
+            }),
+            ..Default::default()
+        }
+    };
     let vault = Arc::new(infantry_vault::unit::VaultUnit::open(
         state_dir,
         Default::default(),
-        Default::default(),
+        vault_deps,
         Arc::new(move |p: Option<&str>| p.and_then(|p| project_dir(&vault_projects, p))),
     ));
+
+    let creds = {
+        let settings = settings::SettingsUnit { db: db.clone() };
+        let c = crate::harness::credentials::HarnessCredentials::new(
+            daemon.registry().all_neutral(),
+            vault.keystore().clone(),
+            Arc::new(move |key| settings.app(key).and_then(|v| v.as_str().map(str::to_string))),
+        );
+        let _ = creds_cell.set(c.clone());
+        let for_sessions = c.clone();
+        daemon.set_provider_env(Arc::new(move |provider| for_sessions.session_env(provider)));
+        c
+    };
 
     // ---- the MCP registry: owned + plugin servers, grants, per-session plans (walled by default) ------------
     let mcp = {
@@ -663,7 +690,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             Arc::new(move |id: &str| project_dir(&p, id))
         },
     ))));
-    let harness_list = harness_frames::HarnessFrames::new(daemon.clone());
+    let harness_list = harness_frames::HarnessFrames::new(daemon.clone(), creds.clone());
     units.push(harness_install::HarnessInstall::new(state_dir, {
         let h = harness_list.clone();
         Arc::new(move || h.rebuild_now())

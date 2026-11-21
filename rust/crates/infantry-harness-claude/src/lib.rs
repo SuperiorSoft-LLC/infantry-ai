@@ -244,6 +244,10 @@ impl Harness for ClaudeHarness {
             help: "Create an API key in the Anthropic Console (console.anthropic.com). Only needed when you choose API key; with a Claude subscription you log in instead.".into(),
             auth_modes: vec![infantry_harness::AUTH_API_KEY.into(), infantry_harness::AUTH_SUBSCRIPTION.into()],
             login_argv: vec![self.program.clone(), "auth".into(), "login".into()],
+            // `claude setup-token`: the browser login that prints a long-lived token, which the app keeps in the vault.
+            token_env: OAUTH_TOKEN_ENV.into(),
+            token_argv: vec![self.program.clone(), "setup-token".into()],
+            token_prefix: "sk-ant-oat".into(),
         })
     }
 

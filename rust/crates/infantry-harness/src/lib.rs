@@ -508,6 +508,12 @@ pub struct Credential {
     pub auth_modes: Vec<String>,
     /// The CLI's own sign-in, argv form (`claude auth login`); empty = no in-app sign-in.
     pub login_argv: Vec<String>,
+    /// The env var the CLI reads a long-lived subscription token from (`CLAUDE_CODE_OAUTH_TOKEN`); empty = no token sign-in.
+    pub token_env: String,
+    /// The CLI's own command that opens the browser and prints that token (`claude setup-token`); empty = paste only.
+    pub token_argv: Vec<String>,
+    /// What the printed token starts with, so the app can take it from the output by itself (`sk-ant-oat`); empty = never.
+    pub token_prefix: String,
 }
 
 /// The auth mode that passes the stored API key to the CLI.
