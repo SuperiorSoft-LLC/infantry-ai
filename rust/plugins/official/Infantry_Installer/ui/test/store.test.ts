@@ -4,7 +4,7 @@
 // buttons follow.
 import { describe, expect, it } from "vitest";
 import type { Envelope } from "@infantry/ui-plugin-api";
-import { createInstallerStore, groupRows, membersOf, rowActions, sortRows, type PluginRow } from "../src/store";
+import { createInstallerStore, findApp, groupRows, routeApp, membersOf, rowActions, sortRows, type PluginRow } from "../src/store";
 
 function link(up = true) {
   const sent: Envelope[] = [];
@@ -113,5 +113,17 @@ describe("the apps screen groups (APPS-ROOT-1)", () => {
     const m = membersOf(rows[1], rows);
     expect(m.core.map((r) => r.id)).toEqual(["Core_One"]);
     expect(m.optional.map((r) => r.id)).toEqual(["Opt_One"]);
+  });
+});
+
+describe("routes (ARMORY-2)", () => {
+  it("names the app a route opens, and nothing for the list", () => {
+    expect(routeApp("app/tower")).toBe("tower");
+    expect(routeApp("app/")).toBeNull();
+    expect(routeApp("elsewhere")).toBeNull();
+    expect(routeApp(undefined)).toBeNull();
+    const rows = [row("tower"), row("other")];
+    expect(findApp(rows, "tower")?.id).toBe("tower");
+    expect(findApp(rows, "gone")).toBeNull();
   });
 });

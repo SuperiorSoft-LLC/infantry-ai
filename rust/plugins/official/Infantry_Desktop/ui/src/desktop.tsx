@@ -5,8 +5,9 @@
 // they live in the daemon). The orchestrator is today's whole shell, drawn untouched. Built from the kit only.
 // DESK-5: the Start menu at the left end of the bottom strip lists the apps; the header's minimize / maximize / close are the
 // shell's own and drive the real window. The app menu acts on the APP inside this OS (minimize to the taskbar, close).
-import { useReducer, useState, type ComponentType, type ReactNode } from "react";
-import { ChevronsDown, LayoutDashboard, LayoutGrid, Minus, MoreVertical, PackageOpen, Power, X } from "lucide-react";
+import { useEffect, useReducer, useState, type ComponentType, type ReactNode } from "react";
+import { useStore } from "zustand";
+import { ChevronsDown, Download, LayoutDashboard, LayoutGrid, Minus, MoreVertical, PackageOpen, Power, X } from "lucide-react";
 import {
   AppDialog,
   Button,
@@ -24,8 +25,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@infantry/ui";
-import { AgentAvatar, SCOPE_ATTRIBUTE, useAgentActivity, usePreference, windowFrame, type ShellProps } from "@infantry/ui-plugin-api";
+import { AgentAvatar, SCOPE_ATTRIBUTE, useAgentActivity, usePreference, windowFrame, type FrameLink, type ShellProps } from "@infantry/ui-plugin-api";
 import { initialState, reduce, toggle, type AppId, type DesktopState } from "./state";
+import { appRoute, createUpdatesStore, versionLine, type AppUpdate, type UpdatesStore } from "./updates";
 
 /** What the "About" of an app says: the owner's legibility rule (an app is a plugin under Apache-2.0, not core). */
 interface AppInfo {
@@ -241,12 +243,52 @@ function StartMenu({ state, onOpen }: { state: DesktopState; onOpen: (app: AppIn
   );
 }
 
+/**
+ * ARMORY-2: the Updates item. It is there only while the daemon reports an installed app (or the shell) with a newer version; its
+ * badge counts them and its menu lists each as "name, installed → available". Picking one opens the Apps app on that app's page.
+ */
+function UpdatesMenu({ store, onPick }: { store: UpdatesStore; onPick: (u: AppUpdate) => void }) {
+  const updates = useStore(store, (s) => s.updates);
+  if (updates.length === 0) return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          aria-label={`Updates (${updates.length})`}
+          data-testid="updates-button"
+          className="h-5 gap-1.5 rounded px-1.5 max-sm:h-12 max-sm:min-w-12 max-sm:rounded-lg max-sm:px-3"
+        >
+          <Download className="size-3.5 max-sm:size-4" />
+          <span className="hidden sm:inline">Updates</span>
+          <span data-testid="updates-badge" className="grid h-5 min-w-5 place-items-center rounded border border-foreground/40 bg-accent px-1 text-[11px] font-semibold">
+            {updates.length}
+          </span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" className="w-auto min-w-56" data-testid="updates-menu">
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Updates available</DropdownMenuLabel>
+        {updates.map((u) => (
+          <DropdownMenuItem key={u.id} onSelect={() => onPick(u)} data-testid={`update-${u.id}`}>
+            <Download />
+            <span className="font-medium">{u.name}</span>
+            <span className="ml-auto pl-4 text-xs text-muted-foreground">{versionLine(u)}</span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 /** Along the bottom on a desktop, a dock on a phone: the Start button, then one entry per open app. Clicking a minimized entry restores it; the front one minimizes. */
-function Taskbar({ state, onToggle, onOpen }: { state: DesktopState; onToggle: (app: AppInfo) => void; onOpen: (app: AppInfo) => void }) {
+function Taskbar({ state, updates, onToggle, onOpen, onOpenUpdate }: { state: DesktopState; updates: UpdatesStore | null; onToggle: (app: AppInfo) => void; onOpen: (app: AppInfo) => void; onOpenUpdate: (u: AppUpdate) => void }) {
   const open = APPS.filter((a) => state.windows[a.id] !== "closed");
   return (
     <nav aria-label="Taskbar" data-testid="taskbar" className="flex h-full min-w-0 items-center gap-1">
       <StartMenu state={state} onOpen={onOpen} />
+      {updates && <UpdatesMenu store={updates} onPick={onOpenUpdate} />}
       {open.length === 0 && <span className="px-1 text-xs text-muted-foreground">No apps open</span>}
       {open.map((a) => {
         const Icon = a.icon;
@@ -278,13 +320,26 @@ function Taskbar({ state, onToggle, onOpen }: { state: DesktopState; onToggle: (
   );
 }
 
-export function Desktop({ plugin, Shell, View }: { plugin: string; Shell: ComponentType<ShellProps>; View: ComponentType<{ plugin: string; id: string }> }) {
+export function Desktop({ plugin, link, Shell, View }: { plugin: string; link: FrameLink; Shell: ComponentType<ShellProps>; View: ComponentType<{ plugin: string; id: string; route?: string }> }) {
   const [openAtStart] = usePreference("desktop.openAtStart", false);
   const [state, dispatch] = useReducer(reduce, openAtStart, initialState);
   const [about, setAbout] = useState<AppInfo | null>(null);
+  // Made in an effect (and disposed with it) so a remount re-subscribes to the link.
+  const [updates, setUpdates] = useState<UpdatesStore | null>(null);
+  useEffect(() => {
+    const s = createUpdatesStore(link);
+    setUpdates(s);
+    return () => s.getState().dispose();
+  }, [link]);
   const taskbar = (
     <Scoped plugin={plugin}>
-      <Taskbar state={state} onToggle={(a) => dispatch(toggle(state, a.id))} onOpen={(a) => dispatch({ type: "open", app: a.id })} />
+      <Taskbar
+        state={state}
+        updates={updates}
+        onToggle={(a) => dispatch(toggle(state, a.id))}
+        onOpen={(a) => dispatch({ type: "open", app: a.id })}
+        onOpenUpdate={(u) => dispatch({ type: "open", app: "apps", route: appRoute(u) })}
+      />
     </Scoped>
   );
   const orchestrator = APPS[0]!;
@@ -300,7 +355,7 @@ export function Desktop({ plugin, Shell, View }: { plugin: string; Shell: Compon
         }
       />
     ) : (
-      <View plugin="Infantry_Installer" id="infantry.installer" />
+      <View plugin="Infantry_Installer" id="infantry.installer" route={state.routes.apps} />
     );
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-gradient-to-br from-background via-muted to-background">

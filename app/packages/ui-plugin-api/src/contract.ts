@@ -93,8 +93,12 @@ export interface LayoutViewProps {
    * unmount it to close the shell.
    */
   Shell: ComponentType<ShellProps>;
-  /** Draws contribution [id] of plugin [plugin] as a page (an installed plugin's tab), with the app's loading and fault states. */
-  View: ComponentType<{ plugin: string; id: string }>;
+  /**
+   * Draws contribution [id] of plugin [plugin] as a page (an installed plugin's tab), with the app's loading and fault states.
+   * [route] (ARMORY-2, "open app at route") is a page inside that contribution, e.g. `app/tower`: the view receives it as its
+   * `route` render prop and shows that page. The shell attaches no meaning to it; the plugin that draws the view does.
+   */
+  View: ComponentType<{ plugin: string; id: string; route?: string }>;
 }
 
 /** What a plugin draws for one of its contributions. */

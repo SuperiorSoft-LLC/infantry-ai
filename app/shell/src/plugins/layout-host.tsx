@@ -22,8 +22,8 @@ export const DEFAULT_LAYOUT_CHOICE = "default";
 /** How long a never-chosen device waits for the plugin list (which may hold the start layout) before drawing today's window. */
 const START_WAIT_MS = 3000;
 
-function View({ plugin, id }: { plugin: string; id: string }) {
-  return <PluginView plugin={plugin} id={id} frame="page" />;
+function View({ plugin, id, route }: { plugin: string; id: string; route?: string }) {
+  return <PluginView plugin={plugin} id={id} frame="page" props={route === undefined ? {} : { route }} />;
 }
 
 /**

@@ -6,11 +6,11 @@
 // to no app is under "Other plugins" so nothing is out of reach. The plugins of an app are managed inside the app, in its
 // Plugins tab. The same view is the app's whole window while nothing else is installed.
 // Built from the kit only: TabPage, ListRow, Switch, Button, EmptyState, RefusalBanner.
-import { useEffect } from "react";
-import { Download, PackageOpen, Power, RefreshCw, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, Download, PackageOpen, Power, RefreshCw, Trash2 } from "lucide-react";
 import { Button, EmptyState, ListRow, RefusalBanner, Switch, TabPage, type Tone } from "@infantry/ui";
 import { useLinkState } from "@infantry/ui-plugin-api";
-import { groupRows, installerStore, membersOf, rowActions, useInstaller, type PluginRow } from "./store";
+import { findApp, groupRows, installerStore, membersOf, routeApp, rowActions, useInstaller, type PluginRow } from "./store";
 
 function tone(r: PluginRow): Tone {
   if (!r.installed) return "neutral";
@@ -96,7 +96,32 @@ function AppEntry({ app, rows, busy }: { app: PluginRow; rows: PluginRow[]; busy
   );
 }
 
-export function InstallerTab() {
+/** A route opens one app's page (ARMORY-2: the taskbar's Updates item): that app's entry, and a way back to the whole list. */
+function AppPage({ id, rows, busy, onBack }: { id: string; rows: PluginRow[]; busy: boolean; onBack: () => void }) {
+  const row = findApp(rows, id);
+  return (
+    <div className="space-y-3" data-testid="app-page">
+      <Button size="sm" variant="ghost" onClick={onBack}>
+        <ArrowLeft /> All apps
+      </Button>
+      {row ? (
+        row.app ? (
+          <AppEntry app={row} rows={rows} busy={busy} />
+        ) : (
+          <Row r={row} busy={busy} system={row.bootstrap} />
+        )
+      ) : (
+        <EmptyState icon={<PackageOpen className="size-6" />} title={`${id} is not in this list`} hint="It is not installed here, or no source offers it." />
+      )}
+    </div>
+  );
+}
+
+export function InstallerTab({ route }: { route?: string }) {
+  // The page a route names stays until the user goes back; a new route (another update picked) shows that page.
+  const [left, setLeft] = useState<string | undefined>(undefined);
+  useEffect(() => setLeft(undefined), [route]);
+  const pageId = left === route ? null : routeApp(route);
   const link = useLinkState();
   const { rows, loaded, busy, refusal, notice } = useInstaller((s) => s);
   useEffect(() => {
@@ -128,6 +153,8 @@ export function InstallerTab() {
       )}
       {!loaded ? (
         <p className="text-xs text-muted-foreground">Reading the app list…</p>
+      ) : pageId ? (
+        <AppPage id={pageId} rows={rows} busy={busy !== null} onBack={() => setLeft(route)} />
       ) : rows.length === 0 ? (
         <EmptyState icon={<PackageOpen className="size-6" />} title="No apps to install" hint="No source offers one. Set the bundled folder (plugins.bundled) or add a folder to plugins.sources." />
       ) : (

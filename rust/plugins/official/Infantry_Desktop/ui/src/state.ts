@@ -11,14 +11,17 @@ export interface DesktopState {
   windows: Record<AppId, WindowState>;
   /** The app drawn full screen, or null for the bare desktop. */
   front: AppId | null;
+  /** Where an app was last opened to (ARMORY-2: an update opens Apps on that app's page); absent = the app's own start page. */
+  routes: Partial<Record<AppId, string>>;
 }
 
-export type DesktopAction = { type: "open" | "minimize" | "close"; app: AppId };
+/** `open` may carry a [route]: the page inside the app to show (the app is told through its view's `route` prop). */
+export type DesktopAction = { type: "open"; app: AppId; route?: string } | { type: "minimize" | "close"; app: AppId };
 
 export function initialState(openOrchestrator: boolean): DesktopState {
   return openOrchestrator
-    ? { windows: { orchestrator: "open", apps: "closed" }, front: "orchestrator" }
-    : { windows: { orchestrator: "closed", apps: "closed" }, front: null };
+    ? { windows: { orchestrator: "open", apps: "closed" }, front: "orchestrator", routes: {} }
+    : { windows: { orchestrator: "closed", apps: "closed" }, front: null, routes: {} };
 }
 
 export function reduce(state: DesktopState, action: DesktopAction): DesktopState {
@@ -28,16 +31,19 @@ export function reduce(state: DesktopState, action: DesktopAction): DesktopState
     case "open": {
       if (state.front && state.front !== app) windows[state.front] = "minimized";
       windows[app] = "open";
-      return { windows, front: app };
+      // A plain open (the Start menu, a taskbar restore) keeps the page the app is on; an open with a route moves it there.
+      const routes = action.route === undefined ? state.routes : { ...state.routes, [app]: action.route };
+      return { windows, front: app, routes };
     }
     case "minimize": {
       if (windows[app] !== "open") return state;
       windows[app] = "minimized";
-      return { windows, front: state.front === app ? null : state.front };
+      return { windows, front: state.front === app ? null : state.front, routes: state.routes };
     }
     case "close": {
       windows[app] = "closed";
-      return { windows, front: state.front === app ? null : state.front };
+      const { [app]: _gone, ...routes } = state.routes;
+      return { windows, front: state.front === app ? null : state.front, routes };
     }
   }
 }

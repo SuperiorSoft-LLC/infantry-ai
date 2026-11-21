@@ -18,6 +18,6 @@ export default definePlugin({
       store.getState().dispose();
       bindInstallerStore(null);
     });
-    ctx.register("infantry.installer", { icon: PackageOpen, render: () => <InstallerTab /> });
+    ctx.register<{ route?: string }>("infantry.installer", { icon: PackageOpen, render: ({ route }) => <InstallerTab route={route} /> });
   },
 });
