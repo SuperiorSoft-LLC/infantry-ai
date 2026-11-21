@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) SuperiorSoft LLC
-# RUST-UPD-1: lays out what the installer ships beside InfantryAI-Rust.exe (tauri.bundle.conf.json `resources`):
+# RUST-UPD-1: lays out what the installer ships beside InfantryAI.exe (tauri.bundle.conf.json `resources`):
 #   bundle-stage/infantry-daemon.exe  infantry.exe  infantry-migrate.exe   (the rust/ workspace binaries)
 #   bundle-stage/plugins/official/<Module>/...                             (rust/plugins/stage.sh)
 # Profile: INFANTRY_BUNDLE_PROFILE (debug | release), default debug.

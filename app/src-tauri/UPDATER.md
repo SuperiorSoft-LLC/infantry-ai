@@ -23,7 +23,7 @@ INFANTRY_BUNDLE_PROFILE=release bash src-tauri/scripts/stage-bundle.sh && pnpm t
 
 That generated config is merged only for an installer build:
 
-- It ships those files beside `InfantryAI-Rust.exe` (`bundle.resources`). The app finds the daemon there, and the daemon
+- It ships those files beside `InfantryAI.exe` (`bundle.resources`). The app finds the daemon there, and the daemon
   finds `plugins/official/<Module>/` beside itself.
 - Install mode is per user, so no admin is needed. The uninstall hook (`windows/installer-hooks.nsh`) takes `infantry`
   off PATH.
@@ -81,7 +81,7 @@ Publish one `latest.json` per channel at the feed URL (for example, as an asset 
   "notes": "What changed",
   "pub_date": "2026-11-20T12:00:00Z",
   "platforms": {
-    "windows-x86_64": { "signature": "<contents of the .sig file>", "url": "https://.../Infantry AI Rust_0.2.0_x64-setup.exe" }
+    "windows-x86_64": { "signature": "<contents of the .sig file>", "url": "https://.../Infantry AI_0.2.0_x64-setup.exe" }
   }
 }
 ```

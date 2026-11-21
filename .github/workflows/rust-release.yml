@@ -110,8 +110,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist; d="$(find app/src-tauri/target -type d -path '*bundle/msi' -print -quit)"
-          cp "$d"/*.msi "dist/InfantryAI-Rust_${VERSION}_x64.msi"
-          cp "$d"/*.msi.sig "dist/InfantryAI-Rust_${VERSION}_x64.msi.sig"
+          cp "$d"/*.msi "dist/InfantryAI_${VERSION}_x64.msi"
+          cp "$d"/*.msi.sig "dist/InfantryAI_${VERSION}_x64.msi.sig"
           echo "${{ steps.key.outputs.signing }}" > dist/SIGNING-windows
       - uses: actions/upload-artifact@v4
         with: { name: dist-windows, path: dist/*, if-no-files-found: error }
@@ -174,8 +174,8 @@ jobs:
           fi
           mkdir -p dist
           "$bt/zipalign" -f -p 4 "$apk" "$RUNNER_TEMP/aligned.apk"
-          "$bt/apksigner" sign --ks "$ks" --ks-pass "pass:$pass" --ks-key-alias "$alias" --key-pass "pass:$kpass" --out "dist/InfantryAI-Rust_${VERSION}_arm64.apk" "$RUNNER_TEMP/aligned.apk"
-          "$bt/apksigner" verify "dist/InfantryAI-Rust_${VERSION}_arm64.apk"
+          "$bt/apksigner" sign --ks "$ks" --ks-pass "pass:$pass" --ks-key-alias "$alias" --key-pass "pass:$kpass" --out "dist/InfantryAI_${VERSION}_arm64.apk" "$RUNNER_TEMP/aligned.apk"
+          "$bt/apksigner" verify "dist/InfantryAI_${VERSION}_arm64.apk"
           echo "$kind" > dist/SIGNING-android
       - uses: actions/upload-artifact@v4
         with: { name: dist-android, path: dist/*, if-no-files-found: error }
@@ -221,8 +221,8 @@ jobs:
             --config "{\"version\":\"$VERSION\",\"bundle\":{\"createUpdaterArtifacts\":true}}" \
             --config "$RUNNER_TEMP/key.json"
           mkdir -p ../dist; d="$(find src-tauri/target -type d -path '*bundle/appimage' -print -quit)"
-          cp "$d"/*.AppImage "../dist/InfantryAI-Rust_${VERSION}_amd64.AppImage"
-          cp "$d"/*.AppImage.sig "../dist/InfantryAI-Rust_${VERSION}_amd64.AppImage.sig"
+          cp "$d"/*.AppImage "../dist/InfantryAI_${VERSION}_amd64.AppImage"
+          cp "$d"/*.AppImage.sig "../dist/InfantryAI_${VERSION}_amd64.AppImage.sig"
           echo "${{ steps.key.outputs.signing }}" > ../dist/SIGNING-linux
       - uses: actions/upload-artifact@v4
         with: { name: dist-linux, path: dist/*, if-no-files-found: error }
@@ -265,8 +265,8 @@ jobs:
             --config "{\"version\":\"$VERSION\",\"bundle\":{\"createUpdaterArtifacts\":true}}" \
             --config "$RUNNER_TEMP/key.json"
           mkdir -p ../dist; d="$(find src-tauri/target -type d -path '*bundle/macos' -print -quit)"
-          cp "$d"/*.app.tar.gz "../dist/InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz"
-          cp "$d"/*.app.tar.gz.sig "../dist/InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz.sig"
+          cp "$d"/*.app.tar.gz "../dist/InfantryAI_${VERSION}_aarch64.app.tar.gz"
+          cp "$d"/*.app.tar.gz.sig "../dist/InfantryAI_${VERSION}_aarch64.app.tar.gz.sig"
           echo "${{ steps.key.outputs.signing }}" > ../dist/SIGNING-macos
       - uses: actions/upload-artifact@v4
         with: { name: dist-macos, path: dist/*, if-no-files-found: error }
@@ -296,9 +296,9 @@ jobs:
           last="${{ needs.plan.outputs.last }}"
           { echo "Infantry AI (Rust) $VERSION"; echo; git log -n 30 --no-merges --pretty='- %s' ${last:+"$last..HEAD"}; } > notes.txt
           cd dist
-          entries=("windows-x86_64=InfantryAI-Rust_${VERSION}_x64.msi:InfantryAI-Rust_${VERSION}_x64.msi.sig" "android-aarch64=InfantryAI-Rust_${VERSION}_arm64.apk")
-          [ -f "InfantryAI-Rust_${VERSION}_amd64.AppImage" ] && entries+=("linux-x86_64=InfantryAI-Rust_${VERSION}_amd64.AppImage:InfantryAI-Rust_${VERSION}_amd64.AppImage.sig")
-          [ -f "InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz" ] && entries+=("darwin-aarch64=InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz:InfantryAI-Rust_${VERSION}_aarch64.app.tar.gz.sig")
+          entries=("windows-x86_64=InfantryAI_${VERSION}_x64.msi:InfantryAI_${VERSION}_x64.msi.sig" "android-aarch64=InfantryAI_${VERSION}_arm64.apk")
+          [ -f "InfantryAI_${VERSION}_amd64.AppImage" ] && entries+=("linux-x86_64=InfantryAI_${VERSION}_amd64.AppImage:InfantryAI_${VERSION}_amd64.AppImage.sig")
+          [ -f "InfantryAI_${VERSION}_aarch64.app.tar.gz" ] && entries+=("darwin-aarch64=InfantryAI_${VERSION}_aarch64.app.tar.gz:InfantryAI_${VERSION}_aarch64.app.tar.gz.sig")
           signing="real"; grep -qs test SIGNING-* && signing="TEST keys (not trusted by any installed app)"
           { echo; echo "Signing: $signing."; echo "DRAFT: not published. Test the build, then run the rust-promote workflow."; } >> ../notes.txt
           node ../app/src-tauri/scripts/release-tools.mjs feed "$VERSION" ../notes.txt "$base" latest.json "${entries[@]}"
