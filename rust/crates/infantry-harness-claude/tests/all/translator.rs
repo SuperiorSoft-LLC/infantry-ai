@@ -30,6 +30,7 @@ const T: Timings = Timings {
     dialog_grace_ms: 3_000,
     first_submit_ms: 30_000,
     hook_silent_ms: 20_000,
+    own_idle_ms: 20_000,
     screen_tail_chars: 600,
 };
 
@@ -621,6 +622,144 @@ fn a_stop_that_comes_before_its_own_prompt_record_is_claimed() {
     assert_eq!(r.written, vec![paste("next")]);
 }
 
+// RESTART-HANG-1: a ticket restart resumes the killed claude and pastes its brief. The resumed claude writes a notice about the
+// background shell jobs the dead session left, as recorded live (`RESUME_NOTICE`): shown, never run, so it is no turn to wait for.
+
+#[test]
+fn a_restarts_brief_goes_in_though_the_resumed_cli_noted_its_orphaned_jobs_first() {
+    let mut r = Rig::new(ApprovalMode::AllowAll);
+    let brief = "[RESTART] Your session ended before this ticket was done; continue.";
+    r.send(brief);
+    // Live, the notice is written ~3 s after the start, before the SessionStart hook fires.
+    r.screen("welcome");
+    r.record(RESUME_NOTICE.trim());
+    r.tick();
+    r.event("start");
+    r.tick();
+    assert!(r.written.is_empty(), "the CLI is not ready yet");
+    r.now += T.ready_after_start_ms;
+    r.tick();
+    assert_eq!(r.written, vec![paste(brief)], "the brief goes in as on any boot");
+    assert!(
+        !r.seen.iter().any(|e| matches!(e, HarnessEvent::Warning(w) if w.contains("turn of its own"))),
+        "the notice is no turn: {:?}",
+        r.seen
+    );
+    r.now += T.paste_settle_ms;
+    r.tick();
+    assert_eq!(r.written.last().unwrap(), tty::ENTER);
+    r.event("submit");
+    assert_eq!(r.count(|e| *e == HarnessEvent::TurnStarted), 1);
+    r.record(&assistant("m1", "continuing", 1));
+    r.event("stop");
+    r.tick();
+    r.now += T.stop_settle_ms;
+    r.tick();
+    assert_eq!(r.ends(), vec![(TurnEnd::Completed, None)], "the host's turn ends: nothing waits behind a phantom one");
+}
+
+#[test]
+fn a_notice_written_after_the_paste_is_not_the_cli_taking_the_prompt() {
+    let mut r = Rig::new(ApprovalMode::AllowAll);
+    r.entered("do the thing");
+    r.record(RESUME_NOTICE.trim());
+    r.tick();
+    assert_eq!(r.count(|e| *e == HarnessEvent::TurnStarted), 0, "only the CLI's own submit acks the prompt");
+    r.event("submit");
+    assert_eq!(r.count(|e| *e == HarnessEvent::TurnStarted), 1);
+}
+
+#[test]
+fn a_turn_of_its_own_that_shows_no_life_lets_the_waiting_prompt_in() {
+    // The safety net for what the notice taught: the CLI announced a turn (a record that looks like a real wake-up) and runs
+    // none. No spinner, no record, no hook; waiting for its Stop would wait for good.
+    let mut r = Rig::new(ApprovalMode::AllowAll);
+    r.up();
+    r.tick();
+    r.record(WAKE_UP);
+    r.tick();
+    r.send("the brief");
+    r.tick();
+    assert!(r.written.is_empty(), "held behind the CLI's own turn");
+    r.now += T.own_idle_ms - 1;
+    r.tick();
+    assert!(r.written.is_empty(), "the turn may still be starting");
+    r.now += 1;
+    r.tick();
+    assert!(r.seen.iter().any(|e| matches!(e, HarnessEvent::Warning(w) if w.contains("is not running"))), "{:?}", r.seen);
+    assert!(r.ends().is_empty(), "the CLI's own turn is not the host's");
+    r.tick();
+    assert_eq!(r.written, vec![paste("the brief")]);
+    r.now += T.paste_settle_ms;
+    r.tick();
+    r.event("submit");
+    r.record(&assistant("m1", "done", 1));
+    r.event("stop");
+    r.tick();
+    r.now += T.stop_settle_ms;
+    r.tick();
+    assert_eq!(r.ends(), vec![(TurnEnd::Completed, None)]);
+}
+
+#[test]
+fn a_turn_of_its_own_that_keeps_drawing_is_never_dropped() {
+    let mut r = Rig::new(ApprovalMode::AllowAll);
+    r.up();
+    r.tick();
+    r.record(WAKE_UP);
+    r.tick();
+    r.send("queued");
+    for _ in 0..12 {
+        // The spinner redraws well inside the limit, for three times the limit.
+        r.now += T.own_idle_ms / 4;
+        r.feed(TranslatorInput::Pty(b"spinner".to_vec()));
+        r.tick();
+    }
+    assert!(r.written.is_empty(), "a running turn keeps the prompt waiting for its Stop");
+    assert!(!r.seen.iter().any(|e| matches!(e, HarnessEvent::Warning(w) if w.contains("is not running"))), "{:?}", r.seen);
+    r.record(&assistant("m1", "noted", 1));
+    r.event("stop");
+    r.tick();
+    r.now += T.stop_settle_ms;
+    r.tick();
+    r.tick();
+    assert_eq!(r.written, vec![paste("queued")]);
+}
+
+#[test]
+fn a_turn_of_its_own_waiting_on_a_permission_answer_is_not_idle() {
+    let mut r = Rig::new(ApprovalMode::Ask);
+    r.up();
+    r.tick();
+    r.record(WAKE_UP);
+    r.tick();
+    r.send("queued");
+    let call = r#"{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"ls"}}"#;
+    r.feed(TranslatorInput::Hook { id: 7, body: call.into() });
+    r.now += T.own_idle_ms * 3; // the owner takes a while to decide
+    r.tick();
+    assert!(r.written.is_empty(), "the CLI waits on the owner: it is not idle");
+    r.t.answer("hook-7", true);
+    r.take();
+    r.tick();
+    assert!(r.written.is_empty(), "the answer is a sign of life: the CLI goes on with its tool");
+    assert!(!r.seen.iter().any(|e| matches!(e, HarnessEvent::Warning(w) if w.contains("is not running"))), "{:?}", r.seen);
+}
+
+#[test]
+fn an_own_idle_limit_of_zero_never_drops_a_turn_of_its_own() {
+    let mut r = Rig::new(ApprovalMode::AllowAll);
+    r.t = Interactive::new(ID, ApprovalMode::AllowAll, Timings { own_idle_ms: 0, ..T });
+    r.up();
+    r.tick();
+    r.record(WAKE_UP);
+    r.tick();
+    r.send("queued");
+    r.now += 3_600_000;
+    r.tick();
+    assert!(r.written.is_empty(), "0 = the turn is waited for as long as it takes");
+}
+
 #[test]
 fn text_typed_into_a_running_turn_is_pasted_and_entered() {
     let mut r = Rig::new(ApprovalMode::AllowAll);
@@ -751,6 +890,15 @@ fn interrupts_synthetic_messages_api_errors_own_prompts_and_compaction_are_read(
     let v: Value = serde_json::from_str(line(&m.map(compact)[0])).unwrap();
     assert_eq!(v["compact_metadata"]["trigger"], "auto");
     assert_eq!(v["compact_metadata"]["pre_tokens"], 1234);
+}
+
+#[test]
+fn a_record_the_cli_only_writes_to_its_transcript_is_no_turn_while_a_real_wake_up_is() {
+    let mut m = TranscriptMapper::new("sid");
+    assert!(m.map(RESUME_NOTICE.trim()).is_empty(), "queued for the transcript only: nothing runs on it");
+    assert_eq!(m.map(WAKE_UP), vec![Signal::OwnPrompt("task-notification".into())], "a task that ended wakes the CLI");
+    let typed = r#"{"type":"user","queueTranscriptOnly":true,"origin":{"kind":"human"},"message":{"role":"user","content":"typed, not run"}}"#;
+    assert!(m.map(typed).is_empty(), "whoever wrote it, a transcript-only record starts no turn");
 }
 
 #[test]

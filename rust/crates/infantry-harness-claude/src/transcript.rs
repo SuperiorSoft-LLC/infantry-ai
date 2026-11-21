@@ -163,6 +163,13 @@ impl TranscriptMapper {
         if flag(record, "isMeta") {
             return Vec::new();
         }
+        // RESTART-HANG-1: a queued command the CLI only writes to the transcript (`queueTranscriptOnly`) is shown, never run:
+        // no turn follows it. The one it writes is the resume notice ("N background shell commands didn't finish before the
+        // previous session ended"), recorded as a `task-notification` prompt; read as a turn of the CLI's own, it held the
+        // host's prompt (a ticket restart's brief) behind a Stop that never came.
+        if flag(record, "queueTranscriptOnly") {
+            return Vec::new();
+        }
         let Some(message) = record.get("message").filter(|m| m.is_object()) else { return Vec::new() };
         let content = message.get("content");
         let blocks: Vec<&Value> =
