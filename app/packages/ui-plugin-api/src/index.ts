@@ -5,7 +5,7 @@
 // `react-dom` and `@infantry/ui` (the UI kit, TabPage, Field, RefusalBanner and `ago` included) are imported as usual: the
 // build helper turns those imports into the app's own copy (build/plugin-config.mjs).
 import { createElement, type ReactElement } from "react";
-import { HOST_GLOBAL, type AgentActivity, type HostApi, type UiHost, type UiPluginModule } from "./contract";
+import { HOST_GLOBAL, type AgentActivity, type HostApi, type UiHost, type UiPluginModule, type WindowFrame } from "./contract";
 
 export * from "./contract";
 // The frame helpers every app store uses: a request with its own id, and a JSON read that never throws. Bundled (they are
@@ -35,6 +35,9 @@ export const usePreference = <T extends string | boolean>(key: string, fallback:
 
 /** The agents that are busy right now (DESK-3, a taskbar badge): how many work, how many need the user, and which. */
 export const useAgentActivity = (): AgentActivity => lent("useAgentActivity")();
+
+/** The real window's frame (minimize, maximize, close), or null in a browser or on a phone (DESK-5: a layout's Start menu). */
+export const windowFrame = (): WindowFrame | null => lent("windowFrame")();
 
 /** The app's pixel-bot avatar for an agent's session id. */
 export function AgentAvatar(props: { agentId: string; size?: "xs" | "sm" }): ReactElement {
