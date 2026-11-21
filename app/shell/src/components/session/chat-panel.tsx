@@ -10,7 +10,7 @@
 // Activity, never inside the box. Minimized, the whole composer (prompt card, queue, status line, box, groups, hint) is
 // not rendered and the transcript takes the space; Restore ("Show composer") is the one floater left. The draft and the
 // minimized / expanded state live per window (`@infantry/client` chat-view), so a restore brings the composer back as it was.
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Copy, Maximize2, Minimize2, Minus, Unplug } from "lucide-react";
 import { EmptyState, cn } from "@infantry/ui";
 import { useAgent } from "@/daemon/agents";
@@ -26,13 +26,18 @@ import { FloatingChip } from "./floating-chip";
 export type ChatVariant = "full" | "popout" | "compact";
 
 export interface ChatPanelProps {
-  /** The session to show; null shows the empty state, and the composer starts a new session. */
+  /** The session to show; null shows the empty state, and the composer starts a new session (unless [sessionRequired]). */
   sessionId: string | null;
   variant?: ChatVariant;
   /** The window this chat lives in; its minimized / expanded / draft state is remembered under this id. */
   windowId?: string;
-  /** Shown instead of the default empty state when there is no session. */
-  empty?: { title: string; hint: string };
+  /** Shown instead of the default empty state when there is no session; [action] sits under the hint (a retry). */
+  empty?: { title: string; hint: string; action?: ReactNode };
+  /**
+   * A chat for one session that something else makes (the Assistant box): with no session it shows the empty state alone,
+   * with no composer, because a prompt typed there would start an ordinary agent in the agents area instead.
+   */
+  sessionRequired?: boolean;
   className?: string;
 }
 
@@ -56,12 +61,13 @@ function ComposerFloaters({ windowId, minimized, expanded }: { windowId: string;
   );
 }
 
-export function ChatPanel({ sessionId, variant = "full", windowId = "main", empty, className }: ChatPanelProps) {
+export function ChatPanel({ sessionId, variant = "full", windowId = "main", empty, sessionRequired, className }: ChatPanelProps) {
   const agent = useAgent(sessionId ?? "");
   const link = useDaemon((s) => s.connection.state);
   const requestHistory = useDaemon((s) => s.requestHistory);
   const busy = agent?.status === "working";
   const { minimized, expanded } = useChatView(windowId);
+  const waiting = !agent && !!sessionRequired;
 
   // A session opened in a view brings its history, if the burst did not already ask for it.
   useEffect(() => {
@@ -79,13 +85,14 @@ export function ChatPanel({ sessionId, variant = "full", windowId = "main", empt
               icon={<Unplug className="size-7" />}
               title={empty?.title ?? (link === "open" ? "No session selected" : "Not connected to the daemon")}
               hint={empty?.hint ?? (link === "open" ? "Send a prompt below to start a new session." : "The app reconnects on its own.")}
+              action={empty?.action}
             />
           </div>
         )}
-        <ActivityBox sessionId={agent?.id ?? null} floaters={<ComposerFloaters windowId={windowId} minimized={minimized} expanded={expanded} />} />
+        {!waiting && <ActivityBox sessionId={agent?.id ?? null} floaters={<ComposerFloaters windowId={windowId} minimized={minimized} expanded={expanded} />} />}
       </div>
       {agent && variant !== "compact" && <BgJobsRow sessionId={agent.id} />}
-      {!minimized && <Composer sessionId={agent?.id ?? null} busy={busy} windowId={windowId} />}
+      {!waiting && !minimized && <Composer sessionId={agent?.id ?? null} busy={busy} windowId={windowId} />}
     </div>
   );
 }

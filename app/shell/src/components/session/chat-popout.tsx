@@ -35,7 +35,9 @@ export interface ChatPopoutProps {
   sessionId: string | null;
   variant?: ChatVariant;
   onClose: () => void;
-  empty?: { title: string; hint: string };
+  empty?: { title: string; hint: string; action?: ReactNode };
+  /** The chat shows no composer until there is a session (see ChatPanel `sessionRequired`). */
+  sessionRequired?: boolean;
   /** Extra header content (a status chip). */
   badge?: ReactNode;
   /** Stack order among popouts. */
@@ -54,7 +56,7 @@ const HANDLE: Record<string, string> = {
   se: "right-0 bottom-0 size-3 cursor-nwse-resize",
 };
 
-export function ChatPopout({ id, title, sessionId, variant = "popout", onClose, empty, badge, z = 40, onFocus }: ChatPopoutProps) {
+export function ChatPopout({ id, title, sessionId, variant = "popout", onClose, empty, sessionRequired, badge, z = 40, onFocus }: ChatPopoutProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [saved, setSaved] = useState<Saved>(() => load(id));
   const [bounds, setBounds] = useState<Bounds>({ w: 1200, h: 800 });
@@ -140,6 +142,7 @@ export function ChatPopout({ id, title, sessionId, variant = "popout", onClose, 
             sessionId={sessionId}
             variant={variant}
             empty={empty}
+            sessionRequired={sessionRequired}
             windowId={id}
           />
         )}

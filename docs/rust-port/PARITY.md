@@ -26,7 +26,7 @@ MCP, Pods, Account and Sites are listed at the end without a grade, because back
 | Project picker, add project | yes | done | |
 | Edit project dialog (folder, lane caps, project skills, project secrets) | yes | partial | Add only. Edit dialog: UI only (`project_save`, `project_config`). |
 | Agent avatar strip | yes | done | |
-| Assistant portrait and popup | yes | missing | Needs an Assistant chat panel. UI only (a session with the assistant role). The dead pill was removed today. |
+| Assistant portrait and popup | yes | partial | *(fixed, #115)* The pop-up hosts the installation's ONE Assistant: the daemon's `assistant` frame makes a global, project-less session at rest in `<state>/assistant` (once, under a lock), on the binding of its role (Roles > binding; the app setting `assistant.role` names the role, default `assistant`). It is no card of the agents lists, and with none yet the pop-up has no composer. Not ported: the Assistant's `KNOWLEDGE.md` in its folder and the standing instructions built from the CLI help (Kotlin `AssistantService`); its start text is the role's persona only. |
 | "N need attention" chip | yes | done | *(fixed today)* It showed a fixed 14. It is now the real count and hides at 0. |
 | Server/host label | yes | partial | *(fixed today)* It now shows "This computer" or the daemon's host (was fixed text). No server-switch dropdown with saved servers: UI only. |
 | Connection chip, connect dialog | yes | done | Phone pairing is in Settings > Daemon. |

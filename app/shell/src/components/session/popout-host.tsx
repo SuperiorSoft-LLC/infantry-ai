@@ -3,40 +3,55 @@
 // Every floating chat in the window: the Assistant box (top-bar button) and any session popped out from its header.
 // All of them are a ChatPopout around the one ChatPanel.
 import { useEffect, useState } from "react";
+import { Button, Chip } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { useAgent } from "@/daemon/agents";
 import { useUi } from "@/state/ui-state";
 import { ChatPopout } from "./chat-popout";
+import { useAssistantAsk, useAssistantId } from "./use-assistant";
 
-/** The installation-wide Assistant session (`record.global`), or null until the daemon has made it. */
-export function useAssistantId(): string | null {
-  return useDaemon((s) => {
-    for (const v of Object.values(s.sessions)) if (v.record.global) return v.record.id;
-    return null;
-  });
+/** What the box says while there is no Assistant to show: the link is down, the daemon refused, or the Assistant is on its way. */
+function assistantEmpty(online: boolean, refusal: string | null, retry: () => void) {
+  if (!online) return { title: "Not connected to the daemon", hint: "The app reconnects on its own." };
+  if (refusal)
+    return {
+      title: "The Assistant did not start",
+      hint: refusal,
+      action: (
+        <Button variant="outline" size="sm" onClick={retry}>
+          Try again
+        </Button>
+      ),
+    };
+  return { title: "Starting the Assistant…", hint: "It opens here as soon as the daemon has it ready." };
 }
 
+/**
+ * The Assistant box. The daemon makes the one installation-wide Assistant (`record.global`) when the box asks for it, and it
+ * lives here: it is no card of the agents lists (`useAgentList` leaves it out), and with none yet the box has no composer,
+ * so nothing typed here can start an ordinary agent instead.
+ */
 function AssistantBox({ z, onFocus }: { z: number; onFocus: () => void }) {
   const ui = useUi();
   const id = useAssistantId();
+  const assistant = useAgent(id ?? "");
   const online = useDaemon((s) => s.connection.state === "open");
-  const sendFrame = useDaemon((s) => s.sendFrame);
-  // Opening the box asks the daemon for the Assistant (it makes it on the first ask and answers with a `session` frame).
+  const { refusal, ask } = useAssistantAsk();
+  // Opening the box asks the daemon for the Assistant (it makes it on the first ask and pushes it as a `session` frame).
   useEffect(() => {
-    if (online && !id) sendFrame({ type: "assistant", data: "" });
-  }, [online, id, sendFrame]);
+    if (online && !id) ask();
+  }, [online, id, ask]);
   return (
     <ChatPopout
       id="assistant"
       title="Assistant"
       sessionId={id}
+      sessionRequired
+      badge={assistant && <Chip tone="green">{`${assistant.provider} · ${assistant.model}`}</Chip>}
       z={z}
       onFocus={onFocus}
       onClose={() => ui.set("assistantOpen", false)}
-      empty={{
-        title: online ? "Starting the Assistant…" : "Not connected to the daemon",
-        hint: online ? "If this stays empty, this daemon does not provide the Assistant yet." : "The app reconnects on its own.",
-      }}
+      empty={assistantEmpty(online, refusal, ask)}
     />
   );
 }

@@ -38,6 +38,7 @@ export const Frame = {
   QUEUE_FORCE: "queue_force",
   PROMPT_ACK: "prompt_ack",
   NEW: "new",
+  ASSISTANT: "assistant",
   TEXT_DELTA: "text_delta",
   STATUS: "status",
   FINISHED: "finished",
@@ -230,4 +231,15 @@ export function isRunning(r: Pick<SessionRecord, "state" | "turnActive">): boole
 export function inProject<T extends { record: Pick<SessionRecord, "projectId"> }>(items: T[], projectId: string | null | undefined): T[] {
   if (!projectId) return items;
   return items.filter((v) => !v.record.projectId || v.record.projectId === projectId);
+}
+
+/** The installation-wide Assistant (`record.global`): the one session the daemon makes for the Assistant box, or null until it has. */
+export function assistantOf<T extends { record: Pick<SessionRecord, "global"> }>(items: Iterable<T>): T | null {
+  for (const v of items) if (v.record.global) return v;
+  return null;
+}
+
+/** [items] without the Assistant: it lives in its own box, so it is never a card of the agents lists. */
+export function withoutAssistant<T extends { record: Pick<SessionRecord, "global"> }>(items: T[]): T[] {
+  return items.some((v) => v.record.global) ? items.filter((v) => !v.record.global) : items;
 }

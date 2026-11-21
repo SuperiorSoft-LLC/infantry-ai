@@ -22,7 +22,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
+mod assistant;
 mod lifecycle;
+pub use assistant::{AssistantSpec, DIR as ASSISTANT_DIR, ROLE as ASSISTANT_ROLE, ROLE_KEY as ASSISTANT_ROLE_KEY};
 pub use lifecycle::{waiting_line, evaluate, Pending, Stats, WatchConfig, WatchPorts, CARRY_MAX_CHARS};
 use infantry_protocol::frames as pf;
 
@@ -48,6 +50,7 @@ pub fn owns(ty: &str) -> bool {
             | pf::SESSION_STATS_GET
             | pf::SESSION_MCP_RECONNECT
             | pf::COMMAND_CATALOG
+            | pf::ASSISTANT
     )
 }
 
@@ -280,6 +283,10 @@ pub struct Daemon {
     /// Where tool approvals and questions go (the owner's prompt cards); unset = sessions run with allow-all.
     prompter: std::sync::OnceLock<Arc<dyn crate::harness::Prompter>>,
     mcp: std::sync::OnceLock<Arc<dyn McpSelector>>,
+    /// ASSISTANT-1: the role the Assistant plays and what it runs on (the role binding); unset = the default role and harness.
+    assistant_spec: std::sync::OnceLock<Arc<dyn Fn() -> AssistantSpec + Send + Sync>>,
+    /// ASSISTANT-1: held across "is there an Assistant?" and its creation, so the installation never gets two.
+    assistant_lock: Mutex<()>,
 }
 
 fn encode(ty: &str, data: String, session: Option<&str>, seq: Option<i64>) -> String {
@@ -361,6 +368,8 @@ impl Daemon {
             role_brief: std::sync::OnceLock::new(),
             prompter: std::sync::OnceLock::new(),
             mcp: std::sync::OnceLock::new(),
+            assistant_spec: std::sync::OnceLock::new(),
+            assistant_lock: Mutex::new(()),
         });
         d.refresh_held();
         Ok(d)
@@ -764,6 +773,14 @@ impl Daemon {
                     Err(m) => vec![encode_req(wire::ERROR, format!("session_stats_get refused: {m}"), sid.as_deref(), None, req.as_deref())],
                 };
             }
+            // ASSISTANT-1: the installation-wide Assistant. Answers the sender with its `session` frame, making the session on
+            // the first request (the creation itself reaches every client as a `session` push); a refusal says why.
+            pf::ASSISTANT => {
+                return vec![match self.ensure_assistant() {
+                    Ok(rec) => encode_req(wire::SESSION, serde_json::to_string(&rec).unwrap_or_default(), Some(&rec.id), None, req.as_deref()),
+                    Err(m) => encode_req(wire::ERROR, m, None, None, req.as_deref()),
+                }];
+            }
             other => Err(format!("{other} refused: this daemon does not serve that frame yet").into()),
         };
         match r {
@@ -837,18 +854,22 @@ impl Daemon {
         Ok(rec)
     }
 
-    /// A JSON `new`: the session exists now, at rest with no run (`neverRun`); its first prompt is its first run.
-    fn bind_new(self: &Arc<Self>, opts: NewOpts, conn: &mut Conn) -> Result<(), String> {
-        let mut rec = self.new_record(&opts, "IDLE", "new")?;
+    /// Lists a new session at rest and announces it: its `session` frame to every client, then its idle status. Returns its id.
+    fn list_idle(&self, mut rec: SessionRecord) -> String {
         let id = rec.id.clone();
         rec.last_action = Some("state idle".into());
         let entry = Arc::new(Mutex::new(Entry::new(rec, false, 0)));
         self.list.lock().unwrap().push((id.clone(), entry.clone()));
-        {
-            let mut e = entry.lock().unwrap();
-            self.push(&mut e);
-            self.emit(&mut e, wire::STATUS, wire::status("IDLE"));
-        }
+        let mut e = entry.lock().unwrap();
+        self.push(&mut e);
+        self.emit(&mut e, wire::STATUS, wire::status("IDLE"));
+        id
+    }
+
+    /// A JSON `new`: the session exists now, at rest with no run (`neverRun`); its first prompt is its first run.
+    fn bind_new(self: &Arc<Self>, opts: NewOpts, conn: &mut Conn) -> Result<(), String> {
+        let rec = self.new_record(&opts, "IDLE", "new")?;
+        let id = self.list_idle(rec);
         conn.active = Some(id.clone());
         match opts.prompt.filter(|p| !p.trim().is_empty()) {
             Some(p) => match self.prompt_into(&id, p) {

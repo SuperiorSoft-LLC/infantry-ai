@@ -4,7 +4,7 @@
 // a card whose session did not change in a flush keeps the same object and does not re-render.
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { inProject, isRunning, type AgentProfile, type ProjectSummary, type SessionView, type TicketSummary } from "@infantry/client";
+import { inProject, isRunning, withoutAssistant, type AgentProfile, type ProjectSummary, type SessionView, type TicketSummary } from "@infantry/client";
 import type { Agent, AgentStatus } from "@/mock/types";
 import { useDaemon } from "./daemon";
 import { useProjects } from "@/components/git/use-projects";
@@ -114,7 +114,7 @@ function cachedAgent(
   return agent;
 }
 
-/** Every session as an Agent, newest first. */
+/** Every session of the selected project as an Agent, newest first. The Assistant is not one of them: it lives in its own box. */
 export function useAgentList(): Agent[] {
   const { sessions, agents, tickets, projects } = useDaemon(
     useShallow((s) => ({ sessions: s.sessions, agents: s.agents, tickets: s.tickets, projects: s.projects })),
@@ -122,7 +122,7 @@ export function useAgentList(): Agent[] {
   const projectId = useProjects((s) => s.currentId);
   return useMemo(
     () =>
-      inProject(Object.values(sessions), projectId)
+      inProject(withoutAssistant(Object.values(sessions)), projectId)
         .sort((a, b) => b.record.spawnedAt - a.record.spawnedAt)
         .map((v) => cachedAgent(v, agents, tickets, projects)),
     [sessions, agents, tickets, projects, projectId],
