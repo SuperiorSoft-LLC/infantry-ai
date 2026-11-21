@@ -4,7 +4,7 @@
 name = "infantry-plugin-host"
 version.workspace = true
 edition = "2021"
-license = "Apache-2.0"
+license = "MPL-2.0"
 description = "Infantry AI daemon plugin host: wasmtime components and native sidecars behind one Plugin trait, grants as linker entries, PluginGuard breaker"
 publish = false
 

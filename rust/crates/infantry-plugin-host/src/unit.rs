@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
 //! A loaded plugin's `daemon.frames` as an infantry-core [`FrameUnit`]. The unit looks the plugin up by id on every
 //! frame, so a hot swap is seen at once and an unloaded plugin refuses.

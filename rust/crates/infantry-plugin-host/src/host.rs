@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
 //! [`PluginHost`]: loads module folders, holds the loaded plugins and their tool table, guards every call, hot swaps.
 use crate::guard::{CallError, Fault, Guard, GuardLimits};

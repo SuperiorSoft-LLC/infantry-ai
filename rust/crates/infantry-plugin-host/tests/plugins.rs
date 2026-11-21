@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
 //! The plugin host end to end: real components built for wasm32-wasip2 and a real sidecar exe.
 mod common;

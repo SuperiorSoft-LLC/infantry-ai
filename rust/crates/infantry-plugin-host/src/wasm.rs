@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
 //! The WASM runtime: one wasmtime [`Engine`] per host (component model, WASI 0.2, fuel and epoch interruption)
 //! and one [`WasmPlugin`] per loaded component.

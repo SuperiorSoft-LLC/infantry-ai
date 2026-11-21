@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
 //! What the daemon gives the plugin host: the back ends of the WIT imports. The host does the per-plugin part
 //! (grants, the `<Module>.` settings prefix, the endpoint filter, the storage table rule); a [`HostServices`]
