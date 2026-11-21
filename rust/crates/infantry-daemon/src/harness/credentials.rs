@@ -11,6 +11,7 @@
 use infantry_harness::{Credential, Harness, LocalProbe, Probe, AUTH_API_KEY, AUTH_SUBSCRIPTION};
 use infantry_vault::handler::KnownSecret;
 use infantry_vault::keystore::{Keystore, VALUE_FIELD};
+use std::any::Any;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::sync::{Arc, Mutex};
@@ -68,27 +69,68 @@ struct Run {
     cancelled: std::sync::atomic::AtomicBool,
     /// The token flow printed the token and it is in the vault.
     captured: std::sync::atomic::AtomicBool,
+    /// The token flow's pseudo-terminal: where a pasted code is written, and how it is stopped.
+    term_writer: Mutex<Option<Box<dyn Write + Send>>>,
+    term_kill: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
 }
 
 impl Run {
     fn new(state: LoginState) -> Arc<Run> {
-        Arc::new(Run { state: Mutex::new(state), child: Mutex::default(), stdin: Mutex::default(), cancelled: Default::default(), captured: Default::default() })
+        Arc::new(Run {
+            state: Mutex::new(state),
+            child: Mutex::default(),
+            stdin: Mutex::default(),
+            cancelled: Default::default(),
+            captured: Default::default(),
+            term_writer: Mutex::default(),
+            term_kill: Mutex::default(),
+        })
     }
     /// Stops the process but keeps the outcome (the token arrived by paste; the CLI no longer matters).
     fn kill_process(&self) {
         if let Some(c) = self.child.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
             let _ = c.kill();
         }
+        if let Some(k) = self.term_kill.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            k();
+        }
     }
     fn kill(&self) {
         self.cancelled.store(true, std::sync::atomic::Ordering::SeqCst);
-        if let Some(c) = self.child.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-            let _ = c.kill();
-        }
+        self.kill_process();
     }
     fn set(&self, f: impl FnOnce(&mut LoginState)) {
         f(&mut self.state.lock().unwrap_or_else(|e| e.into_inner()));
     }
+}
+
+/// A child in a pseudo-terminal: the seam of the token sign-in (the real one is `infantry_runner::pty`, a test fakes it).
+pub struct Term {
+    pub reader: Box<dyn Read + Send>,
+    pub writer: Box<dyn Write + Send>,
+    pub kill: Box<dyn Fn() + Send + Sync>,
+    /// True while the child runs.
+    pub alive: Box<dyn Fn() -> bool + Send + Sync>,
+    /// Keeps the pseudo-console open as long as the run lives.
+    pub keep: Box<dyn Any + Send>,
+}
+/// Starts argv in a pseudo-terminal with the extra environment added.
+pub type TermSpawn = Arc<dyn Fn(&[String], &[(String, String)]) -> Result<Term, String> + Send + Sync>;
+
+/// The real pseudo-terminal: ConPTY on Windows, openpty elsewhere. `claude setup-token` prints nothing to a pipe.
+pub fn pty_spawn() -> TermSpawn {
+    Arc::new(|argv, env| {
+        let mut full = infantry_harness::shim::launcher(&LocalProbe, &argv[0], "node");
+        full.extend(argv[1..].iter().cloned());
+        let program = full.remove(0);
+        let cmd = infantry_runner::pty::Command { program, args: full, cwd: std::env::temp_dir(), env: env.to_vec(), env_remove: Vec::new() };
+        let mut child = infantry_runner::pty::spawn(&cmd, infantry_runner::pty::DEFAULT_ROWS, infantry_runner::pty::DEFAULT_COLS).map_err(|e| e.to_string())?;
+        let reader = child.reader.take().ok_or("the terminal has no output")?;
+        let writer = std::mem::replace(&mut child.writer, Box::new(std::io::sink()));
+        let process = Arc::new(child.process);
+        let (p1, p2) = (process.clone(), process);
+        Ok(Term { reader, writer, kill: Box::new(move || p1.kill()), alive: Box::new(move || p2.try_wait().is_none()), keep: Box::new(child.console) })
+    })
 }
 
 pub type SettingFn = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
@@ -98,11 +140,17 @@ pub struct HarnessCredentials {
     keystore: Arc<Keystore>,
     setting: SettingFn,
     runs: Mutex<HashMap<String, Arc<Run>>>,
+    term: TermSpawn,
 }
 
 impl HarnessCredentials {
     pub fn new(harnesses: Vec<Arc<dyn Harness>>, keystore: Arc<Keystore>, setting: SettingFn) -> Arc<Self> {
-        Arc::new(HarnessCredentials { harnesses, keystore, setting, runs: Mutex::default() })
+        Self::with_terminal(harnesses, keystore, setting, pty_spawn())
+    }
+
+    /// [Self::new] with another pseudo-terminal (a test's).
+    pub fn with_terminal(harnesses: Vec<Arc<dyn Harness>>, keystore: Arc<Keystore>, setting: SettingFn, term: TermSpawn) -> Arc<Self> {
+        Arc::new(HarnessCredentials { harnesses, keystore, setting, runs: Mutex::default(), term })
     }
 
     fn declared(&self) -> impl Iterator<Item = (&Arc<dyn Harness>, Credential)> {
@@ -224,6 +272,9 @@ impl HarnessCredentials {
         }
         let run = Run::new(LoginState { state: LOGIN_RUNNING.into(), ..Default::default() });
         self.runs.lock().unwrap_or_else(|e| e.into_inner()).insert(run_key.clone(), run.clone());
+        if token {
+            return self.start_in_terminal(id, &h, &c, run, run_key);
+        }
         // The CLI the guided setup installed lives in the app's folder: start what its npm shim runs (no cmd.exe between).
         let mut argv = infantry_harness::shim::launcher(&LocalProbe, &argv_decl[0], "node");
         argv.extend(argv_decl[1..].iter().cloned());
@@ -304,6 +355,77 @@ impl HarnessCredentials {
         Ok(())
     }
 
+    /// The token flow: the CLI's token command (`claude setup-token`) runs in a pseudo-terminal, because it prints nothing to a pipe.
+    /// The browser opens from it, its first link is shown, a code pasted by the owner is typed into it, and the token it prints goes
+    /// to the vault and nowhere else.
+    fn start_in_terminal(self: &Arc<Self>, id: &str, h: &Arc<dyn Harness>, c: &Credential, run: Arc<Run>, run_key: String) -> Result<(), String> {
+        // A subscription token must not see the API key variable (it would bill that account).
+        let term = match (self.term)(&c.token_argv, &[(c.env.clone(), String::new())]) {
+            Ok(t) => t,
+            Err(e) => {
+                run.set(|s| {
+                    s.state = LOGIN_FAILED.into();
+                    s.message = cut(&format!("The sign-in could not start: {e}"));
+                });
+                return Ok(());
+            }
+        };
+        let Term { reader, writer, kill, alive, keep } = term;
+        *run.term_writer.lock().unwrap_or_else(|e| e.into_inner()) = Some(writer);
+        *run.term_kill.lock().unwrap_or_else(|e| e.into_inner()) = Some(kill);
+        let (me, h, id, prefix) = (self.clone(), h.clone(), id.to_string(), c.token_prefix.clone());
+        let reader_run = run.clone();
+        let (reader_me, reader_id, reader_prefix) = (me.clone(), id.clone(), prefix);
+        // Detached: on Windows the reader only ends once the pseudo-console is dropped.
+        std::thread::spawn(move || {
+            let (mut reader, mut pending, mut buf) = (reader, String::new(), [0u8; 4096]);
+            let mut take = |line: &str| {
+                let shown = plain(line);
+                if shown.is_empty() {
+                    return;
+                }
+                if let Some(t) = find_token(&shown, &reader_prefix) {
+                    reader_me.token_received(&reader_id, &reader_run, &t);
+                } else {
+                    seen(&reader_run, &shown);
+                }
+            };
+            while let Ok(n) = reader.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                pending.push_str(&String::from_utf8_lossy(&buf[..n]));
+                while let Some(at) = pending.find(['\n', '\r']) {
+                    let line: String = pending.drain(..=at).collect();
+                    take(&line);
+                }
+            }
+            take(&pending);
+        });
+        std::thread::spawn(move || {
+            while alive() && !run.cancelled.load(std::sync::atomic::Ordering::SeqCst) && !run.captured.load(std::sync::atomic::Ordering::SeqCst) {
+                std::thread::sleep(std::time::Duration::from_millis(300));
+            }
+            // The last bytes of its output are still on their way when the CLI exits.
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            run.kill_process();
+            let current = me.runs.lock().unwrap_or_else(|e| e.into_inner()).get(&run_key).is_some_and(|r| Arc::ptr_eq(r, &run));
+            if !run.cancelled.load(std::sync::atomic::Ordering::SeqCst) && current && !run.captured.load(std::sync::atomic::Ordering::SeqCst) {
+                let signed_in = h.sign_in_problem(&me.probe()).is_none();
+                run.set(|s| {
+                    s.state = if signed_in { LOGIN_DONE } else { LOGIN_FAILED }.into();
+                    if signed_in {
+                        s.message = "Signed in.".into();
+                    } else if s.message.is_empty() {
+                        s.message = "The sign-in did not give a token. Paste the token the sign-in page shows, or start it again.".into();
+                    }
+                });
+            }
+            drop(keep);
+        });
+        Ok(())
+    }
+
     /// A token reached us (printed by the CLI or pasted by the owner): into the vault, the run is done.
     fn token_received(&self, id: &str, run: &Run, token: &str) {
         match self.store_token(id, token) {
@@ -338,6 +460,13 @@ impl HarnessCredentials {
         }
         let run = self.runs.lock().unwrap_or_else(|e| e.into_inner()).get(&key).cloned();
         let run = run.filter(|r| r.state.lock().unwrap_or_else(|e| e.into_inner()).state == LOGIN_RUNNING).ok_or("no sign-in is running; start it again")?;
+        let mut term = run.term_writer.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(w) = term.as_mut() {
+            w.write_all(format!("{line}\r").as_bytes()).and_then(|_| w.flush()).map_err(|e| format!("could not send the code: {e}"))?;
+            run.set(|s| s.message = "Checking the code...".into());
+            return Ok(());
+        }
+        drop(term);
         let mut stdin = run.stdin.lock().unwrap_or_else(|e| e.into_inner());
         let w = stdin.as_mut().ok_or("the sign-in no longer takes input; start it again")?;
         w.write_all(format!("{line}\n").as_bytes()).and_then(|_| w.flush()).map_err(|e| format!("could not send the code: {e}"))?;
@@ -545,6 +674,71 @@ mod tests {
         assert_eq!(find_token("sk-fake-", "sk-fake-"), None, "the prefix alone is not a token");
         assert_eq!(find_token("sk-fake-abcdef1234567890", ""), None, "no prefix declared: nothing is taken from output");
         assert_eq!(harness_of("harness.claude.token"), Some("claude"));
+    }
+
+    const TOKEN: &str = "sk-fake-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-ZZZZ";
+
+    /// A fake pseudo-terminal that prints [output] and records what it was asked to run.
+    #[allow(clippy::type_complexity)]
+    fn terminal(output: &'static str) -> (TermSpawn, Arc<Mutex<Vec<(Vec<String>, Vec<(String, String)>)>>>) {
+        let asked: Arc<Mutex<Vec<(Vec<String>, Vec<(String, String)>)>>> = Arc::default();
+        let log = asked.clone();
+        let spawn: TermSpawn = Arc::new(move |argv, env| {
+            log.lock().unwrap().push((argv.to_vec(), env.to_vec()));
+            Ok(Term {
+                reader: Box::new(std::io::Cursor::new(output.as_bytes().to_vec())),
+                writer: Box::new(std::io::sink()),
+                kill: Box::new(|| {}),
+                alive: Box::new(|| false),
+                keep: Box::new(()),
+            })
+        });
+        (spawn, asked)
+    }
+
+    fn with_terminal_creds(spawn: TermSpawn) -> (tempfile::TempDir, Arc<HarnessCredentials>) {
+        let (d, base) = creds(None);
+        let hc = HarnessCredentials::with_terminal(base.harnesses.clone(), base.keystore.clone(), Arc::new(|_| None), spawn);
+        (d, hc)
+    }
+
+    fn wait_for(hc: &HarnessCredentials, name: &str, want: &str) -> LoginState {
+        for _ in 0..100 {
+            let s = hc.state(name);
+            if s.state == want {
+                return s;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        panic!("the sign-in never reached '{want}': {:?}", hc.state(name));
+    }
+
+    #[test]
+    fn the_token_sign_in_runs_in_the_pty_seam_captures_the_token_and_never_shows_it() {
+        let out: &'static str = Box::leak(format!("Open https://claude.ai/oauth?x=1 to sign in\r\nYour token:\r\n{TOKEN}\r\n").into_boxed_str());
+        let (spawn, asked) = terminal(out);
+        let (_d, hc) = with_terminal_creds(spawn);
+        hc.login("harness.fake.token", "start", "").unwrap();
+        let st = wait_for(&hc, "harness.fake.token", LOGIN_DONE);
+        let asked = asked.lock().unwrap();
+        assert_eq!(asked[0].0, vec!["fake".to_string(), "setup-token".to_string()], "the token command goes through the terminal seam");
+        assert_eq!(asked[0].1, vec![("FAKE_API_KEY".to_string(), String::new())], "a subscription token never sees the API key");
+        assert_eq!(st.url, "https://claude.ai/oauth?x=1");
+        assert_eq!(hc.token("fake").as_deref(), Some(TOKEN), "the token went to the vault");
+        // The token is masked everywhere it could show: rows, state, message.
+        let shown = format!("{:?}{:?}", hc.known(), hc.state("harness.fake.token"));
+        assert!(!shown.contains("AbCdEfGh"), "{shown}");
+        assert_eq!(hc.known()[1].signed_in, "true");
+    }
+
+    #[test]
+    fn a_token_sign_in_that_prints_nothing_fails_plainly_and_a_pasted_token_stays_the_fallback() {
+        let (spawn, _) = terminal("");
+        let (_d, hc) = with_terminal_creds(spawn);
+        hc.login("harness.fake.token", "start", "").unwrap();
+        assert!(wait_for(&hc, "harness.fake.token", LOGIN_FAILED).message.contains("Paste the token"));
+        hc.login("harness.fake.token", "input", TOKEN).unwrap();
+        assert_eq!(hc.token("fake").as_deref(), Some(TOKEN));
     }
 
     #[test]

@@ -3,33 +3,77 @@
 // Ports Kotlin SetupWizardTest. The key-row and "unprobed sign-in" cases have no Rust twin: the Rust daemon reads a
 // harness's sign-in straight from its files (providers[].available), so there is no probe state to wait for.
 import { describe, expect, it } from "vitest";
-import { createHarnessInstallStore, installHarnesses, type Envelope, action, defaultPick, signInPhase, signInRow, tokenSecretName, firstModel, firstStep, installed, needed, nodeNote, outcomeFor, statusText, type HarnessInstallReport, type HarnessInstallStatus } from "../src";
+import { createHarnessInstallStore, installHarnesses, type Envelope, action, defaultPick, signInPhase, signInRow, tokenSecretName, firstModel, firstStep, followInstalled, installed, needed, nodeNote, opensNow, outcomeFor, statusText, unprobed, type HarnessInstallReport, type HarnessInstallStatus, type SecretRow } from "../src";
 
 const h = (id: string, isInstalled: boolean): HarnessInstallStatus => ({ id, label: id, npmPackage: `pkg-${id}`, state: isInstalled ? "installed" : "missing", path: isInstalled ? `/bin/${id}` : null });
 const report = (hs: HarnessInstallStatus[], npm: string | null = "/usr/bin/npm"): HarnessInstallReport => ({ harnesses: hs, prefixDir: "/p", npmPath: npm, nodeInstallable: false, busy: false, log: [] });
 
+const row = (id: string, o: Partial<SecretRow> = {}): SecretRow => ({ name: `harness.${id}.key`, label: id, set: false, tail: "", importable: false, overriddenByEnv: false, canLogin: true, signedIn: "false", lastProbe: 1, loginState: "", usesSecret: "", ...o });
+
 describe("setup wizard", () => {
-  it("opens only when nothing can answer, and never on a guess", () => {
-    expect(needed(null, [])).toBeNull();
-    expect(needed(report([h("claude", false)]), null)).toBeNull();
-    expect(needed(report([]), [])).toBeNull();
-    expect(needed(report([h("claude", false), h("opencode", false)]), [])).toBe(true);
-    // Installed but the daemon says it cannot sign in: still nothing to talk to.
-    expect(needed(report([h("claude", true)]), [{ id: "claude", available: false }])).toBe(true);
-    expect(needed(report([h("claude", true)]), [{ id: "claude", available: true }])).toBe(false);
-    // Installed but missing from the daemon's provider list: it cannot run.
-    expect(needed(report([h("claude", true)]), [])).toBe(true);
-    // Any harness, not only claude.
+  it("opens when Node, an agent tool or a signed-in provider is missing, and stays closed only when all three are there", () => {
+    expect(needed(null, [], [])).toBeNull();
+    expect(needed(report([h("claude", false)]), null, [])).toBeNull();
+    expect(needed(report([h("claude", false)]), [], null)).toBeNull();
+    expect(needed(report([]), [], [])).toBeNull();
+    expect(needed(report([h("claude", false), h("opencode", false)], null), [], [])).toBe(true);
+    expect(needed(report([h("claude", true)]), [row("claude")], [{ id: "claude", available: false }])).toBe(true);
+    expect(needed(report([h("claude", true)]), [row("claude", { signedIn: "true" })], [{ id: "claude", available: true }])).toBe(false);
     for (const id of ["codex", "someNewHarness"]) {
-      expect(needed(report([h(id, true)]), [{ id, available: true }])).toBe(false);
-      expect(needed(report([h(id, true)]), [{ id, available: false }])).toBe(true);
+      expect(needed(report([h(id, true)]), [row(id, { signedIn: "true" })], [{ id }])).toBe(false);
+      expect(needed(report([h(id, true)]), [row(id)], [{ id }])).toBe(true);
     }
-    // Free models count as "can answer": from the provider's list, its default, or the models catalog.
-    expect(needed(report([h("opencode", true)]), [{ id: "opencode", available: false, models: ["opencode/big-pickle", "opencode/grok-code-free"] }])).toBe(false);
-    expect(needed(report([h("opencode", true)]), [{ id: "opencode", available: false, defaultModel: "opencode/x-free" }])).toBe(false);
+  });
+
+  it("reads the key row: a key, a confirmed or just-finished sign-in, or a shared secret all count", () => {
+    const one = (r: Partial<SecretRow>) => needed(report([h("claude", true)]), [row("claude", r)], [{ id: "claude", available: false }]);
+    expect(one({ set: true })).toBe(false);
+    expect(one({ signedIn: "true" })).toBe(false);
+    expect(one({ loginState: "done" })).toBe(false);
+    expect(one({ usesSecret: "harness.shared.key" })).toBe(false);
+    expect(one({})).toBe(true);
+    // The row wins over a stale provider list; with no row the provider's `available` decides.
+    expect(needed(report([h("claude", true)]), [row("claude")], [{ id: "claude", available: true }])).toBe(true);
+    expect(needed(report([h("pi", true)]), [], [{ id: "pi", available: true }])).toBe(false);
+    expect(needed(report([h("pi", true)]), [], [{ id: "pi", available: false }])).toBe(true);
+    expect(needed(report([h("pi", true)]), [], [])).toBe(true);
+  });
+
+  it("waits while a sign-in has never been probed", () => {
+    const fresh = row("claude", { signedIn: "unknown", lastProbe: 0 });
+    const r = report([h("claude", true)]);
+    const p = [{ id: "claude", available: false }];
+    expect(unprobed(r, [fresh])).toHaveLength(1);
+    expect(needed(r, [fresh], p)).toBeNull();
+    expect(needed(r, [{ ...fresh, lastProbe: 5 }], p)).toBe(true);
+    expect(needed(r, [{ ...fresh, canLogin: false }], p)).toBe(true);
+    expect(needed(report([h("claude", false)]), [fresh], [])).toBe(true);
+  });
+
+  it("counts free models as 'can answer'", () => {
+    const o = row("opencode", { canLogin: false, signedIn: "unknown" });
+    expect(needed(report([h("opencode", true)]), [o], [{ id: "opencode", available: false, models: ["opencode/big-pickle", "opencode/grok-code-free"] }])).toBe(false);
+    expect(needed(report([h("opencode", true)]), [o], [{ id: "opencode", available: false, defaultModel: "opencode/x-free" }])).toBe(false);
     const catalog = [{ provider: "opencode", models: ["opencode/deepseek-v4.1-flash-free"] }];
-    expect(needed(report([h("opencode", true)]), [{ id: "opencode", available: false }], catalog)).toBe(false);
-    expect(firstModel("opencode", [{ id: "opencode", available: false }], catalog)).toBe("opencode/deepseek-v4.1-flash-free");
+    expect(needed(report([h("opencode", true)]), [o], [{ id: "opencode", available: false }], catalog)).toBe(false);
+    expect(firstModel("opencode", [o], [{ id: "opencode", available: false }], catalog)).toBe("opencode/deepseek-v4.1-flash-free");
+  });
+
+  it("opens again whenever it turns true, and 'Not now' holds only until the answer changes", () => {
+    expect(opensNow(null, true)).toBe(true);
+    expect(opensNow(false, true)).toBe(true);
+    expect(opensNow(true, true)).toBe(false);
+    expect(opensNow(null, false)).toBe(false);
+    expect(opensNow(true, false)).toBe(false);
+    expect(opensNow(false, null)).toBe(false);
+  });
+
+  it("makes the pick follow what is really installed", () => {
+    const r = report([h("claude", false), h("pi", true), h("opencode", true)]);
+    expect(followInstalled("claude", r)).toBe("pi");
+    expect(followInstalled("opencode", r)).toBe("opencode");
+    expect(followInstalled(null, r)).toBe("pi");
+    expect(followInstalled("claude", report([h("claude", false)]))).toBe("claude");
   });
 
   it("starts at Node only while npm is missing and nothing is installed", () => {
@@ -42,9 +86,10 @@ describe("setup wizard", () => {
 
   it("uses a free model for the first agent when the harness cannot answer otherwise", () => {
     const p = { id: "opencode", defaultModel: "anthropic/sonnet", models: ["anthropic/sonnet", "opencode/grok-code-free"] };
-    expect(firstModel("opencode", [{ ...p, available: false }])).toBe("opencode/grok-code-free");
-    expect(firstModel("opencode", [{ ...p, available: true }])).toBe("anthropic/sonnet");
-    expect(firstModel("claude", [p])).toBeNull();
+    expect(firstModel("opencode", [], [{ ...p, available: false }])).toBe("opencode/grok-code-free");
+    expect(firstModel("opencode", [], [{ ...p, available: true }])).toBe("anthropic/sonnet");
+    expect(firstModel("opencode", [row("opencode", { signedIn: "true" })], [{ ...p, available: false }])).toBe("anthropic/sonnet");
+    expect(firstModel("claude", [], [p])).toBeNull();
   });
 
   it("words an install outcome from its log line", () => {
@@ -83,6 +128,21 @@ describe("harness install store", () => {
     expect(sent.filter((e) => e.type === "harness_install_status").length).toBe(before + 1);
   });
 
+  it("re-reads the install report when an install finishes anywhere (another window, the CLI)", () => {
+    const sent: Envelope[] = [];
+    const taps = new Set<(e: Envelope) => void>();
+    const l = { sendFrame: (e: Envelope) => (sent.push(e), true), onFrame: (f: (e: Envelope) => void) => (taps.add(f), () => void taps.delete(f)) };
+    const push = (e: Envelope) => taps.forEach((t) => t(e));
+    const s = createHarnessInstallStore(l);
+    s.getState().refresh();
+    push({ type: "harness_install_status", data: JSON.stringify(report([h("claude", false)])), requestId: sent[0].requestId });
+    const before = sent.length;
+    // The daemon pushes `harness_install_result` with no requestId when an install it ran ends: not ours, still a reason to read again.
+    push({ type: "harness_install_result", data: JSON.stringify({ done: true }) });
+    expect(sent.length).toBe(before + 1);
+    expect(sent[sent.length - 1].type).toBe("harness_install_status");
+  });
+
   it("reads the browser sign-in a harness declares, and opens no matter which harness", () => {
     const row = (name: string, extra: Record<string, unknown> = {}) => ({ name, label: "X", set: false, tail: "", importable: false, overriddenByEnv: false, canLogin: true, ...extra });
     expect(tokenSecretName("claude")).toBe("harness.claude.token");
@@ -94,7 +154,7 @@ describe("harness install store", () => {
     expect(signInPhase(row("t", { loginState: "done" }))).toBe("done");
     expect(signInPhase(row("t", { loginState: "failed" }))).toBe("failed");
     // The token saved: the daemon lists the provider as available and the setup is no longer needed.
-    expect(needed(report([h("claude", true)]), [{ id: "claude", available: false }])).toBe(true);
-    expect(needed(report([h("claude", true)]), [{ id: "claude", available: true }])).toBe(false);
+    expect(needed(report([h("claude", true)]), [], [{ id: "claude", available: false }])).toBe(true);
+    expect(needed(report([h("claude", true)]), [], [{ id: "claude", available: true }])).toBe(false);
   });
 });

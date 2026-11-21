@@ -62,22 +62,62 @@ export function freeModels(id: string, providers: HarnessInfo[], catalog: Catalo
   return [...new Set(all.filter((m) => m.toLowerCase().includes("free")))];
 }
 
-/** True when [id] can answer without asking the user for anything more: the daemon says it is available, or it offers free models. */
-export function credentialOk(id: string, providers: HarnessInfo[], catalog: CatalogGroup[] = []): boolean {
+/** The vault row of [id]'s key / sign-in (`harness.<id>.key`), when the harness declares one. */
+export const keyRow = (id: string, secrets: SecretRow[]): SecretRow | undefined => secrets.find((r) => r.name === `harness.${id}.key`);
+
+/** The in-app sign-in finished (the probe's `signedIn` may lag behind it). */
+const LOGIN_DONE = "done";
+
+/** The row holds a credential: a key is set, the sign-in is confirmed or just finished, or it inherits a shared secret. */
+export const rowSignedIn = (r: SecretRow): boolean => r.set || r.signedIn === "true" || r.loginState === LOGIN_DONE || !!r.usesSecret?.trim();
+
+/**
+ * True when [id] can answer without asking the user for anything more. Kotlin reads the key row (set, signed in, login done, a
+ * shared secret); a harness with no key row falls back to the daemon's `available`. Free models count either way.
+ */
+export function credentialOk(id: string, secrets: SecretRow[], providers: HarnessInfo[], catalog: CatalogGroup[] = []): boolean {
+  if (freeModels(id, providers, catalog).length > 0) return true;
+  const row = keyRow(id, secrets);
+  if (row) return rowSignedIn(row);
   const p = providers.find((x) => x.id === id);
-  if (!p) return false;
-  return p.available !== false || freeModels(id, providers, catalog).length > 0;
+  return !!p && p.available !== false;
 }
 
 /** The harness ids that can answer now. */
-export const talkable = (report: HarnessInstallReport, providers: HarnessInfo[], catalog: CatalogGroup[] = []): string[] =>
-  report.harnesses.filter((h) => installed(h) && credentialOk(h.id, providers, catalog)).map((h) => h.id);
+export const talkable = (report: HarnessInstallReport, secrets: SecretRow[], providers: HarnessInfo[], catalog: CatalogGroup[] = []): string[] =>
+  report.harnesses.filter((h) => installed(h) && credentialOk(h.id, secrets, providers, catalog)).map((h) => h.id);
 
-/** Whether the setup must open by itself: null while the daemon has not answered yet (never open on a guess). */
-export function needed(report: HarnessInstallReport | null, providers: HarnessInfo[] | null, catalog: CatalogGroup[] = []): boolean | null {
-  if (!report || !providers) return null;
+/**
+ * The key rows of installed harnesses whose sign-in the daemon has not probed yet (ONBOARD-CLAUDE-1): "unknown" and never probed.
+ * Only a row with a sign-in to check counts; a harness that cannot sign in from here stays "unknown" for good, which is no reason to wait.
+ */
+export const unprobed = (report: HarnessInstallReport, secrets: SecretRow[]): SecretRow[] =>
+  report.harnesses
+    .filter(installed)
+    .map((h) => keyRow(h.id, secrets))
+    .filter((r): r is SecretRow => !!r && !!r.canLogin && !r.set && r.signedIn === "unknown" && !r.lastProbe);
+
+/**
+ * Whether the setup must open by itself: null while the daemon has not answered yet or a sign-in is still unprobed (never open on
+ * a guess); false when Node, an agent tool and a signed-in provider are all there; true otherwise.
+ */
+export function needed(report: HarnessInstallReport | null, secrets: SecretRow[] | null, providers: HarnessInfo[] | null, catalog: CatalogGroup[] = []): boolean | null {
+  if (!report || !secrets || !providers) return null;
   if (report.harnesses.length === 0) return null;
-  return talkable(report, providers, catalog).length === 0;
+  if (talkable(report, secrets, providers, catalog).length > 0) return false;
+  return unprobed(report, secrets).length > 0 ? null : true;
+}
+
+/**
+ * Whether the setup opens by itself now: the moment [now] turns true after not being true (the first answer of an app start, or
+ * a provider that was signed out later), never while it is already true, so closing it with "Not now" holds until the next change.
+ */
+export const opensNow = (before: boolean | null, now: boolean | null): boolean => now === true && before !== true;
+
+/** The harness the pick follows: [pick] while it is installed (or nothing is), else the first that is. */
+export function followInstalled(pick: string | null, report: HarnessInstallReport): string | null {
+  const ids = report.harnesses.filter(installed).map((h) => h.id);
+  return pick && ids.includes(pick) ? pick : (ids[0] ?? pick);
 }
 
 /** Where the setup starts: Node only while npm is missing and nothing is installed yet; then the pick; then sign-in. */
@@ -92,10 +132,11 @@ export function firstStep(report: HarnessInstallReport): SetupStep {
 export const defaultPick = (report: HarnessInstallReport): string | null => (report.harnesses.find(installed) ?? report.harnesses[0])?.id ?? null;
 
 /** The first agent's model: a free one when the harness cannot answer otherwise (so it answers at once), else the provider's default; null = the daemon picks. */
-export function firstModel(id: string, providers: HarnessInfo[], catalog: CatalogGroup[] = []): string | null {
+export function firstModel(id: string, secrets: SecretRow[], providers: HarnessInfo[], catalog: CatalogGroup[] = []): string | null {
   const p = providers.find((x) => x.id === id);
   if (!p) return null;
-  if (p.available === false) {
+  const row = keyRow(id, secrets);
+  if (row ? !rowSignedIn(row) : p.available === false) {
     const free = freeModels(id, providers, catalog)[0];
     if (free) return free;
   }

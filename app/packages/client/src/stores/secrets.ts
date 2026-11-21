@@ -37,6 +37,13 @@ export interface SecretRow {
   loginUrl?: string;
   /** One short line for the owner; never a token. */
   loginMessage?: string;
+  /** 0 = the daemon never probed this sign-in. */
+  lastProbe?: number;
+  /** The shared secret this row inherits (a non-empty name counts as set). */
+  usesSecret?: string;
+  authModes?: string[];
+  authMode?: string;
+  loginCommand?: string;
 }
 
 export interface SecretRevealed {
@@ -82,6 +89,8 @@ export interface SecretsState {
 
 export interface SecretsActions {
   ensureLoaded(): void;
+  /** Asks the daemon for the rows again (a sign-in or an install changed them). */
+  refresh(): void;
   setField(name: string, field: string, value: string, project?: string): Promise<void>;
   deleteField(name: string, field: string, project?: string): Promise<void>;
   deleteSecret(name: string, project?: string): Promise<void>;
@@ -182,6 +191,9 @@ export function createSecretsStore(link: SecretsLink, timeoutMs = 180_000): Secr
 
       ensureLoaded() {
         if (!get().loaded) link.sendFrame({ type: "secret_status", data: "" });
+      },
+      refresh() {
+        link.sendFrame({ type: "secret_status", data: "" });
       },
       setField: (name, field, value, project) => change("secret_field_set", { name, field, value, ...(project ? { project } : {}) }),
       deleteField: (name, field, project) => change("secret_field_delete", { name, field, ...(project ? { project } : {}) }),
