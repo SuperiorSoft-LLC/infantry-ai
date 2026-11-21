@@ -32,6 +32,11 @@ pub struct SourceStore {
     max_bytes: std::sync::atomic::AtomicU64,
 }
 
+/// A stored folder location without the Windows verbatim prefix (older state files kept `\?\C:\...`).
+fn plain_location(kind: &str, location: &str) -> String {
+    if kind == "folder" { installer::plain(Path::new(location)).display().to_string() } else { location.to_string() }
+}
+
 fn slug(location: &str) -> String {
     let base: String = location.trim_end_matches(['/', '\\']).trim_end_matches(".git").rsplit(['/', '\\', ':']).next().unwrap_or("").chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '-' }).take(32).collect();
     let h = Sha256::digest(location.as_bytes());
@@ -140,7 +145,7 @@ impl SourceStore {
             .and_then(|v| v.as_array().cloned())
             .unwrap_or_default()
             .iter()
-            .filter_map(|s| Some(Source { id: s["id"].as_str()?.into(), kind: s["kind"].as_str()?.into(), location: s["location"].as_str()?.into() }))
+            .filter_map(|s| Some(Source { id: s["id"].as_str()?.into(), kind: s["kind"].as_str()?.into(), location: plain_location(s["kind"].as_str()?, s["location"].as_str()?) }))
             .collect();
         SourceStore { file, cache: state_dir.join(CACHE_DIR), items: Mutex::new(items), max_bytes: std::sync::atomic::AtomicU64::new(DEFAULT_MAX_FILE_BYTES) }
     }
@@ -192,7 +197,7 @@ impl SourceStore {
             return Err("usage: source-add <folder or git url>".into());
         }
         let mut items = self.items.lock().unwrap_or_else(|e| e.into_inner());
-        let canon = |p: &str| std::fs::canonicalize(p).map(|c| c.display().to_string()).unwrap_or_else(|_| p.to_string());
+        let canon = |p: &str| std::fs::canonicalize(p).map(|c| installer::plain(&c).display().to_string()).unwrap_or_else(|_| p.to_string());
         let (kind, location) = if Path::new(&location).is_dir() {
             ("folder", canon(&location))
         } else if is_catalog_url(&location) {
@@ -494,6 +499,22 @@ mod catalog_tests {
             }
         });
         base
+    }
+
+    #[test]
+    fn a_folder_source_location_and_dir_have_no_verbatim_prefix() {
+        let state = std::env::temp_dir().join(format!("infantry-plain-{}", uuid::Uuid::new_v4()));
+        let dir = state.join("src");
+        std::fs::create_dir_all(dir.join("official/Plain_One")).unwrap();
+        std::fs::write(dir.join("official/Plain_One/module.json"), r#"{"name":"Plain_One","version":"1.0.0"}"#).unwrap();
+        let store = SourceStore::load(&state);
+        let added = store.add(&dir.display().to_string()).unwrap();
+        let verbatim = r"\\?\";
+        assert!(!added.location.starts_with(verbatim), "{}", added.location);
+        let row = &store.list()[0];
+        assert!(!row["location"].as_str().unwrap().starts_with(verbatim));
+        assert!(!row["dir"].as_str().unwrap().starts_with(verbatim));
+        assert_eq!(plain_location("folder", r"\\?\C:\a\src"), r"C:\a\src");
     }
 
     #[test]
