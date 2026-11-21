@@ -65,7 +65,7 @@ export interface SlotProps {
   layout: LayoutViewProps;
 }
 
-/** The three buttons of a window frame. The app's own window (the real, OS-level one) has them; so can a layout's window. */
+/** The three buttons of the real (OS-level) window's frame. */
 export interface WindowFrame {
   minimize(): void;
   toggleMaximize(): void;
@@ -73,26 +73,15 @@ export interface WindowFrame {
 }
 
 /**
- * The frame of the window a layout draws the shell in (DESK-5). When a layout hands the shell this, the header's minimize /
- * maximize / close buttons act on it instead of on the real window (which then belongs to the layout, e.g. a Start menu).
- * `maximized` says whether that window fills its room now, so the middle button reads "Maximize" or "Restore".
- */
-export interface ShellWindowControls extends WindowFrame {
-  maximized?: boolean;
-}
-
-/**
- * What a layout may hand the shell it draws (additive; all optional, and a layout that passes none gets the shell as it
+ * What a layout may hand the shell it draws (additive; both optional, and a layout that passes neither gets the shell as it
  * always was). `headerActions` sit at the right end of the shell's header, just left of the window controls (or at the far
  * right where there are none). `statusLeading` sits at the left of the shell's bottom status line, which then keeps its own
- * status text on the right. `windowControls` replaces what the header's window buttons act on (see [ShellWindowControls]).
- * All are plain nodes or callbacks; the shell names no plugin.
+ * status text on the right. Both are plain nodes; the shell names no plugin.
  */
 export interface ShellProps {
   className?: string;
   headerActions?: ReactNode;
   statusLeading?: ReactNode;
-  windowControls?: ShellWindowControls;
 }
 
 /** What a `layout` view is drawn with: today's whole app, and a way to draw another plugin's page contribution. */
