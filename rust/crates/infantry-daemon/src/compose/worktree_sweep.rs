@@ -118,7 +118,7 @@ impl WorktreeSweep {
             .list(None, None)
             .unwrap_or_default()
             .into_iter()
-            .filter_map(|t| t.worktree_branch.clone().map(|b| (b, (t.id.clone(), t.status.clone()))))
+            .filter_map(|t| t.work_branch().map(|b| (b.to_string(), (t.id.clone(), t.status.clone()))))
             .collect();
         let live = self.live_dirs();
         let mut all = Vec::new();
@@ -142,13 +142,13 @@ impl WorktreeSweep {
 
     /// One pass: remove (at most a batch of) done tickets' merged worktrees. Returns how many were removed.
     pub fn sweep(&self) -> usize {
-        let tickets: Vec<_> = self.board.list(None, None).unwrap_or_default().into_iter().filter(|t| t.status == "done" && t.worktree_branch.is_some()).collect();
+        let tickets: Vec<_> = self.board.list(None, None).unwrap_or_default().into_iter().filter(|t| t.status == "done" && t.work_branch().is_some()).collect();
         let live = self.live_dirs();
         let (mut removed, batch, enabled, clean_builds) = (0usize, self.batch(), self.enabled(), self.removes_build_dirs());
         for (root, base) in self.roots() {
             let listed = stale::list(&self.projects.git, &root);
             for t in &tickets {
-                let Some(branch) = t.worktree_branch.as_deref() else { continue };
+                let Some(branch) = t.work_branch() else { continue };
                 let Some(l) = listed.iter().find(|l| l.branch.as_deref() == Some(branch)) else { continue };
                 let is_live = live.iter().any(|d| paths::contains(&l.path, d));
                 // A done ticket's build output is freed even when the worktree is kept.
@@ -200,7 +200,7 @@ impl WorktreeSweep {
             return 0;
         }
         let tickets = self.board.list(None, None).unwrap_or_default();
-        let by_branch: HashMap<String, (String, String)> = tickets.iter().filter_map(|t| t.worktree_branch.clone().map(|b| (b, (t.id.clone(), t.status.clone())))).collect();
+        let by_branch: HashMap<String, (String, String)> = tickets.iter().filter_map(|t| t.work_branch().map(|b| (b.to_string(), (t.id.clone(), t.status.clone())))).collect();
         let live = self.live_dirs();
         let mut freed = 0u64;
         for (root, _) in self.roots() {
