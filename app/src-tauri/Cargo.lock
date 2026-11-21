@@ -1947,7 +1947,6 @@ name = "infantry-harness-claude"
 version = "0.3.0"
 dependencies = [
  "infantry-harness",
- "serde",
  "serde_json",
  "uuid",
 ]
