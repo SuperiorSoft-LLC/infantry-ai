@@ -48,3 +48,6 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_
 [dev-dependencies]
 infantry-conformance = { path = "../conformance" }
 tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
+infantry-harness-claude = { path = "../infantry-harness-claude" }
+infantry-harness-pi = { path = "../infantry-harness-pi" }
+infantry-harness-opencode = { path = "../infantry-harness-opencode" }
