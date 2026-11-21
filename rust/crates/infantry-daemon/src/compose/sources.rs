@@ -1,0 +1,308 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) SuperiorSoft LLC
+//! user-added plugin sources, stored on the daemon so every connected client (desktop, web, phone) sees the same
+//! list. A *source* is laid out like the plugins folder (`<source>/{official,core}/<Module>/module.json`) and is either a
+//! local folder or a git repository (cloned under `<state>/plugin-sources/`, refreshed with a fast-forward pull). The list
+//! is `plugin-sources.json` in the state dir. Core names no source: the built-in ones (the bundled folder and the
+//! `plugins.sources` setting) stay in [`super::installer::InstallConfig`] and are merged with these by the caller.
+
+use super::installer;
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+
+pub const SOURCES_FILE: &str = "plugin-sources.json";
+pub const CACHE_DIR: &str = "plugin-sources";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Source {
+    pub id: String,
+    /// `folder` or `git`.
+    pub kind: String,
+    /// The folder path, or the git URL.
+    pub location: String,
+}
+
+pub struct SourceStore {
+    file: PathBuf,
+    cache: PathBuf,
+    items: Mutex<Vec<Source>>,
+}
+
+fn slug(location: &str) -> String {
+    let base: String = location.trim_end_matches(['/', '\\']).trim_end_matches(".git").rsplit(['/', '\\', ':']).next().unwrap_or("").chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '-' }).take(32).collect();
+    let h = Sha256::digest(location.as_bytes());
+    let short: String = h.iter().take(3).map(|b| format!("{b:02x}")).collect();
+    format!("{}-{short}", if base.is_empty() { "source" } else { &base })
+}
+
+fn is_git(location: &str) -> bool {
+    location.ends_with(".git") || ["http://", "https://", "git@", "ssh://", "git://", "file://"].iter().any(|p| location.starts_with(p))
+}
+
+fn git(args: &[&str], cwd: Option<&Path>) -> Result<String, String> {
+    let mut cmd = infantry_proc::command("git");
+    cmd.args(args).env("GIT_TERMINAL_PROMPT", "0");
+    if let Some(c) = cwd {
+        cmd.current_dir(c);
+    }
+    let out = cmd.output().map_err(|e| format!("git: {e}"))?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    } else {
+        Err(format!("git {}: {}", args.first().unwrap_or(&""), String::from_utf8_lossy(&out.stderr).trim()))
+    }
+}
+
+impl SourceStore {
+    pub fn load(state_dir: &Path) -> SourceStore {
+        let file = state_dir.join(SOURCES_FILE);
+        let items = std::fs::read_to_string(&file)
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            .and_then(|v| v.as_array().cloned())
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|s| Some(Source { id: s["id"].as_str()?.into(), kind: s["kind"].as_str()?.into(), location: s["location"].as_str()?.into() }))
+            .collect();
+        SourceStore { file, cache: state_dir.join(CACHE_DIR), items: Mutex::new(items) }
+    }
+
+    fn save(&self, items: &[Source]) -> Result<(), String> {
+        let v: Vec<Value> = items.iter().map(|s| json!({ "id": s.id, "kind": s.kind, "location": s.location })).collect();
+        super::host_frames::write_json(&self.file, &Value::Array(v))
+    }
+
+    fn dir_of(&self, s: &Source) -> PathBuf {
+        if s.kind == "git" {
+            self.cache.join(&s.id)
+        } else {
+            PathBuf::from(&s.location)
+        }
+    }
+
+    /// The folders the stored sources offer modules from (a source that is gone is skipped, not an error).
+    pub fn dirs(&self) -> Vec<PathBuf> {
+        self.items.lock().unwrap_or_else(|e| e.into_inner()).iter().map(|s| self.dir_of(s)).filter(|d| d.is_dir()).collect()
+    }
+
+    /// Every source with how many modules it offers (`-1` offers: the folder is missing).
+    pub fn list(&self) -> Vec<Value> {
+        self.items
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .map(|s| {
+                let dir = self.dir_of(s);
+                let offers = if dir.is_dir() { installer::catalog(&[dir.clone()]).len() as i64 } else { -1 };
+                json!({ "id": s.id, "kind": s.kind, "location": s.location, "dir": dir.display().to_string(), "offers": offers })
+            })
+            .collect()
+    }
+
+    /// Adds a local folder or a git repository. Refused when it is already listed, cannot be read or offers no module.
+    pub fn add(&self, location: &str) -> Result<Source, String> {
+        let location = location.trim().strip_prefix("file://").filter(|l| Path::new(l).is_dir()).unwrap_or(location.trim()).to_string();
+        if location.is_empty() {
+            return Err("usage: source-add <folder or git url>".into());
+        }
+        let mut items = self.items.lock().unwrap_or_else(|e| e.into_inner());
+        let canon = |p: &str| std::fs::canonicalize(p).map(|c| c.display().to_string()).unwrap_or_else(|_| p.to_string());
+        let (kind, location) = if Path::new(&location).is_dir() {
+            ("folder", canon(&location))
+        } else if is_git(&location) {
+            ("git", location)
+        } else {
+            return Err(format!("{location} is neither a folder on this machine nor a git url"));
+        };
+        let src = Source { id: slug(&location), kind: kind.into(), location };
+        if items.iter().any(|s| s.id == src.id) {
+            return Err(format!("{} is already a source", src.location));
+        }
+        let dir = self.dir_of(&src);
+        if src.kind == "git" {
+            std::fs::create_dir_all(&self.cache).map_err(|e| e.to_string())?;
+            let _ = std::fs::remove_dir_all(&dir);
+            git(&["clone", "--depth", "1", &src.location, &dir.display().to_string()], None)?;
+        }
+        if installer::catalog(&[dir.clone()]).is_empty() {
+            if src.kind == "git" {
+                let _ = std::fs::remove_dir_all(&dir);
+            }
+            return Err(format!("{} offers no module (expected <source>/official/<Module>/module.json or <source>/core/<Module>/module.json)", src.location));
+        }
+        items.push(src.clone());
+        if let Err(e) = self.save(&items) {
+            items.pop();
+            return Err(e);
+        }
+        Ok(src)
+    }
+
+    /// Drops a source by id or location. A cloned repository is deleted; a local folder is never touched.
+    pub fn remove(&self, key: &str) -> Result<Source, String> {
+        let key = key.trim();
+        let mut items = self.items.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(i) = items.iter().position(|s| s.id == key || s.location == key) else { return Err(format!("no source '{key}'")) };
+        let gone = items.remove(i);
+        if let Err(e) = self.save(&items) {
+            items.insert(i, gone);
+            return Err(e);
+        }
+        if gone.kind == "git" {
+            let _ = std::fs::remove_dir_all(self.dir_of(&gone));
+        }
+        Ok(gone)
+    }
+
+    /// Re-reads one source (or all): a git repository is fast-forwarded. Returns one line per source.
+    pub fn refresh(&self, key: &str) -> Result<Vec<String>, String> {
+        let items = self.items.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let chosen: Vec<&Source> = items.iter().filter(|s| key.is_empty() || s.id == key || s.location == key).collect();
+        if chosen.is_empty() {
+            return Err(if key.is_empty() { "no sources to refresh".into() } else { format!("no source '{key}'") });
+        }
+        chosen
+            .into_iter()
+            .map(|s| {
+                let dir = self.dir_of(s);
+                if !dir.is_dir() {
+                    return Err(format!("{}: the folder is gone", s.location));
+                }
+                if s.kind == "git" {
+                    git(&["pull", "--ff-only"], Some(&dir))?;
+                }
+                Ok(format!("{}: {} module(s)", s.id, installer::catalog(&[dir]).len()))
+            })
+            .collect()
+    }
+}
+
+/// The digest of a module folder: every file except `module.sha256`, in path order, as `path NUL length NUL bytes`.
+pub fn folder_digest(dir: &Path) -> Result<String, String> {
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+        for e in std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))? {
+            let p = e.map_err(|e| e.to_string())?.path();
+            if p.is_dir() {
+                walk(root, &p, out)?;
+            } else if p.file_name().and_then(|n| n.to_str()) != Some(DIGEST_FILE) || p.parent() != Some(root) {
+                out.push(p);
+            }
+        }
+        Ok(())
+    }
+    let mut files = Vec::new();
+    walk(dir, dir, &mut files)?;
+    let mut rel: Vec<(String, PathBuf)> = files.into_iter().map(|p| (p.strip_prefix(dir).unwrap_or(&p).to_string_lossy().replace('\\', "/"), p)).collect();
+    rel.sort();
+    let mut h = Sha256::new();
+    for (name, path) in rel {
+        let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        h.update(name.as_bytes());
+        h.update([0]);
+        h.update((bytes.len() as u64).to_le_bytes());
+        h.update([0]);
+        h.update(&bytes);
+    }
+    Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// A module may ship `module.sha256`, the hex digest of its other files ([`folder_digest`]). When it does, an install
+/// refuses a folder whose files no longer match it (a tampered or half-copied module). No file: nothing to check here
+/// (the offer then shows as unsigned).
+pub const DIGEST_FILE: &str = "module.sha256";
+
+pub fn verify(dir: &Path) -> Result<bool, String> {
+    let Ok(want) = std::fs::read_to_string(dir.join(DIGEST_FILE)) else { return Ok(false) };
+    let got = folder_digest(dir)?;
+    if want.trim().eq_ignore_ascii_case(&got) {
+        Ok(true)
+    } else {
+        Err(format!("{}: signature check failed: the files do not match {DIGEST_FILE}", dir.display()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("infantry-sources-{name}-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    fn module(root: &Path, id: &str, version: &str) -> PathBuf {
+        let dir = root.join("official").join(id);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("module.json"), json!({ "name": id, "version": version }).to_string()).unwrap();
+        std::fs::write(dir.join("a.txt"), "hello").unwrap();
+        dir
+    }
+
+    #[test]
+    fn sources_are_added_listed_refreshed_and_removed_and_survive_a_restart() {
+        let (state, src) = (tmp("state"), tmp("src"));
+        module(&src, "Ps_One", "1.0.0");
+        let store = SourceStore::load(&state);
+        assert!(store.list().is_empty());
+        let added = store.add(&src.display().to_string()).unwrap();
+        assert_eq!(added.kind, "folder");
+        assert!(store.add(&src.display().to_string()).unwrap_err().contains("already a source"));
+        assert_eq!(store.list()[0]["offers"], 1);
+        // A second client (a new store over the same state dir) sees the same list.
+        let other = SourceStore::load(&state);
+        assert_eq!(other.list().len(), 1);
+        assert_eq!(other.dirs(), [PathBuf::from(&added.location)]);
+        module(&src, "Ps_Two", "1.0.0");
+        assert!(other.refresh("").unwrap()[0].contains("2 module(s)"));
+        assert!(store.remove("nope").is_err());
+        store.remove(&added.id).unwrap();
+        assert!(src.join("official/Ps_One").is_dir(), "a local folder is never deleted");
+        assert!(SourceStore::load(&state).list().is_empty());
+        for d in [state, src] {
+            let _ = std::fs::remove_dir_all(d);
+        }
+    }
+
+    #[test]
+    fn a_folder_that_offers_nothing_or_does_not_exist_is_refused() {
+        let (state, empty) = (tmp("state2"), tmp("empty"));
+        let store = SourceStore::load(&state);
+        assert!(store.add(&empty.display().to_string()).unwrap_err().contains("offers no module"));
+        assert!(store.add("no/such/folder").unwrap_err().contains("neither a folder"));
+        assert!(store.list().is_empty());
+        for d in [state, empty] {
+            let _ = std::fs::remove_dir_all(d);
+        }
+    }
+
+    #[test]
+    fn the_catalog_merges_sources_in_order_and_the_first_to_offer_an_id_wins() {
+        let (a, b) = (tmp("a"), tmp("b"));
+        module(&a, "Ps_Shared", "1.0.0");
+        module(&b, "Ps_Shared", "2.0.0");
+        module(&b, "Ps_Only_B", "1.0.0");
+        let offers = installer::catalog(&[a.clone(), b.clone()]);
+        let ids: Vec<(&str, &str)> = offers.iter().map(|o| (o.id.as_str(), o.version.as_str())).collect();
+        assert_eq!(ids, [("Ps_Shared", "1.0.0"), ("Ps_Only_B", "1.0.0")]);
+        for d in [a, b] {
+            let _ = std::fs::remove_dir_all(d);
+        }
+    }
+
+    #[test]
+    fn an_install_is_refused_when_the_files_do_not_match_the_signature_file() {
+        let src = tmp("sig");
+        let dir = module(&src, "Ps_Signed", "1.0.0");
+        assert_eq!(verify(&dir), Ok(false), "no signature file: unsigned, not refused");
+        std::fs::write(dir.join(DIGEST_FILE), folder_digest(&dir).unwrap()).unwrap();
+        assert_eq!(verify(&dir), Ok(true));
+        std::fs::write(dir.join("a.txt"), "tampered").unwrap();
+        assert!(verify(&dir).unwrap_err().contains("signature check failed"));
+        std::fs::write(dir.join(DIGEST_FILE), "00ff").unwrap();
+        assert!(verify(&dir).is_err());
+        let _ = std::fs::remove_dir_all(&src);
+    }
+}
