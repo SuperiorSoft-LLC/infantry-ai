@@ -3,17 +3,7 @@
 // One plan account: % used and where it lands at reset on an animated meter, pace and reset, workers against the
 // pacing allowance with a Free slot chip, the override line, every window of the plan, and Type % / Override.
 import { useState } from "react";
-import {
-  meterName,
-  overrideLine,
-  paceWords,
-  projectedLine,
-  resetLine,
-  sourceLine,
-  updatedLine,
-  workersLine,
-  type MeterUsage,
-} from "@infantry/client";
+import { meterLines, meterName, overrideLine, paceWords, resetLine, workersLine, type MeterUsage } from "@infantry/client";
 import { Button, Chip, MeterBar, PanelCard } from "@infantry/ui";
 import { OverrideDialog, TypePercentDialog } from "./usage-dialogs";
 import { useUsage } from "./use-usage";
@@ -24,11 +14,12 @@ const pacePoint = (percent: number | null, delta: number | null): number | null 
 export function PacingCard({ m, now }: { m: MeterUsage; now: number }) {
   const [dialog, setDialog] = useState<"type" | "override" | null>(null);
   const clearOverride = useUsage((s) => s.clearOverride);
+  const limits = useUsage((s) => s.limits);
   const pace = paceWords(m.paceDelta);
   const ahead = (m.paceDelta ?? 0) > 0;
   const free = m.allowance == null ? null : Math.max(0, m.allowance - m.running);
   const over = overrideLine(m, now);
-  const updated = updatedLine(m.updatedAt, now);
+  const lines = meterLines(m, limits, now);
   const extra = m.windows.filter((w) => w.label !== m.window);
   return (
     <PanelCard
@@ -49,13 +40,18 @@ export function PacingCard({ m, now }: { m: MeterUsage; now: number }) {
       <div className="space-y-3 text-xs">
         <div className="space-y-1.5">
           <MeterBar value={m.percent} projected={m.projectedPercent} pace={pacePoint(m.percent, m.paceDelta)} label={`${meterName(m.meter)} usage`} />
-          <div className="flex items-baseline justify-between gap-3 text-[11px]">
-            <span className="text-muted-foreground">{projectedLine(m) ?? sourceLine(m)}</span>
-            {pace && <span className={ahead ? "text-warn" : "text-ok"}>{pace}</span>}
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            {[resetLine(m.resetsAt), m.source === "live" ? updated : sourceLine(m)].filter(Boolean).join(" · ")}
-          </p>
+          {(lines.headline || pace) && (
+            <div className="flex items-baseline justify-between gap-3 text-[11px]">
+              <span className="text-muted-foreground">{lines.headline}</span>
+              {pace && <span className={ahead ? "text-warn" : "text-ok"}>{pace}</span>}
+            </div>
+          )}
+          {lines.detail && <p className="text-[11px] text-muted-foreground">{lines.detail}</p>}
+          {lines.note && (
+            <p className={m.percent != null ? "text-[11px] leading-4 text-warn" : "text-[11px] leading-4 text-muted-foreground"} role="status">
+              {lines.note}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -72,7 +68,7 @@ export function PacingCard({ m, now }: { m: MeterUsage; now: number }) {
           </div>
         )}
         {!over && m.reasoning && <p className="leading-5 text-muted-foreground">pacing: {m.reasoning}</p>}
-        {m.warning && <p className={m.percent != null ? "leading-5 text-danger" : "leading-5 text-muted-foreground"}>{m.warning}</p>}
+        {lines.warning && <p className={m.percent != null ? "leading-5 text-danger" : "leading-5 text-muted-foreground"}>{lines.warning}</p>}
 
         {extra.length > 0 && (
           <div className="space-y-2 border-t pt-2">

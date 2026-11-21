@@ -279,13 +279,6 @@ export function reasonText(reason: string | null | undefined): string {
   return reason.startsWith("http_") ? `the provider answered HTTP ${reason.slice(5)}` : reason;
 }
 
-/** "live", "typed by hand" or "usage unknown (not signed in)". */
-export function sourceLine(m: MeterUsage): string {
-  if (m.source === "live") return "live";
-  if (m.source === "manual") return "typed by hand";
-  return `usage unknown (${reasonText(m.reason)})`;
-}
-
 /** "updated just now", "updated 4m ago", "updated 2h ago". */
 export function updatedLine(at: number | null | undefined, now: number): string | null {
   if (at == null) return null;
@@ -293,6 +286,60 @@ export function updatedLine(at: number | null | undefined, now: number): string 
   if (mins < 1) return "updated just now";
   if (mins < 60) return `updated ${mins}m ago`;
   return `updated ${Math.floor(mins / 60)}h ago`;
+}
+
+/** When the daemon asks [meter]'s provider again: the retry time of its last failed read while still ahead, else null. */
+export function retryAtFor(limits: ProviderLimits[], meter: string, now: number): number | null {
+  const at = limits.find((l) => l.provider === meter)?.retryAt;
+  return at != null && at > now ? at : null;
+}
+
+/** "next try in 4m", or "next try shortly" inside the last minute; null when the daemon states no time. */
+export function nextTryLine(retryAt: number | null | undefined, now: number): string | null {
+  if (retryAt == null) return null;
+  return retryAt - now < 60_000 ? "next try shortly" : `next try in ${until(retryAt, now)}`;
+}
+
+/**
+ * Why a reading is not a clean live one, said ONCE: the reason, what the card shows meanwhile (the last good reading, a
+ * typed value), when the daemon asks again, and that pacing is off while there is nothing to judge by. Null for a clean
+ * live reading or one typed by hand. The age of a kept reading is the "updated Nm ago" of [meterLines].
+ */
+export function readingNote(m: MeterUsage, retryAt: number | null | undefined, now: number): string | null {
+  // the daemon warns without a reading only when pacing fails open on this meter
+  const failsOpen = m.percent == null && m.warning != null ? "pacing is off meanwhile" : null;
+  if (!m.reason) return m.source === "none" ? ["No usage reading for this account", failsOpen].filter(Boolean).join(" · ") : null;
+  const reason = reasonText(m.reason);
+  const shown = m.source === "live" ? "showing the last good reading" : m.source === "manual" ? "showing the typed value" : null;
+  return [reason.charAt(0).toUpperCase() + reason.slice(1), shown, nextTryLine(retryAt, now), failsOpen].filter(Boolean).join(" · ");
+}
+
+/** The text lines of one meter card. */
+export interface MeterLines {
+  /** Under the bar, left: the projected landing, or how the number was got. */
+  headline: string | null;
+  /** "Resets Mon 18 3:00 PM · updated 12m ago". */
+  detail: string | null;
+  /** Why the reading is not a clean live one (the one place the reason is said), or null. */
+  note: string | null;
+  /** The daemon's own warning, only while the note does not already say it. */
+  warning: string | null;
+}
+
+/**
+ * What the card says under its bar. Every fact once: the reason a reading is missing or old is the note alone (it was
+ * the headline, the detail line and the raw warning too, so a rate limit read three times over), and a reading the
+ * daemon kept from before a failure keeps its age ("updated 12m ago") instead of reading "no reading".
+ */
+export function meterLines(m: MeterUsage, limits: ProviderLimits[], now: number): MeterLines {
+  const note = readingNote(m, retryAtFor(limits, m.meter, now), now);
+  const live = m.source === "live";
+  return {
+    headline: projectedLine(m) ?? (m.source === "manual" ? "typed by hand" : live && !m.reason ? "live" : null),
+    detail: [resetLine(m.resetsAt), live ? updatedLine(m.updatedAt, now) : null].filter(Boolean).join(" · ") || null,
+    note,
+    warning: note ? null : m.warning,
+  };
 }
 
 /** The meter's display name (the plan account). */
