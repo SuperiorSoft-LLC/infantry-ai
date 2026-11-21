@@ -16,7 +16,7 @@ pub fn ensure(db: &Db) -> Result<bool, String> {
         }
         let (mut first, mut rest) = (Vec::new(), Vec::new());
         for (_, text) in SCHEMA_SOURCES {
-            for s in infantry_board::schema::schema_statements(text) {
+            for s in infantry_core::db::schema_statements(text) {
                 if s.to_uppercase().starts_with("CREATE TABLE") {
                     first.push(s);
                 } else {
