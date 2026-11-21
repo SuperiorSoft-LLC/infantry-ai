@@ -38,6 +38,7 @@ export * from "./markdown";
 export * from "./shortcuts";
 export * from "./cards";
 export * from "./toasts";
+export * from "./scroll-strip";
 export * from "./tools";
 export * from "./images";
 export * from "./popout";
