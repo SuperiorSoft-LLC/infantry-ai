@@ -78,6 +78,22 @@ fn a_user_added_source_is_searched_installed_from_and_removed() {
     assert!(plugins.join("official/Ps_Good/module.json").is_file());
     assert_eq!(admin(&c, &["disable", "Ps_Good"]).0, 0);
     assert_eq!(admin(&c, &["enable", "Ps_Good"]).0, 0);
+    // An update: the source ships a newer version; the check lists it, a tampered newer copy is refused and the old one
+    // stays loaded, a good one swaps in.
+    assert_eq!(admin(&c, &["updates"]).1.trim(), "[]");
+    std::fs::write(good.join("module.json"), json!({ "name": "Ps_Good", "version": "1.2.0", "ui": { "apiVersion": 1, "entry": "ui/dist/index.js" } }).to_string()).unwrap();
+    let ups: Value = serde_json::from_str(&admin(&c, &["updates"]).1).unwrap();
+    assert_eq!((ups[0]["id"].as_str(), ups[0]["installed"].as_str(), ups[0]["available"].as_str()), (Some("Ps_Good"), Some("1.0.0"), Some("1.2.0")));
+    let (code, _, err) = admin(&c, &["update", "Ps_Good"]);
+    assert_eq!(code, 1, "the digest no longer matches the changed manifest");
+    assert!(err.contains("signature check failed"), "{err}");
+    assert!(std::fs::read_to_string(plugins.join("official/Ps_Good/module.json")).unwrap().contains("1.0.0"), "the old copy stays");
+    std::fs::write(good.join(sources::DIGEST_FILE), sources::folder_digest(&good).unwrap()).unwrap();
+    assert_eq!(admin(&c, &["update", "Ps_Good"]).0, 0);
+    assert!(std::fs::read_to_string(plugins.join("official/Ps_Good/module.json")).unwrap().contains("1.2.0"));
+    assert!(!plugins.join(".installing/Ps_Good.old").exists() && !plugins.join(".installing/Ps_Good").exists(), "no leftovers");
+    assert_eq!(admin(&c, &["update"]).1, "nothing to update");
+
     assert_eq!(admin(&c, &["uninstall", "Ps_Good"]).0, 0);
     assert!(!plugins.join("official/Ps_Good").exists());
 
