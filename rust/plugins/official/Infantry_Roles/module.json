@@ -6,6 +6,7 @@
   "license": "Apache-2.0",
   "description": "The built-in role catalog: who does what (architect, backend, frontend, pm, qa, version-control and the rest) and the text a session of each role starts with. Data only, no daemon half. Without this plugin a role has no text; a user file <roles dir>/<role>.md overrides any role.",
   "tier": "official",
+  "tabs": [{ "id": "infantry.roles", "container": "center" }],
   "roleCatalog": "roles/index.json",
   "data": ["roles"]
 }

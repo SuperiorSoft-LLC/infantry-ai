@@ -6,6 +6,7 @@
   "license": "Apache-2.0",
   "description": "infantry_mcp: the agent face of the MCP registry (list, status, my_tools, grants; changes are refused to agents). Daemon half only.",
   "tier": "official",
+  "tabs": [{ "id": "infantry.mcp", "container": "right" }],
   "sequence": [],
   "daemon": {
     "component": "daemon.component",

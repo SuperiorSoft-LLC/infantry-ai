@@ -6,6 +6,7 @@
   "license": "Apache-2.0",
   "description": "Triggers that start work on an event.",
   "tier": "official",
+  "tabs": [{ "id": "infantry.triggers", "container": "center" }],
   "sequence": [],
   "capabilities": [
     {

@@ -6,6 +6,7 @@
   "license": "Apache-2.0",
   "description": "Project config tools (per-role caps, routing rules, experiments, project data) and scoped settings tools. Daemon half only.",
   "tier": "official",
+  "tabs": [{ "id": "infantry.settings", "container": "center" }],
   "sequence": [],
   "daemon": {
     "component": "daemon.component",
