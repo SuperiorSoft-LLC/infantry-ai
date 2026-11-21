@@ -47,7 +47,7 @@ if ($SkipMsi) {
     $upd = Join-Path $env:TEMP "infantry-msi-upd-$sha.json"; Set-Content $upd '{"bundle":{"createUpdaterArtifacts":true}}'
     Push-Location (Join-Path $repo 'app')
     try { pnpm tauri build --bundles msi @cfg --config $upd; if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' } } finally { Pop-Location }
-    $out = Join-Path $env:CARGO_TARGET_DIR 'release'; $tauriExe = 'InfantryAI-Rust.exe'  # tauri build names the exe after the product
+    $out = Join-Path $env:CARGO_TARGET_DIR 'release'; $tauriExe = 'InfantryAI.exe'  # tauri build names the exe after the product
 }
 # RUST-BUG dd10c3bb: stage every official daemon plugin (WASM) into $out\plugins. Without this the package has no
 # plugins folder and every plugin frame (Triggers, Notes, image_upload) answers "does not serve that frame yet".
@@ -72,7 +72,7 @@ Write-Output "staged core set: $((Get-ChildItem (Join-Path $stagedPlugins 'offic
 $asset = (Get-ChildItem (Join-Path $repo 'app\shell\dist\assets') -Filter '*.js' | Select-Object -First 1).Name
 $bytes = [IO.File]::ReadAllBytes((Join-Path $out $tauriExe))
 $text = [Text.Encoding]::Latin1.GetString($bytes)
-if (-not $text.Contains($asset)) { throw "BUILD REFUSED: InfantryAI-Rust.exe (infantry-tauri.exe) does not embed the UI ($asset not found); it would load devUrl localhost:1420. Build with --features custom-protocol." }
+if (-not $text.Contains($asset)) { throw "BUILD REFUSED: InfantryAI.exe (infantry-tauri.exe) does not embed the UI ($asset not found); it would load devUrl localhost:1420. Build with --features custom-protocol." }
 # STATIC CHECK: a clean Windows has no VC++ redistributable; every packaged exe must link the CRT statically
 # (repo-root .cargo/config.toml, +crt-static). An exe that imports vcruntime140.dll names it in its import table.
 foreach ($f in $tauriExe,'infantry-daemon.exe','infantry-migrate.exe','infantry.exe') {
@@ -81,10 +81,10 @@ foreach ($f in $tauriExe,'infantry-daemon.exe','infantry-migrate.exe','infantry.
 }
 $dest = Join-Path $DistRoot ("builds\{0}-rust-{1}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $sha)
 New-Item -ItemType Directory -Force $dest | Out-Null
-Copy-Item (Join-Path $out $tauriExe) (Join-Path $dest 'InfantryAI-Rust.exe')
+Copy-Item (Join-Path $out $tauriExe) (Join-Path $dest 'InfantryAI.exe')
 foreach ($f in 'infantry-daemon.exe','infantry-migrate.exe','infantry.exe') { Copy-Item (Join-Path $out $f) $dest }
 Copy-Item $stagedPlugins $dest -Recurse
-Set-Content (Join-Path $dest 'start.cmd') "@echo off`r`nrem Rust app, default port 18990, own state dir (%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust)`r`nset INFANTRY_PORT=18990`r`nset INFANTRY_PLUGINS_DIR=%~dp0plugins`r`nstart `"`" `"%~dp0InfantryAI-Rust.exe`""
+Set-Content (Join-Path $dest 'start.cmd') "@echo off`r`nrem Rust app, default port 18990, own state dir (%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust)`r`nset INFANTRY_PORT=18990`r`nset INFANTRY_PLUGINS_DIR=%~dp0plugins`r`nstart `"`" `"%~dp0InfantryAI.exe`""
 if ($SwitchScriptFrom) { Copy-Item $SwitchScriptFrom (Join-Path $dest 'switch-to-rust.ps1') }
 
 if (-not $SkipMsi) {

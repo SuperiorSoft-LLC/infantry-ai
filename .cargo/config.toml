@@ -8,7 +8,7 @@
 [target.x86_64-pc-windows-msvc]
 linker = "rust-lld.exe"
 
-# A clean Windows has no VC++ runtime: link the CRT statically so InfantryAI-Rust.exe, infantry.exe and
+# A clean Windows has no VC++ runtime: link the CRT statically so InfantryAI.exe, infantry.exe and
 # infantry-daemon.exe start there (Windows Sandbox first-time-install run: STATUS_DLL_NOT_FOUND on vcruntime140.dll).
 [target.'cfg(all(windows, target_env = "msvc"))']
 rustflags = ["-C", "target-feature=+crt-static"]

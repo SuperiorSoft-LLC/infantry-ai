@@ -290,7 +290,7 @@ mod tests {
         let o = android_offer(json, "0.1.0", "stable", "aarch64").unwrap().unwrap();
         assert_eq!((o.version.as_str(), o.size), ("0.2.0", Some(14)));
         assert_eq!(o.sha256, "cb4870807289f0ebb14bbfc941421b08f5766fa0346c1828bd5f09a955ccd560");
-        assert!(o.url.ends_with("/InfantryAI-Rust_0.2.0_arm64.apk"));
+        assert!(o.url.ends_with("/InfantryAI_0.2.0_arm64.apk"));
         assert_eq!(android_offer(json, "0.2.0", "stable", "aarch64").unwrap(), None);
         // The Tauri desktop reader needs a `signature` on every platform entry, the Android one included.
         let v: serde_json::Value = serde_json::from_str(json).unwrap();

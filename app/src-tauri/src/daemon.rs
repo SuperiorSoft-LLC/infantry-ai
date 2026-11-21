@@ -40,6 +40,8 @@ pub const DEFAULT_PORT: u16 = 18990;
 /// Ports this app never connects to or starts on: the Kotlin app's daemon (8797) and the Kotlin dev daemon (8787).
 pub const FOREIGN_PORTS: [u16; 2] = [8797, 8787];
 /// The sidecar's state dir under `%LOCALAPPDATA%` when nothing pins it (the Rust app's own, never the Kotlin app's).
+// Kept as InfantryAI-Rust on purpose (RENAME-RUST-1): SuperiorSoft/InfantryAI still holds the old Kotlin app's live data. Moving
+// this is a follow-up once the Kotlin app is retired.
 pub const STATE_SUBDIR: [&str; 2] = ["SuperiorSoft", "InfantryAI-Rust"];
 
 /// `%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Rust` (None where there is no LOCALAPPDATA).

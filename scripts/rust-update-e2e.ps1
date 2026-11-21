@@ -29,7 +29,7 @@ $results = [ordered]@{}; $httpPid = 0; $appPid = 0
 function Step($name, $ok, $detail = '') { $script:results[$name] = [bool]$ok; Write-Output ("{0,-4} {1} {2}" -f $(if ($ok) { 'PASS' } else { 'FAIL' }), $name, $detail) }
 function Wait-Until([scriptblock]$cond, [int]$sec) { $end = (Get-Date).AddSeconds($sec); while ((Get-Date) -lt $end) { if (& $cond) { return $true }; Start-Sleep -Milliseconds 500 }; return $false }
 function Health { try { (Invoke-WebRequest "http://127.0.0.1:$DaemonPort/health" -UseBasicParsing -TimeoutSec 2).Content } catch { $null } }
-function AppProcs { Get-CimInstance Win32_Process -Filter "Name='InfantryAI-Rust.exe'" | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($installDir, [StringComparison]::OrdinalIgnoreCase) } }
+function AppProcs { Get-CimInstance Win32_Process -Filter "Name='InfantryAI.exe'" | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($installDir, [StringComparison]::OrdinalIgnoreCase) } }
 try {
     if (Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs') -Filter 'Infantry AI MSITest' -ErrorAction SilentlyContinue) { throw "a previous test install exists at $installDir; uninstall it first" }
     if (Health) { throw "port $DaemonPort already answers; pick another -DaemonPort" }
@@ -40,7 +40,7 @@ try {
     # 1. install V0 per user: no elevation (this shell is not elevated, so a per-machine MSI would fail here)
     $p = Start-Process msiexec -ArgumentList '/i', "`"$($m0.FullName)`"", '/qn', '/l*v', "`"$tmp\install0.log`"" -Wait -PassThru
     Step 'install V0 without admin' ($p.ExitCode -eq 0) "exit $($p.ExitCode), $v0"
-    $exe = Join-Path $installDir 'InfantryAI-Rust.exe'
+    $exe = Join-Path $installDir 'InfantryAI.exe'
     Step 'installed files (exe, daemon sidecar, plugins)' ((Test-Path $exe) -and (Test-Path (Join-Path $installDir 'infantry-daemon.exe')) -and (@(Get-ChildItem (Join-Path $installDir 'plugins') -Recurse -Include *.component, *.wasm -ErrorAction SilentlyContinue).Count -ge 1))
     $lnk = Get-ChildItem (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs') -Recurse -Filter 'Infantry AI MSITest*.lnk' -ErrorAction SilentlyContinue | Select-Object -First 1
     Step 'Start-menu shortcut' ([bool]$lnk)

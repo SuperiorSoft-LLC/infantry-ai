@@ -51,8 +51,8 @@ Each channel has one `latest.json`, published as an asset of a GitHub release ta
   "notes": "What changed",
   "pub_date": "2026-11-20T12:00:00Z",
   "platforms": {
-    "windows-x86_64": { "signature": "<contents of the .sig file>", "url": "https://.../InfantryAI-Rust_0.2.0_x64.msi" },
-    "android-aarch64": { "signature": "<contents of the .sig file>", "url": "https://.../InfantryAI-Rust_0.2.0_arm64.apk" }
+    "windows-x86_64": { "signature": "<contents of the .sig file>", "url": "https://.../InfantryAI_0.2.0_x64.msi" },
+    "android-aarch64": { "signature": "<contents of the .sig file>", "url": "https://.../InfantryAI_0.2.0_arm64.apk" }
   }
 }
 ```
