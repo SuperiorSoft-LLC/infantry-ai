@@ -15,6 +15,9 @@
 //! - **Turn end:** the `Stop` hook or the transcript's `turn_duration`, then the turn's `result` (usage, cost estimate);
 //!   an API error fails the turn.
 //! - **Own turns (CLI-PTY-4):** a turn the CLI starts itself (a background task ended) is tracked; nothing is pasted into it.
+//!   RESTART-HANG-1: a record the CLI only writes to its transcript (the notice of background jobs a killed session left) is
+//!   no turn, and a tracked own turn that draws nothing, records nothing and fires no hook for [`Timings::own_idle_ms`] is
+//!   not running either: either would hold a waiting prompt (a ticket restart's brief) behind a Stop that never comes.
 //! - **Interrupt:** Esc; a turn stopped before its first reply also gets Ctrl+C, so its prompt does not join the next paste.
 //! - **Dialogs (G3):** a permission dialog or AskUserQuestion menu drawn with no hook call open is answered No (Esc) after
 //!   a grace, so a turn never waits on keys nobody sends.
@@ -70,6 +73,9 @@ pub struct Timings {
     pub first_submit_ms: u64,
     /// HOOK-SHELL-1: an answered turn with no hook event this long means the hooks write nothing (said once).
     pub hook_silent_ms: u64,
+    /// RESTART-HANG-1: a turn of the CLI's own that, with a prompt waiting behind it, draws nothing, records nothing and
+    /// fires no hook this long is not running: it is dropped and the waiting prompt goes in (0 = never dropped).
+    pub own_idle_ms: u64,
     /// Characters of screen in a failure reason.
     pub screen_tail_chars: usize,
 }
@@ -91,6 +97,7 @@ impl Default for Timings {
             dialog_grace_ms: 3_000,
             first_submit_ms: 30_000,
             hook_silent_ms: 20_000,
+            own_idle_ms: 20_000,
             screen_tail_chars: 600,
         }
     }
@@ -101,6 +108,8 @@ struct Turn {
     prompt: String,
     /// The CLI started it (nothing of the host's).
     own: bool,
+    /// When the turn began to be tracked (a turn of the CLI's own is dropped when idle from here on).
+    opened_at: u64,
     abort_at: Option<u64>,
     abort_reason: Option<String>,
     pasted_at: Option<u64>,
@@ -128,6 +137,8 @@ pub struct Interactive {
     output_seen: bool,
     first_output_at: Option<u64>,
     last_output_at: u64,
+    /// The last hook event or transcript record (any), the CLI's other signs of life besides what it draws.
+    sign_at: u64,
     started_at: Option<u64>,
     hook_seen: bool,
     hook_warned: bool,
@@ -167,6 +178,7 @@ impl Interactive {
             output_seen: false,
             first_output_at: None,
             last_output_at: 0,
+            sign_at: 0,
             started_at: None,
             hook_seen: false,
             hook_warned: false,
@@ -266,6 +278,7 @@ impl Interactive {
 
     fn hook_event(&mut self, word: &str, out: &mut Vec<HarnessEvent>) {
         self.hook_seen = true;
+        self.sign_at = self.now;
         match word {
             EV_START => {
                 self.started_at.get_or_insert(self.now);
@@ -281,6 +294,7 @@ impl Interactive {
     }
 
     fn transcript(&mut self, line: &str, out: &mut Vec<HarnessEvent>) {
+        self.sign_at = self.now;
         for s in self.mapper.map(line) {
             match s {
                 Signal::Line(text) => {
@@ -457,6 +471,20 @@ impl Interactive {
         self.now.saturating_sub(pasted.max(turn.recovered_at.unwrap_or(0))) >= self.t.first_submit_ms
     }
 
+    /// RESTART-HANG-1: [turn] is one the CLI started itself, a prompt of the host's waits behind it, and the CLI shows no
+    /// sign of life: it draws nothing (a running turn animates its spinner), records nothing and fires no hook for
+    /// [`Timings::own_idle_ms`]. Such a turn is not running (the CLI announced a turn it never ran), and waiting for its
+    /// Stop would hold the prompt for good. A permission call being answered, or a turn on its way out, is not idleness.
+    fn own_turn_idle(&self, turn: &Turn) -> bool {
+        turn.own
+            && self.t.own_idle_ms > 0
+            && !self.queue.is_empty()
+            && turn.stop_at.is_none()
+            && turn.abort_at.is_none()
+            && !self.answers.open()
+            && self.now.saturating_sub(turn.opened_at.max(self.last_output_at).max(self.sign_at)) >= self.t.own_idle_ms
+    }
+
     /// The end of the active turn: its result record and usage, and for a host turn the turn end (a turn the CLI
     /// started itself is not the host's: ending it would end whatever turn the host has queued).
     fn end(&mut self, turn: Turn, end: TurnEnd, reason: Option<String>, out: &mut Vec<HarnessEvent>) {
@@ -486,7 +514,8 @@ impl Interactive {
         let Some(mut turn) = self.active.take() else {
             if let Some(why) = self.own_pending.take() {
                 // The CLI works on a turn of its own: track it, and paste nothing into it until it ends.
-                self.active = Some(Turn { own: true, submitted: true, stop_at: self.unclaimed_stop_at.take(), ..Default::default() });
+                self.active =
+                    Some(Turn { own: true, submitted: true, opened_at: now, stop_at: self.unclaimed_stop_at.take(), ..Default::default() });
                 out.push(HarnessEvent::Warning(format!("claude: started a turn of its own ({why})")));
             } else if !self.queue.is_empty() && self.started_at.is_none() && screen::setup_screen(&screen::squeeze_rows(&self.rows)) {
                 let reason = format!("{NOT_SIGNED_IN} Screen: {}", self.screen_tail());
@@ -498,7 +527,7 @@ impl Interactive {
                 let watched = !self.first_pasted;
                 self.first_pasted = true;
                 self.paste(&prompt);
-                self.active = Some(Turn { prompt, pasted_at: Some(now), watched, ..Default::default() });
+                self.active = Some(Turn { prompt, opened_at: now, pasted_at: Some(now), watched, ..Default::default() });
             } else if !self.queue.is_empty() && now > self.t.boot_timeout_ms && self.started_at.is_none() {
                 let reason = self.boot_failure();
                 self.fail_queue(&reason, out);
@@ -522,6 +551,13 @@ impl Interactive {
             self.end(turn, TurnEnd::Failed, Some(err), out);
             return;
         } else if turn.stop_at.is_some_and(|s| now.saturating_sub(s) >= self.t.stop_settle_ms) {
+            self.end(turn, TurnEnd::Completed, None, out);
+            return;
+        } else if self.own_turn_idle(&turn) {
+            out.push(HarnessEvent::Warning(format!(
+                "claude: a turn of its own drew, recorded and fired nothing for {} s while a prompt waited; it is not running, so the prompt goes in",
+                self.t.own_idle_ms / 1000
+            )));
             self.end(turn, TurnEnd::Completed, None, out);
             return;
         } else if self.first_turn_due(&turn) {
@@ -603,6 +639,7 @@ impl Translator for Interactive {
             TranslatorInput::HookEvent(word) => self.hook_event(&word, &mut out),
             TranslatorInput::Tail { line, .. } => self.transcript(&line, &mut out),
             TranslatorInput::Hook { id, body } => {
+                self.sign_at = self.now;
                 let mut ob = Vec::new();
                 out.extend(self.answers.call(id, &body, &mut ob));
                 self.out.extend(ob);
@@ -662,6 +699,7 @@ impl Translator for Interactive {
     }
 
     fn answer(&mut self, id: &str, allow: bool) {
+        self.sign_at = self.now;
         let mut ob = Vec::new();
         if self.answers.answer(id, allow, &mut ob) {
             self.dialog_seen_at = None;
@@ -671,6 +709,7 @@ impl Translator for Interactive {
     }
 
     fn answer_questions(&mut self, id: &str, answers: Vec<infantry_harness::HarnessAnswer>) {
+        self.sign_at = self.now;
         let mut ob = Vec::new();
         if self.answers.answer_questions(id, &answers, &mut ob) {
             self.dialog_seen_at = None;

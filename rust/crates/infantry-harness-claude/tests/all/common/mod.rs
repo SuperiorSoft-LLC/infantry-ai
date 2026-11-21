@@ -11,6 +11,11 @@ use std::sync::Mutex;
 
 pub const ID: &str = "11111111-2222-3333-4444-555555555555";
 pub const TURN: &str = include_str!("../../fixtures/turn.jsonl");
+/// RESTART-HANG-1: the record a resumed claude (2.1.330) wrote about the background jobs its killed session left, as
+/// recorded from a live ticket restart (paths and ids neutral). It carries `queueTranscriptOnly`: shown, never run.
+pub const RESUME_NOTICE: &str = include_str!("../../fixtures/resume_notice.jsonl");
+/// A background task's real wake-up: the same prompt kind, but the CLI runs a turn on it (`turnOrigin`, `turnPosition`).
+pub const WAKE_UP: &str = r#"{"type":"user","promptSource":"system","origin":{"kind":"task-notification","producer":"session-task","runId":"r1"},"turnOrigin":"task_notification","turnPosition":{"promptIndex":0,"turnIndex":2},"queueSkipAttachments":true,"message":{"role":"user","content":"<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>"}}"#;
 const SCREENS: &str = include_str!("../../fixtures/screens.txt");
 pub const CLAUDE_RUN: &str =
     include_str!("../../../../../../superiorSoftLibrary/infantry/src/test/resources/retrieval/claude-run.jsonl");

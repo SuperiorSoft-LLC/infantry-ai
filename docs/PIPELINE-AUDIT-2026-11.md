@@ -83,11 +83,17 @@ or a Lua hook uses.
   mid tool call resumed cleanly three times (scrubbed environment twice, and a daemon that kept the launching agent's
   `CLAUDE*`/`ANTHROPIC*` variables once), every time with the `[RESTART]` prompt delivered. The audit run used an older daemon
   (1.155/rust-0.1.4), so that exit was most likely that build's resume path; not reproduced, so not fixed.
-- Found while testing restart, not fixed: a resume can **hang** when the killed claude left background shell jobs running.
-  The resumed claude starts a turn of its own to report the orphaned jobs ("N background shell command tasks didn't finish
-  before the previous session ended"), the pasted `[RESTART]` text is never submitted (no `UserPromptSubmit` hook), and the
-  session reads BUSY with no output for minutes. The restart window only catches a dead resume, not a silent one; a
-  stall watch for "BUSY with no output" (G1's `board.stallSeconds`) would catch it.
+- Found while testing restart: a resume can **hang** when the killed claude left background shell jobs running. The pasted
+  `[RESTART]` text is never submitted (no `UserPromptSubmit` hook), and the session reads BUSY with no output for minutes.
+  The restart window only catches a dead resume, not a silent one. **Fixed (RESTART-HANG-1).** Cause, seen live on the
+  claude screen: the resumed claude does *not* start a turn. It records "N background shell command tasks didn't finish
+  before the previous session ended" as a `task-notification` prompt flagged `queueTranscriptOnly` (shown, never run: no
+  model call, no Stop), the translator read it as a turn of the CLI's own, and held the brief behind a Stop that never came.
+  A transcript-only record is no turn now (`TranscriptMapper`), and a turn of the CLI's own that draws, records and fires
+  nothing for `Timings::own_idle_ms` (20 s) while a prompt waits is dropped (`Interactive::own_turn_idle`). The #117 stall
+  watch does flag such a hang: with `session.stalledMinutes` passed, the session reads `watch.state` QUIET and the card
+  "stalled: BUSY, no output for N min" (checked live on the unfixed hang). Regression: the translator tests in
+  `tests/all/translator.rs` and the ignored live test `live::a_resume_after_a_kill_with_a_background_job_still_takes_its_prompt`.
 - A worker that ended a turn clean stays alive and may die in a later turn (the lead re-prompted it); before PIPE-RESTART-1
   that death was dropped (the run was already closed). It is now told to the lead and the run is rewritten to FAILED.
 - Step 6: answering the card from a UI client and the answer arriving as a turn.
