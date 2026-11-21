@@ -90,6 +90,7 @@ pub struct InstallSeam {
     pub late: Arc<LateUnits>,
     /// the sources the user added, kept on the daemon.
     pub sources: Arc<super::sources::SourceStore>,
+    pub signers: Arc<super::sources::Signers>,
 }
 
 /// What `plugin_admin` manages: the installed daemon halves, the modules with none, and the owner's disabled set.
@@ -183,7 +184,7 @@ impl Admin {
                 serde_json::json!({
                     "id": o.id, "displayName": o.display_name, "description": o.description, "version": o.version, "tier": o.tier,
                     "requires": o.requires, "bootstrap": bootstrap == Some(o.id.as_str()), "daemon": o.daemon, "ui": o.ui,
-                    "source": o.source.display().to_string(), "signed": super::sources::verify(&o.dir).is_ok_and(|s| s), "installed": false, "enabled": false, "status": "available",
+                    "source": o.source.display().to_string(), "signed": super::sources::vet(&o.dir, &self.install.signers.snapshot()).map(|v| v.status).unwrap_or_else(|_| "bad".into()), "installed": false, "enabled": false, "status": "available",
                 }),
             );
         }
@@ -233,7 +234,7 @@ impl Admin {
 
     /// `install <id>...`: each module and what it requires, in dependency order, copied from the first source that
     /// offers it and loaded at once. Stops at the first failure and says what was installed before it.
-    fn install_ops(&self, want: &[String], bus: &EventBus) -> (i32, String, String) {
+    fn install_ops(&self, want: &[String], approve: bool, bus: &EventBus) -> (i32, String, String) {
         let fail = |e: String| (1, String::new(), e);
         if want.is_empty() {
             return fail("usage: plugin install <id>...".into());
@@ -249,7 +250,7 @@ impl Admin {
         }
         let mut done: Vec<String> = Vec::new();
         for offer in order {
-            let step = super::sources::verify(&offer.dir).map_err(|e| format!("{} refused: {e}", offer.id)).and_then(|_| installer::place(&self.plugins_dir, &offer)).and_then(|dir| {
+            let step = self.vet_offer(&offer, approve).and_then(|_| installer::place(&self.plugins_dir, &offer)).and_then(|dir| {
                 self.register(&offer.id, &dir).map_err(|e| {
                     let _ = installer::remove(&self.plugins_dir, &dir);
                     format!("{} not loaded: {e}", offer.id)
@@ -267,6 +268,16 @@ impl Admin {
         (0, format!("installed {}", done.join(", ")), String::new())
     }
 
+    /// The install gate: a bad signature or a digest mismatch is refused; a valid signature by a key that is not a trusted
+    /// signer needs the owner's `--approve`; a trusted signer, a digest match and an unsigned module pass.
+    fn vet_offer(&self, offer: &installer::Offer, approve: bool) -> Result<(), String> {
+        let v = super::sources::vet(&offer.dir, &self.install.signers.snapshot()).map_err(|e| format!("{} refused: {e}", offer.id))?;
+        if v.status == "untrusted" && !approve {
+            return Err(format!("{} is signed by a key that is not a trusted signer; check `plugin show {}` and install with --approve, or add the signer", offer.id, offer.id));
+        }
+        Ok(())
+    }
+
     /// Every installed module with its version.
     fn installed_versions(&self) -> Vec<(String, String)> {
         super::host_frames::scan_modules(&Some(self.plugins_dir.clone())).into_iter().filter(|m| TIERS.contains(&m.tier.as_str())).map(|m| (m.id.clone(), super::host_frames::s(&m.manifest, "version").to_string())).collect()
@@ -282,7 +293,7 @@ impl Admin {
 
     /// `update <id>...` (none: every update): verify the new copy, stage it, swap it for the installed folder and load it.
     /// A copy that fails its check or does not load leaves the old one exactly as it was (and loaded).
-    fn update_ops(&self, want: &[String], bus: &EventBus) -> (i32, String, String) {
+    fn update_ops(&self, want: &[String], approve: bool, bus: &EventBus) -> (i32, String, String) {
         let fail = |e: String| (1, String::new(), e);
         let found = installer::updates(&self.installed_versions(), &installer::catalog(&self.all_sources()));
         let picked: Vec<_> = found.into_iter().filter(|u| want.is_empty() || want.contains(&u.id)).collect();
@@ -295,7 +306,7 @@ impl Admin {
                 if self.install.config.bootstrap.as_deref() == Some(u.id.as_str()) {
                     return Err(format!("{} is the installer: it is updated by a new app build", u.id));
                 }
-                super::sources::verify(&u.offer.dir).map_err(|e| format!("{} refused: {e}", u.id))?;
+                self.vet_offer(&u.offer, approve)?;
                 let current = self.installed.read().unwrap_or_else(|e| e.into_inner()).get(&u.id).map(|i| i.dir.clone()).or_else(|| super::host_frames::scan_modules(&Some(self.plugins_dir.clone())).into_iter().find(|m| m.id == u.id).map(|m| m.dir)).ok_or_else(|| format!("{} is not installed", u.id))?;
                 let staged = installer::stage(&self.plugins_dir, &u.offer)?;
                 self.forget(&u.id);
@@ -388,9 +399,37 @@ impl Admin {
     /// One `plugin_admin` command: (exit code, out, err).
     pub fn admin(&self, args: &[String], bus: &EventBus) -> (i32, String, String) {
         let op = args.first().map(String::as_str).unwrap_or("");
+        // `--approve` is the owner's yes to the signer, licence and grants `show` printed for a module signed by a key
+        // that is not in the trusted signers.
+        let approve = args.iter().any(|a| a == "--approve");
+        let args: Vec<String> = args.iter().filter(|a| a.as_str() != "--approve").cloned().collect();
+        let args = &args[..];
+        let rest: Vec<String> = args.iter().skip(1).map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect();
         let id = args.get(1).map(|s| s.trim()).unwrap_or("");
         let fail = |e: String| (1, String::new(), e);
         match op {
+            "show" => match installer::catalog(&self.all_sources()).into_iter().find(|o| o.id == id) {
+                None => fail(format!("no source offers {id}")),
+                Some(o) => {
+                    let v = super::sources::vet(&o.dir, &self.install.signers.snapshot());
+                    let manifest: serde_json::Value = std::fs::read_to_string(o.dir.join("module.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+                    let grants = manifest.pointer("/daemon/needs").cloned().unwrap_or_else(|| serde_json::json!([]));
+                    let row = match v {
+                        Ok(v) => serde_json::json!({ "id": o.id, "version": o.version, "check": v.status, "signer": v.signer, "license": v.license, "grants": grants, "requires": o.requires }),
+                        Err(e) => serde_json::json!({ "id": o.id, "version": o.version, "check": "bad", "error": e, "grants": grants }),
+                    };
+                    (0, serde_json::to_string_pretty(&row).unwrap_or_default(), String::new())
+                }
+            },
+            "signers" => (0, serde_json::to_string_pretty(&self.install.signers.snapshot()).unwrap_or_default(), String::new()),
+            "signer-add" => match self.install.signers.add(id, args.get(2).map(String::as_str).unwrap_or("")) {
+                Ok(()) => (0, format!("trusted signer {id}"), String::new()),
+                Err(e) => fail(e),
+            },
+            "signer-remove" => match self.install.signers.remove(id) {
+                Ok(()) => (0, format!("removed signer {id}"), String::new()),
+                Err(e) => fail(e),
+            },
             "status" | "list" => {
                 let statuses = self.host.statuses();
                 let disabled = self.disabled.snapshot();
@@ -445,7 +484,7 @@ impl Admin {
             }
             "available" => (0, serde_json::to_string_pretty(&self.available()).unwrap_or_default(), String::new()),
             "updates" => (0, serde_json::to_string_pretty(&self.updates_list()).unwrap_or_default(), String::new()),
-            "update" => self.update_ops(&args[1..].iter().map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect::<Vec<_>>(), bus),
+            "update" => self.update_ops(&rest, approve, bus),
             "sources" => (0, serde_json::to_string_pretty(&self.install.sources.list()).unwrap_or_default(), String::new()),
             "source-add" | "source-remove" | "source-refresh" => {
                 let done = match op {
@@ -470,7 +509,7 @@ impl Admin {
                     .collect();
                 (0, serde_json::to_string_pretty(&rows).unwrap_or_default(), String::new())
             }
-            "install" => self.install_ops(&args[1..].iter().map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect::<Vec<_>>(), bus),
+            "install" => self.install_ops(&rest, approve, bus),
             "uninstall" => self.uninstall_op(id, bus),
             "" => fail("usage: plugin <status|available|search|updates|update|sources|source-add|source-remove|source-refresh|install|uninstall|enable|disable> [id]".into()),
             other => fail(format!("plugin {other}: not supported by this daemon yet (it serves status, available, install, uninstall, enable, disable)")),
