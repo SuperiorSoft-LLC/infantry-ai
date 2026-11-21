@@ -6,8 +6,8 @@ use infantry_protocol::Envelope;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
-/// Pushes the daemon sends on its own clock (plan meters, limits): not part of any session scenario.
-pub const AMBIENT: &[&str] = &["usage_report", "usage_meter", "limits", "provider_state", "provider_states", "usage"];
+/// Pushes the daemon sends on its own clock (plan meters, limits, the Armory update check): not part of any session scenario.
+pub const AMBIENT: &[&str] = &["usage_report", "usage_meter", "limits", "provider_state", "provider_states", "usage", "armory_updates"];
 
 #[derive(Default)]
 pub struct Normalizer {
@@ -55,7 +55,19 @@ fn find_paths(s: &str) -> Vec<(usize, usize)> {
         let unc = i + 2 < b.len() && b[i] == b'\\' && b[i + 1] == b'\\' && b[i + 2].is_ascii_alphanumeric();
         let unix = b[i] == b'/' && i + 1 < b.len() && (b[i + 1].is_ascii_alphanumeric() || b[i + 1] == b'.' || b[i + 1] == b'_');
         if at_token && (drive || unc || unix) {
-            let end = s[i..].char_indices().find(|(_, c)| path_end(*c)).map_or(s.len(), |(k, _)| i + k);
+            let mut end = s[i..].char_indices().find(|(_, c)| path_end(*c)).map_or(s.len(), |(k, _)| i + k);
+            // A Windows path may hold a space (`...\Infantry AI\agents\x`): carry on while the next token is a `\` continuation.
+            if drive || unc {
+                while s[end..].starts_with(' ') {
+                    let rest = &s[end + 1..];
+                    let tok = rest.find(path_end).unwrap_or(rest.len());
+                    if tok > 0 && rest[..tok].contains('\\') && !rest[..tok].contains(':') {
+                        end += 1 + tok;
+                    } else {
+                        break;
+                    }
+                }
+            }
             // A lone `/word` is a command or a route (`/exit`, `/health`), not a machine path.
             if !unix || s[i + 1..end].contains('/') {
                 out.push((i, end));
@@ -191,6 +203,7 @@ mod tests {
     #[test]
     fn absolute_paths_inside_strings_are_blanked() {
         assert_eq!(blank_paths(r"starting stub model default in C:\Users\a\.worktrees\rust-conf-1"), "starting stub model default in <path>");
+        assert_eq!(blank_paths(r"in C:\Users\a\Infantry AI\agents\x done"), "in <path> done");
         assert_eq!(blank_paths("in /home/a/work, then (D:/x/y)"), "in <path>, then (<path>)");
         assert_eq!(blank_paths("share \\\\box\\s\\d done"), "share <path> done");
         // Not paths: a URL, a slash command, a ratio, a route.
