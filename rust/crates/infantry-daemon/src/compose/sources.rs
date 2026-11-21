@@ -37,8 +37,74 @@ fn slug(location: &str) -> String {
     format!("{}-{short}", if base.is_empty() { "source" } else { &base })
 }
 
+/// An http(s) address that is not a git repository: it names a catalog document (a `.json` file).
+fn is_catalog_url(location: &str) -> bool {
+    (location.starts_with("http://") || location.starts_with("https://")) && location.split(['?', '#']).next().unwrap_or("").ends_with(".json")
+}
+
 fn is_git(location: &str) -> bool {
     location.ends_with(".git") || ["http://", "https://", "git@", "ssh://", "git://", "file://"].iter().any(|p| location.starts_with(p))
+}
+
+/// The largest single file a catalog may make the daemon download.
+pub const MAX_CATALOG_FILE_BYTES: u64 = 64 * 1024 * 1024;
+
+fn http_get(agent: &ureq::Agent, url: &str) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let resp = agent.get(url).timeout(std::time::Duration::from_secs(60)).call().map_err(|e| format!("{url}: {e}"))?;
+    let mut body = Vec::new();
+    resp.into_reader().take(MAX_CATALOG_FILE_BYTES + 1).read_to_end(&mut body).map_err(|e| format!("{url}: {e}"))?;
+    if body.len() as u64 > MAX_CATALOG_FILE_BYTES {
+        return Err(format!("{url}: larger than {MAX_CATALOG_FILE_BYTES} bytes"));
+    }
+    Ok(body)
+}
+
+/// A catalog document is `{ "modules": [ { "name": "Id", "tier": "official", "base": "<url or path next to the catalog>",
+/// "files": ["module.json", "ui/dist/index.js", ...] } ] }`. Each module's files are downloaded into `dest/<tier>/<name>/`,
+/// so a catalog source behaves like a folder source from then on (search, vet, install, update). Built in a staging folder
+/// and swapped in, so a failed refresh keeps the previous copy.
+pub fn fetch_catalog(url: &str, dest: &Path) -> Result<usize, String> {
+    let tls = native_tls::TlsConnector::new().map_err(|e| format!("no TLS for catalog downloads: {e}"))?;
+    let agent = ureq::AgentBuilder::new().tls_connector(std::sync::Arc::new(tls)).build();
+    let doc: Value = serde_json::from_slice(&http_get(&agent, url)?).map_err(|_| format!("{url} is not a catalog (JSON with a `modules` array)"))?;
+    let modules = doc.get("modules").and_then(Value::as_array).ok_or_else(|| format!("{url} is not a catalog (JSON with a `modules` array)"))?;
+    let staging = dest.with_extension("new");
+    let _ = std::fs::remove_dir_all(&staging);
+    std::fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
+    let run = || -> Result<usize, String> {
+        for m in modules {
+            let name = m.get("name").and_then(Value::as_str).unwrap_or("");
+            let tier = m.get("tier").and_then(Value::as_str).unwrap_or("official");
+            if !installer::safe_name(name) || !super::plugins::TIERS.contains(&tier) {
+                return Err(format!("catalog entry '{name}' ({tier}) is not a name or tier a module installs under"));
+            }
+            let base = m.get("base").and_then(Value::as_str).unwrap_or("");
+            let base = if base.contains("://") { base.to_string() } else { format!("{}/{}", url.rsplit_once('/').map(|x| x.0).unwrap_or(url), base.trim_start_matches('/')) };
+            for f in m.get("files").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
+                let local = Path::new(f);
+                if local.is_absolute() || local.components().any(|c| !matches!(c, std::path::Component::Normal(_))) {
+                    return Err(format!("{name}: file '{f}' is outside the module folder"));
+                }
+                let bytes = http_get(&agent, &format!("{}/{f}", base.trim_end_matches('/')))?;
+                let target = staging.join(tier).join(name).join(local);
+                std::fs::create_dir_all(target.parent().unwrap_or(&staging)).map_err(|e| e.to_string())?;
+                std::fs::write(&target, bytes).map_err(|e| format!("{}: {e}", target.display()))?;
+            }
+        }
+        Ok(modules.len())
+    };
+    match run() {
+        Ok(n) => {
+            let _ = std::fs::remove_dir_all(dest);
+            std::fs::rename(&staging, dest).map_err(|e| format!("{}: {e}", dest.display()))?;
+            Ok(n)
+        }
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&staging);
+            Err(e)
+        }
+    }
 }
 
 fn git(args: &[&str], cwd: Option<&Path>) -> Result<String, String> {
@@ -75,7 +141,7 @@ impl SourceStore {
     }
 
     fn dir_of(&self, s: &Source) -> PathBuf {
-        if s.kind == "git" {
+        if s.kind != "folder" {
             self.cache.join(&s.id)
         } else {
             PathBuf::from(&s.location)
@@ -111,6 +177,8 @@ impl SourceStore {
         let canon = |p: &str| std::fs::canonicalize(p).map(|c| c.display().to_string()).unwrap_or_else(|_| p.to_string());
         let (kind, location) = if Path::new(&location).is_dir() {
             ("folder", canon(&location))
+        } else if is_catalog_url(&location) {
+            ("catalog", location)
         } else if is_git(&location) {
             ("git", location)
         } else {
@@ -121,13 +189,17 @@ impl SourceStore {
             return Err(format!("{} is already a source", src.location));
         }
         let dir = self.dir_of(&src);
-        if src.kind == "git" {
+        if src.kind != "folder" {
             std::fs::create_dir_all(&self.cache).map_err(|e| e.to_string())?;
             let _ = std::fs::remove_dir_all(&dir);
-            git(&["clone", "--depth", "1", &src.location, &dir.display().to_string()], None)?;
+            if src.kind == "git" {
+                git(&["clone", "--depth", "1", &src.location, &dir.display().to_string()], None)?;
+            } else {
+                fetch_catalog(&src.location, &dir)?;
+            }
         }
         if installer::catalog(&[dir.clone()]).is_empty() {
-            if src.kind == "git" {
+            if src.kind != "folder" {
                 let _ = std::fs::remove_dir_all(&dir);
             }
             return Err(format!("{} offers no module (expected <source>/official/<Module>/module.json or <source>/core/<Module>/module.json)", src.location));
@@ -150,7 +222,7 @@ impl SourceStore {
             items.insert(i, gone);
             return Err(e);
         }
-        if gone.kind == "git" {
+        if gone.kind != "folder" {
             let _ = std::fs::remove_dir_all(self.dir_of(&gone));
         }
         Ok(gone)
@@ -170,7 +242,9 @@ impl SourceStore {
                 if !dir.is_dir() {
                     return Err(format!("{}: the folder is gone", s.location));
                 }
-                if s.kind == "git" {
+                if s.kind == "catalog" {
+                    fetch_catalog(&s.location, &dir)?;
+                } else if s.kind == "git" {
                     git(&["pull", "--ff-only"], Some(&dir))?;
                 }
                 Ok(format!("{}: {} module(s)", s.id, installer::catalog(&[dir]).len()))
@@ -376,5 +450,60 @@ mod tests {
         std::fs::write(dir.join(DIGEST_FILE), "00ff").unwrap();
         assert!(verify(&dir).is_err());
         let _ = std::fs::remove_dir_all(&src);
+    }
+}
+
+#[cfg(test)]
+mod catalog_tests {
+    use super::*;
+    use std::io::{Read, Write};
+
+    /// A one-thread HTTP server over fixed pages (port 0): returns its base url.
+    fn serve(pages: Vec<(&'static str, String)>) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let mut s = stream;
+                let mut buf = [0u8; 2048];
+                let n = s.read(&mut buf).unwrap_or(0);
+                let path = String::from_utf8_lossy(&buf[..n]).split_whitespace().nth(1).unwrap_or("/").to_string();
+                let (status, body) = match pages.iter().find(|(p, _)| *p == path) {
+                    Some((_, b)) => ("200 OK", b.clone()),
+                    None => ("404 Not Found", String::new()),
+                };
+                let _ = write!(s, "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+            }
+        });
+        base
+    }
+
+    #[test]
+    fn a_catalog_url_becomes_a_source_that_is_downloaded_refreshed_and_removed() {
+        let state = std::env::temp_dir().join(format!("infantry-catalog-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&state).unwrap();
+        let catalog = json!({ "modules": [{ "name": "Cat_One", "tier": "official", "base": "files/Cat_One", "files": ["module.json", "ui/dist/index.js"] }] }).to_string();
+        let base = serve(vec![
+            ("/catalog.json", catalog),
+            ("/files/Cat_One/module.json", json!({ "name": "Cat_One", "version": "1.0.0" }).to_string()),
+            ("/files/Cat_One/ui/dist/index.js", "export default {};".into()),
+            ("/evil.json", json!({ "modules": [{ "name": "Cat_Evil", "base": "files/Cat_One", "files": ["../escape.txt"] }] }).to_string()),
+            ("/empty.json", json!({ "modules": [] }).to_string()),
+        ]);
+        let store = SourceStore::load(&state);
+        let src = store.add(&format!("{base}/catalog.json")).unwrap();
+        assert_eq!(src.kind, "catalog");
+        let row = &store.list()[0];
+        assert_eq!(row["offers"], 1);
+        let dir = PathBuf::from(row["dir"].as_str().unwrap());
+        assert!(dir.join("official/Cat_One/ui/dist/index.js").is_file());
+        assert_eq!(store.refresh("").unwrap().len(), 1);
+        assert!(store.add(&format!("{base}/evil.json")).unwrap_err().contains("outside the module folder"));
+        assert!(store.add(&format!("{base}/empty.json")).unwrap_err().contains("offers no module"));
+        assert!(store.add(&format!("{base}/missing.json")).is_err());
+        assert_eq!(store.list().len(), 1, "a refused catalog is not kept");
+        store.remove(&src.id).unwrap();
+        assert!(!dir.exists(), "the downloaded copy goes with the source");
+        let _ = std::fs::remove_dir_all(&state);
     }
 }
