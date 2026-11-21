@@ -351,6 +351,46 @@ pub struct CloseAnswer {
     pub warnings: Vec<String>,
 }
 
+/// PIPE-RESTART-1: `ticket_restart`, the lead's one-call recovery of an in_progress ticket whose worker died.
+/// It first tries to RESUME the dead session (the same conversation); when the resume dies inside the window
+/// (`board.restartResumeSeconds`) or cannot be tried, it starts a FRESH session on the SAME worktree and branch with the
+/// ticket brief and a "continue from your last commit" note.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TicketRestart {
+    pub ticket_id: String,
+    /// Skip the resume and start the fresh session at once.
+    #[serde(default)]
+    pub fresh: bool,
+    /// Who restarts: a session id (the worker reports to it from now on), or None for the owner.
+    #[serde(default)]
+    pub restarted_by: Option<String>,
+}
+
+/// How a restart went.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestartAnswer {
+    pub ticket: crate::Ticket,
+    /// `resumed` (the dead session got a new turn; a fresh one replaces it if it dies inside the window) or `fresh`
+    /// (a new session on the same worktree and branch).
+    pub mode: String,
+    /// The session now working the ticket.
+    #[serde(default)]
+    pub session_id: Option<String>,
+    /// The session that died.
+    #[serde(default)]
+    pub previous_session_id: Option<String>,
+    /// What happened and why, in one line (also posted as a ticket comment).
+    pub detail: String,
+}
+
+/// `RestartAnswer.mode` values.
+pub mod restart_mode {
+    pub const RESUMED: &str = "resumed";
+    pub const FRESH: &str = "fresh";
+}
+
 // ---- hooks ----------------------------------------------------------------------------------------------
 
 /// The named events the board emits on the bus for Lua hooks (LUA-1's engine subscribes). Payloads
@@ -372,6 +412,9 @@ pub mod hooks {
     pub const RUN_ENDED: &str = "ticket.run_ended";
     /// A run ended badly (failed, killed, orphaned, or clean with no done comment): `sessionId`, `outcome`, `detail`.
     pub const RUN_FAILED: &str = "ticket.run_failed";
+    /// A restart (`ticket_restart`, or a resume that died inside the window) put a worker back on the ticket: `mode`
+    /// (`resumed` / `fresh`), `sessionId`, `previousSessionId`, `detail`.
+    pub const RUN_RESTARTED: &str = "ticket.run_restarted";
     /// An in_progress ticket went back to todo: `sessionId`, `note`.
     pub const TICKET_UNASSIGNED: &str = "ticket.unassigned";
     /// An agent's queue changed: `agentId`, `tickets`.

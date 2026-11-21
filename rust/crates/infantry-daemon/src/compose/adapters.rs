@@ -75,7 +75,12 @@ pub struct DaemonBoardEnv {
     settings: super::settings::SettingsUnit,
     /// The script hook store, set once it exists (`autoStart=false` hooks).
     hooks: std::sync::OnceLock<Arc<infantry_scripting::hooks::HookStore>>,
+    /// The mail router and the attention list a worker's bad end is told through (PIPE-RESTART-1; set once they exist).
+    lead_notice: std::sync::OnceLock<(Arc<infantry_mail::mail::router::MailRouter>, Arc<infantry_mail::notify::attention::AttentionStore>)>,
 }
+
+/// `board.restartResumeSeconds`: how long a resumed session must live before a restart counts as working.
+pub const BOARD_RESTART_RESUME_SECONDS: &str = "board.restartResumeSeconds";
 
 /// `lanes.maxInProgress`: scopes app, project, role; default = the usage pacing allowance.
 pub const LANES_MAX_IN_PROGRESS: &str = "lanes.maxInProgress";
@@ -90,7 +95,12 @@ impl DaemonBoardEnv {
             notify: std::sync::OnceLock::new(),
             settings: super::settings::SettingsUnit { db },
             hooks: std::sync::OnceLock::new(),
+            lead_notice: std::sync::OnceLock::new(),
         }
+    }
+
+    pub fn set_lead_notice(&self, mail: Arc<infantry_mail::mail::router::MailRouter>, attention: Arc<infantry_mail::notify::attention::AttentionStore>) {
+        let _ = self.lead_notice.set((mail, attention));
     }
 
     pub fn set_hooks(&self, h: Arc<infantry_scripting::hooks::HookStore>) {
@@ -207,6 +217,16 @@ impl BoardEnv for DaemonBoardEnv {
         };
         crate::health::record_notice(subject, ticket_id, session_id, &how, t0.elapsed().as_millis() as i64, line);
         ok
+    }
+    fn worker_failed(&self, f: &infantry_board::env::WorkerFailed<'_>) -> bool {
+        let Some((mail, attention)) = self.lead_notice.get() else { return false };
+        let down = super::watch::WorkerDown { ticket_id: f.ticket_id, session_id: f.session_id, lead: f.lead, outcome: f.outcome, subject: f.subject, detail: f.detail };
+        super::watch::worker_down(attention, mail, &down)
+    }
+    fn restart_resume_window_ms(&self) -> u64 {
+        let s = self.settings.app(BOARD_RESTART_RESUME_SECONDS);
+        let secs = s.and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|x| x.trim().parse().ok())));
+        secs.unwrap_or(20) * 1000
     }
     fn branch_facts(&self, project_id: Option<&str>, branch: Option<&str>, base: Option<&str>) -> Option<String> {
         let dir = super::project_dir(&self.projects, project_id?)?;
@@ -397,6 +417,9 @@ impl SessionLauncher for DaemonLauncher {
         match self.daemon.record(session_id) {
             None => WorkerState::Ended,
             Some(r) if ended(&r) => WorkerState::Ended,
+            // PIPE-RESTART-1: a process that died at rest (killed, crashed: a non-zero exit) is a dead worker even though the
+            // session reads IDLE; a normal rest between turns has no exit code or 0.
+            Some(r) if r.state == SessionState::Idle && !r.is_process_alive && r.last_exit_code.is_some_and(|c| c != 0) => WorkerState::Ended,
             Some(_) if self.daemon.turn_active(session_id) == Some(true) => WorkerState::Busy,
             Some(_) => WorkerState::Idle,
         }
@@ -549,6 +572,17 @@ impl SessionObserver for WorkObserver {
     }
     fn on_exit(&self, rec: &SessionRecord) {
         self.usage.on_exit(&usage_info(rec));
+    }
+    fn on_rest_exit(&self, rec: &SessionRecord, code: Option<i32>) {
+        let Some(ticket) = rec.ticket_id.clone() else { return };
+        let detail = format!("the worker's process died while it was idle (exit code {})", code.map(|c| c.to_string()).unwrap_or_else(|| "none".into()));
+        let report = DoneReport { ticket_id: ticket, session_id: rec.id.clone(), outcome: "FAILED".into(), detail: Some(detail) };
+        let d = self.dispatcher.clone();
+        self.handle.spawn_blocking(move || {
+            if let Err(e) = d.on_worker_died(&report) {
+                eprintln!("[infantry] dead-worker notice for {} failed: {e:?}", report.ticket_id);
+            }
+        });
     }
     fn on_turn_end(&self, rec: &SessionRecord, outcome: &str, detail: &str) {
         let (id, ticket) = (rec.id.clone(), rec.ticket_id.clone());

@@ -217,7 +217,7 @@ pub fn usage_error(p: &Parsed) -> Option<String> {
         }
         // Kotlin's `ticketUsageError` has no branch for these two, so the frozen CLI refuses them with the subcommand
         // line before their own usage checks can run; here they reach their commands, which print their own usage.
-        Some("assign") | Some("unassign") | Some("close") => None,
+        Some("assign") | Some("unassign") | Some("close") | Some("restart") => None,
         _ => Some("ticket needs a subcommand: infantry ticket show <id|prefix> | create --title \"...\" | update <id|prefix> ... | move <id|prefix> <status> | start <id|prefix> | link <id|prefix> <otherId|prefix> <type>".into()),
     }
 }
@@ -234,6 +234,7 @@ pub fn run(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
         Some("assign") => assign(ctx, p),
         Some("start") => start_ticket(ctx, p),
         Some("close") => close_ticket(ctx, p),
+        Some("restart") => restart_ticket(ctx, p),
         Some("link") => link(ctx, p),
         Some("files") => files(ctx, p),
         Some("archive") | Some("restore") => archive_command(ctx, p),
@@ -804,6 +805,31 @@ fn close_ticket(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
     ctx.out(format!("  next:     {}", c.get("next").filter(|n| !n.is_null()).and_then(|n| s(n, "id")).unwrap_or_else(|| "none started".into())));
     for w in c.get("warnings").and_then(|w| w.as_array()).into_iter().flatten().filter_map(|w| w.as_str()) {
         ctx.out(format!("  warning:  {w}"));
+    }
+    Ok(0)
+}
+
+/// PIPE-RESTART-1: `infantry ticket restart <id|prefix> [--fresh]`: puts a worker back on an in_progress ticket whose
+/// worker died. It resumes the dead session; if that dies inside `board.restartResumeSeconds` (or `--fresh` is given) a
+/// fresh session starts on the same worktree and branch with the brief and a continue-from-your-last-commit note.
+fn restart_ticket(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
+    check_contract(ctx)?;
+    let Some(id) = p.arg(1).map(|a| a.trim().to_string()).filter(|a| !a.is_empty()) else {
+        ctx.err("usage: infantry ticket restart <id|prefix> [--fresh]");
+        return Ok(1);
+    };
+    let project = board_project(p, ctx.getenv);
+    let Some(ticket) = resolve_ticket(ctx, &id, &project)? else { return Ok(1) };
+    let tid = s(&ticket, "id").unwrap_or_default();
+    let req = json!({"ticketId": tid, "fresh": p.flag("fresh"), "restartedBy": session_of(ctx)});
+    let env = Envelope::new("ticket_restart", req.to_string()).with_session(session_of(ctx));
+    let answer = ctx.stream().request(&env, "ticket_restarted", "ticket_restart", false)?;
+    let r: Value = serde_json::from_str(&answer.data).map_err(|e| format!("ticket_restarted answer is not JSON: {e}"))?;
+    let mode = s(&r, "mode").unwrap_or_default();
+    ctx.out(format!("restarted {tid} ({mode}): {}", s(&r, "detail").unwrap_or_default()));
+    ctx.out(format!("  session:  {}", s(&r, "sessionId").unwrap_or_else(|| "none".into())));
+    if let Some(prev) = s(&r, "previousSessionId").filter(|prev| s(&r, "sessionId").as_deref() != Some(prev.as_str())) {
+        ctx.out(format!("  replaced: {prev}"));
     }
     Ok(0)
 }
