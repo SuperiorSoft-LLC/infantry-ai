@@ -263,3 +263,20 @@ Not on the engine yet:
 
 The plugin's settings stay the one config point for the app's own source. See also [Daemon plugin API](daemon-plugin-api.md)
 and [Plugins](Plugins.md).
+
+## Armory update check (daemon)
+
+The daemon, not a client, checks installed apps and the shell against the Armory apps catalog
+(`rust/crates/infantry-daemon/src/compose/armory.rs`). The catalog is one `apps.json` in the `battalionOS-apps`
+repository: `{ "apps": [ { id, name, kind: app|shell, version | feed, publicKey, restart: none|daemon|relaunch } ] }`.
+A `feed` is a release feed like the one above (`{channel}` is replaced). The shell counts as installed at the daemon's
+version; an app counts when `armory-installed.json` in the state dir lists it. Clients read one list with the
+`armory_updates` frame (id, name, kind, installed, available, notes, restart); `armory_check` is "check now"; a change is
+also pushed as `armory_updates`. A dead catalog or feed is a `warnings` line, never a failure.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `armory.catalogUrl` | the raw `apps.json` of `battalionOS-apps` | http(s) address, file, or folder holding `apps.json`. |
+| `armory.channel` | `stable` | Fills `{channel}` in a feed. |
+| `armory.checkSeconds` | `0` | Seconds between checks; 0 checks only at start and on "check now". |
+| `catalog.maxFileBytes` | 64 MB | Largest file a catalog (plugin sources and Armory) may download. Read at daemon start. |

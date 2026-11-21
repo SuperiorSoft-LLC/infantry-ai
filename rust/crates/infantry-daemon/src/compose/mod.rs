@@ -15,6 +15,7 @@ mod adapters;
 mod agent_frames;
 mod agent_registry;
 mod agent_tools;
+pub mod armory;
 mod harness_frames;
 mod harness_install;
 pub mod host_frames;
@@ -567,7 +568,9 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         }
         config
     };
-    let plugin_set = plugins::start(state_dir, plugins_dir(), bus.clone(), handle.clone(), disabled.clone(), plugins::InstallSeam { config: install_config, boot: boot.clone(), late: late.clone(), sources: Arc::new(sources::SourceStore::load(state_dir)), signers: Arc::new(sources::Signers::load(state_dir)) });
+    let plugin_sources = Arc::new(sources::SourceStore::load(state_dir));
+    plugin_sources.set_max_bytes(sources::limit_of(settings::SettingsUnit { db: db.clone() }.app(sources::MAX_FILE_BYTES_KEY)));
+    let plugin_set = plugins::start(state_dir, plugins_dir(), bus.clone(), handle.clone(), disabled.clone(), plugins::InstallSeam { config: install_config, boot: boot.clone(), late: late.clone(), sources: plugin_sources.clone(), signers: Arc::new(sources::Signers::load(state_dir)) });
     let plugin_host = plugin_set.as_ref().map(|p| p.host.clone());
     let bundles = Arc::new(ui_bundles::UiBundles { plugins_dir: plugins_dir(), plugins: plugin_host.clone(), disabled });
     tools.set_plugins(plugin_host.clone());
@@ -596,6 +599,12 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     if mode.has_board() {
         sweep.clone().spawn();
     }
+    // ARMORY-1: the update check for installed apps and the shell, on its own thread (never in a client).
+    let armory = {
+        let settings = settings::SettingsUnit { db: db.clone() };
+        armory::ArmoryUnit::new(state_dir, Arc::new(move |k: &str| settings.app(k)), bus.clone())
+    };
+    armory.clone().spawn();
     let mut units: Vec<Arc<dyn FrameUnit>> = vec![
         Arc::new(projects_unit),
         Arc::new(git_unit),
@@ -611,6 +620,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         Arc::new(tools::ToolsUnit { tools: tools.clone() }),
         Arc::new(crate::run::RunUnit { runs: runs.clone() }),
         Arc::new(settings::SettingsUnit { db: db.clone() }),
+        armory.clone(),
         vault.clone(),
         Arc::new(crate::mcp::McpUnit { registry: mcp.clone() }),
         board_side(Arc::new(crate::pods::PodsUnit { pods: pods.clone() })),

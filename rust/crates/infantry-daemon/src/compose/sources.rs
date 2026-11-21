@@ -28,6 +28,8 @@ pub struct SourceStore {
     file: PathBuf,
     cache: PathBuf,
     items: Mutex<Vec<Source>>,
+    /// The largest file a catalog download may be (`catalog.maxFileBytes`), set by the composition at start.
+    max_bytes: std::sync::atomic::AtomicU64,
 }
 
 fn slug(location: &str) -> String {
@@ -46,16 +48,24 @@ fn is_git(location: &str) -> bool {
     location.ends_with(".git") || ["http://", "https://", "git@", "ssh://", "git://", "file://"].iter().any(|p| location.starts_with(p))
 }
 
-/// The largest single file a catalog may make the daemon download.
-pub const MAX_CATALOG_FILE_BYTES: u64 = 64 * 1024 * 1024;
+/// The setting that caps the largest single file a catalog (plugin sources and the Armory apps catalog) may make the
+/// daemon download, and its default.
+pub const MAX_FILE_BYTES_KEY: &str = "catalog.maxFileBytes";
+pub const DEFAULT_MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
 
-fn http_get(agent: &ureq::Agent, url: &str) -> Result<Vec<u8>, String> {
+/// A setting value that is a positive whole number (a number or a numeric string).
+pub fn limit_of(v: Option<Value>) -> u64 {
+    v.and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))).filter(|n| *n > 0).unwrap_or(DEFAULT_MAX_FILE_BYTES)
+}
+
+/// One GET with a size cap and a timeout; the single download seam of the catalogs.
+pub fn http_get(agent: &ureq::Agent, url: &str, max_bytes: u64) -> Result<Vec<u8>, String> {
     use std::io::Read;
     let resp = agent.get(url).timeout(std::time::Duration::from_secs(60)).call().map_err(|e| format!("{url}: {e}"))?;
     let mut body = Vec::new();
-    resp.into_reader().take(MAX_CATALOG_FILE_BYTES + 1).read_to_end(&mut body).map_err(|e| format!("{url}: {e}"))?;
-    if body.len() as u64 > MAX_CATALOG_FILE_BYTES {
-        return Err(format!("{url}: larger than {MAX_CATALOG_FILE_BYTES} bytes"));
+    resp.into_reader().take(max_bytes + 1).read_to_end(&mut body).map_err(|e| format!("{url}: {e}"))?;
+    if body.len() as u64 > max_bytes {
+        return Err(format!("{url}: larger than {max_bytes} bytes"));
     }
     Ok(body)
 }
@@ -64,10 +74,10 @@ fn http_get(agent: &ureq::Agent, url: &str) -> Result<Vec<u8>, String> {
 /// "files": ["module.json", "ui/dist/index.js", ...] } ] }`. Each module's files are downloaded into `dest/<tier>/<name>/`,
 /// so a catalog source behaves like a folder source from then on (search, vet, install, update). Built in a staging folder
 /// and swapped in, so a failed refresh keeps the previous copy.
-pub fn fetch_catalog(url: &str, dest: &Path) -> Result<usize, String> {
+pub fn fetch_catalog(url: &str, dest: &Path, max_bytes: u64) -> Result<usize, String> {
     let tls = native_tls::TlsConnector::new().map_err(|e| format!("no TLS for catalog downloads: {e}"))?;
     let agent = ureq::AgentBuilder::new().tls_connector(std::sync::Arc::new(tls)).build();
-    let doc: Value = serde_json::from_slice(&http_get(&agent, url)?).map_err(|_| format!("{url} is not a catalog (JSON with a `modules` array)"))?;
+    let doc: Value = serde_json::from_slice(&http_get(&agent, url, max_bytes)?).map_err(|_| format!("{url} is not a catalog (JSON with a `modules` array)"))?;
     let modules = doc.get("modules").and_then(Value::as_array).ok_or_else(|| format!("{url} is not a catalog (JSON with a `modules` array)"))?;
     let staging = dest.with_extension("new");
     let _ = std::fs::remove_dir_all(&staging);
@@ -86,7 +96,7 @@ pub fn fetch_catalog(url: &str, dest: &Path) -> Result<usize, String> {
                 if local.is_absolute() || local.components().any(|c| !matches!(c, std::path::Component::Normal(_))) {
                     return Err(format!("{name}: file '{f}' is outside the module folder"));
                 }
-                let bytes = http_get(&agent, &format!("{}/{f}", base.trim_end_matches('/')))?;
+                let bytes = http_get(&agent, &format!("{}/{f}", base.trim_end_matches('/')), max_bytes)?;
                 let target = staging.join(tier).join(name).join(local);
                 std::fs::create_dir_all(target.parent().unwrap_or(&staging)).map_err(|e| e.to_string())?;
                 std::fs::write(&target, bytes).map_err(|e| format!("{}: {e}", target.display()))?;
@@ -132,7 +142,15 @@ impl SourceStore {
             .iter()
             .filter_map(|s| Some(Source { id: s["id"].as_str()?.into(), kind: s["kind"].as_str()?.into(), location: s["location"].as_str()?.into() }))
             .collect();
-        SourceStore { file, cache: state_dir.join(CACHE_DIR), items: Mutex::new(items) }
+        SourceStore { file, cache: state_dir.join(CACHE_DIR), items: Mutex::new(items), max_bytes: std::sync::atomic::AtomicU64::new(DEFAULT_MAX_FILE_BYTES) }
+    }
+
+    pub fn set_max_bytes(&self, n: u64) {
+        self.max_bytes.store(n, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn max_bytes(&self) -> u64 {
+        self.max_bytes.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     fn save(&self, items: &[Source]) -> Result<(), String> {
@@ -195,7 +213,7 @@ impl SourceStore {
             if src.kind == "git" {
                 git(&["clone", "--depth", "1", &src.location, &dir.display().to_string()], None)?;
             } else {
-                fetch_catalog(&src.location, &dir)?;
+                fetch_catalog(&src.location, &dir, self.max_bytes())?;
             }
         }
         if installer::catalog(&[dir.clone()]).is_empty() {
@@ -243,7 +261,7 @@ impl SourceStore {
                     return Err(format!("{}: the folder is gone", s.location));
                 }
                 if s.kind == "catalog" {
-                    fetch_catalog(&s.location, &dir)?;
+                    fetch_catalog(&s.location, &dir, self.max_bytes())?;
                 } else if s.kind == "git" {
                     git(&["pull", "--ff-only"], Some(&dir))?;
                 }
