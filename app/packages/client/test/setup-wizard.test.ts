@@ -128,6 +128,25 @@ describe("harness install store", () => {
     expect(sent.filter((e) => e.type === "harness_install_status").length).toBe(before + 1);
   });
 
+  it("shows the install as busy the moment it is sent, before any status answer (INSTALL-PROGRESS-2)", () => {
+    const sent: Envelope[] = [];
+    const taps = new Set<(e: Envelope) => void>();
+    const l = { sendFrame: (e: Envelope) => (sent.push(e), true), onFrame: (f: (e: Envelope) => void) => (taps.add(f), () => void taps.delete(f)) };
+    const push = (e: Envelope) => taps.forEach((t) => t(e));
+    const s = createHarnessInstallStore(l);
+    s.getState().refresh();
+    push({ type: "harness_install_status", data: JSON.stringify(report([h("claude", false)])), requestId: sent[0].requestId });
+    expect(s.getState().data?.busy).toBe(false);
+    installHarnesses(s, ["claude"]);
+    expect(s.getState().data?.busy).toBe(true);
+    const before = sent.filter((e) => e.type === "harness_install_status").length;
+    push({ type: "harness_install_result", data: JSON.stringify({ started: true }), requestId: sent[sent.length - 1].requestId });
+    expect(sent.filter((e) => e.type === "harness_install_status").length).toBe(before + 1);
+    // The daemon's own status wins over the optimistic flag.
+    push({ type: "harness_install_status", data: JSON.stringify({ ...report([h("claude", true)]), busy: false }), requestId: sent[sent.length - 1].requestId });
+    expect(s.getState().data?.busy).toBe(false);
+  });
+
   it("re-reads the install report when an install finishes anywhere (another window, the CLI)", () => {
     const sent: Envelope[] = [];
     const taps = new Set<(e: Envelope) => void>();
