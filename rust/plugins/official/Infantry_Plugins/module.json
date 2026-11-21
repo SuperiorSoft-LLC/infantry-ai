@@ -13,6 +13,9 @@
     "needs": [
       "frames"
     ],
+    "ownerFrames": [
+      "plugins_op"
+    ],
     "tools": [
       {
         "name": "infantry_plugin_list",

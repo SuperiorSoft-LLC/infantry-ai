@@ -452,14 +452,20 @@ impl HostServices for DaemonServices {
         s.remove(key);
         self.save_settings(&s)
     }
-    fn frame_request(&self, _module: &str, frame: Frame, caller: Option<&CallContext>, _timeout_ms: u32) -> Result<Frame, String> {
+    fn frame_request(&self, module: &str, frame: Frame, caller: Option<&CallContext>, as_owner: bool, _timeout_ms: u32) -> Result<Frame, String> {
         let c = self.composed.get().and_then(Weak::upgrade).ok_or("the daemon is still starting")?;
         let max_depth = self.setting_get(super::scope::MAX_DEPTH_KEY).and_then(|v| v.trim().parse().ok()).unwrap_or(super::scope::MAX_DEPTH);
         if let Some(why) = super::scope::refusal(&frame.r#type, &frame.data, frame.session_id.as_deref(), caller, &c.daemon.records(), max_depth) {
             return Err(why);
         }
+        // SEC-PLUGIN-1: the frame is the plugin's, not the owner's. It goes in as a non-owner unless the manifest lists
+        // this frame type in daemon.ownerFrames (`as_owner`, official and core only). The one frame a plugin may always
+        // send with the vault's owner authority is the read of ITS OWN secret, pinned to the calling module.
+        let own_secret = frame.r#type == infantry_protocol::frames::PLUGIN_SECRET_GET;
+        let data = if own_secret { super::scope::own_secret_request(module, &frame.data)? } else { frame.data };
+        let owner = as_owner || own_secret;
         let _rt = self.handle.enter();
-        let mut env = Envelope::new(frame.r#type.clone(), frame.data);
+        let mut env = Envelope::new(frame.r#type.clone(), data);
         env.session_id = frame.session_id;
         // An in-process request always wants its answer: units that answer only a request id (the board) do.
         env.request_id = Some(frame.request_id.clone().unwrap_or_else(|| format!("plugin-{}", uuid::Uuid::new_v4())));
@@ -470,7 +476,7 @@ impl HostServices for DaemonServices {
             bound = conn.active;
             out
         } else {
-            c.request(&env, true)?
+            c.request(&env, owner)?
         };
         // A `new` answers its requester nothing (clients see the pushes): the session it bound is the plugin's answer.
         if let (true, Some(id)) = (replies.iter().all(|e| e.r#type != crate::wire::ERROR), bound.filter(|_| frame.r#type == crate::wire::NEW)) {

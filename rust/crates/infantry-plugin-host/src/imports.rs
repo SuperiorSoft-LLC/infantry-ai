@@ -290,7 +290,10 @@ impl PluginImports {
     pub fn frame_request(&self, r#type: &str, data: &str, session_id: Option<String>, timeout_ms: u32) -> Result<Frame, String> {
         self.check("frames")?;
         let caller = self.caller();
-        self.services.frame_request(&self.module_id, Frame { r#type: r#type.into(), data: data.into(), session_id, request_id: None }, caller.as_ref(), timeout_ms)
+        // The owner's authority is an explicit, per-frame-type grant of the manifest (`daemon.ownerFrames`), official and
+        // core modules only; the `frames` grant alone sends every frame as a non-owner.
+        let as_owner = self.tier != Tier::Community && self.decl.owner_frames.iter().any(|f| f == r#type);
+        self.services.frame_request(&self.module_id, Frame { r#type: r#type.into(), data: data.into(), session_id, request_id: None }, caller.as_ref(), as_owner, timeout_ms)
     }
 
     /// One sidecar `import` line: `<interface>.<func>` with its JSON params; the JSON ok value or the error.

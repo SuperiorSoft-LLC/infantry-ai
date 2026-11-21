@@ -75,6 +75,11 @@ pub struct DaemonDecl {
     pub tools: Vec<ToolDecl>,
     #[serde(default)]
     pub frames: Vec<FrameDecl>,
+    /// Frame types this plugin may send into the daemon with the OWNER's authority (`daemon.ownerFrames`). The `frames`
+    /// import otherwise sends every frame as a non-owner: the owner-only ones (the vault, plugin admin, MCP changes)
+    /// are refused. Official and core modules only: a community module that declares any is refused at load.
+    #[serde(default)]
+    pub owner_frames: Vec<String>,
     #[serde(default)]
     pub hooks: Vec<String>,
     #[serde(default)]

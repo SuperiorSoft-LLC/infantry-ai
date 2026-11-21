@@ -41,6 +41,19 @@ refused without them) or `daemon.wants` (a refused one becomes a stub that fails
 A frame a plugin requests is checked against the caller's scope and depth limit in
 `rust/crates/infantry-daemon/src/compose/scope.rs` before it reaches the daemon.
 
+**What `frames` grants (SEC-PLUGIN-1).** A plugin's frame is the PLUGIN's, never the owner's. The daemon dispatches it as a
+non-owner, whoever the plugin is working for: every frame a unit refuses to a non-owner (the vault's `secret_*`, `plugin_admin`,
+the MCP changes, `attention_raise`, `pod_submit` ...) is refused to the plugin with that unit's own "owner only" answer.
+Two explicit exceptions, and no others:
+
+- `daemon.ownerFrames`: a list of frame types, in the manifest, that the plugin sends AS THE OWNER (official and core modules
+  only; a community module that declares any is refused at load). It is per frame type, so it grants the whole frame, every
+  op of it. A plugin that lists one must itself refuse the agent callers it does not want to serve (see `Infantry_Mcp`, which
+  refuses `add`, `remove` and `grant` to an agent session before it sends `mcp_add` or `mcp_assign`).
+- `plugin_secret_get` reads the secret of the calling plugin only (`plugin.<module id>`). The daemon takes the module from the
+  host (the module id of the manifest), never from the request: a request that names another module is refused, and one that
+  names none is filled in with the caller's. It needs no `ownerFrames` entry.
+
 ### The model
 
 - **Frames.** A frame is the wire envelope (`type`, `data`, optional `session-id`, `request-id`). A plugin declares

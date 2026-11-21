@@ -19,6 +19,13 @@ fn arg(a: &Value, k: &str) -> Option<String> {
     a.get(k).and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()).map(String::from)
 }
 
+const IMPORT_TOOL: &str = "infantry_plugin_list_import";
+
+/// Whether an agent session (not the owner) is calling.
+fn agent(ctx: &CallContext) -> bool {
+    ctx.caller.agent || ctx.client_session_id.is_some() || ctx.client_role.is_some()
+}
+
 /// The `plugins_op` payload for a tool call, or the refusal text.
 pub fn op_payload(tool: &str, a: &Value, session: Option<&str>) -> Result<Value, String> {
     let need = |k: &str| arg(a, k).ok_or_else(|| format!("{tool}: {k} is required"));
@@ -81,6 +88,11 @@ fn run(tool: &str, a: &Value, session: Option<&str>) -> Result<String, String> {
 impl Plugin for Plugins {
     fn call_tool(name: String, args: String, ctx: CallContext) -> Result<String, String> {
         let a: Value = serde_json::from_str(if args.trim().is_empty() { "{}" } else { &args }).map_err(|e| format!("{name}: arguments are not JSON: {e}"))?;
+        // SEC-PLUGIN-1: this module sends `plugins_op` as the owner (daemon.ownerFrames, for the import op), so the
+        // import is the owner's to ask: an agent session asks for a plugin with `infantry_plugin_request` instead.
+        if agent(&ctx) && name == IMPORT_TOOL {
+            return Err(format!("{name} refused: an agent session cannot import a plugin list. Use infantry_plugin_request to ask the owner for a plugin."));
+        }
         run(&name, &a, ctx.client_session_id.as_deref())
     }
 }

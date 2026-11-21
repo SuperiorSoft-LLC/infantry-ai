@@ -171,6 +171,11 @@ impl PluginHost {
         &self.limits
     }
 
+    /// The daemon-side back ends the plugins' imports end in (what a tool or a test hands to a [`PluginImports`]).
+    pub fn services(&self) -> &Arc<dyn HostServices> {
+        &self.services
+    }
+
     /// Records the owner's modules.json `allow` list for `module_id`.
     pub fn set_allow(&self, module_id: &str, allow: impl IntoIterator<Item = String>) {
         self.allow.lock().unwrap().insert(module_id.into(), allow.into_iter().collect());
@@ -395,6 +400,9 @@ fn refusal(tier: Tier, d: &DaemonDecl, allow: &BTreeSet<String>) -> Result<(), S
     if d.hooks.iter().any(|h| h == "admission") {
         return Err("a community module may not admit tokens".into());
     }
+    if let Some(f) = d.owner_frames.first() {
+        return Err(format!("a community module may not send a frame as the owner (daemon.ownerFrames: {f})"));
+    }
     if let Some(f) = d.frames.iter().find(|f| f.owner_only) {
         return Err(format!("a community module may not declare an owner-only frame ({})", f.r#type));
     }
@@ -450,6 +458,11 @@ mod tests {
         let allow: BTreeSet<String> = ["daemon.code", "daemon.tool"].iter().map(|s| s.to_string()).collect();
         assert!(refusal(Tier::Community, &d, &allow).is_ok());
         assert!(grants(Tier::Community, &d, &allow).unwrap_err().contains("daemon.import.frames"));
+        // SEC-PLUGIN-1: the owner's authority for a frame is never a community module's, whatever it is granted.
+        let owner: DaemonDecl = serde_json::from_str(r#"{"needs":["frames"],"ownerFrames":["plugin_admin"]}"#).unwrap();
+        assert!(refusal(Tier::Official, &owner, &none).is_ok() && refusal(Tier::Core, &owner, &none).is_ok());
+        let all: BTreeSet<String> = ["daemon.code", "daemon.tool", "daemon.frame"].iter().map(|s| s.to_string()).collect();
+        assert!(refusal(Tier::Community, &owner, &all).unwrap_err().contains("daemon.ownerFrames: plugin_admin"));
         let mut allow2 = allow.clone();
         allow2.insert("daemon.import.frames".into());
         let (g, x) = grants(Tier::Community, &d, &allow2).unwrap();

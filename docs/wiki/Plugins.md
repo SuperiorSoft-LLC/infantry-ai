@@ -41,6 +41,7 @@ A real example is `rust/plugins/official/Infantry_Notes/module.json`. The fields
 | `daemon.apiAtLeast` | The plugin ABI the module needs. A 0.x requirement above the host's version (0.1.0) is refused. |
 | `daemon.tools` | `[{name, action, kind, description, inputSchema}]`. Agent and script tools. The name must match `^[a-z][a-z0-9_]{2,63}$`. |
 | `daemon.frames` | `[{type, action, kind, ownerOnly}]`. Client frames the plugin answers. A frame core owns (`plugin_tools`, `plugin_tool_call`, `plugin_tool_result`, `replay_request`, `ready`, `error`) is refused. |
+| `daemon.ownerFrames` | `[frame type]`. Frames the plugin sends into the daemon AS THE OWNER (official and core modules only). Without an entry, a frame sent through the `frames` grant is dispatched as a non-owner, so a frame only the owner may send is refused. See [Daemon plugin API](daemon-plugin-api.md). |
 | `daemon.hooks`, `daemon.routes`, `daemon.publicRoutes` | Hook kinds, HTTP routes (public ones skip the daemon bearer token). |
 | `daemon.endpoints`, `daemon.env`, `daemon.secrets`, `daemon.limits`, `daemon.config`, `daemon.storage.adopt` | Outbound addresses, env vars, secrets, per-call limits, settings, and existing tables an official module may use. |
 

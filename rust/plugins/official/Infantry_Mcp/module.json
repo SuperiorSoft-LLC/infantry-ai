@@ -11,6 +11,7 @@
     "component": "daemon.component",
     "apiAtLeast": "0.1.0",
     "needs": ["frames"],
+    "ownerFrames": ["mcp_add", "mcp_remove", "mcp_set_enabled", "mcp_assign", "mcp_revoke"],
     "tools": [
       { "name": "infantry_mcp", "action": "mcp.read", "kind": "read", "description": "MCP servers. op list: every server. op status: one server (name). op my_tools: the servers THIS session was handed and why. op grants: who was granted what. add/remove/enable/disable/grant/revoke are refused to agents (ask the PM or owner)." }
     ]
