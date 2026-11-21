@@ -88,6 +88,17 @@ export function membersOf(app: PluginRow, rows: PluginRow[]): { core: PluginRow[
   return { core: find(app.app?.core ?? []), optional: find(app.app?.optional ?? []) };
 }
 
+/** ARMORY-2: the app id a route names (`app/<id>`, how a layout opens this view on one app's page), or null for the list. */
+export function routeApp(route: string | undefined): string | null {
+  const m = /^app\/(.+)$/.exec(route ?? "");
+  return m ? m[1]!.trim() || null : null;
+}
+
+/** The app row a route names: an app, the system installer or a loose plugin, by module id. */
+export function findApp(rows: PluginRow[], id: string): PluginRow | null {
+  return rows.find((r) => r.id === id) ?? null;
+}
+
 /** Installed first, then by name; the list reads the same after every refresh. */
 export function sortRows(rows: PluginRow[]): PluginRow[] {
   return [...rows].sort((a, b) => Number(b.installed) - Number(a.installed) || (a.displayName || a.id).localeCompare(b.displayName || b.id));
