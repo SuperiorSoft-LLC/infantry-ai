@@ -38,6 +38,9 @@ pub struct InstallConfig {
     /// else the `plugins.ui` setting, else the first module whose manifest says `"uiPlugin": true`. None: this daemon has none.
     pub ui_plugin: Option<String>,
     pub sources: Vec<PathBuf>,
+    /// The bundled folder (the modules that ship with the app), when it exists and is one of `sources`. A module it
+    /// offers is reported `bundled`; one installed from any other source is not, so the owner can uninstall it.
+    pub bundled: Option<PathBuf>,
 }
 
 /// APPS-ROOT-1: a module that is an *app* lists the modules that belong to it, in its manifest:
@@ -150,6 +153,12 @@ pub fn catalog(sources: &[PathBuf]) -> Vec<Offer> {
     out
 }
 
+/// The ids the bundled folder offers: the modules that ship with the app (none when there is no bundled folder). A module
+/// installed from any other source is not among them, so the owner may uninstall it.
+pub fn bundled_ids(bundled: Option<&Path>) -> BTreeSet<String> {
+    bundled.map(|d| catalog(&[d.to_path_buf()]).into_iter().map(|o| o.id).collect()).unwrap_or_default()
+}
+
 /// The ids of the modules installed in the plugins folder (a daemon half or not).
 pub fn installed_ids(plugins_dir: &Path) -> BTreeSet<String> {
     super::host_frames::scan_modules(&Some(plugins_dir.to_path_buf())).into_iter().map(|m| m.id).collect()
@@ -172,6 +181,8 @@ pub fn config(plugins_dir: &Option<PathBuf>, setting: &dyn Fn(&str) -> Option<Va
         .or_else(|| std::env::current_exe().ok()?.parent().map(|p| p.join(BUNDLED_DIR)));
     let canon = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
     let own = plugins_dir.as_deref().map(canon);
+    let mut bundled_dir: Option<PathBuf> = None;
+    let first = bundled.clone();
     for s in bundled.into_iter().chain(list(setting(SOURCES_KEY)).into_iter().map(PathBuf::from)) {
         if !s.is_dir() {
             continue;
@@ -179,6 +190,9 @@ pub fn config(plugins_dir: &Option<PathBuf>, setting: &dyn Fn(&str) -> Option<Va
         let c = canon(&s);
         if own.as_ref() == Some(&c) || sources.iter().any(|x| canon(x) == c) {
             continue;
+        }
+        if sources.is_empty() && first.as_ref() == Some(&s) {
+            bundled_dir = Some(s.clone());
         }
         sources.push(s);
     }
@@ -192,7 +206,7 @@ pub fn config(plugins_dir: &Option<PathBuf>, setting: &dyn Fn(&str) -> Option<Va
         installed.or_else(|| catalog(&sources).into_iter().find(|o| o.ui_plugin).map(|o| o.id))
     };
     let ui_plugin = crate::auth::env(UI_ENV).or_else(|| one(setting(UI_KEY))).or_else(|| flagged("uiPlugin"));
-    InstallConfig { bootstrap, ui_plugin, sources }
+    InstallConfig { bootstrap, ui_plugin, sources, bundled: bundled_dir }
 }
 
 /// The modules to install, in the order to install them: `want` and everything they `requires`, each module after the
@@ -467,6 +481,37 @@ mod tests {
         }
         std::fs::write(dir.join("module.json"), m.to_string()).unwrap();
         std::fs::write(dir.join("ui/dist/index.js"), "export default {};").unwrap();
+    }
+
+    #[test]
+    fn bundled_names_only_the_bundled_folder_and_its_modules() {
+        let root = tmp("bundled-ids");
+        let (bundled, source, plugins) = (root.join("bundled"), root.join("src"), root.join("plugins"));
+        module(&bundled, "official", "Ships_In", json!({}));
+        module(&source, "official", "Qa_Demo", json!({}));
+        std::fs::create_dir_all(&plugins).unwrap();
+        let (b, s) = (bundled.display().to_string(), source.display().to_string());
+        let setting = |k: &str| match k {
+            BUNDLED_KEY => Some(json!(b)),
+            SOURCES_KEY => Some(json!([s])),
+            _ => None,
+        };
+        let cfg = config(&Some(plugins.clone()), &setting);
+        assert_eq!(cfg.bundled.as_deref(), Some(bundled.as_path()));
+        assert_eq!(cfg.sources.len(), 2);
+        let ids = bundled_ids(cfg.bundled.as_deref());
+        assert!(ids.contains("Ships_In"));
+        assert!(!ids.contains("Qa_Demo"), "a module from a user source is not bundled");
+        // No bundled folder on disk: nothing is bundled, a plugins.sources folder never takes its place.
+        let gone = root.join("gone").display().to_string();
+        let setting = |k: &str| match k {
+            BUNDLED_KEY => Some(json!(gone)),
+            SOURCES_KEY => Some(json!([s])),
+            _ => None,
+        };
+        let cfg = config(&Some(plugins), &setting);
+        assert_eq!(cfg.bundled, None);
+        assert!(bundled_ids(cfg.bundled.as_deref()).is_empty());
     }
 
     fn tmp(name: &str) -> PathBuf {

@@ -55,6 +55,9 @@ pub struct HostFrames {
     pub projects: Arc<infantry_projects::store::ProjectStore>,
     /// The enable rule the list reports, shared with the web UI route (WEBUI-1).
     pub bundles: Arc<super::ui_bundles::UiBundles>,
+    /// The bundled folder ([`super::installer::InstallConfig::bundled`]): a module it offers is `bundled` (ships with the
+    /// app); one installed from a user source is not, and its card offers Uninstall.
+    pub bundled_dir: Option<PathBuf>,
 }
 
 /// One module.json found in the plugins folder.
@@ -196,7 +199,17 @@ impl HostFrames {
 
     // ---- plugins ---------------------------------------------------------------------------------------------
 
-    fn summary(&self, m: &Module) -> Value {
+    /// The ids the bundled folder offers (empty when there is none).
+    fn bundled_ids(&self) -> std::collections::BTreeSet<String> {
+        super::installer::bundled_ids(self.bundled_dir.as_deref())
+    }
+
+    fn summaries(&self) -> Value {
+        let bundled = self.bundled_ids();
+        Value::Array(self.modules().iter().map(|m| self.summary(m, &bundled)).collect())
+    }
+
+    fn summary(&self, m: &Module, bundled: &std::collections::BTreeSet<String>) -> Value {
         let statuses = self.bundles.statuses();
         let daemon = m.manifest.get("daemon");
         let status = statuses.get(&m.id).cloned();
@@ -204,11 +217,12 @@ impl HostFrames {
         let enabled = self.bundles.enabled(m, &statuses);
         let mut ui = ui_of(&m.manifest);
         ui["web"] = super::ui_bundles::web_row(m);
+        let is_bundled = m.tier != "community" && bundled.contains(&m.id);
         json!({
             "id": m.id, "version": s(&m.manifest, "version"), "class": Some(s(&m.manifest, "class")).filter(|c| !c.is_empty()).unwrap_or("plugin"),
-            "tier": m.tier, "bundled": m.tier != "community", "enabled": enabled,
+            "tier": m.tier, "bundled": is_bundled, "enabled": enabled,
             "grants": strings(daemon.and_then(|d| d.get("needs"))), "requested": strings(daemon.and_then(|d| d.get("wants"))),
-            "license": s(&m.manifest, "license"), "source": "bundled", "yanked": false, "updateTo": Value::Null,
+            "license": s(&m.manifest, "license"), "source": if is_bundled { "bundled" } else { "installed" }, "yanked": false, "updateTo": Value::Null,
             "status": status.unwrap_or_else(|| if has_daemon { "not loaded".into() } else if enabled { "ui only".into() } else { "disabled".into() }),
             "ui": ui,
         })
@@ -253,10 +267,10 @@ impl HostFrames {
         let r = |why: String| Refusal::new(PLUGINS_OP, why);
         let id = Some(s(d, "id")).filter(|v| !v.is_empty()).or_else(|| Some(s(d, "ref")).filter(|v| !v.is_empty()));
         let data = match s(d, "op") {
-            "" | "list" => Value::Array(self.modules().iter().map(|m| self.summary(m)).collect()),
+            "" | "list" => self.summaries(),
             "status" => match id {
-                None => Value::Array(self.modules().iter().map(|m| self.summary(m)).collect()),
-                Some(id) => self.modules().iter().find(|m| m.id == id).map(|m| self.summary(m)).ok_or_else(|| r(format!("no plugin '{id}' on this host")))?,
+                None => self.summaries(),
+                Some(id) => self.modules().iter().find(|m| m.id == id).map(|m| self.summary(m, &self.bundled_ids())).ok_or_else(|| r(format!("no plugin '{id}' on this host")))?,
             },
             "search" => {
                 let q = s(d, "query").to_lowercase();
