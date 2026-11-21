@@ -90,6 +90,15 @@ pub const TICKETS_DEFAULT_ROLE: &str = "tickets.defaultRole";
 /// The generic default when the setting is unset: the catalog's role for work with no specialty.
 pub const GENERIC_DEFAULT_ROLE: &str = "custom";
 
+/// `board.doneReport` (scopes app, project): the DONE-report block appended to a brief whose ticket has none.
+/// Empty or `off` turns it off; `<id>` is the ticket id.
+pub const BOARD_DONE_REPORT: &str = "board.doneReport";
+/// The setting's default text (data: change it with `settings_set`, not here).
+pub const DEFAULT_DONE_REPORT: &str = "DONE REPORT (mandatory): when you finish, mail the lead (`infantry send starter \"<report>\"`; \
+moving the ticket alone is not enough). Questions go to the lead by mail too, never as a question in your own console. The report names: \
+(1) the merge commit; (2) each check and its PASS/FAIL; (3) the \"test later\" items; (4) whether your worktree was removed (cd out of it \
+before removing it; never remove a shared merge checkout); (5) anything visible to the owner.";
+
 impl DaemonBoardEnv {
     pub fn new(daemon: Arc<Daemon>, projects: Arc<Projects>, state_dir: &Path, usage: Arc<UsageService>, db: Arc<infantry_core::db::Db>) -> DaemonBoardEnv {
         DaemonBoardEnv {
@@ -264,6 +273,15 @@ impl BoardEnv for DaemonBoardEnv {
         let v = self.settings.resolve(TICKETS_DEFAULT_ROLE, &d)["value"].clone();
         let set = v.as_str().map(str::trim).filter(|s| !s.is_empty() && !s.contains(char::is_whitespace));
         Some(set.unwrap_or(GENERIC_DEFAULT_ROLE).to_string())
+    }
+    fn done_report_block(&self, project_id: Option<&str>) -> Option<String> {
+        let d = serde_json::json!({ "project": project_id });
+        match self.settings.resolve(BOARD_DONE_REPORT, &d)["value"].as_str() {
+            // An explicit value wins ("off" or empty turns the block off); unset, the default text.
+            Some(s) if s.trim().is_empty() || s.trim().eq_ignore_ascii_case("off") => None,
+            Some(s) => Some(s.to_string()),
+            None => Some(DEFAULT_DONE_REPORT.to_string()),
+        }
     }
     fn auto_start_next(&self, project_id: Option<&str>) -> bool {
         let off = |v: Option<&serde_json::Value>| match v {

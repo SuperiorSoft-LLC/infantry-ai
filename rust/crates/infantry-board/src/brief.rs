@@ -169,6 +169,12 @@ pub fn ledger(runs: &[RunRow], comments: &[Comment]) -> Option<String> {
     (!lines.is_empty()).then(|| format!("Ticket ledger (earlier runs and comments, oldest first):\n{}", lines.join("\n")))
 }
 
+/// Whether the ticket text already carries its own DONE-report instruction.
+pub fn has_done_report(title: &str, description: &str) -> bool {
+    let has = |s: &str| s.to_ascii_lowercase().contains("done report");
+    has(title) || has(strip_related(description))
+}
+
 /// Composes the brief.
 pub fn compose(env: &dyn BoardEnv, input: &BriefInput<'_>) -> Brief {
     let row = input.row;
@@ -210,6 +216,12 @@ pub fn compose(env: &dyn BoardEnv, input: &BriefInput<'_>) -> Brief {
     let related = related_block(env, row, input.rows, input.links);
     let description = if related.is_some() { strip_related(&row.description) } else { row.description.as_str() };
     sections.push(("ticket".into(), format!("{}\n\n{}", row.title, description)));
+    // PIPE-BRIEF-1: a ticket with no DONE-report instruction of its own gets the host's standard block.
+    if !has_done_report(&row.title, &row.description) {
+        if let Some(b) = env.done_report_block(row.project_id.as_deref()).filter(|b| !b.trim().is_empty()) {
+            sections.push(("doneReport".into(), b.replace("<id>", &row.id)));
+        }
+    }
     // AGENT-TASKS-2: only the LATEST handoff rides along.
     if let Some(h) = input.comments.iter().rev().find(|c| c.kind == "handoff") {
         sections.push(("handoff".into(), format!("## Handoff from the previous worker\n{}", h.body)));

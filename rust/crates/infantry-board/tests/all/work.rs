@@ -97,6 +97,23 @@ fn start_puts_the_ticket_in_progress_with_a_brief() {
     assert!(briefs[0].1.contains("Work 1"), "the brief names the ticket");
 }
 
+/// PIPE-BRIEF-1: a brief without a DONE-report instruction gets the standard block; one with it is unchanged.
+#[test]
+fn brief_appends_the_done_report_block_only_when_missing() {
+    const BLOCK: &str = "STANDARD-DONE-BLOCK for <id>";
+    let env = StaticEnv { lane_cap: 10, done_report: Some(BLOCK.into()), ..kotlin_daemon_env() };
+    let (f, launcher, _d, o) = setup("work-donereport", env, Duration::ZERO);
+    f.env.push_ids(&["ticket-00000001", "ticket-00000002"]);
+    save(&f.orch, r#"{"title":"Plain","projectId":"p1","agentId":"role:backend","description":"do it"}"#);
+    save(&f.orch, r#"{"title":"Own","projectId":"p1","agentId":"role:backend","description":"do it\n\n**DONE report (mandatory):** mail the PM"}"#);
+    start(&o, "ticket-00000001");
+    start(&o, "ticket-00000002");
+    let briefs = launcher.briefs.lock().unwrap();
+    let of = |id: &str| briefs.iter().find(|(t, _)| t == id).unwrap().1.clone();
+    assert!(of("ticket-00000001").contains("STANDARD-DONE-BLOCK for ticket-00000001"), "the missing block is appended");
+    assert!(!of("ticket-00000002").contains("STANDARD-DONE-BLOCK"), "a ticket with its own DONE report is unchanged");
+}
+
 #[test]
 fn lane_cap_queues_and_done_starts_the_next() {
     let (f, _launcher, d, o) = setup("work-lane", kotlin_daemon_env(), Duration::ZERO);
