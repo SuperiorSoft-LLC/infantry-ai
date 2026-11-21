@@ -3,11 +3,19 @@
 // The centre tab bar. Its tabs come from the plugin registry (plugins/catalog.tsx `tabsFor("center")`): an enabled
 // plugin's declared tab appears, a disabled one's goes. Scrolls horizontally when narrow.
 import { cn, KeyHint } from "@infantry/ui";
+import { ScrollStrip } from "@/components/layout/scroll-strip";
 import type { TabEntry } from "@/plugins/catalog";
 
 export function SessionTabBar({ tabs, value, onChange }: { tabs: TabEntry[]; value: string; onChange: (id: string) => void }) {
   return (
-    <nav role="tablist" aria-label="Session views" className="no-scrollbar flex min-w-0 max-w-full shrink-0 gap-1 overflow-x-auto border-b px-3">
+    <ScrollStrip
+      as="nav"
+      label="tabs"
+      activeKey={value}
+      className="shrink-0 border-b px-3"
+      rowClassName="gap-1"
+      rowProps={{ role: "tablist", "aria-label": "Session views" }}
+    >
       {tabs.map((t) => {
         const Icon = t.icon;
         const active = t.id === value;
@@ -30,6 +38,6 @@ export function SessionTabBar({ tabs, value, onChange }: { tabs: TabEntry[]; val
           </button>
         );
       })}
-    </nav>
+    </ScrollStrip>
   );
 }

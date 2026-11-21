@@ -8,6 +8,7 @@ import { useUi } from "@/state/ui-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@infantry/ui";
 import { ScrollArea } from "@infantry/ui";
 import { KeyHint } from "@infantry/ui";
+import { ScrollStrip } from "@/components/layout/scroll-strip";
 import { useTabs } from "@/plugins/catalog";
 
 export function RightPanel() {
@@ -18,7 +19,8 @@ export function RightPanel() {
   return (
     <aside aria-label="Side panel" className="flex h-full w-[360px] max-w-full shrink-0 flex-col border-l bg-background">
       <Tabs value={value} onValueChange={(v) => ui.set("rightTab", v)} className="flex min-h-0 flex-1 flex-col gap-0">
-        <TabsList variant="line" className="no-scrollbar h-10! w-full shrink-0 justify-start gap-1 overflow-x-auto border-b px-2">
+        <ScrollStrip label="tabs" activeKey={value} className="shrink-0 border-b px-2">
+        <TabsList variant="line" className="h-10! w-max shrink-0 justify-start gap-1 px-0">
           {tabs.map((t) => (
             <TabsTrigger key={t.id} value={t.id} className="flex-none gap-1.5 px-2 text-xs data-[state=active]:text-danger after:bg-danger!">
               <t.icon className="size-3.5" />
@@ -27,6 +29,7 @@ export function RightPanel() {
             </TabsTrigger>
           ))}
         </TabsList>
+        </ScrollStrip>
         <ScrollArea className="min-h-0 flex-1">
           <div className="p-3">
             {tabs.map((t) => (
