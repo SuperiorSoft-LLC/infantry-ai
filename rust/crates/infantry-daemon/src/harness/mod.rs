@@ -5,7 +5,7 @@
 //! `pty-screen`, `file-tail`, `hook-channel`) and whether it keeps one process across turns.
 //!
 //! Implementations: [`stub`] (scripted, no process; `INFANTRY_PROVIDER=stub`) and [`driven`], which runs any
-//! `infantry-harness` crate (one agent CLI each) on the local runner. The registry is [`by_name`].
+//! `infantry-harness` crate (one agent CLI each) on the local runner. The registry is [`HarnessRegistry`], built by `main.rs`.
 
 pub mod driven;
 pub mod launch;
@@ -172,34 +172,46 @@ pub trait HarnessSession: Send {
     }
 }
 
-/// The provider a daemon runs when none is named.
-pub const DEFAULT_PROVIDER: &str = infantry_harness_claude::ID;
-
-/// The agent-CLI harness (the neutral `infantry-harness` trait: models, sign-in, launch) for a provider id.
-pub fn neutral(name: &str) -> Option<std::sync::Arc<dyn infantry_harness::Harness>> {
-    Some(match name {
-        infantry_harness_claude::ID => std::sync::Arc::new(infantry_harness_claude::ClaudeHarness::default()),
-        infantry_harness_codex::ID => std::sync::Arc::new(infantry_harness_codex::CodexHarness::default()),
-        infantry_harness_opencode::ID => std::sync::Arc::new(infantry_harness_opencode::OpenCodeHarness::default()),
-        infantry_harness_pi::ID => std::sync::Arc::new(infantry_harness_pi::PiHarness::default()),
-        // HARNESS REGISTRATION SPOT: a new provider crate adds one arm here and its id to
-        // [`REGISTERED`]; nothing else in the daemon names a provider.
-        _ => return None,
-    })
+/// The agent-CLI harnesses a daemon can run, in listing order, and the one it runs when none is named. The daemon
+/// library names no harness crate: the composition root (`main.rs`) builds this list and passes it in.
+#[derive(Clone, Default)]
+pub struct HarnessRegistry {
+    list: Vec<std::sync::Arc<dyn infantry_harness::Harness>>,
+    default: String,
 }
 
-/// The harness for a provider name, or None when this daemon has no such harness.
-pub fn by_name(name: &str) -> Option<Box<dyn Harness>> {
-    if name == stub::NAME {
-        return Some(Box::new(stub::Stub::default()));
+impl HarnessRegistry {
+    /// `list` in the order the harness list shows them; the first is the default.
+    pub fn new(list: Vec<std::sync::Arc<dyn infantry_harness::Harness>>) -> HarnessRegistry {
+        let default = list.first().map(|h| h.id().to_string()).unwrap_or_default();
+        HarnessRegistry { list, default }
     }
-    neutral(name).map(|h| Box::new(driven::Driven::new(h)) as Box<dyn Harness>)
-}
 
-/// Every provider this build can run, in the order the harness list shows them (the stub is a test harness, not listed).
-pub const REGISTERED: &[&str] = &[infantry_harness_claude::ID, infantry_harness_codex::ID, infantry_harness_opencode::ID, infantry_harness_pi::ID];
+    /// The provider a daemon runs when none is named (empty when the registry is).
+    pub fn default_id(&self) -> &str {
+        &self.default
+    }
 
-/// Every registered harness except `skip` (the daemon's default, already built).
-pub fn all_except(skip: &str) -> Vec<std::sync::Arc<dyn Harness>> {
-    REGISTERED.iter().filter(|n| **n != skip).filter_map(|n| by_name(n)).map(std::sync::Arc::from).collect()
+    /// The provider ids, in listing order.
+    pub fn names(&self) -> Vec<String> {
+        self.list.iter().map(|h| h.id().to_string()).collect()
+    }
+
+    /// The agent-CLI harness (the neutral `infantry-harness` trait: models, sign-in, launch) for a provider id.
+    pub fn neutral(&self, name: &str) -> Option<std::sync::Arc<dyn infantry_harness::Harness>> {
+        self.list.iter().find(|h| h.id() == name).cloned()
+    }
+
+    /// The harness for a provider name, or None when this daemon has no such harness.
+    pub fn by_name(&self, name: &str) -> Option<Box<dyn Harness>> {
+        if name == stub::NAME {
+            return Some(Box::new(stub::Stub::default()));
+        }
+        self.neutral(name).map(|h| Box::new(driven::Driven::new(h)) as Box<dyn Harness>)
+    }
+
+    /// Every registered harness except `skip` (the daemon's default, already built).
+    pub fn all_except(&self, skip: &str) -> Vec<std::sync::Arc<dyn Harness>> {
+        self.list.iter().filter(|h| h.id() != skip).filter_map(|h| self.by_name(h.id())).map(std::sync::Arc::from).collect()
+    }
 }

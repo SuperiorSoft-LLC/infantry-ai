@@ -117,7 +117,7 @@ pub const BASELINE: &[(&str, &[&str], &str)] = &[
     ("crates/infantry-daemon/src/health.rs", &["\"worktree"], "DECOUPLE-7"),
     ("crates/infantry-daemon/src/pods.rs", &["\"pod_"], "DECOUPLE-10"),
     (
-        "crates/infantry-daemon/src/harness/mod.rs",
+        "crates/infantry-daemon/src/main.rs",
         &["infantry_harness_claude", "infantry_harness_codex", "infantry_harness_opencode", "infantry_harness_pi"],
         "DECOUPLE-6",
     ),

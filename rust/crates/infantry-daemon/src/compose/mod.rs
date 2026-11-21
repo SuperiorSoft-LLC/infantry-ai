@@ -161,7 +161,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         log_line("infantry.db: a fresh database; the full schema was created");
     }
     let bus = EventBus::new(BUS_CAPACITY);
-    for h in crate::harness::all_except(daemon.harness.name()) {
+    for h in daemon.registry().all_except(daemon.harness.name()) {
         daemon.add_harness(h);
     }
     let repo = crate::auth::env(REPO_ENV).map(PathBuf::from);
