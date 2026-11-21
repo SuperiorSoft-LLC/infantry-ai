@@ -29,8 +29,6 @@ pub const API_CRATES: &[&str] = &["infantry-plugin-wit", "infantry-plugin-sdk", 
 pub const CROSSINGS: &[(&str, &str, &str)] = &[
     // Rule 1: core links a feature or a concrete harness.
     ("infantry-daemon", "infantry-board", "LIC-6 to LIC-10: the board wiring becomes a module in its own Apache crate, registered by the distribution"),
-    // Rule 1: the plugin loader is part of the kernel (the owner's boot model), but its crate is Apache.
-    ("infantry-daemon", "infantry-plugin-host", "LIC-2: owner decides the loader's side (proposed: MPL-2.0)"),
 ];
 
 /// `.rs` files with no SPDX header, `(path from rust/, the move that adds it)`.

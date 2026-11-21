@@ -2,7 +2,7 @@
 
 # Licensing: the foundation and everything on top
 
-> **Rust crates:** the same split holds on main; each crate's `Cargo.toml` names its licence. MPL-2.0 (core): `infantry-cli`, `infantry-core`, `infantry-daemon`, `infantry-knowledge`, `infantry-mail`, `infantry-migrate`, `infantry-proc`, `infantry-projects`, `infantry-protocol`, `infantry-runner`, `infantry-runner-link`, `infantry-runner-local`, `infantry-scripting`, `infantry-usage`, `infantry-vault`. Apache-2.0: the API crates (`infantry-plugin-wit`, `infantry-plugin-sdk`, `infantry-harness`, `infantry-orchestrator-api`, `infantry-runner-api`), `infantry-plugin-host`, the board (`infantry-board`), the harness crates (`infantry-harness-claude`, `-codex`, `-opencode`, `-pi`), `infantry-distribution`, `infantry-guards`, `conformance` and the app (`app/src-tauri`).
+> **Rust crates:** the same split holds on main; each crate's `Cargo.toml` names its licence. MPL-2.0 (core): `infantry-cli`, `infantry-core`, `infantry-daemon`, `infantry-knowledge`, `infantry-mail`, `infantry-migrate`, `infantry-plugin-host`, `infantry-proc`, `infantry-projects`, `infantry-protocol`, `infantry-runner`, `infantry-runner-link`, `infantry-runner-local`, `infantry-scripting`, `infantry-usage`, `infantry-vault`. Apache-2.0: the API crates (`infantry-plugin-wit`, `infantry-plugin-sdk`, `infantry-harness`, `infantry-orchestrator-api`, `infantry-runner-api`), the board (`infantry-board`), the harness crates (`infantry-harness-claude`, `-codex`, `-opencode`, `-pi`), `infantry-distribution`, `infantry-guards`, `conformance` and the app (`app/src-tauri`).
 
 > The split is applied in the repo (license
 > texts in `LICENSES/`, SPDX headers, per-directory `LICENSE` files, `LicenseMapGuardTest`); it is official

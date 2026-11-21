@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
 //! The guard around every call into one plugin (the behaviour of the Kotlin `PluginGuard`, rebuilt for WASM and
 //! sidecars):

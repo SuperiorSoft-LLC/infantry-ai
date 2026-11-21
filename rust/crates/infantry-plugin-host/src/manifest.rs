@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
 //! `module.json`, the same schema as the Kotlin `ModuleManifest` (only the keys the daemon half needs are typed;
 //! the rest is ignored). The Rust daemon adds `daemon.component` (a `.wasm` in the module folder) and

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
 //! The sidecar runtime: a native process (`daemon.sidecar {exe, args}`) speaking the JSON-lines mapping of the
 //! daemon-plugin world over stdio (`infantry_plugin_wit::jsonl`). Its imports are answered by the same

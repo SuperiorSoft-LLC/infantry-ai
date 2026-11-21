@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
 //! The plugin host's test guest.
 use infantry_plugin_sdk::types::{CallContext, Caller, Frame};

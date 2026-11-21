@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
 //! The WIT imports for ONE plugin, runtime-neutral: the WASM linker and the sidecar's JSON-lines `import` lines both
 //! end here. This is where the per-plugin rules live: grants, the `<Module>.` settings prefix, the endpoint filter

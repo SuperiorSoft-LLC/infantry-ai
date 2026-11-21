@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
 //! Builds the test guests (once per test binary) and lays out module folders in a temp dir.
 #![allow(dead_code)]

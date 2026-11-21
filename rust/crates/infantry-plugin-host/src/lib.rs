@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
 //! The Infantry AI daemon plugin host (docs/rust-port/PLAN.md section 2).
 //!
