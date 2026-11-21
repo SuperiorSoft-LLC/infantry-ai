@@ -568,6 +568,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         }
         config
     };
+    let bundled_dir = install_config.bundled.clone();
     let plugin_sources = Arc::new(sources::SourceStore::load(state_dir));
     plugin_sources.set_max_bytes(sources::limit_of(settings::SettingsUnit { db: db.clone() }.app(sources::MAX_FILE_BYTES_KEY)));
     let plugin_set = plugins::start(state_dir, plugins_dir(), bus.clone(), handle.clone(), disabled.clone(), plugins::InstallSeam { config: install_config, boot: boot.clone(), late: late.clone(), sources: plugin_sources.clone(), signers: Arc::new(sources::Signers::load(state_dir)) });
@@ -676,6 +677,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         state_dir: state_dir.to_path_buf(),
         projects: projects.store.clone(),
         bundles: bundles.clone(),
+        bundled_dir,
     }));
     for u in units {
         let name = u.name();
