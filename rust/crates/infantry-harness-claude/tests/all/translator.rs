@@ -308,6 +308,56 @@ fn trust_menu_reads_the_row_with_the_pointer() {
 }
 
 #[test]
+fn trust_menu_reads_the_recorded_screens_of_the_current_cli_with_either_pointer() {
+    assert_eq!(screen::trust_menu(&screen("trust_v2330_on_no")), TrustMenu::OnNo);
+    assert_eq!(screen::trust_menu(&screen("trust_v2330_on_yes")), TrustMenu::OnYes);
+    // A claude started with no TERM (a daemon the desktop app started) draws `>` for `❯`: the same menu, read the same way.
+    assert_eq!(screen::trust_menu(&screen("trust_v2330_ascii_on_no")), TrustMenu::OnNo);
+    assert_eq!(screen::trust_menu(&screen("trust_v2330_ascii_on_yes")), TrustMenu::OnYes);
+}
+
+#[test]
+fn a_greater_than_sign_that_is_not_in_front_of_an_option_is_no_pointer() {
+    let rows: Vec<String> = ["Is this folder a > b? Yes, I trust this folder >", "   No, exit"].map(String::from).to_vec();
+    assert_eq!(screen::trust_menu(&rows), TrustMenu::NoPointer);
+}
+
+#[test]
+fn the_folder_trust_menu_is_answered_when_the_cli_drew_ascii_glyphs() {
+    // The owner's failure ("new agent: thinking, then failed"): no TERM in the daemon, so the CLI drew `>`, the menu read as
+    // having no pointer and was never answered.
+    let mut r = Rig::new(ApprovalMode::Ask);
+    r.send("x");
+    r.screen("trust_v2330_ascii_on_no");
+    r.now += T.key_gap_ms;
+    r.tick();
+    assert_eq!(r.written, vec![tty::DOWN]);
+    r.screen("trust_v2330_ascii_on_yes");
+    r.now += T.key_gap_ms;
+    r.tick();
+    assert_eq!(r.written, vec![tty::DOWN, tty::ENTER]);
+    assert!(r.seen.iter().any(|e| matches!(e, HarnessEvent::Warning(w) if w.contains("folder trust answered"))));
+    r.event("start");
+    r.screen("welcome");
+    r.now += T.ready_after_start_ms;
+    r.tick();
+    assert_eq!(r.written.last().unwrap(), &paste("x"), "the prompt goes in once the menu is answered");
+}
+
+#[test]
+fn the_current_folder_trust_menu_is_answered_down_then_enter() {
+    let mut r = Rig::new(ApprovalMode::Ask);
+    r.send("x");
+    r.screen("trust_v2330_on_no");
+    r.now += T.key_gap_ms;
+    r.tick();
+    r.screen("trust_v2330_on_yes");
+    r.now += T.key_gap_ms;
+    r.tick();
+    assert_eq!(r.written, vec![tty::DOWN, tty::ENTER]);
+}
+
+#[test]
 fn the_folder_trust_menu_is_answered_from_the_grid_down_then_enter_before_any_paste() {
     let mut r = Rig::new(ApprovalMode::AllowAll);
     r.send("x");
@@ -353,6 +403,49 @@ fn a_cli_that_never_comes_up_fails_its_queued_turns_with_the_screen() {
     let ends = r.ends();
     assert_eq!(ends[0].0, TurnEnd::Failed);
     assert!(ends[0].1.as_deref().unwrap().contains("Loading..."), "{ends:?}");
+}
+
+#[test]
+fn a_trust_menu_whose_pointer_cannot_be_read_is_said_once_and_named_when_the_boot_times_out() {
+    let mut r = Rig::new(ApprovalMode::Ask);
+    r.send("x");
+    r.screen("trust_no_pointer");
+    r.now += T.trust_retry_ms;
+    r.tick();
+    r.now += T.trust_retry_ms;
+    r.tick();
+    let said = r.seen.iter().filter(|e| matches!(e, HarnessEvent::Warning(w) if w.contains("no selection pointer"))).count();
+    assert_eq!(said, 1, "said once, not on every tick: {:?}", r.seen);
+    assert!(r.written.is_empty(), "no key goes into a menu whose selected row is unknown");
+    r.now = T.boot_timeout_ms + 1;
+    r.tick();
+    let ends = r.ends();
+    assert_eq!(ends[0].0, TurnEnd::Failed);
+    let why = ends[0].1.as_deref().unwrap();
+    assert!(why.contains("folder-trust question") && why.contains("could not answer"), "names what it was stuck on: {why}");
+    assert!(why.contains("running `claude`") && why.contains("restart this agent"), "says what to do: {why}");
+    assert!(why.contains("Yes, I trust this folder"), "shows the screen: {why}");
+}
+
+#[test]
+fn a_boot_that_times_out_on_a_screen_nothing_knows_says_what_to_do_about_it() {
+    let mut r = Rig::new(ApprovalMode::Ask);
+    r.send("x");
+    r.rows = vec!["Some new question: 1. Yes 2. No".into()];
+    r.now = T.boot_timeout_ms + 1;
+    r.tick();
+    let why = r.ends()[0].1.clone().unwrap();
+    assert!(!why.contains("folder-trust"), "not blamed on a menu it never saw: {why}");
+    assert!(why.contains("running `claude` in this folder") && why.contains("restart this agent"), "{why}");
+    assert!(why.contains("Some new question"), "{why}");
+}
+
+#[test]
+fn the_screen_in_a_failure_reason_starts_at_the_first_row_with_words() {
+    let tail = screen::tail_text(&screen("trust_v2330_on_no"), 600);
+    assert!(tail.starts_with("Accessing workspace:"), "{tail}");
+    assert!(!tail.contains("────"), "a rule says nothing: {tail}");
+    assert!(tail.ends_with("Enter to confirm · Esc to cancel"), "{tail}");
 }
 
 #[test]

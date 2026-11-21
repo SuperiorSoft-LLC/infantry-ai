@@ -3,5 +3,7 @@
 //! One integration-test binary for infantry-harness-claude: each module is one former `tests/<name>.rs` file, so the crate links once.
 
 mod common;
+mod launch;
 mod live;
+mod live_trust;
 mod translator;

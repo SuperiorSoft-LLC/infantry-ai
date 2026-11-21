@@ -134,6 +134,8 @@ pub struct Interactive {
     trust_seen: bool,
     trust_down_at: Option<u64>,
     trust_done: bool,
+    /// The "menu on screen, no pointer to read" warning went out (said once).
+    trust_warned: bool,
     interrupted_seen: bool,
     input_cleared_at: Option<u64>,
     api_error: Option<String>,
@@ -171,6 +173,7 @@ impl Interactive {
             trust_seen: false,
             trust_down_at: None,
             trust_done: false,
+            trust_warned: false,
             interrupted_seen: false,
             input_cleared_at: None,
             api_error: None,
@@ -198,6 +201,22 @@ impl Interactive {
 
     fn screen_tail(&self) -> String {
         screen::tail_text(&self.rows, self.t.screen_tail_chars)
+    }
+
+    /// Why the CLI never came up, for the waiting turn: what the harness was stuck on, what to do, and the screen.
+    fn boot_failure(&self) -> String {
+        let secs = self.t.boot_timeout_ms / 1000;
+        let screen = self.screen_tail();
+        if self.trust_seen && !self.trust_done {
+            return format!(
+                "the interactive claude did not come up in {secs} s: it is stopped at its folder-trust question and the harness could not answer it. \
+                 Trust the folder once by running `claude` in it in a terminal, then restart this agent. screen: {screen}"
+            );
+        }
+        format!(
+            "the interactive claude did not come up in {secs} s. If its screen below is a question the harness does not know, answer it once \
+             by running `claude` in this folder in a terminal, then restart this agent. screen: {screen}"
+        )
     }
 
     /// One stream-json record as the raw line plus its neutral events.
@@ -323,7 +342,16 @@ impl Interactive {
                     self.trust_done = true;
                 }
             }
-            TrustMenu::NoPointer => self.trust_seen = true,
+            TrustMenu::NoPointer => {
+                self.trust_seen = true;
+                // The pointer is drawn with the options; still missing once the screen is quiet, nothing can be answered.
+                if !self.trust_warned && quiet >= self.t.trust_retry_ms {
+                    self.trust_warned = true;
+                    out.push(HarnessEvent::Warning(
+                        "claude: its folder-trust menu is on screen but no selection pointer was found in it, so it cannot be answered".into(),
+                    ));
+                }
+            }
             TrustMenu::OnYes => {
                 self.trust_seen = true;
                 if quiet >= self.t.key_gap_ms {
@@ -472,8 +500,7 @@ impl Interactive {
                 self.paste(&prompt);
                 self.active = Some(Turn { prompt, pasted_at: Some(now), watched, ..Default::default() });
             } else if !self.queue.is_empty() && now > self.t.boot_timeout_ms && self.started_at.is_none() {
-                let reason =
-                    format!("the interactive claude did not come up in {} s; screen: {}", self.t.boot_timeout_ms / 1000, self.screen_tail());
+                let reason = self.boot_failure();
                 self.fail_queue(&reason, out);
             }
             if self.unclaimed_stop_at.is_some_and(|at| now.saturating_sub(at) >= self.t.stop_claim_ms) {

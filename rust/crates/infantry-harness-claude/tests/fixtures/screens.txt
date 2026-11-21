@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Screens of the interactive claude as the runner's grid shows them (visible rows, trailing blanks trimmed).
 # Each screen starts with a `== name` line; the rows follow until the next one.
+# The trust_v2330_* screens are recorded from claude 2.1.330 (Windows ConPTY, a folder it had never been started in; the path is
+# made up and the rules shortened). Its folder-trust menu has the pointer on "No, exit" first: Down moves it, Enter takes it.
+# trust_v2330_ascii_* is the same menu from a claude started WITHOUT a TERM (a daemon the desktop app started): its UI falls
+# back to ASCII glyphs, so the pointer is `>` and not `❯`.
 == trust_on_no
 ╭──────────────────────────────────────────────────────────────╮
 │ Do you trust the files in this folder?                       │
@@ -47,3 +51,75 @@
  Choose the text style that looks best with your terminal
  ❯ 1. Dark mode
    2. Light mode
+== trust_v2330_on_no
+────────────────────────────────────────────────────────────
+ Accessing workspace:
+
+ C:\Users\dev\work
+
+ Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If not, take a moment to review what's in this
+ folder first.
+
+ Claude Code'll be able to read, edit, and execute files here.
+
+ Trusting this folder loads .mcp.json here or above (MCP servers).
+ Security guide
+
+ ❯ No, exit
+   Yes, I trust this folder
+
+ Enter to confirm · Esc to cancel
+== trust_v2330_on_yes
+────────────────────────────────────────────────────────────
+ Accessing workspace:
+
+ C:\Users\dev\work
+
+ Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If not, take a moment to review what's in this
+ folder first.
+
+ Claude Code'll be able to read, edit, and execute files here.
+
+ Trusting this folder loads .mcp.json here or above (MCP servers).
+ Security guide
+
+   No, exit
+ ❯ Yes, I trust this folder
+
+ Enter to confirm · Esc to cancel
+== trust_v2330_ascii_on_no
+────────────────────────────────────────────────────────────
+ Accessing workspace:
+
+ C:\Users\dev\work
+
+ Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If not, take a moment to review what's in this
+ folder first.
+
+ Claude Code'll be able to read, edit, and execute files here.
+
+ Trusting this folder loads .mcp.json here or above (MCP servers).
+ Security guide
+
+ > No, exit
+   Yes, I trust this folder
+
+ Enter to confirm · Esc to cancel
+== trust_v2330_ascii_on_yes
+────────────────────────────────────────────────────────────
+ Accessing workspace:
+
+ C:\Users\dev\work
+
+ Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If not, take a moment to review what's in this
+ folder first.
+
+ Claude Code'll be able to read, edit, and execute files here.
+
+ Trusting this folder loads .mcp.json here or above (MCP servers).
+ Security guide
+
+   No, exit
+ > Yes, I trust this folder
+
+ Enter to confirm · Esc to cancel

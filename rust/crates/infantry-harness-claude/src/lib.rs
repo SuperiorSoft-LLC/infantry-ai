@@ -47,6 +47,11 @@ pub const ENV_REMOVE: [&str; 2] = ["CLAUDECODE", "CLAUDE_CODE_*"];
 pub const HOOK_TIMEOUT_SEC: u64 = 600;
 /// The terminal the interactive claude draws in.
 pub const PTY_SIZE: Size = Size { rows: 50, cols: 200 };
+/// The terminal type the interactive claude is told it draws in: the runner's grid is an xterm-compatible one, whatever
+/// terminal (or none: a daemon the desktop app started has no `TERM`) the daemon itself was started from. Without it the
+/// CLI's UI falls back to ASCII glyphs (`>` for `❯`) and the harness no longer reads its menus.
+pub const TERM_ENV: &str = "TERM";
+pub const TERM_VALUE: &str = "xterm-256color";
 
 pub const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
 
@@ -275,6 +280,10 @@ impl Harness for ClaudeHarness {
                 })
             }
             Mode::Interactive => {
+                // The request's own TERM (a caller that means a different terminal) wins; otherwise this terminal's.
+                if !spec.env.iter().any(|(k, _)| k.eq_ignore_ascii_case(TERM_ENV)) {
+                    spec.env.push((TERM_ENV.into(), TERM_VALUE.into()));
+                }
                 let tail = self
                     .transcript_path(&req.cwd, &session_id)
                     .map(|p| TailSpec { path: p.to_string_lossy().into_owned(), from: if resume { TailFrom::End } else { TailFrom::Start } })

@@ -181,6 +181,17 @@ Windows), exactly as you would run Claude Code yourself. The daemon types into t
 transcript the CLI writes; nothing about the CLI is patched or spoofed. Its requests are the CLI's own, so usage
 behaves like normal Claude Code use. You get this without changing anything.
 
+Two things a person's terminal gives the CLI, which the harness gives it too (`infantry-harness-claude`):
+
+- **A terminal type.** The harness sets `TERM=xterm-256color` on the CLI (a `TERM` the launch request names wins). A daemon
+  the desktop app starts has no `TERM`, and a CLI that inherits none draws ASCII glyphs (`>` for `❯`), which breaks reading
+  its menus.
+- **The folder-trust answer.** The first start in a folder the CLI has never trusted shows its "Accessing workspace / Quick
+  safety check" question. Starting an agent in a folder is your consent, so the harness answers it as a person would (Down to
+  "Yes, I trust this folder", then Enter), reading the selected row from the screen (`❯`, or `>`). When the menu cannot be
+  read, or the CLI sits on a screen the harness does not know, the turn fails after the boot timeout with the screen text and
+  what to do (trust the folder once by running `claude` in it in a terminal, then restart the agent).
+
 The setting is `harness.claude.mode`:
 
 | Value | What runs | Trade-off |
