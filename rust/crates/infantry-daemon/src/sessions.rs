@@ -99,12 +99,14 @@ pub struct Config {
     pub sent_ids_kept: usize,
     /// Frames kept per session for `replay_request`.
     pub replay_kept: usize,
+    /// The agent-CLI harnesses this daemon can run (built by the composition root; empty = only the one `Daemon::new` got).
+    pub registry: crate::harness::HarnessRegistry,
 }
 
 impl Config {
     /// The defaults Kotlin ships with.
     pub fn new(state_dir: PathBuf, default_cwd: PathBuf) -> Config {
-        Config { state_dir, default_cwd, kill_settle_ms: KILL_SETTLE_MS, queue_max: QUEUE_MAX, sent_ids_kept: SENT_IDS_KEPT, replay_kept: REPLAY_KEPT }
+        Config { state_dir, default_cwd, kill_settle_ms: KILL_SETTLE_MS, queue_max: QUEUE_MAX, sent_ids_kept: SENT_IDS_KEPT, replay_kept: REPLAY_KEPT, registry: Default::default() }
     }
 }
 
@@ -410,6 +412,11 @@ impl Daemon {
             Some(p) if p == self.harness.name() => Some(self.harness.clone()),
             Some(p) => self.harnesses.lock().unwrap().iter().find(|h| h.name() == p).cloned(),
         }
+    }
+
+    /// The harness registry the composition root passed in.
+    pub fn registry(&self) -> &crate::harness::HarnessRegistry {
+        &self.cfg.registry
     }
 
     /// The provider names this daemon can run, the default first.

@@ -386,7 +386,7 @@ impl AgentTools {
                 let providers = self.daemon.providers();
                 let mut out = Vec::new();
                 for (i, p) in providers.iter().enumerate() {
-                    let Some(h) = crate::harness::neutral(p) else {
+                    let Some(h) = self.daemon.registry().neutral(p) else {
                         out.push(format!("{p}{}", if i == 0 { " (default)" } else { "" }));
                         continue;
                     };

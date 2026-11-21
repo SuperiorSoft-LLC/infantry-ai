@@ -26,6 +26,17 @@ pub const KOTLIN_APP_PORT: u16 = 8797;
 /// The default state dir under `%LOCALAPPDATA%` (the Rust app's own, never the Kotlin app's `InfantryAI`).
 pub const STATE_SUBDIR: [&str; 2] = ["SuperiorSoft", "InfantryAI-Rust"];
 
+/// The agent-CLI harnesses this build can run, in the order the harness list shows them; the first is the default.
+/// HARNESS REGISTRATION SPOT: a new provider crate adds one line here; nothing else in the daemon names a provider.
+fn harness_registry() -> harness::HarnessRegistry {
+    harness::HarnessRegistry::new(vec![
+        Arc::new(infantry_harness_claude::ClaudeHarness::default()),
+        Arc::new(infantry_harness_codex::CodexHarness::default()),
+        Arc::new(infantry_harness_opencode::OpenCodeHarness::default()),
+        Arc::new(infantry_harness_pi::PiHarness::default()),
+    ])
+}
+
 fn default_state_dir() -> PathBuf {
     if let Some(l) = std::env::var_os("LOCALAPPDATA").filter(|v| !v.is_empty()) {
         return STATE_SUBDIR.iter().fold(PathBuf::from(l), |p, s| p.join(s));
@@ -66,14 +77,16 @@ fn main() {
     }
     // RUST-BUG e0c433c9: a panic is written to <state>/health/panics.log, and the next start's health event names it.
     infantry_daemon::health::install_panic_log(&state_dir);
-    let provider = arg("--provider").or_else(|| auth::env("INFANTRY_PROVIDER")).unwrap_or_else(|| harness::DEFAULT_PROVIDER.into());
-    let harness: Arc<dyn harness::Harness> = match harness::by_name(provider.trim()) {
+    let registry = harness_registry();
+    let provider = arg("--provider").or_else(|| auth::env("INFANTRY_PROVIDER")).unwrap_or_else(|| registry.default_id().into());
+    let harness: Arc<dyn harness::Harness> = match registry.by_name(provider.trim()) {
         Some(h) => Arc::from(h),
         None => fail(format!("no harness named `{provider}`")),
     };
     let token = auth::token_from_environment().unwrap_or_else(|e| fail(e));
     let policy = AccessPolicy::new(&host, token.as_deref()).unwrap_or_else(|e| fail(e));
-    let cfg = Config::new(state_dir.clone(), std::env::current_dir().unwrap_or_else(|_| state_dir.clone()));
+    let mut cfg = Config::new(state_dir.clone(), std::env::current_dir().unwrap_or_else(|_| state_dir.clone()));
+    cfg.registry = registry;
     let daemon = Daemon::new(harness, cfg).unwrap_or_else(|e| fail(e));
     let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap_or_else(|e| fail(e.to_string()));
     // Every unit, registered over the session manager (inside the runtime: units start background tasks).

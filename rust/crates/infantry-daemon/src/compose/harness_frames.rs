@@ -57,7 +57,7 @@ fn build(daemon: &Daemon) -> Listing {
     let mut providers = Vec::new();
     let mut models = Vec::new();
     for (i, p) in daemon.providers().iter().enumerate() {
-        let Some(h) = crate::harness::neutral(p) else {
+        let Some(h) = daemon.registry().neutral(p) else {
             providers.push(json!({ "id": p, "default": i == 0, "available": true }));
             continue;
         };
