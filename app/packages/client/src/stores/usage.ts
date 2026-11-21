@@ -303,11 +303,12 @@ export function meterName(meter: string): string {
 }
 
 /**
- * The harnesses the Usage tab has no meter card for but can still list: installed, saying in `usageNote` why the daemon
- * reads no plan limit for them, and not already a meter (a worker running on one adds its own card). The daemon decides
- * which harness has a note; nothing here names a harness.
+ * The harnesses the Usage tab has no meter card for but can still list, each with a reason: it cannot run here (the
+ * daemon's `unavailableReason`) or it runs and the daemon reads no plan limit for it (its `usageNote`). A harness that is
+ * already a meter is left out (a worker running on one adds its own card). The daemon states the reasons; nothing here
+ * names a harness.
  */
 export function unmeteredHarnesses(harnesses: HarnessInfo[], meters: MeterUsage[]): HarnessInfo[] {
   const metered = new Set(meters.map((m) => m.meter));
-  return harnesses.filter((h) => h.available !== false && !!h.usageNote?.trim() && !metered.has(h.id));
+  return harnesses.filter((h) => !metered.has(h.id) && (h.available === false || !!h.usageNote?.trim()));
 }

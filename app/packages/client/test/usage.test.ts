@@ -57,14 +57,18 @@ describe("harnesses without a meter", () => {
     { id: "claude", available: true },
     { id: "pi", available: true, usageNote: "pi has no plan of its own." },
     { id: "codex", available: true, usageNote: "   " },
-    { id: "gone", available: false, usageNote: "not installed, so not listed" },
+    { id: "gone", available: false, usageNote: "cannot run, and says why it has no meter" },
+    { id: "quiet", available: false, unavailableReason: "quiet is not signed in" },
     { id: "other", usageNote: "availability not stated: listed" },
   ];
 
-  it("lists the installed ones that say why, unless a meter already carries their name", () => {
-    expect(unmeteredHarnesses(harnesses, [meter()]).map((h) => h.id)).toEqual(["pi", "other"]);
+  it("lists the ones that cannot run or say why they have no meter, unless a meter already carries their name", () => {
+    // one that runs and states nothing (claude, codex) has no card of its own
+    expect(unmeteredHarnesses(harnesses, [meter()]).map((h) => h.id)).toEqual(["pi", "gone", "quiet", "other"]);
     // a worker running on pi adds its own meter card, so the note card steps aside
-    expect(unmeteredHarnesses(harnesses, [meter(), meter({ meter: "pi", source: "none", percent: null })]).map((h) => h.id)).toEqual(["other"]);
+    expect(unmeteredHarnesses(harnesses, [meter(), meter({ meter: "pi", source: "none", percent: null })]).map((h) => h.id)).toEqual(["gone", "quiet", "other"]);
+    // a meter that is itself down is still one card, not two
+    expect(unmeteredHarnesses([{ id: "claude", available: false }], [meter()])).toEqual([]);
     expect(unmeteredHarnesses([], [meter()])).toEqual([]);
   });
 });

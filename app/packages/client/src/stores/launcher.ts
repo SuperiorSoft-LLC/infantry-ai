@@ -118,9 +118,16 @@ export function modelsFor(harness: string | null, harnesses: HarnessInfo[], cata
  * none still says it cannot run.
  */
 export function unavailableLine(harnesses: HarnessInfo[]): string | null {
-  const down = harnesses.filter((h) => h.available === false);
-  if (down.length === 0) return null;
-  return down.map((h) => `${h.id}: ${h.unavailableReason?.trim() || "cannot run on this machine"}`).join(" · ");
+  const down = harnesses.flatMap((h) => {
+    const why = whyUnavailable(h);
+    return why ? [`${h.id}: ${why}`] : [];
+  });
+  return down.length === 0 ? null : down.join(" · ");
+}
+
+/** Why this one harness cannot run here (the daemon states it; none stated still says it cannot), or null when it can. */
+export function whyUnavailable(h: HarnessInfo): string | null {
+  return h.available === false ? h.unavailableReason?.trim() || "cannot run on this machine" : null;
 }
 
 /** What the role dialog's model pin suggests (a role binds to any harness the daemon runs, metered or not). */

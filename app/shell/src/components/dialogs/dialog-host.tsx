@@ -28,7 +28,10 @@ export function DialogHost() {
   // UI-RESUME-WEB-1: Resume runs only in the embedded runner; anywhere else no dialog offers it.
   const dialog = ui.dialog === "resume" && !localMode ? null : ui.dialog;
   useEffect(() => {
-    if (dialog === "new-agent") setAgent(EMPTY_DRAFT);
+    // The new-agent draft is cleared when its dialog closes, not when it opens: the body seeds the default harness as it
+    // mounts (its effect runs before this one), so a reset on open wiped that whenever the harness list was already loaded
+    // and left "Pick a harness" with Add disabled.
+    if (dialog !== "new-agent") setAgent(EMPTY_DRAFT);
     if (dialog === "resume") setPicked(null);
   }, [dialog]);
   if (!dialog) return <PluginSettingsDialog />;

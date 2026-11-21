@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 import { describe, expect, it } from "vitest";
-import { EMPTY_DRAFT, addBlockedReason, pinOptions, rankRoles, unavailableLine, withDefaults, withRole, type HarnessInfo, type ModelGroup } from "../src";
+import { EMPTY_DRAFT, addBlockedReason, pinOptions, rankRoles, unavailableLine, whyUnavailable, withDefaults, withRole, type HarnessInfo, type ModelGroup } from "../src";
 
 const roles = ["pm", "frontend", "backend"].map((id) => ({ id, name: id, color: "#f00", persona: "", source: "BUILT_IN" as const, icon: "", description: "" }));
 const harnesses: HarnessInfo[] = [{ id: "claude", default: true, defaultModel: "sonnet" }, { id: "pi" }];
@@ -34,6 +34,11 @@ describe("harness picker and role pin", () => {
       { id: "codex", available: false, unavailableReason: "  " },
     ];
     expect(unavailableLine(down)).toBe("pi: pi is not installed (not on PATH) · codex: cannot run on this machine");
+    // the same wording for one harness, as the Usage tab card shows it
+    expect(whyUnavailable(down[1])).toBe("pi is not installed (not on PATH)");
+    expect(whyUnavailable(down[2])).toBe("cannot run on this machine");
+    expect(whyUnavailable(down[0])).toBeNull();
+    expect(whyUnavailable({ id: "x" })).toBeNull();
   });
 
   it("offers a role pin every harness the daemon runs, metered or not, and its models", () => {

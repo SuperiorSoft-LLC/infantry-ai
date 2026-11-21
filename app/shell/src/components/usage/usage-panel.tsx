@@ -3,7 +3,7 @@
 // Usage tab: the pacing rule, then one card per plan account (live from the daemon's usage_report).
 import { useEffect, useState } from "react";
 import { Gauge, RefreshCw, X } from "lucide-react";
-import { meterName, ruleLine, unmeteredHarnesses, updatedLine } from "@infantry/client";
+import { meterName, ruleLine, unmeteredHarnesses, updatedLine, whyUnavailable } from "@infantry/client";
 import { EmptyState, IconButton, PanelCard, SectionLabel, cn } from "@infantry/ui";
 import { PacingCard } from "./pacing-card";
 import { daemonNote } from "@/daemon/daemon";
@@ -34,7 +34,7 @@ export function UsageMeters({ grid }: { grid?: boolean }) {
       />
     );
   if (!report) return <EmptyState icon={<Gauge className="size-5" />} title="Reading usage" hint="Waiting for the daemon's first usage report." />;
-  // Harnesses with no plan-limit meter still get a card that says why (their `usageNote` on the `providers` row).
+  // Harnesses with no plan-limit meter still get a card that says why: it cannot run here, or its `usageNote`.
   const unmetered = unmeteredHarnesses(harnesses, report.meters);
   if (report.meters.length === 0 && unmetered.length === 0)
     return <EmptyState icon={<Gauge className="size-5" />} title="No plan accounts" hint="No live usage source answered and no ticket worker is running." />;
@@ -43,11 +43,17 @@ export function UsageMeters({ grid }: { grid?: boolean }) {
       {report.meters.map((m) => (
         <PacingCard key={m.meter} m={m} now={now} />
       ))}
-      {unmetered.map((h) => (
-        <PanelCard key={h.id} title={meterName(h.id)} action={<span className="text-xs text-muted-foreground">no plan limit read</span>}>
-          <p className="text-xs leading-5 text-muted-foreground">{h.usageNote}</p>
-        </PanelCard>
-      ))}
+      {unmetered.map((h) => {
+        const why = whyUnavailable(h);
+        return (
+          <PanelCard key={h.id} title={meterName(h.id)} action={<span className="text-xs text-muted-foreground">{why ? "cannot run here" : "no plan limit read"}</span>}>
+            <div className="space-y-1 text-xs leading-5 text-muted-foreground">
+              {why && <p className="text-warn">{why}</p>}
+              {h.usageNote?.trim() && <p>{h.usageNote}</p>}
+            </div>
+          </PanelCard>
+        );
+      })}
     </div>
   );
 }

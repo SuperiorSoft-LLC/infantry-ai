@@ -20,7 +20,7 @@ A **harness** is a Rust crate on the `infantry-harness` contract (layer L3). The
 - Gemini is named in the contract's design table only. There is no Gemini harness crate and it is not in the daemon's registered list (claude, codex, opencode, pi).
 - `INFANTRY_PROVIDER=stub` selects a scripted test harness with no process.
 - Each harness reports its models through `Harness::models`. The Kotlin model-picker settings below are not verified in Rust.
-- A harness whose plan limits the daemon does not read says why through `Harness::usage_note` (default: none). The `providers` row carries it as `usageNote`, and the Usage tab lists an installed harness with that text instead of leaving it out. Today `pi` and `codex` state one. The picker greys out a harness that cannot run and shows the row's `unavailableReason` under the Harness field.
+- A harness whose plan limits the daemon does not read says why through `Harness::usage_note` (default: none). The `providers` row carries it as `usageNote`, and the Usage tab lists that harness with the text instead of leaving it out. Today `pi` and `codex` state one. A harness that cannot run (not installed, not signed in) is listed there too, with the row's `unavailableReason`, and the picker greys it out and shows the same reason under the Harness field.
 
 ## Legacy (Kotlin) reference
 
