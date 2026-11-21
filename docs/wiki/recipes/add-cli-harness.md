@@ -6,7 +6,7 @@
 
 ## Rust: add a CLI harness (current)
 
-In the Rust framework a harness is a crate that implements `Harness` from `infantry-harness` (`id`, `capabilities`, `models`, `sign_in_problem`, `launch`) plus a `Translator`. `launch` returns a launch plan (the process to run and the translator). Copy the smallest one, `infantry-harness-codex`, and add the crate to `harness_registry()` in `rust/crates/infantry-distribution/src/main.rs`. The layer guard (`cargo test -p infantry-guards`) keeps the crate on L3. A JSON-descriptor or plugin route for harnesses is not verified in Rust.
+In the Rust framework a harness is a crate that implements `Harness` from `infantry-harness` (`id`, `capabilities`, `models`, `sign_in_problem`, `launch`, and `usage_note` when the daemon reads no plan limits for your CLI, so the Usage tab can say why) plus a `Translator`. `launch` returns a launch plan (the process to run and the translator). Copy the smallest one, `infantry-harness-codex`, and add the crate to `harness_registry()` in `rust/crates/infantry-distribution/src/main.rs`. The layer guard (`cargo test -p infantry-guards`) keeps the crate on L3. A JSON-descriptor or plugin route for harnesses is not verified in Rust.
 
 Build and test from `rust/`: `cargo build -p infantry-distribution` and `cargo test -p infantry-harness-<name>`. See [Harnesses](../Harnesses.md).
 

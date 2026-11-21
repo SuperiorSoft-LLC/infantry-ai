@@ -52,6 +52,25 @@ fn groups_of(harness: &str, ids: &[String]) -> Vec<(String, Vec<String>)> {
     vec![(harness.to_string(), ids.to_vec())]
 }
 
+/// One harness's `providers` row and its `models` groups. `usageNote` is set only for a harness that says why the Usage
+/// tab has no meter card for it ([`infantry_harness::Harness::usage_note`]).
+fn rows_of(id: &str, default: bool, h: &dyn infantry_harness::Harness, probe: &dyn infantry_harness::Probe) -> (Value, Vec<Value>) {
+    let problem = h.sign_in_problem(probe);
+    let ids: Vec<String> = h.models(probe).into_iter().map(|m| m.id).collect();
+    let mut row = json!({
+        "id": id, "default": default, "models": ids, "available": problem.is_none(), "unavailableReason": problem,
+        "efforts": EFFORTS, "effort": "supported",
+    });
+    if let Some(note) = h.usage_note() {
+        row["usageNote"] = Value::String(note);
+    }
+    let groups = groups_of(id, &ids)
+        .into_iter()
+        .map(|(g, ms)| json!({ "provider": id, "group": g, "label": g, "models": ms, "unavailable": problem.is_some() }))
+        .collect();
+    (row, groups)
+}
+
 fn build(daemon: &Daemon) -> Listing {
     let probe = infantry_harness::LocalProbe;
     let mut providers = Vec::new();
@@ -61,15 +80,9 @@ fn build(daemon: &Daemon) -> Listing {
             providers.push(json!({ "id": p, "default": i == 0, "available": true }));
             continue;
         };
-        let problem = h.sign_in_problem(&probe);
-        let ids: Vec<String> = h.models(&probe).into_iter().map(|m| m.id).collect();
-        providers.push(json!({
-            "id": p, "default": i == 0, "models": ids, "available": problem.is_none(), "unavailableReason": problem,
-            "efforts": EFFORTS, "effort": "supported",
-        }));
-        for (g, ms) in groups_of(p, &ids) {
-            models.push(json!({ "provider": p, "group": g, "label": g, "models": ms, "unavailable": problem.is_some() }));
-        }
+        let (row, groups) = rows_of(p, i == 0, h.as_ref(), &probe);
+        providers.push(row);
+        models.extend(groups);
     }
     Listing { at: Instant::now(), providers: Value::Array(providers), models: Value::Array(models) }
 }
@@ -154,6 +167,63 @@ impl FrameUnit for HarnessFrames {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use infantry_harness::{Capabilities, LaunchError, LaunchPlan, LaunchRequest, ModelInfo, Probe, TurnDelivery};
+
+    /// A harness with one model, an optional sign-in problem and an optional usage note.
+    struct Stub {
+        note: Option<&'static str>,
+        problem: Option<&'static str>,
+    }
+
+    impl infantry_harness::Harness for Stub {
+        fn id(&self) -> &str {
+            "stub"
+        }
+        fn capabilities(&self) -> Capabilities {
+            Capabilities {
+                delivery: TurnDelivery::SpawnPerTurn,
+                pty_screen: false,
+                file_tail: false,
+                hook_channel: false,
+                http: false,
+                resume: false,
+                usage: false,
+                model_selection: true,
+                approval_modes: Vec::new(),
+            }
+        }
+        fn models(&self, _: &dyn Probe) -> Vec<ModelInfo> {
+            vec![ModelInfo { id: "lab/m1".into(), label: "m1".into() }]
+        }
+        fn sign_in_problem(&self, _: &dyn Probe) -> Option<String> {
+            self.problem.map(String::from)
+        }
+        fn launch(&self, _: &LaunchRequest) -> Result<LaunchPlan, LaunchError> {
+            Err(LaunchError("stub".into()))
+        }
+        fn usage_note(&self) -> Option<String> {
+            self.note.map(String::from)
+        }
+    }
+
+    #[test]
+    fn a_row_carries_the_usage_note_only_when_the_harness_has_one() {
+        let (with, _) = rows_of("stub", false, &Stub { note: Some("no plan limit is read"), problem: None }, &infantry_harness::LocalProbe);
+        assert_eq!(with["usageNote"], "no plan limit is read", "{with}");
+        let (without, _) = rows_of("stub", false, &Stub { note: None, problem: None }, &infantry_harness::LocalProbe);
+        assert!(without.get("usageNote").is_none(), "a harness with a meter has no note: {without}");
+    }
+
+    #[test]
+    fn an_unavailable_row_says_why_and_marks_its_model_groups() {
+        let (row, groups) = rows_of("stub", true, &Stub { note: None, problem: Some("stub is not installed (not on PATH)") }, &infantry_harness::LocalProbe);
+        assert_eq!(row["available"], false);
+        assert_eq!(row["unavailableReason"], "stub is not installed (not on PATH)");
+        assert_eq!(row["default"], true);
+        assert_eq!((groups.len(), groups[0]["group"].as_str(), groups[0]["unavailable"].as_bool()), (1, Some("lab"), Some(true)));
+        let (ok, _) = rows_of("stub", false, &Stub { note: None, problem: None }, &infantry_harness::LocalProbe);
+        assert_eq!((ok["available"].as_bool(), ok["unavailableReason"].is_null()), (Some(true), true));
+    }
 
     #[test]
     fn prefixed_ids_split_by_provider_and_plain_ids_stay_one_group() {

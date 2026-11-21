@@ -15,6 +15,8 @@ export interface HarnessInfo {
   models?: string[] | null;
   available?: boolean;
   unavailableReason?: string | null;
+  /** Why the Usage tab has no plan-limit meter for this harness, and what is still counted (the harness states it). */
+  usageNote?: string | null;
   /** The effort levels this harness takes. */
   efforts?: string[] | null;
 }
@@ -108,6 +110,33 @@ export function modelsFor(harness: string | null, harnesses: HarnessInfo[], cata
   const h = harnesses.find((x) => x.id === harness);
   const own = h?.models?.length ? h.models : h?.defaultModel ? [h.defaultModel] : [];
   return own.length ? [{ provider: harness, group: harness, label: harness, models: own }] : [];
+}
+
+/**
+ * Why the harnesses the picker greys out cannot run here: "pi: pi is not installed (not on PATH) · codex: codex is not
+ * signed in: run `codex login`". Null when every harness can run. The daemon states each reason; a greyed entry with
+ * none still says it cannot run.
+ */
+export function unavailableLine(harnesses: HarnessInfo[]): string | null {
+  const down = harnesses.flatMap((h) => {
+    const why = whyUnavailable(h);
+    return why ? [`${h.id}: ${why}`] : [];
+  });
+  return down.length === 0 ? null : down.join(" · ");
+}
+
+/** Why this one harness cannot run here (the daemon states it; none stated still says it cannot), or null when it can. */
+export function whyUnavailable(h: HarnessInfo): string | null {
+  return h.available === false ? h.unavailableReason?.trim() || "cannot run on this machine" : null;
+}
+
+/** What the role dialog's model pin suggests (a role binds to any harness the daemon runs, metered or not). */
+export function pinOptions(harnesses: HarnessInfo[], catalog: ModelGroup[], bindings: RoleBinding[], provider: string): { providers: string[]; models: string[] } {
+  const wanted = provider.trim();
+  const providers = new Set([...harnesses.map((h) => h.id), ...bindings.map((b) => b.provider ?? "")].filter(Boolean));
+  const bound = bindings.filter((b) => !wanted || b.provider === wanted).map((b) => b.model ?? "");
+  const own = wanted ? modelsFor(wanted, harnesses, catalog).flatMap((g) => g.models) : [];
+  return { providers: [...providers].sort(), models: [...new Set([...own, ...bound].filter(Boolean))].sort() };
 }
 
 function seed(d: NewAgentDraft, harness: string | null, wanted: string | null, harnesses: HarnessInfo[], catalog: ModelGroup[]): NewAgentDraft {

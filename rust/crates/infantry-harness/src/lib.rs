@@ -487,6 +487,12 @@ pub trait Harness: Send + Sync {
     fn credential(&self) -> Option<Credential> {
         None
     }
+    /// What the Usage tab says about a CLI whose plan limits the daemon does not read (it has no meter card), in one or
+    /// two plain sentences: why there is none and what is still counted. The `providers` row carries it as `usageNote`
+    /// so the tab lists the CLI with this text instead of leaving it out. None = it has a meter, or says nothing.
+    fn usage_note(&self) -> Option<String> {
+        None
+    }
 }
 
 /// The sign-in a harness declares ([`Harness::credential`]).

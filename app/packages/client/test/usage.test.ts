@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 import { describe, expect, it } from "vitest";
-import { createUsageStore, overrideLine, paceWords, ruleLine, workersLine, type Envelope, type MeterUsage } from "../src";
+import { createUsageStore, overrideLine, paceWords, ruleLine, unmeteredHarnesses, workersLine, type Envelope, type HarnessInfo, type MeterUsage } from "../src";
 
 function link(up = true) {
   const sent: Envelope[] = [];
@@ -49,6 +49,27 @@ describe("usage store", () => {
     const s = createUsageStore(link(false));
     expect(s.getState().clearOverride("claude")).toBe(false);
     expect(s.getState().refusal).toContain("link is down");
+  });
+});
+
+describe("harnesses without a meter", () => {
+  const harnesses: HarnessInfo[] = [
+    { id: "claude", available: true },
+    { id: "pi", available: true, usageNote: "pi has no plan of its own." },
+    { id: "codex", available: true, usageNote: "   " },
+    { id: "gone", available: false, usageNote: "cannot run, and says why it has no meter" },
+    { id: "quiet", available: false, unavailableReason: "quiet is not signed in" },
+    { id: "other", usageNote: "availability not stated: listed" },
+  ];
+
+  it("lists the ones that cannot run or say why they have no meter, unless a meter already carries their name", () => {
+    // one that runs and states nothing (claude, codex) has no card of its own
+    expect(unmeteredHarnesses(harnesses, [meter()]).map((h) => h.id)).toEqual(["pi", "gone", "quiet", "other"]);
+    // a worker running on pi adds its own meter card, so the note card steps aside
+    expect(unmeteredHarnesses(harnesses, [meter(), meter({ meter: "pi", source: "none", percent: null })]).map((h) => h.id)).toEqual(["gone", "quiet", "other"]);
+    // a meter that is itself down is still one card, not two
+    expect(unmeteredHarnesses([{ id: "claude", available: false }], [meter()])).toEqual([]);
+    expect(unmeteredHarnesses([], [meter()])).toEqual([]);
   });
 });
 

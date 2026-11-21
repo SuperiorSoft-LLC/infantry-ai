@@ -133,6 +133,12 @@ impl Harness for CodexHarness {
         }
     }
 
+    /// No codex plan window is read, and the usage meter does not parse its stream: `turn.completed` carries the thread's
+    /// running token total, not one turn's, so adding it would count a resumed thread's earlier turns again.
+    fn usage_note(&self) -> Option<String> {
+        Some("Codex plan limits are not read yet, so there is no meter and no pacing for it, and its tokens are not counted in Stats yet.".into())
+    }
+
     fn launch(&self, req: &LaunchRequest) -> Result<LaunchPlan, LaunchError> {
         let prompt = req.prompt.as_deref().ok_or_else(|| LaunchError("codex runs a process per turn: a prompt is required".into()))?;
         let mut spec = ProcessSpec::new(self.program.clone(), self.args(req)).cwd(req.cwd.to_string_lossy());

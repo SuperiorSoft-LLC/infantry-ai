@@ -261,6 +261,15 @@ impl Harness for PiHarness {
         Some("pi has no provider: no API key variable, no auth.json login (/login), no models.json or extension".into())
     }
 
+    /// pi has no plan of its own: the meter a session spends is its model's provider's, and its `message_end` lines carry
+    /// the tokens and cost the usage meter stores.
+    fn usage_note(&self) -> Option<String> {
+        Some(
+            "pi has no plan of its own. A session is paced on the meter of its model's provider when that provider has one (anthropic/ models use the Claude meter), otherwise it is not paced. Its tokens and cost count in Stats."
+                .into(),
+        )
+    }
+
     fn assets(&self, req: &LaunchRequest) -> Vec<Asset> {
         let mut names = vec![TODO, APPROVAL, COMMANDCODE];
         if req.approval == ApprovalMode::AllowAll {
@@ -298,5 +307,17 @@ impl Harness for PiHarness {
             translator: Box::new(rpc::RpcTranslator::new().with_context_limit(self.context_limit)),
             tail: Vec::new(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pi_tells_the_usage_tab_why_it_has_no_meter_of_its_own() {
+        let note = PiHarness::default().usage_note().expect("pi has no plan-limit reader, so it says why");
+        assert!(note.contains("no plan of its own") && note.contains("count in Stats"), "{note}");
+        assert!(!note.contains('\n'), "one paragraph for a card: {note}");
     }
 }

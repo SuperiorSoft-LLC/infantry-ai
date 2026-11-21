@@ -5,13 +5,13 @@
 // modal.
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, RefreshCw, Sparkle, Trash2, UserCog, X } from "lucide-react";
-import { MAX_ROLE_TRAITS, roleList, type Role, type Trait } from "@infantry/client";
+import { MAX_ROLE_TRAITS, pinOptions, roleList, type Role, type Trait } from "@infantry/client";
 import { AppDialog, Button, Chip, EmptyState, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from "@infantry/ui";
 import { TabPage } from "../tabs/tab-page";
 import { ROLE_ICON_NAMES, RoleGlyph } from "../agents/role-icon";
+import { useLauncher } from "../dialogs/new-agent-dialog";
 import { Field, RefusalBanner, Segmented } from "../knowledge/parts";
 import { rolesStore, useRoles, useRolesLoaded } from "../knowledge/use-knowledge";
-import { useUsage } from "../usage/use-usage";
 
 type View = "roles" | "traits";
 
@@ -168,8 +168,7 @@ export function RolesTab() {
 }
 
 function RolesDialog({ modal, setModal, traits, roles }: { modal: Modal | null; setModal: (m: Modal | null) => void; traits: Trait[]; roles: Record<string, Role> }) {
-  const limits = useUsage((s) => s.limits);
-  const providers = useMemo(() => limits.map((l) => l.provider), [limits]);
+  const { harnesses, catalog } = useLauncher();
   const bindings = useRoles((s) => s.bindings);
   const close = (): void => setModal(null);
   const store = rolesStore().getState;
@@ -235,8 +234,8 @@ function RolesDialog({ modal, setModal, traits, roles }: { modal: Modal | null; 
     if (d) setModal({ kind: "role", draft: { ...d, ...patch } });
   };
   const role = d && !d.isNew ? roles[d.id] : undefined;
-  const providerOptions = [...new Set([...providers, ...Object.values(bindings).map((b) => b.provider ?? "")].filter(Boolean))].sort();
-  const modelOptions = [...new Set(Object.values(bindings).filter((b) => !d?.provider || b.provider === d.provider).map((b) => b.model ?? "").filter(Boolean))].sort();
+  // A role binds to any harness the daemon runs, whether or not it has a plan-limit meter.
+  const { providers: providerOptions, models: modelOptions } = pinOptions(harnesses, catalog, Object.values(bindings), d?.provider ?? "");
   const move = (i: number, by: number): void => {
     if (!d) return;
     const ids = [...d.traitIds];
