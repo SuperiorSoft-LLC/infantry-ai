@@ -26,6 +26,32 @@ export function loginCodeFromUrl(url: string, prefixes: readonly string[] | unde
   return state ? `${code}#${state}` : code;
 }
 
+/** True when [url] is a page of one of [hosts] (exact host, so a look-alike suffix does not count). */
+export function isExternalOnlyHost(url: string, hosts: readonly string[] | undefined): boolean {
+  if (!hosts?.length) return false;
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return hosts.some((x) => x.toLowerCase() === h);
+  } catch {
+    return false;
+  }
+}
+
+/** The addresses the host window reports: the declared code pages plus a bare origin per external-only host. */
+export function loginWatchList(prefixes: readonly string[] | undefined, hosts: readonly string[] | undefined): string[] {
+  return [...(prefixes ?? []), ...(hosts ?? []).map((h) => `https://${h}`)];
+}
+
+/**
+ * What the sign-in screen shows for a failed login input, or null when nothing should show: a refusal because no sign-in runs
+ * any more means the login already ended, so it is dropped when [finished]; the daemon's frame prefix never reaches the owner.
+ */
+export function friendlyLoginError(why: unknown, finished: boolean): string | null {
+  const raw = (why instanceof Error ? why.message : String(why)).replace(/^\s*secret_login refused:\s*/i, "").trim();
+  if (/no sign-in is running|no longer takes input/i.test(raw)) return finished ? null : "The sign-in is not running. Press Log in to start it again.";
+  return raw || "The sign-in could not take that code. Try again.";
+}
+
 /** What [watchLoginWindow] needs of the host (a [Host] has it). */
 export interface LoginWindowOpener {
   openLoginWindow(url: string, watch: readonly string[], h: LoginWindowHandlers): Promise<LoginWindow | null>;
@@ -44,12 +70,23 @@ export async function watchLoginWindow(
   prefixes: readonly string[] | undefined,
   submit: (code: string) => void,
   onClosed: () => void = () => undefined,
+  externalHosts?: readonly string[],
+  onExternal: () => void = () => undefined,
 ): Promise<{ close(): void }> {
   let win: LoginWindow | null = null;
   let sent = false;
   const handlers: LoginWindowHandlers = {
     onUrl(u) {
-      const code = sent ? null : loginCodeFromUrl(u, prefixes);
+      if (sent) return;
+      if (isExternalOnlyHost(u, externalHosts)) {
+        // The page refuses an embedded window: the same login page opens in the system browser, the paste field takes the code.
+        sent = true;
+        win?.close();
+        void host.openExternal(url).catch(() => undefined);
+        onExternal();
+        return;
+      }
+      const code = loginCodeFromUrl(u, prefixes);
       if (!code) return;
       sent = true;
       submit(code);
@@ -58,7 +95,7 @@ export async function watchLoginWindow(
     onClosed,
   };
   try {
-    win = await host.openLoginWindow(url, prefixes ?? [], handlers);
+    win = await host.openLoginWindow(url, loginWatchList(prefixes, externalHosts), handlers);
   } catch {
     win = null;
   }

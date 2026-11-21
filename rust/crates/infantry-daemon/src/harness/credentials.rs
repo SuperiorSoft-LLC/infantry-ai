@@ -210,6 +210,7 @@ impl HarnessCredentials {
                     let login = self.state(&token_name(&id));
                     (t.login_state, t.login_url, t.login_message) = (login.state, login.url, login.message);
                     t.login_code_urls = c.login_code_urls.clone();
+                    t.login_external_hosts = c.login_external_hosts.clone();
                     rows.push(t);
                 }
                 let login = self.state(&id);
@@ -224,6 +225,7 @@ impl HarnessCredentials {
                 k.login_url = login.url;
                 k.login_message = login.message;
                 k.login_code_urls = c.login_code_urls.clone();
+                k.login_external_hosts = c.login_external_hosts.clone();
                 rows.push(k);
                 rows
             })
@@ -461,6 +463,10 @@ impl HarnessCredentials {
             };
         }
         let run = self.runs.lock().unwrap_or_else(|e| e.into_inner()).get(&key).cloned();
+        // A code that arrives after the sign-in finished (the page reported twice) is not an error: the login is done.
+        if run.as_ref().is_some_and(|r| r.state.lock().unwrap_or_else(|e| e.into_inner()).state == LOGIN_DONE) {
+            return Ok(());
+        }
         let run = run.filter(|r| r.state.lock().unwrap_or_else(|e| e.into_inner()).state == LOGIN_RUNNING).ok_or("no sign-in is running; start it again")?;
         let mut term = run.term_writer.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(w) = term.as_mut() {
@@ -601,6 +607,7 @@ mod tests {
             token_argv: vec!["fake".into(), "setup-token".into()],
             token_prefix: "sk-fake-".into(),
             login_code_urls: vec!["https://login.example/callback".into()],
+            login_external_hosts: vec!["sso.example".into()],
         };
         let hc = HarnessCredentials::new(vec![Arc::new(Fake(Some(c))), Arc::new(Fake(None))], ks, Arc::new(move |_| setting.map(String::from)));
         (dir, hc)
@@ -618,6 +625,7 @@ mod tests {
         assert_eq!(k[1].login_command, "fake auth login");
         assert_eq!(k[1].signed_in, "false");
         assert_eq!(k[0].login_code_urls, vec!["https://login.example/callback".to_string()], "the harness declares where the code shows; the wire carries it");
+        assert_eq!(k[1].login_external_hosts, vec!["sso.example".to_string()], "the harness declares the hosts that refuse an embedded window");
         assert_eq!(k[1].auth_modes, vec![AUTH_API_KEY.to_string(), AUTH_SUBSCRIPTION.to_string()]);
     }
 
@@ -668,8 +676,12 @@ mod tests {
         assert_eq!(hc.token("fake").as_deref(), Some("sk-fake-0123456789abcdef"));
         let st = hc.state("harness.fake.token");
         assert_eq!((st.state.as_str(), st.message.as_str()), (LOGIN_DONE, "Signed in."));
+        // A code that arrives once the sign-in is done is a no-op, not an error (the login page may report its address twice).
+        assert!(hc.login("harness.fake.token", "input", "a-code").is_ok());
+        assert_eq!(hc.state("harness.fake.token").state, LOGIN_DONE);
         // Something that is not a token needs a running sign-in to receive it.
-        assert!(hc.login("harness.fake.token", "input", "a-code").is_err());
+        let (_d2, fresh) = creds(None);
+        assert!(fresh.login("harness.fake.token", "input", "a-code").is_err());
     }
 
     #[test]

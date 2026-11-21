@@ -290,6 +290,7 @@ impl Harness for ClaudeHarness {
                 "https://platform.claude.com/oauth/code/callback".into(),
                 "https://console.anthropic.com/oauth/code/callback".into(),
             ],
+            login_external_hosts: vec!["accounts.google.com".into()],
         })
     }
 

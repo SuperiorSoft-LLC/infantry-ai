@@ -6,7 +6,7 @@
 // daemon's (`loginState` on the row), so every window agrees. Nothing here names a harness; the token itself never comes here.
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
-import { loginRow, signInPhase, watchLoginWindow } from "@infantry/client";
+import { friendlyLoginError, loginRow, signInPhase, watchLoginWindow } from "@infantry/client";
 import { Button, Input } from "@infantry/ui";
 import { daemonStore } from "@/daemon/daemon";
 import { secretsStore } from "@/daemon/secrets-store";
@@ -24,6 +24,9 @@ export function SubscriptionSignIn({ id, label, onSignedIn }: { id: string; labe
   const opened = useRef<string>("");
   const win = useRef<{ close(): void } | null>(null);
   const reported = useRef(false);
+  const submitted = useRef(new Set<string>());
+  const [hint, setHint] = useState<string | null>(null);
+  const finished = useRef(false);
   useEffect(() => st.ensureLoaded(), [st]);
   useEffect(() => {
     if (phase !== "running") return;
@@ -32,10 +35,25 @@ export function SubscriptionSignIn({ id, label, onSignedIn }: { id: string; labe
   }, [phase]);
   // The login page opens by itself in a window of the app, which reads the code off the page it ends on; the paste field below
   // covers every flow where no code is read. Closed with the sign-in (done, failed, cancelled) and with this screen.
-  const submitCode = (text: string) => st.login(row?.name ?? "", "input", text).catch((why) => setError(String(why)));
+  // One submit per code, and none once the login is over: the page can report its address more than once.
+  finished.current = phase === "done" || phase === "failed" || row?.signedIn === "true";
+  const submitCode = (text: string) => {
+    if (finished.current || submitted.current.has(text)) return;
+    submitted.current.add(text);
+    st.login(row?.name ?? "", "input", text).catch((why) => setError(friendlyLoginError(why, finished.current)));
+  };
   const openPage = (url: string) => {
     win.current?.close();
-    void watchLoginWindow(host, url, row?.loginCodeUrls, (c) => void submitCode(c)).then((w) => (win.current = w));
+    setHint(null);
+    void watchLoginWindow(
+      host,
+      url,
+      row?.loginCodeUrls,
+      submitCode,
+      undefined,
+      row?.loginExternalHosts,
+      () => setHint("Google sign-in opens in your browser. When the page shows a code, paste it here."),
+    ).then((w) => (win.current = w));
   };
   useEffect(() => {
     if (row?.loginUrl && opened.current !== row.loginUrl) {
@@ -64,9 +82,11 @@ export function SubscriptionSignIn({ id, label, onSignedIn }: { id: string; labe
     setError(null);
     if (action === "start") {
       reported.current = false;
+      submitted.current.clear();
+      setHint(null);
       setCode("");
     }
-    st.login(row.name, action, text).catch((why) => setError(String(why)));
+    st.login(row.name, action, text).catch((why) => setError(friendlyLoginError(why, finished.current)));
   };
   const invalid = row.loginMessage?.toLowerCase().startsWith("invalid");
   return (
@@ -93,6 +113,7 @@ export function SubscriptionSignIn({ id, label, onSignedIn }: { id: string; labe
               </Button>
             </div>
           ) : null}
+          {hint ? <p className="text-xs">{hint}</p> : null}
           <p className="text-xs text-muted-foreground">If the page shows a code, paste it here:</p>
           <div className="flex items-center gap-2">
             <Input
