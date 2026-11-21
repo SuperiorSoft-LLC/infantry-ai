@@ -301,7 +301,10 @@ processes, tools, usage), with the evidence for each cell and the open gaps, is 
 - **claude**: the interactive terminal (the default) and headless stream-json both carry MCP, effort and context
   limit. Only headless reports cost and compaction. Tool approval ASK relays each call to the owner (interactive:
   the `ClaudePermissionHook` relay, HARNESS-GAP G3; headless: `--permission-prompt-tool stdio`, G4). ASK is the fresh-install
-  default (`ToolApprovals.DEFAULT`, FIRSTRUN-PERM-1).
+  default (`ToolApprovals.DEFAULT`, FIRSTRUN-PERM-1). A call only reaches the owner when claude itself would ask:
+  in `--permission-mode default`, the mode ASK uses, claude runs its built-in read-only commands (`echo`, `ls`, `pwd`,
+  `cat`, `git status`, `node -v`) with no permission dialog, so those never raise a card (APPROVAL-ASK-1). To check ASK
+  live, use a command that needs a dialog: a write, a redirect, `mkdir`, `node -e`.
 - **pi**: no MCP server (agents use the `infantry` CLI); approval modes are not enforced; context limit is best
   effort; no mid-turn input.
 - **opencode**: an ASK approval relay like claude's; effort and context limit are recorded but not

@@ -66,6 +66,10 @@ pub fn watch_url(env: &[(String, String)]) -> Option<String> {
 }
 
 /// Whether an approval mode gets the permission hook (every mode that can see a dialog: all but allow-all).
+///
+/// The hook answers a permission DIALOG, so it only hears about what claude itself would ask for. claude runs its
+/// built-in read-only commands (`echo`, `ls`, `pwd`, `cat`, `git status` ...) in `default` mode with no dialog, and under
+/// ask they raise no card (APPROVAL-ASK-1: not a wiring bug; `launch.rs` pins the wiring).
 pub fn permission_wanted(a: ApprovalMode) -> bool {
     a != ApprovalMode::AllowAll
 }
