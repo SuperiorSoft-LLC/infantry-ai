@@ -10,6 +10,7 @@ import { AgentSidebar } from "@/components/agents/agent-sidebar";
 import { SessionView } from "@/components/session/session-view";
 import { RightPanel } from "@/components/usage/right-panel";
 import { DialogHost } from "@/components/dialogs/dialog-host";
+import type { ShellProps } from "@infantry/ui-plugin-api/contract";
 import { TitleBar } from "./title-bar";
 import { StatusBar } from "./status-bar";
 import { usePluginsLoaded } from "@/plugins/use-plugins";
@@ -27,7 +28,7 @@ function Drawer({ side, onClose, children }: { side: "left" | "right"; onClose: 
   );
 }
 
-export function AppShell() {
+export function AppShell({ headerActions, statusLeading }: Pick<ShellProps, "headerActions" | "statusLeading"> = {}) {
   const ui = useUi();
   const layout = useLayout();
   const narrowLeft = !layout.leftInline;
@@ -54,7 +55,7 @@ export function AppShell() {
 
   return (
     <div className="flex h-full flex-col" data-layout={layout.kind}>
-      <TitleBar />
+      <TitleBar headerActions={headerActions} />
       <div className="relative flex min-h-0 flex-1">
         {ui.leftOpen && !narrowLeft && <AgentSidebar />}
         <SessionView />
@@ -72,7 +73,7 @@ export function AppShell() {
           </Drawer>
         )}
       </div>
-      <StatusBar />
+      <StatusBar leading={statusLeading} />
       <ToastHost />
       <DialogHost />
       <GlobalWorkersHost />
