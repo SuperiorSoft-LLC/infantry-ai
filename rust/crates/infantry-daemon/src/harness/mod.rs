@@ -7,6 +7,7 @@
 //! Implementations: [`stub`] (scripted, no process; `INFANTRY_PROVIDER=stub`) and [`driven`], which runs any
 //! `infantry-harness` crate (one agent CLI each) on the local runner. The registry is [`HarnessRegistry`], built by `main.rs`.
 
+pub mod credentials;
 pub mod driven;
 pub mod launch;
 pub mod stub;
@@ -200,6 +201,11 @@ impl HarnessRegistry {
     /// The agent-CLI harness (the neutral `infantry-harness` trait: models, sign-in, launch) for a provider id.
     pub fn neutral(&self, name: &str) -> Option<std::sync::Arc<dyn infantry_harness::Harness>> {
         self.list.iter().find(|h| h.id() == name).cloned()
+    }
+
+    /// Every agent-CLI harness, in listing order.
+    pub fn all_neutral(&self) -> Vec<std::sync::Arc<dyn infantry_harness::Harness>> {
+        self.list.clone()
     }
 
     /// The harness for a provider name, or None when this daemon has no such harness.

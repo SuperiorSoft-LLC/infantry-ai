@@ -5,6 +5,7 @@
 // (harness_install_status) and its provider list (providers, where `available` = the harness can sign in / answer now).
 // Nothing here names a harness: they are whatever the daemon's installer reports.
 import type { HarnessInfo } from "./stores/launcher";
+import type { SecretRow } from "./stores/secrets";
 
 export interface HarnessInstallStatus {
   id: string;
@@ -99,6 +100,30 @@ export function firstModel(id: string, providers: HarnessInfo[], catalog: Catalo
     if (free) return free;
   }
   return p.defaultModel ?? p.models?.[0] ?? null;
+}
+
+// ---- In-app sign-in of a harness (the daemon declares it as a built-in secret row `harness.<id>.token`) ----
+
+/** The vault name of a harness's browser sign-in token. */
+export const tokenSecretName = (id: string): string => `harness.${id}.token`;
+
+/** The row of [id]'s browser sign-in, or null when its harness declares none (then only the other ways apply). */
+export const signInRow = (id: string, rows: SecretRow[]): SecretRow | null => rows.find((r) => r.name === tokenSecretName(id) && r.canLogin) ?? null;
+
+export type SignInPhase = "idle" | "running" | "done" | "failed";
+
+/** Where the browser sign-in stands, from the daemon's row. */
+export function signInPhase(row: SecretRow | null): SignInPhase {
+  switch (row?.loginState) {
+    case "running":
+      return "running";
+    case "done":
+      return "done";
+    case "failed":
+      return "failed";
+    default:
+      return "idle";
+  }
 }
 
 // ---- HarnessInstallSetting ----

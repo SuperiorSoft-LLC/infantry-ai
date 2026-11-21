@@ -5,14 +5,10 @@
 // store), delete. Reuses the bordered row cards, Button and Input of the kit.
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
-import { createSecretsStore, placeholderOf, secretId, type SecretEntryRow, type SecretsStore } from "@infantry/client";
+import { placeholderOf, secretId, signInRow, type SecretEntryRow } from "@infantry/client";
 import { Button, Input, Label } from "@infantry/ui";
-import { daemonStore } from "@/daemon/daemon";
-
-let store: SecretsStore | null = null;
-function secretsStore(): SecretsStore {
-  return (store ??= createSecretsStore(daemonStore().getState()));
-}
+import { secretsStore } from "@/daemon/secrets-store";
+import { SubscriptionSignIn } from "@/components/setup/subscription-sign-in";
 
 function FieldRow({ entry, field, tail }: { entry: SecretEntryRow; field: string; tail: string }) {
   const s = secretsStore().getState();
@@ -118,6 +114,14 @@ export function SecretsPanel() {
           {st.refusal}
         </div>
       )}
+      {/* The harnesses that sign in from the app (the daemon declares them): the same control as the guided setup. */}
+      {st.builtIns
+        .filter((r) => r.name.endsWith(".token") && signInRow(r.name.slice("harness.".length, -".token".length), st.builtIns))
+        .map((r) => (
+          <div key={r.name} className="space-y-2 rounded-lg border bg-card p-3">
+            <SubscriptionSignIn id={r.name.slice("harness.".length, -".token".length)} label={r.label.replace(/ subscription token$/, "")} onSignedIn={() => {}} />
+          </div>
+        ))}
       {st.entries.map((e) => (
         <div key={secretId(e)} className="space-y-2 rounded-lg border bg-card p-3">
           <div className="flex items-center gap-2">

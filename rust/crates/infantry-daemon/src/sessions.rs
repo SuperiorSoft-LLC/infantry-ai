@@ -281,6 +281,8 @@ pub struct Daemon {
     /// What every agent process is told about this daemon (set once the port is bound).
     launch: Mutex<crate::harness::launch::LaunchBase>,
     env_extra: std::sync::OnceLock<Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>>,
+    /// The env one provider's sessions get on top (its stored key or subscription token, the API key variable blanked).
+    provider_env: std::sync::OnceLock<Arc<dyn Fn(&str) -> Vec<(String, String)> + Send + Sync>>,
     /// Whether a role exists (`session_swap` to a role); unset = any well-formed role.
     role_known: std::sync::OnceLock<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
     /// PM-ROLE-1: the text a new conversation of a role starts with (the role catalog's persona); unset = none.
@@ -372,6 +374,7 @@ impl Daemon {
             health: Arc::new(crate::health::Health::new(&cfg_dir)),
             launch: Mutex::new(Default::default()),
             env_extra: std::sync::OnceLock::new(),
+            provider_env: std::sync::OnceLock::new(),
             role_known: std::sync::OnceLock::new(),
             role_brief: std::sync::OnceLock::new(),
             prompter: std::sync::OnceLock::new(),
@@ -1156,6 +1159,11 @@ impl Daemon {
     }
 
     /// Env added to every agent process, read at each start (so a setting change applies to the next start).
+    /// Sets the env a session of a given provider gets (read at each start).
+    pub fn set_provider_env(&self, f: Arc<dyn Fn(&str) -> Vec<(String, String)> + Send + Sync>) {
+        let _ = self.provider_env.set(f);
+    }
+
     pub fn set_env_extra(&self, f: Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>) {
         let _ = self.env_extra.set(f);
     }
@@ -1176,6 +1184,11 @@ impl Daemon {
         if let Some(extra) = self.env_extra.get() {
             env.retain(|(k, _)| !extra().iter().any(|(ek, _)| ek == k));
             env.extend(extra());
+        }
+        if let Some(f) = self.provider_env.get() {
+            let mine = f(&e.rec.provider);
+            env.retain(|(k, _)| !mine.iter().any(|(mk, _)| mk == k));
+            env.extend(mine);
         }
         env.retain(|(k, _)| k != crate::role_policy::ENV);
         if let Some(pair) = self.role_policy.get().and_then(|f| f(e.rec.role.as_deref(), e.rec.project_id.as_deref())) {

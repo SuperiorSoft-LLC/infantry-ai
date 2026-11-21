@@ -9,6 +9,7 @@
 // Every decision is `@infantry/client` setup-wizard.ts (tested); this file draws the daemon's answers.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
+import { SubscriptionSignIn } from "@/components/setup/subscription-sign-in";
 import {
   createHarnessInstallStore,
   createQueryStore,
@@ -181,16 +182,15 @@ function HarnessStep({ report, pick, onPick }: { report: HarnessInstallReport; p
   );
 }
 
-function SignInStep({ id, provider, recheck }: { id: string; provider?: HarnessInfo; recheck: () => void }) {
+function SignInStep({ id, label, provider, recheck }: { id: string; label: string; provider?: HarnessInfo; recheck: () => void }) {
   return (
     <div className="space-y-2.5">
-      <p className="text-[13px]">Connect {id} so your agent can answer.</p>
+      <p className="text-[13px]">Connect {label} so your agent can answer.</p>
       <p className="text-xs text-muted-foreground">{provider?.unavailableReason ?? "It is not signed in yet."}</p>
-      <p className="text-xs text-muted-foreground">
-        Open a terminal and start <span className="font-mono">{id}</span>. It asks you to sign in (a browser window opens). Come back here and press Check again.
-      </p>
-      <Button size="sm" onClick={recheck}>
-        Check again
+      {/* Whatever sign-in the harness declares (a browser login that gives a token); nothing here names a harness. */}
+      <SubscriptionSignIn id={id} label={label} onSignedIn={recheck} />
+      <Button size="sm" variant="outline" onClick={recheck}>
+        Check
       </Button>
     </div>
   );
@@ -304,7 +304,7 @@ function Wizard({ report, providers, catalog, recheck, onClose }: { report: Harn
     <AppDialog open onOpenChange={(o) => !o && onClose()} title={SETUP_STEPS[idx].title} description={`Step ${idx + 1} of ${SETUP_STEPS.length}`} footer={footer}>
       {step === "node" && <NodeStep report={report} recheck={recheck} />}
       {step === "harness" && <HarnessStep report={report} pick={pick} onPick={setPick} />}
-      {step === "sign-in" && pick && <SignInStep id={pick} provider={providers.find((p) => p.id === pick)} recheck={recheck} />}
+      {step === "sign-in" && pick && <SignInStep id={pick} label={picked?.label || pick} provider={providers.find((p) => p.id === pick)} recheck={recheck} />}
       {step === "first-agent" && pick && <FirstAgentStep id={pick} providers={providers} catalog={catalog} />}
     </AppDialog>
   );

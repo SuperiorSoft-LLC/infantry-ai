@@ -158,6 +158,7 @@ impl Harness for OpenCodeHarness {
             help: "Create an API key in your OpenCode account (opencode.ai) and paste it here. Only needed for the paid OpenCode Go models; the free tier needs none.".into(),
             auth_modes: Vec::new(),
             login_argv: Vec::new(),
+            ..Default::default()
         })
     }
 

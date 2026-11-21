@@ -28,6 +28,15 @@ export interface SecretRow {
   importable: boolean;
   overriddenByEnv: boolean;
   help?: string;
+  /** The harness has an in-app sign-in on this row (a token flow: the browser opens, the token comes back). */
+  canLogin?: boolean;
+  /** "true" | "false" | "unknown": the harness can answer now. */
+  signedIn?: string;
+  /** "" | running | done | failed. */
+  loginState?: string;
+  loginUrl?: string;
+  /** One short line for the owner; never a token. */
+  loginMessage?: string;
 }
 
 export interface SecretRevealed {
@@ -78,6 +87,8 @@ export interface SecretsActions {
   deleteSecret(name: string, project?: string): Promise<void>;
   setBuiltIn(name: string, value: string): Promise<void>;
   clearBuiltIn(name: string): Promise<void>;
+  /** start / input / cancel the in-app sign-in on a built-in row (`input` carries the pasted token or code; it is never kept here). */
+  login(name: string, action: "start" | "input" | "cancel", text?: string): Promise<void>;
   /** Asks the daemon for one value after the OS check. Resolves with it; the caller shows it briefly, then drops it. */
   reveal(name: string, field: string, purpose: "reveal" | "copy", project?: string): Promise<SecretRevealed>;
   exportBackup(path: string, passphrase: string): Promise<{ path: string; secrets: number; method: string }>;
@@ -177,6 +188,7 @@ export function createSecretsStore(link: SecretsLink, timeoutMs = 180_000): Secr
       deleteSecret: (name, project) => change("secret_delete", { name, ...(project ? { project } : {}) }),
       setBuiltIn: (name, value) => change("secret_set", { name, value }),
       clearBuiltIn: (name) => change("secret_clear", { name }),
+      login: (name, action, text = "") => change("secret_login", { name, action, text }),
       async reveal(name, field, purpose, project) {
         const e = await request("secret_reveal", { name, field, purpose, ...(project ? { project } : {}) });
         const r = json<SecretRevealed>(e.data);

@@ -40,4 +40,19 @@ describe("secrets store", () => {
     l.push({ type: "error", data: "secret_reveal refused: no Hello", requestId: l.sent[3].requestId });
     await expect(refused).rejects.toBe("secret_reveal refused: no Hello");
   });
+
+  it("starts the in-app sign-in and sends a pasted token to the daemon only", async () => {
+    const l = link();
+    const s = createSecretsStore(l);
+    const start = s.getState().login("harness.claude.token", "start");
+    expect(l.sent[0]).toMatchObject({ type: "secret_login" });
+    expect(JSON.parse(l.sent[0].data)).toEqual({ name: "harness.claude.token", action: "start", text: "" });
+    l.push({ type: "secret_state", data: JSON.stringify({ ...state, secrets: [{ name: "harness.claude.token", label: "t", set: false, tail: "", canLogin: true, loginState: "running", loginUrl: "https://claude.ai/x" }] }), requestId: l.sent[0].requestId });
+    await start;
+    expect(s.getState().builtIns[0]).toMatchObject({ loginState: "running", loginUrl: "https://claude.ai/x" });
+    const paste = s.getState().login("harness.claude.token", "input", "sk-ant-oat01-secret");
+    l.push({ type: "secret_state", data: JSON.stringify(state), requestId: l.sent[1].requestId });
+    await paste;
+    expect(JSON.stringify(s.getState())).not.toContain("sk-ant-oat01-secret");
+  });
 });

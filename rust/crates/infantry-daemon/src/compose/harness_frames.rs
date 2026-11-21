@@ -32,6 +32,8 @@ struct Listing {
 
 pub struct HarnessFrames {
     daemon: Arc<Daemon>,
+    /// Judges each harness's sign-in with the subscription tokens the vault holds.
+    creds: Arc<crate::harness::credentials::HarnessCredentials>,
     cache: Arc<Mutex<Option<Listing>>>,
     refreshing: Arc<Mutex<bool>>,
 }
@@ -71,8 +73,8 @@ fn rows_of(id: &str, default: bool, h: &dyn infantry_harness::Harness, probe: &d
     (row, groups)
 }
 
-fn build(daemon: &Daemon) -> Listing {
-    let probe = infantry_harness::LocalProbe;
+fn build(daemon: &Daemon, creds: &crate::harness::credentials::HarnessCredentials) -> Listing {
+    let probe = creds.probe();
     let mut providers = Vec::new();
     let mut models = Vec::new();
     for (i, p) in daemon.providers().iter().enumerate() {
@@ -88,15 +90,15 @@ fn build(daemon: &Daemon) -> Listing {
 }
 
 impl HarnessFrames {
-    pub fn new(daemon: Arc<Daemon>) -> Arc<HarnessFrames> {
-        let u = Arc::new(HarnessFrames { daemon, cache: Arc::new(Mutex::new(None)), refreshing: Arc::new(Mutex::new(false)) });
+    pub fn new(daemon: Arc<Daemon>, creds: Arc<crate::harness::credentials::HarnessCredentials>) -> Arc<HarnessFrames> {
+        let u = Arc::new(HarnessFrames { daemon, creds, cache: Arc::new(Mutex::new(None)), refreshing: Arc::new(Mutex::new(false)) });
         u.refresh_in_background();
         u
     }
 
     /// Builds the listing now and stores it (the install changed what is on this machine; the next answer must show it).
     pub fn rebuild_now(&self) {
-        let l = build(&self.daemon);
+        let l = build(&self.daemon, &self.creds);
         *self.cache.lock().unwrap_or_else(|e| e.into_inner()) = Some(l);
     }
 
@@ -108,9 +110,9 @@ impl HarnessFrames {
             }
             *r = true;
         }
-        let (daemon, cache, flag) = (self.daemon.clone(), self.cache.clone(), self.refreshing.clone());
+        let (daemon, creds, cache, flag) = (self.daemon.clone(), self.creds.clone(), self.cache.clone(), self.refreshing.clone());
         std::thread::spawn(move || {
-            let l = build(&daemon);
+            let l = build(&daemon, &creds);
             *cache.lock().unwrap_or_else(|e| e.into_inner()) = Some(l);
             *flag.lock().unwrap_or_else(|e| e.into_inner()) = false;
         });
@@ -130,7 +132,7 @@ impl HarnessFrames {
                 (p, m)
             }
             None => {
-                let l = build(&self.daemon);
+                let l = build(&self.daemon, &self.creds);
                 let out = (l.providers.clone(), l.models.clone());
                 *self.cache.lock().unwrap_or_else(|e| e.into_inner()) = Some(l);
                 out

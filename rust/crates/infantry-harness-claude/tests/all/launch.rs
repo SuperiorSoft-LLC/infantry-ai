@@ -127,3 +127,31 @@ fn every_mode_but_allow_all_keeps_the_permission_hook_and_allow_all_alone_bypass
         assert_eq!(s.get("skipDangerousModePermissionPrompt").is_some(), bypass, "{mode:?}");
     }
 }
+
+/// The browser token sign-in the app offers (`claude setup-token`) and the variable the stored token reaches Claude Code through.
+#[test]
+fn claude_declares_the_token_sign_in_the_app_shows() {
+    use infantry_harness::{Harness, Probe};
+    use infantry_harness_claude::{ClaudeHarness, OAUTH_TOKEN_ENV};
+    struct Token;
+    impl Probe for Token {
+        fn env(&self, name: &str) -> Option<String> {
+            (name == OAUTH_TOKEN_ENV).then(|| "sk-ant-oat01-x".to_string())
+        }
+        fn home(&self) -> Option<std::path::PathBuf> {
+            None
+        }
+        fn read_to_string(&self, _: &std::path::Path) -> Option<String> {
+            None
+        }
+        fn exists(&self, _: &std::path::Path) -> bool {
+            false
+        }
+    }
+    let c = ClaudeHarness::default().credential().expect("claude declares a credential");
+    assert_eq!(c.token_env, "CLAUDE_CODE_OAUTH_TOKEN");
+    assert_eq!(&c.token_argv[1..], ["setup-token"]);
+    assert_eq!(c.env, "ANTHROPIC_API_KEY");
+    // A stored token (the daemon's probe puts it under that variable) counts as signed in, with no credentials file.
+    assert!(ClaudeHarness::default().sign_in_problem(&Token).is_none());
+}
