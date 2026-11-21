@@ -151,6 +151,23 @@ export const tokenSecretName = (id: string): string => `harness.${id}.token`;
 /** The row of [id]'s browser sign-in, or null when its harness declares none (then only the other ways apply). */
 export const signInRow = (id: string, rows: SecretRow[]): SecretRow | null => rows.find((r) => r.name === tokenSecretName(id) && r.canLogin) ?? null;
 
+/**
+ * The row that runs [id]'s subscription login: the key row when its CLI has a login (link + code), else the token row (the CLI's
+ * token command, whose result is pasted). Both answer start / input / cancel and report loginState, so the screen is one flow.
+ */
+export const loginRow = (id: string, rows: SecretRow[]): SecretRow | null => {
+  const key = rows.find((r) => r.name === `harness.${id}.key` && r.canLogin);
+  return key ?? signInRow(id, rows);
+};
+
+/** The two ways to connect, as the Kotlin screen draws them (harness-neutral): the subscription login if declared, and the key. */
+export function signInChoices(id: string, rows: SecretRow[]): { login: SecretRow | null; key: SecretRow | null; keyNeeded: boolean } {
+  const login = loginRow(id, rows);
+  const key = rows.find((r) => r.name === `harness.${id}.key`) ?? null;
+  const done = signInPhase(login) === "done" || login?.signedIn === "true";
+  return { login, key, keyNeeded: !done };
+}
+
 export type SignInPhase = "idle" | "running" | "done" | "failed";
 
 /** Where the browser sign-in stands, from the daemon's row. */

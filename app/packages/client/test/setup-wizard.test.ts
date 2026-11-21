@@ -3,7 +3,7 @@
 // Ports Kotlin SetupWizardTest. The key-row and "unprobed sign-in" cases have no Rust twin: the Rust daemon reads a
 // harness's sign-in straight from its files (providers[].available), so there is no probe state to wait for.
 import { describe, expect, it } from "vitest";
-import { createHarnessInstallStore, installHarnesses, type Envelope, action, defaultPick, signInPhase, signInRow, tokenSecretName, firstModel, firstStep, followInstalled, installed, needed, nodeNote, opensNow, outcomeFor, statusText, unprobed, type HarnessInstallReport, type HarnessInstallStatus, type SecretRow } from "../src";
+import { createHarnessInstallStore, installHarnesses, type Envelope, action, defaultPick, signInChoices, loginRow, signInPhase, signInRow, tokenSecretName, firstModel, firstStep, followInstalled, installed, needed, nodeNote, opensNow, outcomeFor, statusText, unprobed, type HarnessInstallReport, type HarnessInstallStatus, type SecretRow } from "../src";
 
 const h = (id: string, isInstalled: boolean): HarnessInstallStatus => ({ id, label: id, npmPackage: `pkg-${id}`, state: isInstalled ? "installed" : "missing", path: isInstalled ? `/bin/${id}` : null });
 const report = (hs: HarnessInstallStatus[], npm: string | null = "/usr/bin/npm"): HarnessInstallReport => ({ harnesses: hs, prefixDir: "/p", npmPath: npm, nodeInstallable: false, busy: false, log: [] });
@@ -156,5 +156,23 @@ describe("harness install store", () => {
     // The token saved: the daemon lists the provider as available and the setup is no longer needed.
     expect(needed(report([h("claude", true)]), [], [{ id: "claude", available: false }])).toBe(true);
     expect(needed(report([h("claude", true)]), [], [{ id: "claude", available: true }])).toBe(false);
+  });
+  it("draws the two Kotlin choices: the subscription login (key row first, else the token row) and the API key", () => {
+    const key = row("claude", { canLogin: true, help: "Anthropic key", authModes: ["api-key", "subscription-login"] });
+    const token = { ...row("claude"), name: "harness.claude.token", canLogin: true };
+    // A CLI login on the key row wins; without one the token row runs the same screen.
+    expect(loginRow("claude", [key, token])?.name).toBe("harness.claude.key");
+    expect(loginRow("claude", [{ ...key, canLogin: false }, token])?.name).toBe("harness.claude.token");
+    expect(loginRow("pi", [key])).toBeNull();
+    // Idle / running / failed keep the key card open; done (login or probe) says it is not needed.
+    for (const state of ["", "running", "failed"]) {
+      const c = signInChoices("claude", [{ ...key, loginState: state }]);
+      expect([c.login?.name, c.key?.name, c.keyNeeded]).toEqual(["harness.claude.key", "harness.claude.key", true]);
+    }
+    expect(signInChoices("claude", [{ ...key, loginState: "done" }]).keyNeeded).toBe(false);
+    expect(signInChoices("claude", [{ ...key, signedIn: "true" }]).keyNeeded).toBe(false);
+    // A harness with no login gets the plain key row only.
+    const plain = signInChoices("pi", [row("pi", { canLogin: false })]);
+    expect([plain.login, plain.key?.name, plain.keyNeeded]).toEqual([null, "harness.pi.key", true]);
   });
 });

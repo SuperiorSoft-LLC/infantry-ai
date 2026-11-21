@@ -18,7 +18,7 @@ import {
   credentialOk,
   firstModel,
   followInstalled,
-  keyRow,
+  signInChoices,
   opensNow,
   firstStep,
   HELLO_PROMPT,
@@ -195,77 +195,55 @@ function HarnessStep({ report, pick, onPick }: { report: HarnessInstallReport; p
   );
 }
 
-function SignInStep({ id, label, row, provider, recheck }: { id: string; label: string; row?: SecretRow; provider?: HarnessInfo; recheck: () => void }) {
-  const [code, setCode] = useState("");
+/** A bordered card for one way to connect (Kotlin `ChoiceCard`). */
+function ChoiceCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2 rounded-lg border bg-card p-3">
+      <p className="text-[13px] font-semibold">{title}</p>
+      {subtitle ? <p className="text-xs text-muted-foreground">{subtitle}</p> : null}
+      {children}
+    </div>
+  );
+}
+
+/** The sign-in step, as the Kotlin screen: the harness's name, then the ways it declares (a subscription login, an API key). */
+function SignInStep({ id, label, rows, recheck }: { id: string; label: string; rows: SecretRow[]; recheck: () => void }) {
   const [key, setKey] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const running = row?.loginState === "running";
-  // The sign-in runs on the daemon and its state is not pushed: read the key rows again while it runs.
-  useEffect(() => {
-    if (!running) return;
-    const t = setInterval(() => secretsStore().getState().refresh(), 1500);
-    return () => clearInterval(t);
-  }, [running]);
-  const act = (action: "start" | "input" | "cancel", text = "") => {
-    if (!row) return;
-    setError(null);
-    secretsStore().getState().login(row.name, action, text).catch((why) => setError(String(why)));
-  };
-  const failed = row?.loginState === "failed" ? row.loginMessage : null;
+  const { login, key: keyRowOf, keyNeeded } = signInChoices(id, rows);
+  const showKey = !!keyRowOf && keyRowOf.authModes?.includes("api-key") !== false;
   return (
     <div className="space-y-2.5">
-      <p className="text-[13px]">Connect {label} so your agent can answer.</p>
-      <p className="text-xs text-muted-foreground">{provider?.unavailableReason ?? "It is not signed in yet."}</p>
-      {/* Whatever sign-in the harness declares (a browser login that gives a token); nothing here names a harness. */}
-      <SubscriptionSignIn id={id} label={label} onSignedIn={recheck} />
-      {row?.canLogin && (
-        <div className="space-y-2 rounded-lg border bg-card p-3">
-          <p className="text-[13px] font-semibold">Sign in with your account</p>
-          {running ? (
-            <>
-              <p className="text-xs text-muted-foreground">{row.loginMessage || "Finish in the browser window. If the page shows a code, paste it here."}</p>
-              {row.loginUrl ? (
-                <Button size="sm" variant="outline" onClick={() => window.open(row.loginUrl, "_blank")}>
-                  Open the sign-in page
-                </Button>
-              ) : null}
-              <div className="flex gap-2">
-                <Input aria-label="Code from the sign-in page" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Code from the sign-in page" />
-                <Button size="sm" disabled={!code.trim()} onClick={() => (act("input", code), setCode(""))}>
-                  Send code
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => act("cancel")}>
-                  Cancel
-                </Button>
-              </div>
-            </>
+      <p className="text-[13px] font-semibold">{label}</p>
+      <p className="text-xs text-muted-foreground">{login && showKey ? `Choose one way to connect ${label}.` : `Connect ${label} so your agent can answer.`}</p>
+      {login && (
+        <ChoiceCard title={`Log in with your ${label} subscription`} subtitle={`Your browser opens so you can log in to your ${label} account.`}>
+          <SubscriptionSignIn id={id} label={label} onSignedIn={recheck} />
+        </ChoiceCard>
+      )}
+      {showKey && keyRowOf && (
+        <ChoiceCard title={login ? `Use an API key` : `${label} API key`} subtitle={keyRowOf.help}>
+          {keyNeeded ? (
+            <div className="flex gap-2">
+              <Input aria-label="API key" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder="API key" />
+              <Button
+                size="sm"
+                disabled={!key.trim()}
+                onClick={() => secretsStore().getState().setField(keyRowOf.name, "value", key.trim()).then(() => (setKey(""), recheck()), (why: unknown) => setError(String(why)))}
+              >
+                Save key
+              </Button>
+            </div>
           ) : (
-            <Button size="sm" onClick={() => act("start")}>
-              Sign in
-            </Button>
+            <p className="text-xs text-muted-foreground">Not needed: you are logged in with your subscription.</p>
           )}
-        </div>
+        </ChoiceCard>
       )}
-      {row && !row.canLogin && row.authModes?.includes("api-key") && (
-        <div className="flex gap-2">
-          <Input aria-label="API key" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Paste your API key" />
-          <Button
-            size="sm"
-            disabled={!key.trim()}
-            onClick={() => secretsStore().getState().setField(row.name, "value", key.trim()).then(() => (setKey(""), recheck()), (why: unknown) => setError(String(why)))}
-          >
-            Save key
-          </Button>
-        </div>
-      )}
-      {failed || error ? (
+      {error ? (
         <p role="alert" className="text-xs text-danger">
-          {failed || error}
+          {error}
         </p>
       ) : null}
-      <Button size="sm" variant="outline" onClick={recheck}>
-        Check
-      </Button>
     </div>
   );
 }
@@ -384,7 +362,7 @@ function Wizard({ report, secrets, providers, catalog, recheck, onClose }: { rep
     <AppDialog open onOpenChange={() => {}} title={SETUP_STEPS[idx].title} description={`Step ${idx + 1} of ${SETUP_STEPS.length}`} footer={footer}>
       {step === "node" && <NodeStep report={report} recheck={recheck} />}
       {step === "harness" && <HarnessStep report={report} pick={pick} onPick={setPick} />}
-      {step === "sign-in" && pick && <SignInStep id={pick} label={picked?.label || pick} row={keyRow(pick, secrets)} provider={providers.find((p) => p.id === pick)} recheck={recheck} />}
+      {step === "sign-in" && pick && <SignInStep id={pick} label={picked?.label || pick} rows={secrets} recheck={recheck} />}
       {step === "first-agent" && pick && <FirstAgentStep id={pick} secrets={secrets} providers={providers} catalog={catalog} />}
     </AppDialog>
   );

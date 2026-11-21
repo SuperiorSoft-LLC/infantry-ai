@@ -741,6 +741,67 @@ mod tests {
         assert_eq!(hc.token("fake").as_deref(), Some(TOKEN));
     }
 
+    /// A fake CLI that prints a login URL, waits for the code on stdin and writes its credentials file (the real `auth login` shape).
+    #[test]
+    fn the_login_prints_a_link_waits_for_the_code_and_signs_in() {
+        struct Cli(std::path::PathBuf);
+        impl Harness for Cli {
+            fn id(&self) -> &str {
+                "cli"
+            }
+            fn capabilities(&self) -> Capabilities {
+                Fake(None).capabilities()
+            }
+            fn models(&self, _: &dyn Probe) -> Vec<ModelInfo> {
+                Vec::new()
+            }
+            fn sign_in_problem(&self, _: &dyn Probe) -> Option<String> {
+                (!self.0.exists()).then(|| "not signed in".into())
+            }
+            fn launch(&self, _: &LaunchRequest) -> Result<LaunchPlan, LaunchError> {
+                Err(LaunchError("no".into()))
+            }
+            fn credential(&self) -> Option<Credential> {
+                let creds = self.0.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/");
+                let (program, args) = if cfg!(windows) {
+                    ("powershell", vec!["-NoProfile".to_string(), "-Command".into(), format!("[Console]::Out.WriteLine('Open https://login.example/x?c=1'); $c = [Console]::In.ReadLine(); if ($c -eq 'good') {{ Set-Content -Path '{creds}' -Value ok; exit 0 }} else {{ exit 1 }}")])
+                } else {
+                    ("sh", vec!["-c".to_string(), format!("echo 'Open https://login.example/x?c=1'; read c; [ \"$c\" = good ] && echo ok > '{creds}'")])
+                };
+                Some(Credential {
+                    env: "CLI_API_KEY".into(),
+                    label: "Cli".into(),
+                    help: String::new(),
+                    auth_modes: vec![AUTH_API_KEY.into(), AUTH_SUBSCRIPTION.into()],
+                    login_argv: std::iter::once(program.to_string()).chain(args).collect(),
+                    ..Default::default()
+                })
+            }
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let ks = Arc::new(Keystore::with(dir.path(), Arc::new(|_| None), None, infantry_vault::limits::Limits::default()));
+        let hc = HarnessCredentials::new(vec![Arc::new(Cli(dir.path().join("creds")))], ks, Arc::new(|_| None));
+        hc.login("harness.cli.key", "start", "").unwrap();
+        let st = wait_for_url(&hc, "cli");
+        assert_eq!(st.url, "https://login.example/x?c=1", "the link the CLI printed is the row's login url");
+        assert_eq!(st.state, LOGIN_RUNNING);
+        hc.login("harness.cli.key", "input", "good").unwrap();
+        let done = wait_for(&hc, "cli", LOGIN_DONE);
+        assert_eq!(done.message, "Signed in.");
+        assert_eq!(hc.known()[0].signed_in, "true");
+    }
+
+    fn wait_for_url(hc: &HarnessCredentials, name: &str) -> LoginState {
+        for _ in 0..100 {
+            let s = hc.state(name);
+            if !s.url.is_empty() {
+                return s;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        panic!("no login link: {:?}", hc.state(name));
+    }
+
     #[test]
     fn a_code_needs_a_running_sign_in() {
         let (_d, hc) = creds(None);
