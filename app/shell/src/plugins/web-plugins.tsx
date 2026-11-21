@@ -34,6 +34,7 @@ import { host } from "@/host";
 import { daemonLink, daemonStore, useDaemon } from "@/daemon/daemon";
 import { pluginsStore, usePlugins } from "./use-plugins";
 import { usePreference } from "./preferences";
+import { shellUpdater } from "./shell-updater";
 import { HostAgentAvatar, useAgentActivity } from "./agent-activity";
 
 /** Lends the plugins this window loads its own React, React DOM and UI kit, and the app state they may read. */
@@ -41,7 +42,7 @@ function installHost(): void {
   const lent: UiHost = {
     apiVersion: UI_API_VERSION,
     modules: { react: React, "react/jsx-runtime": JsxRuntime, "react-dom": ReactDom, "@infantry/ui": Kit },
-    api: { useLinkState: () => useDaemon((s) => s.connection.state), usePreference, useAgentActivity, AgentAvatar: HostAgentAvatar, windowFrame: () => host.window },
+    api: { useLinkState: () => useDaemon((s) => s.connection.state), usePreference, useAgentActivity, AgentAvatar: HostAgentAvatar, windowFrame: () => host.window, shellUpdater: () => shellUpdater(host) },
   };
   (globalThis as Record<string, unknown>)[HOST_GLOBAL] = Object.freeze(lent);
 }

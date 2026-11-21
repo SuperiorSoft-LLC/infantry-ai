@@ -65,6 +65,17 @@ export interface SlotProps {
   layout: LayoutViewProps;
 }
 
+/**
+ * ARMORY-3: the shell's own updater (the Tauri updater and the release feed), lent so an app page can update the shell.
+ * `check` asks the feed; `download` fetches and verifies the update in the background and installs nothing; `relaunch`
+ * installs it and restarts the app (call it only on a user's click).
+ */
+export interface ShellUpdater {
+  check(): Promise<{ available: boolean; version: string | null; current: string }>;
+  download(): Promise<string>;
+  relaunch(): Promise<void>;
+}
+
 /** The three buttons of the real (OS-level) window's frame. */
 export interface WindowFrame {
   minimize(): void;
@@ -152,6 +163,8 @@ export interface HostApi {
    * draws it (a browser) or there is none (a phone). Read it when you draw, not once at start-up.
    */
   windowFrame(): WindowFrame | null;
+  /** The shell's own updater, or null where it has none (a browser, a phone) (ARMORY-3). */
+  shellUpdater(): ShellUpdater | null;
 }
 
 /** One busy agent, as a taskbar shows it. */
