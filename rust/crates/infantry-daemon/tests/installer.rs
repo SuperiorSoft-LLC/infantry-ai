@@ -193,6 +193,44 @@ fn a_daemon_with_nothing_installed_boots_the_installer_and_installs_live() {
     assert_eq!((b["ready"].clone(), b["bootstrap"].clone()), (json!(true), json!({ "plugin": "Test_Installer", "active": false, "error": null })));
     assert!(!plugins.join("official/Test_Base").exists());
 
+    // ---- APPS-ROOT-1: an app installs its core members, offers its optional ones, and removes its members with it ----
+    let (b2, plugins, state) = (tmp.join("bundle-apps"), tmp.join("plugins-apps"), tmp.join("state-apps"));
+    module(&b2, "official", "Test_Installer", json!({ "bootstrap": true }));
+    module(&b2, "official", "Test_Shell", json!({ "app": { "core": ["Test_Core", "Test_Shared"], "optional": ["Test_Opt"] } }));
+    module(&b2, "official", "Test_Shell2", json!({ "app": { "core": ["Test_Shared"] } }));
+    for id in ["Test_Core", "Test_Shared", "Test_Opt"] {
+        module(&b2, "official", id, json!({}));
+    }
+    std::fs::create_dir_all(&plugins).unwrap();
+    std::env::set_var("INFANTRY_BUNDLED_PLUGINS_DIR", &b2);
+    let (_d, c) = composed(&rt, &tmp, &plugins, &state);
+    let on_disk = |id: &str| plugins.join("official").join(id).join("module.json").is_file();
+    let (code, out, _) = admin(&c, &["install", "Test_Shell"]);
+    assert_eq!((code, out.as_str()), (0, "installed Test_Core, Test_Shared, Test_Shell"), "the core set comes with the app, the app last");
+    assert!(!on_disk("Test_Opt") && !on_disk("Test_Shell2"), "an optional member is not forced");
+    let rows: Vec<Value> = serde_json::from_str(&admin(&c, &["available"]).1).unwrap();
+    let row = |id: &str| rows.iter().find(|r| r["id"] == id).unwrap().clone();
+    assert_eq!(row("Test_Shell")["app"], json!({ "core": ["Test_Core", "Test_Shared"], "optional": ["Test_Opt"] }));
+    assert_eq!(row("Test_Opt")["memberOf"], json!([{ "app": "Test_Shell", "kind": "optional" }]));
+    assert_eq!(row("Test_Core")["memberOf"], json!([{ "app": "Test_Shell", "kind": "core" }]));
+    assert_eq!(row("Test_Shared")["memberOf"].as_array().unwrap().len(), 2, "a member can belong to two apps");
+    assert!(row("Test_Installer")["memberOf"].as_array().unwrap().is_empty() && row("Test_Installer")["app"].is_null());
+    // The core member cannot go alone; the optional one installs and removes on its own.
+    assert!(admin(&c, &["uninstall", "Test_Core"]).2.contains("core part of Test_Shell"));
+    assert!(on_disk("Test_Core"));
+    assert_eq!(admin(&c, &["install", "Test_Opt"]).1, "installed Test_Opt");
+    assert_eq!(admin(&c, &["uninstall", "Test_Opt"]).0, 0);
+    assert!(!on_disk("Test_Opt") && on_disk("Test_Shell"), "only the optional member went");
+    // A member another installed app lists is kept when the first app goes.
+    assert_eq!(admin(&c, &["install", "Test_Shell2", "Test_Opt"]).0, 0);
+    let (code, out, _) = admin(&c, &["uninstall", "Test_Shell"]);
+    assert_eq!(code, 0);
+    assert_eq!(out, "uninstalled Test_Core, Test_Opt, Test_Shell; kept Test_Shared (also part of Test_Shell2)");
+    assert!(on_disk("Test_Shared") && on_disk("Test_Shell2") && !on_disk("Test_Core") && !on_disk("Test_Shell"));
+    assert_eq!(admin(&c, &["uninstall", "Test_Shell2"]).1, "uninstalled Test_Shared, Test_Shell2");
+    assert_eq!(ids(&c), ["Test_Installer"]);
+    assert_eq!(boot(&c)["bootstrap"]["active"], true, "removing the last app returns to the installer");
+
     // ---- a daemon with no bootstrap plugin anywhere reports none, and is ready as it always was ----
     let (plugins, state) = (tmp.join("plugins-none"), tmp.join("state-none"));
     module(&plugins, "official", "Test_Other", json!({}));

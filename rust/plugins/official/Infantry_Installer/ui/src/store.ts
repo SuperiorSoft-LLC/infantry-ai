@@ -25,6 +25,10 @@ export interface PluginRow {
   source: string | null;
   installed: boolean;
   enabled: boolean;
+  /** APPS-ROOT-1: set when this module is an app: the plugins that come with it (`core`) and the ones it offers (`optional`). */
+  app?: { core: string[]; optional: string[] } | null;
+  /** The apps this module belongs to, and whether it is a core or an optional member of each. */
+  memberOf?: { app: string; kind: "core" | "optional" }[];
   /** `available`, `loaded`, `ui only`, `disabled`, `refused: ...`, `failed: ...`. */
   status: string;
 }
@@ -61,9 +65,27 @@ export function rowActions(r: PluginRow): { install: boolean; uninstall: boolean
   return { install: !r.installed && r.source !== null, uninstall: r.installed && !r.bootstrap, toggle: r.installed && !r.bootstrap };
 }
 
-/** The ids "Install all" sends: every module a source offers that is not installed yet (the daemon orders them). */
-export function installableIds(rows: PluginRow[]): string[] {
-  return rows.filter((r) => rowActions(r).install).map((r) => r.id);
+/** APPS-ROOT-1: what the Apps screen lists. Apps and the system installer are shown; a member shows inside its app;
+ * a plugin that belongs to no app lands in `other`, so nothing becomes unreachable. */
+export interface AppGroups {
+  system: PluginRow[];
+  apps: PluginRow[];
+  other: PluginRow[];
+}
+
+export function groupRows(rows: PluginRow[]): AppGroups {
+  const isApp = (r: PluginRow) => !!r.app;
+  return {
+    system: rows.filter((r) => r.bootstrap && !isApp(r)),
+    apps: rows.filter(isApp),
+    other: rows.filter((r) => !r.bootstrap && !isApp(r) && (r.memberOf ?? []).length === 0),
+  };
+}
+
+/** The members of an app row, resolved against the list: core ones and optional ones (an id no source offers is left out). */
+export function membersOf(app: PluginRow, rows: PluginRow[]): { core: PluginRow[]; optional: PluginRow[] } {
+  const find = (ids: string[]) => ids.map((id) => rows.find((r) => r.id === id)).filter((r): r is PluginRow => !!r);
+  return { core: find(app.app?.core ?? []), optional: find(app.app?.optional ?? []) };
 }
 
 /** Installed first, then by name; the list reads the same after every refresh. */

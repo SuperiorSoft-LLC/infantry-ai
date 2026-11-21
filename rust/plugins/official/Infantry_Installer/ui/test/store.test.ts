@@ -4,7 +4,7 @@
 // buttons follow.
 import { describe, expect, it } from "vitest";
 import type { Envelope } from "@infantry/ui-plugin-api";
-import { createInstallerStore, installableIds, rowActions, sortRows, type PluginRow } from "../src/store";
+import { createInstallerStore, groupRows, membersOf, rowActions, sortRows, type PluginRow } from "../src/store";
 
 function link(up = true) {
   const sent: Envelope[] = [];
@@ -87,9 +87,31 @@ describe("the rows", () => {
     expect(rowActions(row("A", { installed: true, bootstrap: true }))).toEqual({ install: false, uninstall: false, toggle: false });
   });
 
-  it("installs everything not installed, installed rows first by name", () => {
+  it("lists installed rows first by name", () => {
     const rows = [row("Z_Last"), row("B_Done", { installed: true }), row("A_Next"), row("Gone", { source: null })];
-    expect(installableIds(rows)).toEqual(["Z_Last", "A_Next"]);
     expect(sortRows(rows).map((r) => r.id)).toEqual(["B_Done", "A_Next", "Gone", "Z_Last"]);
+  });
+});
+
+describe("the apps screen groups (APPS-ROOT-1)", () => {
+  const rows = [
+    row("Sys_Installer", { bootstrap: true, installed: true }),
+    row("Big_App", { app: { core: ["Core_One", "Gone_Core"], optional: ["Opt_One"] } }),
+    row("Core_One", { memberOf: [{ app: "Big_App", kind: "core" }] }),
+    row("Opt_One", { memberOf: [{ app: "Big_App", kind: "optional" }] }),
+    row("Stray_Plugin"),
+  ];
+
+  it("shows apps, the system installer, and the plugins that belong to no app; members stay inside their app", () => {
+    const g = groupRows(rows);
+    expect(g.system.map((r) => r.id)).toEqual(["Sys_Installer"]);
+    expect(g.apps.map((r) => r.id)).toEqual(["Big_App"]);
+    expect(g.other.map((r) => r.id)).toEqual(["Stray_Plugin"]);
+  });
+
+  it("resolves an app's core and optional members from the list", () => {
+    const m = membersOf(rows[1], rows);
+    expect(m.core.map((r) => r.id)).toEqual(["Core_One"]);
+    expect(m.optional.map((r) => r.id)).toEqual(["Opt_One"]);
   });
 });

@@ -40,6 +40,29 @@ pub struct InstallConfig {
     pub sources: Vec<PathBuf>,
 }
 
+/// APPS-ROOT-1: a module that is an *app* lists the modules that belong to it, in its manifest:
+/// `"app": { "core": ["A", "B"], "optional": ["C"] }`. `core` members come with the app and cannot be removed while it
+/// is installed; `optional` members are offered and installed or removed on their own. Moving an id between the two lists
+/// is a one-line manifest edit. Core names no plugin id: the lists are data an app's developer sets.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AppDecl {
+    pub core: Vec<String>,
+    pub optional: Vec<String>,
+}
+
+impl AppDecl {
+    pub fn members(&self) -> impl Iterator<Item = &String> {
+        self.core.iter().chain(self.optional.iter())
+    }
+}
+
+/// The `app` declaration of a manifest, when it has one.
+pub fn app_decl(manifest: &Value) -> Option<AppDecl> {
+    let a = manifest.get("app")?.as_object()?;
+    let ids = |k: &str| -> Vec<String> { a.get(k).and_then(Value::as_array).map(|v| v.iter().filter_map(|x| x.as_str().map(String::from)).filter(|x| safe_name(x)).collect()).unwrap_or_default() };
+    Some(AppDecl { core: ids("core"), optional: ids("optional") })
+}
+
 /// One module a source offers.
 #[derive(Debug, Clone)]
 pub struct Offer {
@@ -52,6 +75,8 @@ pub struct Offer {
     pub display_name: String,
     pub description: String,
     pub requires: Vec<String>,
+    /// Set when this module is an app (see [`AppDecl`]).
+    pub app: Option<AppDecl>,
     pub bootstrap: bool,
     pub ui_plugin: bool,
     pub daemon: bool,
@@ -97,6 +122,7 @@ fn offer_of(dir: &Path, tier: &str, source: &Path) -> Option<Offer> {
         display_name: text(&v, "displayName"),
         description: text(&v, "description"),
         requires,
+        app: app_decl(&v),
         bootstrap: v.get("bootstrap").and_then(Value::as_bool).unwrap_or(false),
         ui_plugin: v.get("uiPlugin").and_then(Value::as_bool).unwrap_or(false),
         daemon: v.get("daemon").is_some_and(Value::is_object),
@@ -198,6 +224,68 @@ pub fn plan(want: &[String], offers: &[Offer], installed: &BTreeSet<String>) -> 
         visit(id, None, offers, installed, &mut Vec::new(), &mut out)?;
     }
     Ok(out)
+}
+
+/// What an install of `want` means once apps are read: an app is preceded by its core members (so the app, which switches
+/// the window over, lands last and a failed member leaves the installer on screen), every other id stays as asked.
+pub fn expand_apps(want: &[String], offers: &[Offer]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for id in want {
+        if let Some(app) = offers.iter().find(|o| &o.id == id).and_then(|o| o.app.as_ref()) {
+            for m in &app.core {
+                if !out.contains(m) {
+                    out.push(m.clone());
+                }
+            }
+        }
+        if !out.contains(id) {
+            out.push(id.clone());
+        }
+    }
+    out
+}
+
+fn requires_of(v: &Value) -> Vec<String> {
+    v.get("requires").and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default()
+}
+
+/// What removing the app `id` takes away, in the order to remove it. `modules` is every installed module with its
+/// manifest. A member stays when another installed app also lists it, when an installed module outside the set requires it
+/// (the second list says which were kept and why), or when it is `keep` (the installer). None when `id` is no app.
+pub fn app_removal(id: &str, modules: &[(String, Value)], keep: Option<&str>) -> Option<(Vec<String>, Vec<(String, String)>)> {
+    let decl = app_decl(&modules.iter().find(|(m, _)| m == id)?.1)?;
+    let installed = |m: &str| modules.iter().any(|(x, _)| x == m);
+    let mut set: Vec<String> = decl.members().filter(|m| installed(m) && Some(m.as_str()) != keep).cloned().collect();
+    set.push(id.to_string());
+    let mut kept: Vec<(String, String)> = Vec::new();
+    let others: Vec<(&String, AppDecl)> = modules.iter().filter(|(m, _)| m != id).filter_map(|(m, v)| app_decl(v).map(|d| (m, d))).collect();
+    set.retain(|m| {
+        if m == id {
+            return true;
+        }
+        match others.iter().find(|(_, d)| d.members().any(|x| x == m)) {
+            Some((app, _)) => {
+                kept.push((m.clone(), format!("also part of {app}")));
+                false
+            }
+            None => true,
+        }
+    });
+    // A module outside the set that requires a member keeps that member.
+    loop {
+        let hit = set.iter().filter(|m| m.as_str() != id).find_map(|m| modules.iter().find(|(o, v)| !set.contains(o) && requires_of(v).contains(m)).map(|(o, _)| (m.clone(), o.clone())));
+        let Some((member, by)) = hit else { break };
+        kept.push((member.clone(), format!("required by {by}")));
+        set.retain(|m| *m != member);
+    }
+    // Dependents first: a module goes only once nothing left in the set requires it.
+    let mut order: Vec<String> = Vec::new();
+    let mut left = set;
+    while !left.is_empty() {
+        let pick = left.iter().position(|m| !left.iter().any(|o| o != m && modules.iter().find(|(x, _)| x == o).is_some_and(|(_, v)| requires_of(v).contains(m)))).unwrap_or(0);
+        order.push(left.remove(pick));
+    }
+    Some((order, kept))
 }
 
 /// Copies a module folder (files and folders; a link is refused, so a source cannot reach outside itself).

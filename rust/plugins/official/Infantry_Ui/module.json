@@ -4,9 +4,30 @@
   "apiVersion": 2,
   "author": "Infantry AI",
   "license": "Apache-2.0",
-  "displayName": "Interface",
-  "description": "The app's interface: the shell and its default layout (the centre tabs and the right panel, as the app has always looked). The boot chain loads it after the installer. Without it the daemon stays on the installer's screen instead of opening a blank window. The shell code ships in the app; this module is the switch that turns it on, so removing it falls back to the installer.",
+  "displayName": "Infantry AI",
+  "description": "The Infantry AI app: the orchestrator interface and the plugins that belong to it. Its plugins are managed inside the app, in its Plugins tab. Removing the app returns to the installer.",
   "tier": "official",
   "uiPlugin": true,
+  "app": {
+    "core": [
+      "Infantry_Cards",
+      "Infantry_Chat",
+      "Infantry_Desktop",
+      "Infantry_Docs",
+      "Infantry_Git",
+      "Infantry_Health",
+      "Infantry_JobFeed",
+      "Infantry_Mcp",
+      "Infantry_News",
+      "Infantry_Notes",
+      "Infantry_Plugins",
+      "Infantry_Roles",
+      "Infantry_Settings",
+      "Infantry_Triggers"
+    ],
+    "optional": [
+      "Infantry_Sites"
+    ]
+  },
   "sequence": []
 }
