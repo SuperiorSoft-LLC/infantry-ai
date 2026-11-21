@@ -126,13 +126,19 @@ export function withRole(d: NewAgentDraft, roleId: string, binding: RoleBinding 
   return seed({ ...d, roleId }, harness, wanted, harnesses, catalog);
 }
 
+/** No role picked: seed the executor from the default harness and its default model, so all defaults can start an agent. */
+export function withDefaults(d: NewAgentDraft, harnesses: HarnessInfo[], catalog: ModelGroup[]): NewAgentDraft {
+  const fallback = harnesses.find((h) => h.default && h.available !== false) ?? harnesses.find((h) => h.available !== false);
+  if (!fallback) return d;
+  return seed(d, fallback.id, fallback.defaultModel || null, harnesses, catalog);
+}
+
 export function withHarness(d: NewAgentDraft, harness: string, harnesses: HarnessInfo[], catalog: ModelGroup[]): NewAgentDraft {
   return seed(d, harness, harnesses.find((h) => h.id === harness)?.defaultModel ?? null, harnesses, catalog);
 }
 
 /** Why Add is disabled (shown beside the button, never silent), or null when it can go. */
 export function addBlockedReason(d: NewAgentDraft): string | null {
-  if (!d.roleId) return "Pick a role first";
   if (!d.harness) return "Pick a harness";
   if (!d.task.trim()) return "Type the agent's first task";
   return null;

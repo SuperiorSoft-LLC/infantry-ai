@@ -11,6 +11,7 @@ import {
   createLauncherStore,
   rankRoles,
   roleList,
+  withDefaults,
   withRole,
   type LauncherStore,
   type NewAgentDraft,
@@ -60,18 +61,17 @@ export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDra
   const [query, setQuery] = useState("");
   const all = useMemo(() => roleList(rolesById).filter((r) => !r.disabled), [rolesById]);
   const options = useMemo(() => rankRoles(all, query), [all, query]);
-  const roleMissing = draft.roleId === null;
 
   // Catalogs that arrive after a role was picked seed the executor then, without losing the draft.
   useEffect(() => {
-    if (draft.roleId && !draft.harness && harnesses.length > 0) {
-      onChange(withRole(draft, draft.roleId, bindings[draft.roleId], harnesses, catalog));
+    if (!draft.harness && harnesses.length > 0) {
+      onChange(draft.roleId ? withRole(draft, draft.roleId, bindings[draft.roleId], harnesses, catalog) : withDefaults(draft, harnesses, catalog));
     }
   }, [harnesses, catalog]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-5">
-      <Step n={1} title="Role" missing={roleMissing}>
+      <Step n={1} title="Role (optional)">
         <Input
           placeholder="Search roles..."
           aria-label="Search roles"
@@ -115,7 +115,7 @@ export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDra
         )}
       </Step>
 
-      {draft.roleId && (
+      {(
         <Step n={2} title="Harness, provider and model" missing={!draft.harness}>
           <ExecutorPicker
             idPrefix="new-agent"
@@ -147,7 +147,8 @@ export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDra
 /** Add: the existing spawn with the picked role, harness and model, then the first task. */
 export function addAgent(d: NewAgentDraft): void {
   const store = daemonStore().getState();
-  const opts: Record<string, unknown> = { role: d.roleId };
+  const opts: Record<string, unknown> = {};
+  if (d.roleId) opts.role = d.roleId;
   if (d.harness) opts.provider = d.harness;
   if (d.model) opts.model = d.model;
   if (d.effort) opts.effort = d.effort;
