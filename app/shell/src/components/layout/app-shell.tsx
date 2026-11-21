@@ -28,7 +28,7 @@ function Drawer({ side, onClose, children }: { side: "left" | "right"; onClose: 
   );
 }
 
-export function AppShell({ headerActions, statusLeading }: Pick<ShellProps, "headerActions" | "statusLeading"> = {}) {
+export function AppShell({ headerActions, statusLeading, windowControls }: Pick<ShellProps, "headerActions" | "statusLeading" | "windowControls"> = {}) {
   const ui = useUi();
   const layout = useLayout();
   const narrowLeft = !layout.leftInline;
@@ -55,7 +55,7 @@ export function AppShell({ headerActions, statusLeading }: Pick<ShellProps, "hea
 
   return (
     <div className="flex h-full flex-col" data-layout={layout.kind}>
-      <TitleBar headerActions={headerActions} />
+      <TitleBar headerActions={headerActions} windowControls={windowControls} />
       <div className="relative flex min-h-0 flex-1">
         {ui.leftOpen && !narrowLeft && <AgentSidebar />}
         <SessionView />

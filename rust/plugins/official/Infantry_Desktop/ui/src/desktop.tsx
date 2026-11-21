@@ -3,10 +3,28 @@
 // DESK-2: the desktop layout. A plain wallpaper with an icon per app. An app opens full screen under a slim app title bar with
 // Minimize (back to the desktop, the app stays open and keeps its state) and Close (the app ends; agents keep running because
 // they live in the daemon). The orchestrator is today's whole shell, drawn untouched. Built from the kit only.
+// DESK-5: two levels. The header's minimize / maximize / close (the shell's own, handed our frame as `windowControls`) and the
+// app menu act on the APP inside this OS; the real window's are in the Start menu at the left end of the bottom strip.
 import { useReducer, useState, type ComponentType, type ReactNode } from "react";
-import { ChevronsDown, LayoutDashboard, MoreVertical, PackageOpen, X } from "lucide-react";
-import { AppDialog, cn, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, IconButton, PanelCard, Switch, Tooltip, TooltipContent, TooltipTrigger } from "@infantry/ui";
-import { AgentAvatar, SCOPE_ATTRIBUTE, useAgentActivity, usePreference, type ShellProps } from "@infantry/ui-plugin-api";
+import { ChevronsDown, Copy, LayoutDashboard, LayoutGrid, Minus, MoreVertical, PackageOpen, Power, Square, X } from "lucide-react";
+import {
+  AppDialog,
+  Button,
+  cn,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  IconButton,
+  PanelCard,
+  Switch,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@infantry/ui";
+import { AgentAvatar, SCOPE_ATTRIBUTE, useAgentActivity, usePreference, windowFrame, type ShellProps } from "@infantry/ui-plugin-api";
 import { initialState, reduce, toggle, type AppId, type DesktopState } from "./state";
 
 /** What the "About" of an app says: the owner's legibility rule (an app is a plugin under Apache-2.0, not core). */
@@ -67,13 +85,16 @@ function DesktopIcon({ app, running, onOpen, onAbout }: { app: AppInfo; running:
   );
 }
 
-/** The slim title bar of an open app. Its buttons are the APP's: the OS window controls (desktop app) sit at the far right. */
-function AppBar({ app, onMinimize, onClose }: { app: AppInfo; onMinimize: () => void; onClose: () => void }) {
+/** The slim title bar of an open app. Its buttons are the APP's (minimize, maximize or restore, close); the real window's are in the Start menu. */
+function AppBar({ app, maximized, onMinimize, onToggleMaximize, onClose }: { app: AppInfo; maximized: boolean; onMinimize: () => void; onToggleMaximize: () => void; onClose: () => void }) {
   const Icon = app.icon;
   return (
     <header data-tauri-drag-region className="flex h-8 shrink-0 items-center gap-1 border-b bg-muted/50 pl-1 text-xs select-none">
       <IconButton label={`Minimize ${app.name} to the desktop`} size="icon-xs" onClick={onMinimize}>
         <ChevronsDown />
+      </IconButton>
+      <IconButton label={`${maximized ? "Restore" : "Maximize"} ${app.name}`} size="icon-xs" onClick={onToggleMaximize}>
+        {maximized ? <Copy className="size-2.5!" /> : <Square className="size-2.5!" />}
       </IconButton>
       <IconButton label={`Close ${app.name}`} size="icon-xs" onClick={onClose}>
         <X />
@@ -117,10 +138,17 @@ function Scoped({ plugin, children }: { plugin: string; children: ReactNode }) {
   );
 }
 
-/** Hidden, not unmounted, while minimized: the app keeps running and reopens as it was. */
-function Window({ show, children }: { show: boolean; children: ReactNode }) {
+/**
+ * Hidden, not unmounted, while minimized: the app keeps running and reopens as it was. Maximized it fills the work area; restored
+ * it is a smaller window with the wallpaper around it (on a phone it always fills: there is no room for a second window).
+ */
+function Window({ show, maximized, children }: { show: boolean; maximized: boolean; children: ReactNode }) {
   return (
-    <div className={show ? "absolute inset-0 flex flex-col bg-background" : "hidden"} aria-hidden={!show}>
+    <div
+      className={show ? cn("absolute flex flex-col bg-background", maximized ? "inset-0" : "inset-x-[6%] inset-y-[5%] border shadow-2xl max-sm:inset-0 max-sm:border-0 max-sm:shadow-none") : "hidden"}
+      aria-hidden={!show}
+      data-window-state={show ? (maximized ? "maximized" : "restored") : "hidden"}
+    >
       {children}
     </div>
   );
@@ -171,11 +199,64 @@ function TaskbarAvatars() {
   );
 }
 
-/** Along the bottom on a desktop, a dock on a phone: one entry per open app. Clicking a minimized entry restores it; the front one minimizes. */
-function Taskbar({ state, onToggle }: { state: DesktopState; onToggle: (app: AppInfo) => void }) {
+/**
+ * The OS level (DESK-5): the Start button at the left end of the bottom strip. It is the strip's height (h-5 inside the h-6 strip,
+ * like the taskbar entries), never taller. Its menu lists the apps, then the real window's own actions: Minimize Infantry and
+ * Exit Infantry. Those two appear only where the app has a window frame to act on (the desktop app; a browser or phone has none).
+ */
+function StartMenu({ state, onOpen }: { state: DesktopState; onOpen: (app: AppInfo) => void }) {
+  const frame = windowFrame();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          aria-label="Start"
+          data-testid="start-button"
+          className="h-5 gap-1.5 rounded px-1.5 max-sm:h-12 max-sm:min-w-12 max-sm:rounded-lg max-sm:px-3"
+        >
+          <LayoutGrid className="size-3.5 max-sm:size-4" />
+          <span className="hidden sm:inline">Start</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" className="w-auto min-w-48" data-testid="start-menu">
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Apps</DropdownMenuLabel>
+        {APPS.map((a) => {
+          const Icon = a.icon;
+          return (
+            <DropdownMenuItem key={a.id} onSelect={() => onOpen(a)} data-testid={`start-app-${a.id}`}>
+              <Icon />
+              {a.name}
+              {state.windows[a.id] !== "closed" && <span className="ml-auto size-1.5 rounded-full bg-foreground" aria-label="running" />}
+            </DropdownMenuItem>
+          );
+        })}
+        {frame && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => frame.minimize()} data-testid="start-minimize-window">
+              <Minus />
+              Minimize Infantry
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => frame.close()} data-testid="start-exit-window">
+              <Power />
+              Exit Infantry
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** Along the bottom on a desktop, a dock on a phone: the Start button, then one entry per open app. Clicking a minimized entry restores it; the front one minimizes. */
+function Taskbar({ state, onToggle, onOpen }: { state: DesktopState; onToggle: (app: AppInfo) => void; onOpen: (app: AppInfo) => void }) {
   const open = APPS.filter((a) => state.windows[a.id] !== "closed");
   return (
     <nav aria-label="Taskbar" data-testid="taskbar" className="flex h-full min-w-0 items-center gap-1">
+      <StartMenu state={state} onOpen={onOpen} />
       {open.length === 0 && <span className="px-1 text-xs text-muted-foreground">No apps open</span>}
       {open.map((a) => {
         const Icon = a.icon;
@@ -213,15 +294,23 @@ export function Desktop({ plugin, Shell, View }: { plugin: string; Shell: Compon
   const [about, setAbout] = useState<AppInfo | null>(null);
   const taskbar = (
     <Scoped plugin={plugin}>
-      <Taskbar state={state} onToggle={(a) => dispatch(toggle(state, a.id))} />
+      <Taskbar state={state} onToggle={(a) => dispatch(toggle(state, a.id))} onOpen={(a) => dispatch({ type: "open", app: a.id })} />
     </Scoped>
   );
   const orchestrator = APPS[0]!;
+  // The orchestrator's status line carries the taskbar only while it fills the work area; restored, the OS strip below it does.
+  const taskbarInShell = state.front === "orchestrator" && state.maximized.orchestrator;
   const body = (id: AppId): ReactNode =>
     id === "orchestrator" ? (
       <Shell
         className="min-h-0 flex-1"
-        statusLeading={taskbar}
+        statusLeading={taskbarInShell ? taskbar : undefined}
+        windowControls={{
+          minimize: () => dispatch({ type: "minimize", app: "orchestrator" }),
+          toggleMaximize: () => dispatch({ type: "toggleMaximize", app: "orchestrator" }),
+          close: () => dispatch({ type: "close", app: "orchestrator" }),
+          maximized: state.maximized.orchestrator,
+        }}
         headerActions={
           <Scoped plugin={plugin}>
             <AppMenu app={orchestrator} onMinimize={() => dispatch({ type: "minimize", app: "orchestrator" })} onClose={() => dispatch({ type: "close", app: "orchestrator" })} onAbout={() => setAbout(orchestrator)} />
@@ -244,8 +333,16 @@ export function Desktop({ plugin, Shell, View }: { plugin: string; Shell: Compon
       {APPS.map(
         (a) =>
           state.windows[a.id] !== "closed" && (
-            <Window key={a.id} show={state.front === a.id}>
-              {a.id !== "orchestrator" && <AppBar app={a} onMinimize={() => dispatch({ type: "minimize", app: a.id })} onClose={() => dispatch({ type: "close", app: a.id })} />}
+            <Window key={a.id} show={state.front === a.id} maximized={state.maximized[a.id]}>
+              {a.id !== "orchestrator" && (
+                <AppBar
+                  app={a}
+                  maximized={state.maximized[a.id]}
+                  onMinimize={() => dispatch({ type: "minimize", app: a.id })}
+                  onToggleMaximize={() => dispatch({ type: "toggleMaximize", app: a.id })}
+                  onClose={() => dispatch({ type: "close", app: a.id })}
+                />
+              )}
               <div className="relative min-h-0 flex-1">
                 <div className="absolute inset-0 flex flex-col">{body(a.id)}</div>
               </div>
@@ -253,8 +350,8 @@ export function Desktop({ plugin, Shell, View }: { plugin: string; Shell: Compon
           ),
       )}
      </div>
-      {/* The orchestrator's status line carries the taskbar; with another app or the wallpaper in front, a strip of the same height does. */}
-      {state.front !== "orchestrator" && <footer className="flex h-6 shrink-0 items-center border-t bg-background px-3 max-sm:h-14">{taskbar}</footer>}
+      {/* While the orchestrator fills the work area its status line carries the taskbar; otherwise (another app, the wallpaper, or a restored window) a strip of the same height does. */}
+      {!taskbarInShell && <footer className="flex h-6 shrink-0 items-center border-t bg-background px-3 max-sm:h-14">{taskbar}</footer>}
       <About app={about} onClose={() => setAbout(null)} />
     </div>
   );

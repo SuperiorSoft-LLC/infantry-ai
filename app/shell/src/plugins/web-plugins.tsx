@@ -41,7 +41,7 @@ function installHost(): void {
   const lent: UiHost = {
     apiVersion: UI_API_VERSION,
     modules: { react: React, "react/jsx-runtime": JsxRuntime, "react-dom": ReactDom, "@infantry/ui": Kit },
-    api: { useLinkState: () => useDaemon((s) => s.connection.state), usePreference, useAgentActivity, AgentAvatar: HostAgentAvatar },
+    api: { useLinkState: () => useDaemon((s) => s.connection.state), usePreference, useAgentActivity, AgentAvatar: HostAgentAvatar, windowFrame: () => host.window },
   };
   (globalThis as Record<string, unknown>)[HOST_GLOBAL] = Object.freeze(lent);
 }
