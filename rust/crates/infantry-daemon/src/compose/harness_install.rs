@@ -27,6 +27,10 @@ const FRAMES: &[&str] = &[pf::HARNESS_INSTALL_STATUS, pf::HARNESS_INSTALL];
 const DIST_BASE: &str = "https://nodejs.org/dist";
 /// One npm install may not take longer than this (a named limit, not a hidden one).
 const NPM_TIMEOUT: Duration = Duration::from_secs(900);
+/// The log line that carries npm's latest output, rewritten in place while the install runs.
+const NPM_LIVE: &str = "[npm] ";
+/// The log line that carries the Node.js download's progress, rewritten in place.
+const NODE_DOWNLOAD: &str = "[node] downloading ";
 const VERSION_TIMEOUT: Duration = Duration::from_secs(8);
 const NODE_GUIDANCE: &str = "Node.js is not installed on this machine. Infantry AI can install it for you into its own folder (no admin prompt).";
 const NODE_MANUAL: &str = "Install Node.js from nodejs.org, then press Check again.";
@@ -56,6 +60,16 @@ impl HarnessInstall {
         let prefix = state_dir.join("harness-tools");
         add_to_path(&prefix);
         Arc::new(HarnessInstall { prefix, log: Arc::default(), busy: Arc::default(), versions: Arc::default(), on_changed, on_done })
+    }
+
+    /// A progress line that is rewritten in place (the latest npm line, the download percent) instead of piling up: it replaces the
+    /// last log entry when that one starts with [prefix].
+    fn live(log: &Mutex<Vec<String>>, prefix: &str, line: impl Into<String>) {
+        let mut l = log.lock().unwrap_or_else(|e| e.into_inner());
+        match l.last_mut() {
+            Some(last) if last.starts_with(prefix) => *last = line.into(),
+            _ => l.push(line.into()),
+        }
     }
 
     fn note(log: &Mutex<Vec<String>>, line: impl Into<String>) {
@@ -207,12 +221,12 @@ fn read_version(path: &Path) -> Option<String> {
 
 // ---- installing ----
 
-fn run_install(prefix: &Path, log: &Mutex<Vec<String>>, ids: &[String], update: bool, runtime: bool) {
+fn run_install(prefix: &Path, log: &Arc<Mutex<Vec<String>>>, ids: &[String], update: bool, runtime: bool) {
     let note = |s: String| HarnessInstall::note(log, s);
     let mut npm = find_npm(prefix);
     if npm.is_none() {
         match node_platform() {
-            Some(platform) => match install_node(prefix, platform, &note) {
+            Some(platform) => match install_node(prefix, platform, &note, Some(log)) {
                 Ok(()) => {
                     note("node: installed".into());
                     npm = find_npm(prefix);
@@ -245,7 +259,7 @@ fn run_install(prefix: &Path, log: &Mutex<Vec<String>>, ids: &[String], update: 
             continue;
         }
         note(format!("[{id}] npm install -g {pkg}"));
-        match npm_install(&npm, prefix, pkg, log) {
+        match npm_install(&npm, prefix, pkg, log.clone()) {
             Ok(()) => match find_cli(prefix, cmd).and_then(|p| read_version(&p)) {
                 Some(v) => note(format!("{id}: installed {v}")),
                 None => note(format!("{id}: failed - npm finished but {cmd} does not run")),
@@ -255,12 +269,13 @@ fn run_install(prefix: &Path, log: &Mutex<Vec<String>>, ids: &[String], update: 
     }
 }
 
-fn npm_install(npm: &Path, prefix: &Path, pkg: &str, log: &Mutex<Vec<String>>) -> Result<(), String> {
+fn npm_install(npm: &Path, prefix: &Path, pkg: &str, log_arc: Arc<Mutex<Vec<String>>>) -> Result<(), String> {
     let mut path = std::ffi::OsString::from(prefix.as_os_str());
     path.push(if cfg!(windows) { ";" } else { ":" });
     path.push(std::env::var_os("PATH").unwrap_or_default());
     let mut child = infantry_proc::command(npm)
-        .args(["install", "-g", "--no-fund", "--no-audit", "--prefix"])
+        // --loglevel=http makes npm print each package it fetches, so there is a live line to show.
+        .args(["install", "-g", "--no-fund", "--no-audit", "--loglevel=http", "--prefix"])
         .arg(prefix)
         .arg(format!("{pkg}@latest"))
         .env("PATH", path)
@@ -270,14 +285,25 @@ fn npm_install(npm: &Path, prefix: &Path, pkg: &str, log: &Mutex<Vec<String>>) -
         .spawn()
         .map_err(|e| format!("could not start npm: {e}"))?;
     let tail: Arc<Mutex<Vec<String>>> = Arc::default();
+    let log_live = log_arc;
     let mut readers = Vec::new();
     for stream in [child.stdout.take().map(|s| Box::new(s) as Box<dyn Read + Send>), child.stderr.take().map(|s| Box::new(s) as Box<dyn Read + Send>)].into_iter().flatten() {
-        let tail = tail.clone();
+        let (tail, log) = (tail.clone(), log_live.clone());
         readers.push(std::thread::spawn(move || {
-            let mut text = String::new();
-            let _ = { stream }.read_to_string(&mut text);
-            let mut t = tail.lock().unwrap_or_else(|e| e.into_inner());
-            t.extend(text.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from));
+            for line in std::io::BufRead::lines(std::io::BufReader::new(stream)).map_while(Result::ok) {
+                let line = line.trim().to_string();
+                if line.is_empty() {
+                    continue;
+                }
+                // The latest npm line, live (the owner sees it moving); the last few are kept for an error.
+                HarnessInstall::live(&log, NPM_LIVE, format!("{NPM_LIVE}{}", shown_npm(&line)));
+                let mut t = tail.lock().unwrap_or_else(|e| e.into_inner());
+                t.push(line);
+                let n = t.len();
+                if n > 20 {
+                    t.drain(..n - 20);
+                }
+            }
         }));
     }
     let start = Instant::now();
@@ -297,9 +323,6 @@ fn npm_install(npm: &Path, prefix: &Path, pkg: &str, log: &Mutex<Vec<String>>) -
         let _ = r.join();
     }
     let t = tail.lock().unwrap_or_else(|e| e.into_inner());
-    for l in t.iter().rev().take(3).rev() {
-        HarnessInstall::note(log, format!("[npm] {l}"));
-    }
     match status {
         Some(s) if s.success() => Ok(()),
         Some(s) => Err(format!("npm exited with {} ({})", s.code().map_or("a signal".into(), |c| c.to_string()), t.last().cloned().unwrap_or_default())),
@@ -321,7 +344,25 @@ fn node_platform() -> Option<&'static str> {
     }
 }
 
+/// npm's http lines are long (`http fetch GET 200 https://registry.npmjs.org/x 123ms`): cut for one live line.
+fn shown_npm(line: &str) -> String {
+    line.chars().take(160).collect()
+}
+
+/// `12.3 of 40.1 MB (31%)` for a download in progress.
+fn download_text(done: u64, total: Option<u64>) -> String {
+    let mb = |b: u64| format!("{:.1}", b as f64 / 1_048_576.0);
+    match total.filter(|t| *t > 0) {
+        Some(t) => format!("{} of {} MB ({}%)", mb(done), mb(t), (done.min(t) * 100) / t),
+        None => format!("{} MB", mb(done)),
+    }
+}
+
 fn http_get(url: &str) -> Result<Vec<u8>, String> {
+    http_get_with(url, &|_, _| {})
+}
+
+fn http_get_with(url: &str, progress: &dyn Fn(u64, Option<u64>)) -> Result<Vec<u8>, String> {
     // ureq is built with only the native-tls feature, which is not a default backend: without an explicit connector every
     // https call fails "no TLS backend is configured" (Windows Sandbox run 6: the wizard's Node step never downloaded).
     let tls = native_tls::TlsConnector::new().map_err(|e| format!("no TLS for {url}: {e}"))?;
@@ -331,8 +372,24 @@ fn http_get(url: &str) -> Result<Vec<u8>, String> {
         .timeout_read(Duration::from_secs(120))
         .build();
     let resp = agent.get(url).call().map_err(|e| format!("could not reach {url}: {e}"))?;
+    let total = resp.header("Content-Length").and_then(|v| v.parse::<u64>().ok());
+    let mut reader = resp.into_reader();
     let mut buf = Vec::new();
-    resp.into_reader().read_to_end(&mut buf).map_err(|e| format!("download of {url} failed: {e}"))?;
+    let mut chunk = [0u8; 65536];
+    let mut last = 0u64;
+    loop {
+        let n = reader.read(&mut chunk).map_err(|e| format!("download of {url} failed: {e}"))?;
+        if n == 0 {
+            break;
+        }
+        buf.extend_from_slice(&chunk[..n]);
+        // About every 512 KB, not per chunk: a log line is rewritten, a frame can follow.
+        if buf.len() as u64 - last >= 524_288 {
+            last = buf.len() as u64;
+            progress(last, total);
+        }
+    }
+    progress(buf.len() as u64, total);
     Ok(buf)
 }
 
@@ -353,7 +410,7 @@ fn sha_for(sums: &str, file: &str) -> Option<String> {
     sums.lines().map(|l| l.split_whitespace().collect::<Vec<_>>()).find(|p| p.len() == 2 && p[1] == file).map(|p| p[0].to_string()).filter(|h| h.len() == 64 && h.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
-fn install_node(prefix: &Path, platform: &str, note: &dyn Fn(String)) -> Result<(), String> {
+fn install_node(prefix: &Path, platform: &str, note: &dyn Fn(String), live: Option<&Mutex<Vec<String>>>) -> Result<(), String> {
     std::fs::create_dir_all(prefix).map_err(|e| format!("cannot create {}: {e}", prefix.display()))?;
     let work = prefix.join(".node-download");
     let _ = std::fs::remove_dir_all(&work);
@@ -365,8 +422,12 @@ fn install_node(prefix: &Path, platform: &str, note: &dyn Fn(String)) -> Result<
         let zip_name = format!("node-{version}-{platform}.zip");
         let sums = String::from_utf8_lossy(&http_get(&format!("{DIST_BASE}/{version}/SHASUMS256.txt"))?).to_string();
         let want = sha_for(&sums, &zip_name).ok_or_else(|| format!("the Node.js checksums do not list {zip_name}"))?;
-        note(format!("[node] downloading {zip_name}"));
-        let bytes = http_get(&format!("{DIST_BASE}/{version}/{zip_name}"))?;
+        note(format!("{NODE_DOWNLOAD}{zip_name}"));
+        let bytes = http_get_with(&format!("{DIST_BASE}/{version}/{zip_name}"), &|done, total| {
+            if let Some(live) = live {
+                HarnessInstall::live(live, NODE_DOWNLOAD, format!("{NODE_DOWNLOAD}{zip_name}: {}", download_text(done, total)));
+            }
+        })?;
         let got = Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect::<String>();
         if !got.eq_ignore_ascii_case(&want) {
             return Err("the Node.js download does not match its checksum".to_string());
@@ -401,6 +462,17 @@ mod tests {
         assert_eq!(latest_lts(idx, "win-x64").as_deref(), Some("v24.11.0"));
         assert_eq!(latest_lts(idx, "win-ia32"), None);
         assert_eq!(latest_lts("not json", "win-x64"), None);
+    }
+
+    #[test]
+    fn a_progress_line_is_rewritten_in_place_and_a_download_reads_as_percent() {
+        let log: Mutex<Vec<String>> = Mutex::default();
+        HarnessInstall::note(&log, "[claude] npm install -g x");
+        HarnessInstall::live(&log, NPM_LIVE, "[npm] http fetch one");
+        HarnessInstall::live(&log, NPM_LIVE, "[npm] http fetch two");
+        assert_eq!(*log.lock().unwrap(), vec!["[claude] npm install -g x".to_string(), "[npm] http fetch two".to_string()]);
+        assert_eq!(download_text(10_485_760, Some(41_943_040)), "10.0 of 40.0 MB (25%)");
+        assert_eq!(download_text(1_048_576, None), "1.0 MB");
     }
 
     #[test]

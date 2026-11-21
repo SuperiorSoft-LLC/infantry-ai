@@ -151,6 +151,23 @@ export const tokenSecretName = (id: string): string => `harness.${id}.token`;
 /** The row of [id]'s browser sign-in, or null when its harness declares none (then only the other ways apply). */
 export const signInRow = (id: string, rows: SecretRow[]): SecretRow | null => rows.find((r) => r.name === tokenSecretName(id) && r.canLogin) ?? null;
 
+/**
+ * The row that runs [id]'s subscription login: the key row when its CLI has a login (link + code), else the token row (the CLI's
+ * token command, whose result is pasted). Both answer start / input / cancel and report loginState, so the screen is one flow.
+ */
+export const loginRow = (id: string, rows: SecretRow[]): SecretRow | null => {
+  const key = rows.find((r) => r.name === `harness.${id}.key` && r.canLogin);
+  return key ?? signInRow(id, rows);
+};
+
+/** The two ways to connect, as the Kotlin screen draws them (harness-neutral): the subscription login if declared, and the key. */
+export function signInChoices(id: string, rows: SecretRow[]): { login: SecretRow | null; key: SecretRow | null; keyNeeded: boolean } {
+  const login = loginRow(id, rows);
+  const key = rows.find((r) => r.name === `harness.${id}.key`) ?? null;
+  const done = signInPhase(login) === "done" || login?.signedIn === "true";
+  return { login, key, keyNeeded: !done };
+}
+
 export type SignInPhase = "idle" | "running" | "done" | "failed";
 
 /** Where the browser sign-in stands, from the daemon's row. */
@@ -165,6 +182,38 @@ export function signInPhase(row: SecretRow | null): SignInPhase {
     default:
       return "idle";
   }
+}
+
+// ---- Install progress ----
+
+/** After this long a running install gets the reassurance line (a cost trade-off, not a limit on the install). */
+export const INSTALL_REASSURE_SECONDS = 60;
+
+export interface InstallProgress {
+  /** What is being installed (`node` or a harness id), from the newest `[id] ...` log line. */
+  step: string | null;
+  /** 0-100 when the log carries a download percent, else null (an indeterminate bar). */
+  percent: number | null;
+  /** The newest live line (the latest npm output, the download status), without its `[id] ` tag. */
+  line: string;
+}
+
+/** What the running install is doing, read from the daemon's `[id] ...` progress lines. */
+export function installProgress(log: string[]): InstallProgress {
+  const tagged = log.filter((l) => /^\[[^\]]+\] /.test(l));
+  const last = tagged[tagged.length - 1] ?? "";
+  const m = /^\[([^\]]+)\] (.*)$/.exec(last);
+  const live = [...tagged].reverse().find((l) => l.startsWith("[npm] ") || /\(\d+%\)\s*$/.test(l) || /^\[node\] /.test(l)) ?? last;
+  const text = live.replace(/^\[[^\]]+\] /, "");
+  const pct = /\((\d{1,3})%\)\s*$/.exec(text);
+  const step = tagged.map((l) => /^\[([^\]]+)\]/.exec(l)?.[1] ?? "").filter((t) => t && t !== "npm").pop() ?? m?.[1] ?? null;
+  return { step, percent: pct ? Math.min(100, Number(pct[1])) : null, line: text };
+}
+
+/** "1 min 05 s" for an install that has run [seconds]. */
+export function elapsedText(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")} s`;
 }
 
 // ---- HarnessInstallSetting ----
