@@ -32,7 +32,7 @@ Commands in these pages were checked against the code (`rust/crates/infantry-cli
 
 ## Support Infantry AI
 
-<!-- shared:support_line -->The core (MPL-2.0) is the community foundation. Sponsorship and donations pay for keeping it stable and backward compatible.<!-- /shared:support_line -->
+<!-- shared:support_line -->BattalionOS (MPL-2.0) is the community foundation. Sponsorship and donations pay for keeping it stable and backward compatible.<!-- /shared:support_line -->
 
 - [Sponsor on GitHub](https://github.com/sponsors/SPONSORS_ACCOUNT) (monthly)
 - [Donate once](https://buy.stripe.com/STRIPE_PAYMENT_LINK) (you choose the amount)

@@ -1,7 +1,7 @@
 > [!IMPORTANT]
 > **Attention:** we are currently refactoring our framework and rebuilding it on Rust, React and Tauri 2. Please be patient while we go through this process; we will be updating our wiki and license very soon.
 >
-> Our license keeps the same structure: the core code for managing plugins and abstraction is **MPL-2.0**, while the specifics, such as the entire Orchestrator, the Agents and anything else that is business-specific, will always be **Apache-2.0**.
+> Our license keeps the same structure: the core code for managing plugins and abstraction, called **BattalionOS**, is **MPL-2.0**, while the specifics, such as the entire Orchestrator, the Agents and anything else that is business-specific, will always be **Apache-2.0**.
 
 <p align="center"><img src="assets/branding/infantry-ai-emblem.png" alt="Infantry AI emblem" width="220"></p>
 
@@ -65,13 +65,13 @@ More shots: [Settings](assets/screenshots/rust/rust-11-settings-modal-dark.png),
 
 Infantry AI is an AI framework. It is no longer only a project-management app: it is the components to build something else. You can build a completely new application with it, or use the platform itself to build the application you want. The AI is no longer just the builder: the agents are the cells of the body, and they evolve the application into something else. The project-management board is one app built on this framework. See [docs/VISION.md](docs/VISION.md).
 
-Infantry AI (formerly AgentHQ) is a command post for coding agents. You file tickets on a board, give each one a role
+Infantry AI runs on BattalionOS, the MPL-2.0 core and shell (daemon, protocol, runner, desktop shell). Infantry AI (formerly AgentHQ) is the command post for coding agents built on it. You file tickets on a board, give each one a role
 (full-stack engineer, QA, PM, ...) and a provider (Claude Code, opencode, pi, or any CLI you describe in a JSON file),
 and Infantry AI starts the agent on its own git branch and worktree, keeps its mail, progress and shared project
 knowledge in one daemon, and lets you watch, steer and merge the work from your desktop or your phone. The daemon runs
 on your machine or on your own server: your code, keys and agent output never pass through a third-party service.
 
-**Foundation and free, on purpose.** <!-- shared:license_line -->The core (the daemon) is the foundation: it is licensed MPL-2.0 to protect its integrity, so apps and plugins can rely on a stable base that does not break, with backward compatibility as the promise. Everything built on top (the SDKs, the UI core, the apps and every plugin) is free under Apache-2.0: build, fork, sell and extend it without copyleft.<!-- /shared:license_line --> See [Licensing](docs/wiki/licensing.md) (draft, not yet in effect).
+**Foundation and free, on purpose.** <!-- shared:license_line -->BattalionOS, the core and shell (the daemon, protocol, runner and desktop shell), is the foundation: it is licensed MPL-2.0 to protect its integrity, so apps and plugins can rely on a stable base that does not break, with backward compatibility as the promise. Everything built on top (the SDKs, the UI core, the apps and every plugin) is free under Apache-2.0: build, fork, sell and extend it without copyleft.<!-- /shared:license_line --> See [Licensing](docs/wiki/licensing.md) (draft, not yet in effect).
 
 > **Status: early preview.** The app is used daily by its own team, but it is not 1.0. Read
 > [Roadmap and known issues](#roadmap-and-known-issues) before you rely on it.
@@ -438,7 +438,7 @@ Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Support the project
 
-<!-- shared:support_line -->The core (MPL-2.0) is the community foundation. Sponsorship and donations pay for keeping it stable and backward compatible.<!-- /shared:support_line -->
+<!-- shared:support_line -->BattalionOS (MPL-2.0) is the community foundation. Sponsorship and donations pay for keeping it stable and backward compatible.<!-- /shared:support_line -->
 
 <!-- OWNER TODO: replace SPONSORS_ACCOUNT and STRIPE_PAYMENT_LINK (docs/shared/product.md and .github/FUNDING.yml) before the repo goes public. -->
 - [Sponsor on GitHub](https://github.com/sponsors/SPONSORS_ACCOUNT) (monthly)
@@ -448,13 +448,13 @@ Starring the repository and filing good bug reports help too.
 
 ## License
 
-**<!-- shared:license_footer -->The core is a community effort; the rest is yours.<!-- /shared:license_footer -->**
+**<!-- shared:license_footer -->BattalionOS is a community effort; the rest is yours.<!-- /shared:license_footer -->**
 
 Infantry AI is licensed per directory. Every source file names its license in an `SPDX-License-Identifier` header.
 
 | License | What it covers |
 |---|---|
-| **MPL-2.0** (the core) | `superiorSoftLibrary/infantryProtocol`, `superiorSoftLibrary/infantryCore`, `superiorSoftLibrary/infantryRunner`, `superiorSoftLibrary/infantry`, and the reserved `plugins/core/` |
+| **MPL-2.0** (BattalionOS, the core) | `superiorSoftLibrary/infantryProtocol`, `superiorSoftLibrary/infantryCore`, `superiorSoftLibrary/infantryRunner`, `superiorSoftLibrary/infantry`, and the reserved `plugins/core/` |
 | **Apache-2.0** (everything else) | the plugin API and host, the SDKs, the board, the UI core, the apps, `samples/`, `plugins/`, `docs/`, `docker/`, `scripts/` and the build files |
 | **Neither** (trademark) | the name "Infantry AI", the logo and the emblem |
 

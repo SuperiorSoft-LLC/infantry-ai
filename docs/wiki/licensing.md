@@ -2,7 +2,9 @@
 
 # Licensing: the foundation and everything on top
 
-> **Rust crates:** the same split holds on main; each crate's `Cargo.toml` names its licence. MPL-2.0 (core): `infantry-cli`, `infantry-core`, `infantry-daemon`, `infantry-knowledge`, `infantry-mail`, `infantry-migrate`, `infantry-plugin-host`, `infantry-proc`, `infantry-projects`, `infantry-protocol`, `infantry-runner`, `infantry-runner-link`, `infantry-runner-local`, `infantry-scripting`, `infantry-usage`, `infantry-vault`. Apache-2.0: the API crates (`infantry-plugin-wit`, `infantry-plugin-sdk`, `infantry-harness`, `infantry-orchestrator-api`, `infantry-runner-api`), the board (`infantry-board`), the harness crates (`infantry-harness-claude`, `-codex`, `-opencode`, `-pi`), `infantry-distribution`, `infantry-guards`, `conformance` and the app (`app/src-tauri`).
+Infantry AI runs on **BattalionOS**: the MPL-2.0 core and shell (daemon, protocol, runner, desktop shell). Package, crate and CLI names keep the `infantry` prefix for now.
+
+> **Rust crates:** the same split holds on main; each crate's `Cargo.toml` names its licence. MPL-2.0 (BattalionOS, the core): `infantry-cli`, `infantry-core`, `infantry-daemon`, `infantry-knowledge`, `infantry-mail`, `infantry-migrate`, `infantry-plugin-host`, `infantry-proc`, `infantry-projects`, `infantry-protocol`, `infantry-runner`, `infantry-runner-link`, `infantry-runner-local`, `infantry-scripting`, `infantry-usage`, `infantry-vault`. Apache-2.0: the API crates (`infantry-plugin-wit`, `infantry-plugin-sdk`, `infantry-harness`, `infantry-orchestrator-api`, `infantry-runner-api`), the board (`infantry-board`), the harness crates (`infantry-harness-claude`, `-codex`, `-opencode`, `-pi`), `infantry-distribution`, `infantry-guards`, `conformance` and the app (`app/src-tauri`).
 
 > The split is applied in the repo (license
 > texts in `LICENSES/`, SPDX headers, per-directory `LICENSE` files, `LicenseMapGuardTest`); it is official
@@ -11,7 +13,7 @@
 
 ## The short version
 
-<!-- shared:license_line -->The core (the daemon) is the foundation: it is licensed MPL-2.0 to protect its integrity, so apps and plugins can rely on a stable base that does not break, with backward compatibility as the promise. Everything built on top (the SDKs, the UI core, the apps and every plugin) is free under Apache-2.0: build, fork, sell and extend it without copyleft.<!-- /shared:license_line -->
+<!-- shared:license_line -->BattalionOS, the core and shell (the daemon, protocol, runner and desktop shell), is the foundation: it is licensed MPL-2.0 to protect its integrity, so apps and plugins can rely on a stable base that does not break, with backward compatibility as the promise. Everything built on top (the SDKs, the UI core, the apps and every plugin) is free under Apache-2.0: build, fork, sell and extend it without copyleft.<!-- /shared:license_line -->
 
 **The abstraction layer is the foundation. It is MPL-2.0 to protect its integrity.** Apps and plugins stand on the core, so the
 core has to stay a stable base that does not break under them. MPL-2.0 keeps every change to a core file open, so a
@@ -23,7 +25,7 @@ examples and the demo. Anyone may build on it, fork it, sell it and extend it, w
 
 ## 1. Why the split
 
-| | Core (MPL-2.0) | Everything else (Apache-2.0) |
+| | BattalionOS, the core (MPL-2.0) | Everything else (Apache-2.0) |
 |---|---|---|
 | What it is | The daemon: process runner, wire protocol, database, mail, worktrees, plugin host, CLI | The plugin APIs (SDKs), UI core, desktop/Android/web apps, all plugins, examples, demo |
 | What the license is for | Integrity: changes to core files stay open, so the base stays one shared, trustworthy thing | Freedom: no strings, a patent grant, easy to copy, sell and extend |

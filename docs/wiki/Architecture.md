@@ -11,6 +11,8 @@ the legacy heading.
 
 ## 1. Shape of the system
 
+Infantry AI runs on **BattalionOS**: the MPL-2.0 platform core and shell (daemon core, protocol, runner, desktop shell). Infantry AI is the orchestrator app on top. Crate and package names keep the `infantry` prefix for now.
+
 Infantry AI is a command post for coding agents. One **daemon** owns the state: the ticket board, the agents' sessions,
 the mail, the shared project knowledge, the scripts and the plugins. Clients connect to it over one WebSocket and never
 own state themselves.
