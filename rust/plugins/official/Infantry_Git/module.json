@@ -6,6 +6,7 @@
   "license": "Apache-2.0",
   "description": "Git daemon half: registers nothing today (the pipeline tools live with the board plugin).",
   "tier": "official",
+  "tabs": [{ "id": "infantry.git", "container": "center" }, { "id": "infantry.changes", "container": "right" }],
   "sequence": [],
   "daemon": {
     "component": "daemon.component",
