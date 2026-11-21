@@ -2,7 +2,7 @@
 # Copyright (c) SuperiorSoft LLC
 [package]
 name = "infantry-tauri"
-version = "0.4.1"
+version = "0.4.2"
 description = "Infantry AI desktop shell (Tauri v2)"
 authors = ["SuperiorSoft LLC"]
 license = "Apache-2.0"
