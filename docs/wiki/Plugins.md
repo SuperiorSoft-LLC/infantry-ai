@@ -32,6 +32,7 @@ A real example is `rust/plugins/official/Infantry_Notes/module.json`. The fields
 | `name`, `version`, `tier` | The module id (same as the folder), its version, and `official` for the bundled ones. The host decides the tier from the install folder, not from this field. |
 | `requires` | `["Vendor_Module", ...]`. The modules this one needs. The installer installs them first, in dependency order, and will not remove one while a module that requires it is installed. |
 | `bootstrap` | `true` on the one plugin that installs the others (the daemon loads it when nothing else is installed). The `plugins.bootstrap` setting names it instead; core names no plugin id. |
+| `app` | `{ "core": [...], "optional": [...] }` (APPS-ROOT-1). Marks the module as an **app** and lists the plugins that belong to it. `core` members install with the app and cannot be removed alone while it is installed; `optional` members are offered (an Install switch under the app on the Apps screen, and in the app's Plugins tab) and install or uninstall on their own. Moving an id from one list to the other is a one-line manifest edit. The Apps screen lists apps only; a plugin that belongs to no app is listed under "Other plugins". Removing an app removes its members, except one another installed app also lists, or one an installed module outside the app still `requires`. Today `Infantry_Ui` ("Infantry AI") is the app and lists every other plugin as `core`, except the closed-source Infantry_Sites, which is `optional` (its sidecar is not in this repository, so no source can offer it). |
 | `tabs` | `[{id, container}]`. Declared for the app: the React shell shows a tab for each enabled plugin that declares one. |
 | `actions` | `[{id, label, kind, frames}]`. `kind` is `read`, `write` or `destructive`. |
 | `ui` | The web UI half: `apiVersion`, `entry`, `styles`, `assets` and `contributes` (the slots `tab`, `panel`, `settings.card`, `plugin.config` and `card.badge`). See [Web UI plugins](Web-UI-plugins.md). |
@@ -88,9 +89,9 @@ rollback are not served: see [Plugin lifecycle](Plugin-lifecycle.md).
 
 | Op | What it does |
 |---|---|
-| `available` | One row per module a source offers and per module installed: id, name, version, `requires`, `installed`, `enabled`, `status`, `source`. |
-| `install <id>...` | Copies each module, and the modules it `requires`, from the first source that offers it into `<plugins>/<tier>/<id>`, in dependency order. Its daemon half loads, its frames answer, its web UI half is served, and every window gets `plugins_changed`. A missing dependency or a cycle is refused before anything is copied. |
-| `uninstall <id>` | Unloads the module and deletes its folder. Refused for the bootstrap plugin and for a module another installed module `requires`. |
+| `available` | One row per module a source offers and per module installed: id, name, version, `requires`, `app` (the member lists, for an app), `memberOf` (`[{app, kind}]`), `installed`, `enabled`, `status`, `source`. |
+| `install <id>...` | For an app id, its `core` members come first and the app last. Copies each module, and the modules it `requires`, from the first source that offers it into `<plugins>/<tier>/<id>`, in dependency order. Its daemon half loads, its frames answer, its web UI half is served, and every window gets `plugins_changed`. A missing dependency or a cycle is refused before anything is copied. |
+| `uninstall <id>` | For an app id, removes the app and its members (see `app` above); for a core member of an installed app, refused ("a core part of ..."). Unloads the module and deletes its folder. Refused for the bootstrap plugin and for a module another installed module `requires`. |
 
 A **source** is a folder laid out like the plugins folder (`<source>/{official,core}/<Module>/module.json`). The bundled
 folder comes first (`plugins.bundled` or `INFANTRY_BUNDLED_PLUGINS_DIR`, else `plugins-bundled` beside the daemon), then

@@ -16,7 +16,7 @@
 #   shell-only: 1 the daemon starts with an empty plugins folder and installs ONLY the installer from its bundle
 #               2 boot_progress says bootstrap mode (the installer is the window); the installer's screen is served
 #               3 the plugin repo is configured (plugins.sources) and offers its plugins to the installer
-#               4 installing the UI plugin ends bootstrap mode (the normal app); installing the rest installs the set
+#               4 installing the app (APPS-ROOT-1: the UI plugin, whose manifest lists its members) installs its whole set and ends bootstrap mode
 #               5 the board works: create a ticket, then list it
 #   bundled:    6 a daemon with every plugin pre-installed is not in bootstrap mode, and its board works
 #   match:      7 the installed shell-only build and the bundled one have the same plugins and the same agent tools
@@ -245,21 +245,18 @@ try {
     if ($missing.Count) { throw "the installer does not offer: $($missing -join ', ')" }
     "$($offered.Count) modules offered, $(@($rows | Where-Object installed).Count) installed"
   }
-  Check '4a installing the UI plugin ends bootstrap mode (the normal app)' {
+  Check '4a installing the app installs its core members and ends bootstrap mode (the normal app)' {
     $r = Invoke-Admin $port @('install', $uiPlugin)
     if ($r.code -ne 0) { throw "install $uiPlugin failed: $($r.err)" }
     $b = Get-Boot $port
     if ($b.bootstrap.active -ne $false) { throw "still in bootstrap mode after installing $uiPlugin : $($b.bootstrap | ConvertTo-Json -Compress)" }
     "$($r.out); bootstrap.active = false"
   }
-  Check '4b installing the rest of the plugin set (live, no restart)' {
-    $rest = @($repoMods | Where-Object { $_ -ne $installer -and $_ -ne $uiPlugin })
-    $r = Invoke-Admin $port (@('install') + $rest)
-    if ($r.code -ne 0) { throw "install failed: $($r.err)" }
+  Check '4b the app brought every plugin of the set (live, no restart, nothing else installed by hand)' {
     $ids = Get-PluginIds $port
     $missing = @($repoMods | Where-Object { $ids -notcontains $_ })
-    if ($missing.Count) { throw "not installed: $($missing -join ', ')" }
-    "$($ids.Count) plugins installed: $($r.out)"
+    if ($missing.Count) { throw "not installed by the app: $($missing -join ', ')" }
+    "$($ids.Count) plugins installed"
   }
   $shellIds = @(); $shellTools = @()
   Check '5 the board works: create a ticket, then list it' {

@@ -185,6 +185,31 @@ impl Admin {
             row["enabled"] = (!off).into();
             row["status"] = status.into();
         }
+        // APPS-ROOT-1: an app row carries its member lists (`app`), a member row the apps it belongs to (`memberOf`).
+        let decls: Vec<(String, installer::AppDecl)> = rows
+            .values()
+            .filter_map(|r| {
+                let from_manifest = installed.iter().find(|m| m.id == r["id"].as_str().unwrap_or("")).and_then(|m| installer::app_decl(&m.manifest));
+                let id = r["id"].as_str()?.to_string();
+                from_manifest.or_else(|| offers.iter().find(|o| o.id == id).and_then(|o| o.app.clone())).map(|d| (id, d))
+            })
+            .collect();
+        for (id, d) in &decls {
+            if let Some(r) = rows.get_mut(id) {
+                r["app"] = serde_json::json!({ "core": d.core, "optional": d.optional });
+            }
+        }
+        for (id, r) in rows.iter_mut() {
+            let of: Vec<serde_json::Value> = decls
+                .iter()
+                .filter(|(a, _)| a != id)
+                .filter_map(|(a, d)| {
+                    let kind = if d.core.contains(id) { "core" } else if d.optional.contains(id) { "optional" } else { return None };
+                    Some(serde_json::json!({ "app": a, "kind": kind }))
+                })
+                .collect();
+            r["memberOf"] = of.into();
+        }
         rows.into_values().collect()
     }
 
@@ -196,7 +221,8 @@ impl Admin {
             return fail("usage: plugin install <id>...".into());
         }
         let offers = installer::catalog(&self.install.config.sources);
-        let order = match installer::plan(want, &offers, &installer::installed_ids(&self.plugins_dir)) {
+        let want = installer::expand_apps(want, &offers);
+        let order = match installer::plan(&want, &offers, &installer::installed_ids(&self.plugins_dir)) {
             Ok(o) => o,
             Err(e) => return fail(e),
         };
@@ -230,6 +256,32 @@ impl Admin {
         if id.is_empty() {
             return fail("usage: plugin uninstall <id>".into());
         }
+        // APPS-ROOT-1: removing an app removes its members (kept: a member another app lists, or another module needs);
+        // a core member alone is refused while its app is installed.
+        let mods: Vec<(String, serde_json::Value)> = super::host_frames::scan_modules(&Some(self.plugins_dir.clone())).into_iter().filter(|m| TIERS.contains(&m.tier.as_str())).map(|m| (m.id, m.manifest)).collect();
+        if let Some((order, kept)) = installer::app_removal(id, &mods, self.install.config.bootstrap.as_deref()) {
+            let mut gone: Vec<String> = Vec::new();
+            for m in &order {
+                let (code, _, err) = self.remove_one(m, bus);
+                if code != 0 {
+                    let before = if gone.is_empty() { String::new() } else { format!(" (removed before it: {})", gone.join(", ")) };
+                    return fail(format!("{err}{before}"));
+                }
+                gone.push(m.clone());
+            }
+            let kept = if kept.is_empty() { String::new() } else { format!("; kept {}", kept.iter().map(|(m, why)| format!("{m} ({why})")).collect::<Vec<_>>().join(", ")) };
+            return (0, format!("uninstalled {}{kept}", gone.join(", ")), String::new());
+        }
+        let owners: Vec<&str> = mods.iter().filter(|(a, v)| a != id && installer::app_decl(v).is_some_and(|d| d.core.iter().any(|c| c == id))).map(|(a, _)| a.as_str()).collect();
+        if !owners.is_empty() {
+            return fail(format!("{id} is a core part of {}; remove the app to remove it", owners.join(", ")));
+        }
+        self.remove_one(id, bus)
+    }
+
+    /// Removes one installed module (no app logic): the installer stays, and so does a module another one requires.
+    fn remove_one(&self, id: &str, bus: &EventBus) -> (i32, String, String) {
+        let fail = |e: String| (1, String::new(), e);
         if self.install.config.bootstrap.as_deref() == Some(id) {
             return fail(format!("{id} is the installer: it stays, so there is always a way to install"));
         }

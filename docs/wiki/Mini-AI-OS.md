@@ -26,6 +26,8 @@ setting or its manifest flag, never by core. With nothing else installed the dae
 the installer's Apps screen; an install is live. Step 3 is the UI plugin (Infantry_Ui, BOOT-CHAIN-1): without it the installer stays the window. Before it the installer installs
 the component plugins and the shell stays built in. See [Plugins](Plugins.md#the-installer-and-the-bootstrap-plugin).
 
+Apps (APPS-ROOT-1): the Apps screen lists **apps**, not plugins. An app is a module whose manifest has `app: { core, optional }` (see [Plugins](Plugins.md)); installing it installs its core plugins and removing it removes them, and the app's plugins are managed inside the app, in its Plugins tab. The installer is a system app (not removable); a plugin that belongs to no app sits under "Other plugins". Today the one app is Infantry AI (`Infantry_Ui`).
+
 Proof: `pwsh scripts/shell-only-check.ps1` builds the **shell-only** flavour (the core daemon plus the installer, nothing
 else), boots it on a throwaway state dir and port, installs the UI plugin and the rest of the plugin set from a local
 plugin repo folder (`-PluginRepo`, default: staged from this checkout), checks that the board works (create a ticket, list

@@ -78,8 +78,22 @@ export interface AdminResult {
   err: string;
 }
 
+/** APPS-ROOT-1: an optional member of an installed app that is not installed yet (offered by a source). */
+export interface OptionalPlugin {
+  id: string;
+  displayName: string;
+  description: string;
+  version: string;
+  /** The app it belongs to (its manifest's `app.optional` lists it). */
+  app: string;
+}
+
 export interface PluginsState {
   plugins: PluginRow[];
+  /** Optional members of installed apps that can be installed (from `plugin_admin available`; empty when none or not the owner). */
+  optional: OptionalPlugin[];
+  /** Installed plugins that belong to an app: id -> core or optional. A core member stays while its app does. */
+  memberKind: Record<string, "core" | "optional">;
   loaded: boolean;
   /** Plugin ids with an enable/disable in flight. */
   pending: string[];
@@ -91,11 +105,42 @@ export interface PluginsActions {
   refresh(): void;
   /** Ask the daemon's plugin manager to enable or disable [id] (owner only); the list is re-read after the answer. */
   setEnabled(id: string, enabled: boolean): void;
+  /** Install an optional member / remove one (owner only; `plugin_admin install|uninstall`). */
+  /** Read which optional members of installed apps can be installed (owner only; an answer of "not the owner" is silent). */
+  readOptional(): void;
+  install(id: string): void;
+  uninstall(id: string): void;
   clearRefusal(): void;
   dispose(): void;
 }
 
 export type PluginsStore = StoreApi<PluginsState & PluginsActions>;
+
+interface AvailableRow {
+  id: string;
+  displayName?: string;
+  description?: string;
+  version?: string;
+  source?: string | null;
+  installed?: boolean;
+  memberOf?: { app: string; kind: string }[];
+}
+
+/** Reads a `plugin_admin available` answer into the optional members to offer and the kind of each installed member. */
+export function parseAvailable(out: string): Pick<PluginsState, "optional" | "memberKind"> {
+  const rows = json<AvailableRow[]>(out);
+  const optional: OptionalPlugin[] = [];
+  const memberKind: Record<string, "core" | "optional"> = {};
+  if (!Array.isArray(rows)) return { optional, memberKind };
+  const apps = new Set(rows.filter((r) => r.installed).map((r) => r.id));
+  for (const r of rows) {
+    const of = (r.memberOf ?? []).filter((m) => apps.has(m.app));
+    if (of.length === 0) continue;
+    if (r.installed) memberKind[r.id] = of.some((m) => m.kind === "core") ? "core" : "optional";
+    else if (r.source && of.some((m) => m.kind === "optional")) optional.push({ id: r.id, displayName: r.displayName || r.id, description: r.description ?? "", version: r.version ?? "", app: of[0].app });
+  }
+  return { optional, memberKind };
+}
 
 /** A status that is neither loaded nor a plain "not a daemon plugin" is a fault the manager shows. */
 export function isFault(p: Pick<PluginRow, "status" | "enabled">): boolean {
@@ -228,6 +273,10 @@ export function createPluginsStore(link: FrameLink): PluginsStore {
         ops.delete(env.requestId);
         const r = json<{ code?: number | string; out?: string; err?: string }>(env.data) ?? {};
         const code = Number(r.code ?? 1);
+        if (o.op === "available") {
+          if (code === 0) set(parseAvailable(r.out ?? ""));
+          return;
+        }
         set({
           pending: get().pending.filter((x) => x !== o.id),
           last: { ...o, code, out: r.out ?? "", err: r.err ?? "" },
@@ -241,6 +290,7 @@ export function createPluginsStore(link: FrameLink): PluginsStore {
         if (rid && ops.has(rid)) {
           const o = ops.get(rid)!;
           ops.delete(rid);
+          if (o.op === "available") return; // not the owner: no optional list, no banner
           set({ pending: get().pending.filter((x) => x !== o.id), refusal: env.data });
         } else if (req.settle(env) || env.data.startsWith("plugins_op") || env.data.startsWith("plugin_admin")) {
           set({ refusal: env.data, loaded: true });
@@ -248,8 +298,21 @@ export function createPluginsStore(link: FrameLink): PluginsStore {
       }
     });
 
+    const admin = (op: string, id: string, track: boolean): void => {
+      adminCounter += 1;
+      const requestId = `plugin-admin:${Date.now().toString(36)}-${adminCounter.toString(36)}`;
+      ops.set(requestId, { id, op });
+      if (track) set({ pending: [...get().pending.filter((x) => x !== id), id] });
+      if (!link.sendFrame({ type: "plugin_admin", data: JSON.stringify({ args: op === "available" ? [op] : [op, id] }), requestId })) {
+        ops.delete(requestId);
+        if (track) set({ pending: get().pending.filter((x) => x !== id), refusal: "plugin_admin not sent: the daemon link is down" });
+      }
+    };
+
     return {
       plugins: [],
+      optional: [],
+      memberKind: {},
       loaded: false,
       pending: [],
       last: null,
@@ -257,6 +320,9 @@ export function createPluginsStore(link: FrameLink): PluginsStore {
       refresh() {
         req.send("plugins_op", JSON.stringify({ op: "list" }));
       },
+      readOptional: () => admin("available", "", false),
+      install: (id) => admin("install", id, true),
+      uninstall: (id) => admin("uninstall", id, true),
       setEnabled(id, enabled) {
         const op = enabled ? "enable" : "disable";
         adminCounter += 1;
