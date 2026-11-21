@@ -6,6 +6,26 @@
 
 The `infantry-usage` crate has live plan meters, a refresher with backoff, a pacing judge and forecast (`pace.rs`, `pacing.rs`), overrides and the governor's workers-allowed answer. CLI: `infantry usage`. Limits: `limits.usage.*` and `limits.pacing.maxWorkersCeiling`. The numbers below are Kotlin-era and not verified in Rust.
 
+### When a provider rate-limits a meter
+
+Claude's plan endpoint (`/api/oauth/usage`) rate-limits the **token**, and every process that reads with it counts: the
+daemon, the dev and test daemons, other tools signed in as the same account. When a read fails:
+
+- The wait before the next read is the **later** of the provider's `Retry-After` and our backoff (`usage.refreshMinutes`,
+  doubling up to `limits.usage.backoffMaxMinutes`). That endpoint answers every 429 with `Retry-After: 0`; a hint can only
+  lengthen the wait, so a `0` never turns the backoff into "ask again now".
+- The **last good reading stays on the card**, marked old, for up to `limits.usage.staleMaxHours` hours. The card says its
+  age ("updated 12m ago"), the reason once, and when the daemon asks again ("next try in 4m"). With no reading at all it says
+  so, and that pacing is off for the meter.
+- The meter **recovers by itself** at the first read the provider allows; there is nothing to click. Refresh asks only outside
+  the manual floor (`limits.usage.manualRefreshFloorSeconds`) and never inside a backoff.
+- The daemons of one machine **share what they read**: the last good reading, the failures in a row and the next time to ask,
+  in one small JSON file per provider and sign-in under `%LOCALAPPDATA%\SuperiorSoft\InfantryAI-Cache\limits` (else
+  `$XDG_CACHE_HOME/infantry-ai/limits`, else `~/.cache/infantry-ai/limits`; `INFANTRY_LIMITS_CACHE_DIR` moves it). A restarted
+  daemon shows the last good reading at once, and a second daemon does not ask while the first one waits or right after it
+  read. The files hold readings only, never the credential; a sign-in is told apart by a hash of the folder it lives in.
+  If the folder cannot be written the daemon logs it once and reads on its own.
+
 ## Legacy (Kotlin) reference
 
 
