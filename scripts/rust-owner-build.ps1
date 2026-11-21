@@ -34,7 +34,7 @@ if ($SkipMsi) {
     $cfg = @('--config', 'src-tauri/bundle-stage/tauri.bundle.conf.json')
     if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
         $kd = Join-Path $env:TEMP "infantry-msi-key-$sha"; New-Item -ItemType Directory -Force $kd | Out-Null
-        Push-Location (Join-Path $repo 'app'); try { pnpm tauri signer generate --ci -p '' -w "$kd/test.key" | Out-Null } finally { Pop-Location }
+        Push-Location (Join-Path $repo 'app'); try { pnpm tauri signer generate --ci --password= -w "$kd/test.key" | Out-Null } finally { Pop-Location }
         $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content "$kd/test.key" -Raw; $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
         $ov = Join-Path $kd 'ov.json'; (@{ plugins = @{ updater = @{ pubkey = (Get-Content "$kd/test.key.pub" -Raw).Trim() } } } | ConvertTo-Json -Depth 5) | Set-Content $ov
         $cfg += @('--config', $ov); Write-Output 'MSI signed with a THROWAWAY test key (no installed app trusts it)'
