@@ -75,6 +75,7 @@
     "apiAtLeast": "0.1.0",
     "side": "orchestrator",
     "needs": ["storage", "frames", "events"],
+    "ownerFrames": ["attention_raise"],
     "wants": ["settings"],
     "config": [
       {

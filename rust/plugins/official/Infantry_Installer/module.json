@@ -15,6 +15,9 @@
     "needs": [
       "frames"
     ],
+    "ownerFrames": [
+      "plugin_admin"
+    ],
     "tools": [
       {
         "name": "infantry_installer_available",

@@ -23,7 +23,12 @@ pub trait HostServices: Send + Sync + 'static {
     /// for: the call context of the tool call, frame or capability running when it asked (None = the plugin's own
     /// work, a hook, an event or a route). The daemon scopes the frame to that caller (spawn depth, kill scope,
     /// project scope).
-    fn frame_request(&self, module: &str, frame: Frame, caller: Option<&CallContext>, timeout_ms: u32) -> Result<Frame, String>;
+    ///
+    /// The frame is the PLUGIN's, never the owner's: the daemon dispatches it as a non-owner, so a frame only the
+    /// owner may send is refused, and `module` is the calling plugin (the daemon pins what a frame names to it, e.g.
+    /// whose secret `plugin_secret_get` reads). `as_owner` is true only when the plugin's manifest lists this frame
+    /// type in `daemon.ownerFrames` (an official or core module); the daemon then dispatches that one frame as the owner.
+    fn frame_request(&self, module: &str, frame: Frame, caller: Option<&CallContext>, as_owner: bool, timeout_ms: u32) -> Result<Frame, String>;
     /// Publishes a named event as `module` (source); the stored event.
     fn publish(&self, module: &str, name: &str, payload: &str, cause_id: Option<&str>) -> Result<NamedEvent, String>;
     /// Pushes a frame to every connected client.
@@ -107,7 +112,7 @@ impl HostServices for MemoryServices {
         self.settings.lock().unwrap().remove(key);
         Ok(())
     }
-    fn frame_request(&self, module: &str, frame: Frame, _caller: Option<&CallContext>, _timeout_ms: u32) -> Result<Frame, String> {
+    fn frame_request(&self, module: &str, frame: Frame, _caller: Option<&CallContext>, _as_owner: bool, _timeout_ms: u32) -> Result<Frame, String> {
         (self.frame_handler)(module, frame)
     }
     fn publish(&self, module: &str, name: &str, payload: &str, cause_id: Option<&str>) -> Result<NamedEvent, String> {
