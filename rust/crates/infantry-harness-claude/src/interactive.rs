@@ -165,6 +165,11 @@ pub struct Interactive {
 }
 
 impl Interactive {
+    pub fn with_policy(mut self, p: Option<crate::policy::Policy>) -> Self {
+        self.answers = self.answers.with_policy(p);
+        self
+    }
+
     pub fn new(session_id: &str, approval: ApprovalMode, t: Timings) -> Self {
         Interactive {
             t,

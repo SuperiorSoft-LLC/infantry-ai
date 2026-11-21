@@ -147,6 +147,20 @@ fn role_catalogs(plugins_dir: &Option<PathBuf>) -> Vec<PathBuf> {
         .collect()
 }
 
+/// PM-ENFORCE-1: the role-policy file of every module that declares one (`module.json` `rolePolicy`).
+fn role_policy_files(plugins_dir: &Option<PathBuf>) -> Vec<PathBuf> {
+    host_frames::scan_modules(plugins_dir)
+        .into_iter()
+        .filter_map(|m| {
+            let rel = host_frames::s(&m.manifest, "rolePolicy");
+            if rel.is_empty() || rel.contains("..") || Path::new(rel).is_absolute() {
+                return None;
+            }
+            Some(m.dir.join(rel)).filter(|p| p.is_file())
+        })
+        .collect()
+}
+
 /// Builds every unit over `daemon` and attaches them to it. Call inside the tokio runtime.
 pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, String> {
     build_with_mode(daemon, state_dir, crate::mode::Mode::Both)
@@ -334,6 +348,18 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             let root = app_settings.app(crate::sessions::WORKSPACE_ROOT_KEY).and_then(|v| v.as_str().map(str::to_string));
             let keep = app_settings.app(crate::sessions::WORKSPACE_KEEP_KEY).and_then(|v| v.as_bool());
             crate::sessions::workspace::spec_from(root, keep)
+        }));
+    }
+    {
+        // PM-ENFORCE-1: the role-policy files of the modules (`rolePolicy`), and the settings that turn an entry off.
+        let policy_settings = settings::SettingsUnit { db: db.clone() };
+        daemon.set_role_policy(Arc::new(move |role, project| {
+            let files: Vec<String> = role_policy_files(&plugins_dir()).iter().filter_map(|p| std::fs::read_to_string(p).ok()).collect();
+            let d = serde_json::json!({"role": role, "project": project});
+            crate::role_policy::env_for(&files, role, &|k| match policy_settings.resolve(k, &d)["value"].clone() {
+                serde_json::Value::Null => None,
+                v => Some(v),
+            })
         }));
     }
     let vault_projects = projects.clone();

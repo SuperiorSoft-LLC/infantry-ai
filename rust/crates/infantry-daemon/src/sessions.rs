@@ -292,6 +292,8 @@ pub struct Daemon {
     assistant_spec: std::sync::OnceLock<Arc<dyn Fn() -> AssistantSpec + Send + Sync>>,
     /// ASSISTANT-1: held across "is there an Assistant?" and its creation, so the installation never gets two.
     assistant_lock: Mutex<()>,
+    /// PM-ENFORCE-1: (role, project) -> the role-policy env pair a session of that role starts with.
+    role_policy: std::sync::OnceLock<Arc<dyn Fn(Option<&str>, Option<&str>) -> Option<(String, String)> + Send + Sync>>,
     workspace_spec: std::sync::OnceLock<Arc<dyn Fn() -> Option<WorkspaceSpec> + Send + Sync>>,
 }
 
@@ -376,6 +378,7 @@ impl Daemon {
             mcp: std::sync::OnceLock::new(),
             assistant_spec: std::sync::OnceLock::new(),
             assistant_lock: Mutex::new(()),
+            role_policy: std::sync::OnceLock::new(),
             workspace_spec: std::sync::OnceLock::new(),
         });
         d.refresh_held();
@@ -1157,6 +1160,11 @@ impl Daemon {
         let _ = self.env_extra.set(f);
     }
 
+    /// Sets how a session's role maps to its role-policy env (read at each start, so a setting applies to the next).
+    pub fn set_role_policy(&self, f: Arc<dyn Fn(Option<&str>, Option<&str>) -> Option<(String, String)> + Send + Sync>) {
+        let _ = self.role_policy.set(f);
+    }
+
     /// Sets what every agent process started from now on is told about this daemon.
     pub fn set_launch(&self, base: crate::harness::launch::LaunchBase) {
         *self.launch.lock().unwrap() = base;
@@ -1168,6 +1176,10 @@ impl Daemon {
         if let Some(extra) = self.env_extra.get() {
             env.retain(|(k, _)| !extra().iter().any(|(ek, _)| ek == k));
             env.extend(extra());
+        }
+        env.retain(|(k, _)| k != crate::role_policy::ENV);
+        if let Some(pair) = self.role_policy.get().and_then(|f| f(e.rec.role.as_deref(), e.rec.project_id.as_deref())) {
+            env.push(pair);
         }
         if let Some(m) = self.mcp.get() {
             m.select(&e.rec, &mut mcp);
