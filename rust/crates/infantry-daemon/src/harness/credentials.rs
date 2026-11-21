@@ -379,7 +379,7 @@ impl HarnessCredentials {
         // Detached: on Windows the reader only ends once the pseudo-console is dropped.
         std::thread::spawn(move || {
             let (mut reader, mut pending, mut buf) = (reader, String::new(), [0u8; 4096]);
-            let mut take = |line: &str| {
+            let take = |line: &str| {
                 let shown = plain(line);
                 if shown.is_empty() {
                     return;

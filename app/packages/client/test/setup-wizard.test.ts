@@ -3,7 +3,7 @@
 // Ports Kotlin SetupWizardTest. The key-row and "unprobed sign-in" cases have no Rust twin: the Rust daemon reads a
 // harness's sign-in straight from its files (providers[].available), so there is no probe state to wait for.
 import { describe, expect, it } from "vitest";
-import { createHarnessInstallStore, installHarnesses, type Envelope, action, defaultPick, signInChoices, loginRow, signInPhase, signInRow, tokenSecretName, firstModel, firstStep, followInstalled, installed, needed, nodeNote, opensNow, outcomeFor, statusText, unprobed, type HarnessInstallReport, type HarnessInstallStatus, type SecretRow } from "../src";
+import { createHarnessInstallStore, installHarnesses, type Envelope, action, defaultPick, signInChoices, loginRow, installProgress, elapsedText, signInPhase, signInRow, tokenSecretName, firstModel, firstStep, followInstalled, installed, needed, nodeNote, opensNow, outcomeFor, statusText, unprobed, type HarnessInstallReport, type HarnessInstallStatus, type SecretRow } from "../src";
 
 const h = (id: string, isInstalled: boolean): HarnessInstallStatus => ({ id, label: id, npmPackage: `pkg-${id}`, state: isInstalled ? "installed" : "missing", path: isInstalled ? `/bin/${id}` : null });
 const report = (hs: HarnessInstallStatus[], npm: string | null = "/usr/bin/npm"): HarnessInstallReport => ({ harnesses: hs, prefixDir: "/p", npmPath: npm, nodeInstallable: false, busy: false, log: [] });
@@ -157,6 +157,17 @@ describe("harness install store", () => {
     expect(needed(report([h("claude", true)]), [], [{ id: "claude", available: false }])).toBe(true);
     expect(needed(report([h("claude", true)]), [], [{ id: "claude", available: true }])).toBe(false);
   });
+  it("reads install progress from the log: a download percent, the live npm line, and the elapsed time", () => {
+    const node = installProgress(["[node] looking up the current Node.js LTS release", "[node] downloading node-v24-win-x64.zip: 10.0 of 40.0 MB (25%)"]);
+    expect([node.step, node.percent]).toEqual(["node", 25]);
+    expect(node.line).toContain("(25%)");
+    const npm = installProgress(["claude: skipped", "[claude] npm install -g pkg", "[npm] http fetch GET 200 https://registry.npmjs.org/x 12ms"]);
+    expect([npm.step, npm.percent]).toEqual(["claude", null]);
+    expect(npm.line).toBe("http fetch GET 200 https://registry.npmjs.org/x 12ms");
+    expect(installProgress([])).toEqual({ step: null, percent: null, line: "" });
+    expect([elapsedText(5), elapsedText(65), elapsedText(600)]).toEqual(["5 s", "1 min 05 s", "10 min 00 s"]);
+  });
+
   it("draws the two Kotlin choices: the subscription login (key row first, else the token row) and the API key", () => {
     const key = row("claude", { canLogin: true, help: "Anthropic key", authModes: ["api-key", "subscription-login"] });
     const token = { ...row("claude"), name: "harness.claude.token", canLogin: true };

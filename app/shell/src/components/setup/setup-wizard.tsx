@@ -16,7 +16,10 @@ import {
   createQueryStore,
   defaultPick,
   credentialOk,
+  elapsedText,
   firstModel,
+  INSTALL_REASSURE_SECONDS,
+  installProgress,
   followInstalled,
   signInChoices,
   opensNow,
@@ -36,7 +39,7 @@ import {
   type SecretRow,
   type SetupStep,
 } from "@infantry/client";
-import { AppDialog, Button, cn, Input } from "@infantry/ui";
+import { AppDialog, Button, cn, Input, ProgressLine } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { secretsStore } from "@/daemon/secrets-store";
 import { useUi } from "@/state/ui-state";
@@ -125,6 +128,26 @@ function Choice({ selected, disabled, onClick, title, hint }: { selected: boolea
   );
 }
 
+/** A running install: a bar (a percent when the log has one), the time it has run, the live line, and a reassurance after a minute. */
+function InstallProgressView({ log }: { log: string[] }) {
+  const p = installProgress(log);
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="space-y-1.5" data-testid="install-progress">
+      <ProgressLine value={p.percent} />
+      <p className="text-xs text-muted-foreground">
+        Installing{p.step ? ` ${p.step}` : ""}... {elapsedText(seconds)}
+      </p>
+      {p.line ? <p className="truncate font-mono text-[11px] text-muted-foreground">{p.line}</p> : null}
+      {seconds >= INSTALL_REASSURE_SECONDS ? <p className="text-xs text-muted-foreground">Still installing; first installs can take a few minutes.</p> : null}
+    </div>
+  );
+}
+
 function Log({ lines }: { lines: string[] }) {
   const shown = lines.filter((l) => l.startsWith("[")).slice(-4);
   if (shown.length === 0) return null;
@@ -147,7 +170,7 @@ function NodeStep({ report, recheck }: { report: HarnessInstallReport; recheck: 
       {report.nodeInstallable ? (
         <>
           <p className="text-xs text-muted-foreground">Installing it for you now: about 40 MB, into Infantry AI's own folder. No admin prompt, nothing else on your PC changes.</p>
-          <Log lines={report.log} />
+          {report.busy ? <InstallProgressView log={report.log} /> : <Log lines={report.log} />}
           {outcome && !outcome.ok && !report.busy && (
             <>
               <p role="alert" className="text-xs text-danger">{outcome.text}</p>
@@ -184,8 +207,7 @@ function HarnessStep({ report, pick, onPick }: { report: HarnessInstallReport; p
           <Choice key={h.id} selected={h.id === pick} disabled={report.busy} onClick={() => onPick(h.id)} title={h.label || h.id} hint={statusText(h)} />
         ))}
       </div>
-      {report.busy ? <p className="text-xs text-muted-foreground">Installing. This can take a few minutes.</p> : null}
-      <Log lines={report.log} />
+      {report.busy ? <InstallProgressView log={report.log} /> : <Log lines={report.log} />}
       {!report.busy && outcome && !outcome.ok && (
         <p role="alert" className="text-xs text-danger">
           {outcome.text} Press Install to try again.
