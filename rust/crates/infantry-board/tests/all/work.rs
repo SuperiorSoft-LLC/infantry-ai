@@ -14,7 +14,8 @@ use infantry_board::dispatch::reason;
 use infantry_board::env::StaticEnv;
 use infantry_board::Dispatcher;
 use infantry_orchestrator_api::{
-    LaunchRequest, LaunchedSession, NoWorkspaces, Orchestrator, SessionLauncher, StartOrigin, TicketDone, TicketStartRequest, WorkerState,
+    LaunchRequest, LaunchedSession, NoWorkspaces, Orchestrator, SessionLauncher, StartOrigin, TicketClose, TicketDone, TicketStartRequest, WorkerState,
+    Workspace, WorkspaceProvider, WorkspaceRelease, WorkspaceRequest,
 };
 
 /// A launcher that hands out `s1`, `s2`, ... after `delay`, and remembers which are still running.
@@ -24,6 +25,7 @@ struct FakeLauncher {
     n: AtomicUsize,
     live: Mutex<HashMap<String, WorkerState>>,
     briefs: Mutex<Vec<(String, String)>>,
+    removed: Mutex<Vec<String>>,
 }
 
 impl SessionLauncher for FakeLauncher {
@@ -36,6 +38,11 @@ impl SessionLauncher for FakeLauncher {
     }
     fn stop(&self, session_id: &str, _reason: &str) {
         self.live.lock().unwrap().insert(session_id.to_string(), WorkerState::Ended);
+    }
+    fn remove(&self, session_id: &str, _reason: &str) -> bool {
+        self.stop(session_id, "remove");
+        self.removed.lock().unwrap().push(session_id.to_string());
+        true
     }
     fn state(&self, session_id: &str) -> WorkerState {
         self.live.lock().unwrap().get(session_id).copied().unwrap_or(WorkerState::Ended)
@@ -208,4 +215,86 @@ fn auto_start_off_starts_nothing_after_a_done() {
     let done = block_on(o.done(TicketDone { ticket_id: ids[0].clone(), session_id: "s1".into(), summary: "commit abc: x".into(), stop_worker: true })).unwrap();
     assert!(done.next.is_none());
     assert_eq!(block_on(o.get(ids[1].clone())).unwrap().status, "todo");
+}
+
+// ---- PIPE-CLOSE-1: the one-call close ------------------------------------------------------------------------
+
+/// Cuts a fake worktree per ticket; `release` answers what `verdict` holds (Ok = clean and merged) and records removals.
+struct FakeWorkspaces {
+    verdict: Mutex<Result<(), String>>,
+    released: Mutex<Vec<String>>,
+}
+
+impl WorkspaceProvider for FakeWorkspaces {
+    fn wants_worktree(&self, _p: Option<&str>) -> bool {
+        true
+    }
+    fn ensure(&self, r: &WorkspaceRequest) -> Result<Workspace, String> {
+        Ok(Workspace { branch: format!("ticket/{}", r.ticket_id), base: "main".into(), path: format!("/wt/{}", r.ticket_id), note: None })
+    }
+    fn release(&self, r: &WorkspaceRelease) -> Result<Option<String>, String> {
+        self.verdict.lock().unwrap().clone()?;
+        if !r.dry_run {
+            self.released.lock().unwrap().push(r.branch.clone());
+        }
+        Ok(Some(format!("/wt/{}", r.branch)))
+    }
+}
+
+fn close_setup(tag: &str, verdict: Result<(), String>) -> (Fixture, Arc<FakeLauncher>, Arc<FakeWorkspaces>, infantry_board::LocalOrchestrator) {
+    let f = fixture(tag, kotlin_daemon_env());
+    let launcher = Arc::new(FakeLauncher::default());
+    let ws = Arc::new(FakeWorkspaces { verdict: Mutex::new(verdict), released: Mutex::new(Vec::new()) });
+    let d = Dispatcher::new(f.board.clone(), ws.clone(), launcher.clone(), f.bus.clone());
+    let o = infantry_board::LocalOrchestrator::with_dispatcher(d, f.bus.clone());
+    (f, launcher, ws, o)
+}
+
+fn close(id: &str) -> TicketClose {
+    TicketClose { ticket_id: id.into(), summary: Some("commit abc: merged".into()), keep_worktree: false, closed_by: Some("lead".into()) }
+}
+
+#[test]
+fn close_is_done_worker_gone_worktree_gone_and_the_next_starts() {
+    let (f, launcher, ws, o) = close_setup("close-ok", Ok(()));
+    let ids = tickets(&f, 2);
+    start(&o, &ids[0]);
+    start(&o, &ids[1]); // queued behind the one-worker lane
+    let c = block_on(o.close(close(&ids[0]))).unwrap();
+    assert_eq!(c.ticket.status, "done");
+    assert_eq!(c.worker_removed.as_deref(), Some("s1"));
+    assert_eq!(launcher.removed.lock().unwrap().as_slice(), ["s1"]);
+    assert!(c.worktree_removed.is_some(), "{c:?}");
+    assert_eq!(ws.released.lock().unwrap().len(), 1);
+    assert_eq!(c.next.as_ref().map(|n| n.id.as_str()), Some(ids[1].as_str()), "the lane's next ticket started");
+    assert_eq!(block_on(o.get(ids[1].clone())).unwrap().status, "in_progress");
+    assert!(c.warnings.is_empty(), "{:?}", c.warnings);
+}
+
+#[test]
+fn close_refuses_an_unmerged_worktree_and_changes_nothing() {
+    let (f, launcher, ws, o) = close_setup("close-unmerged", Err("branch 'x' is not merged into 'main'".into()));
+    let ids = tickets(&f, 2);
+    start(&o, &ids[0]);
+    start(&o, &ids[1]);
+    let e = block_on(o.close(close(&ids[0]))).unwrap_err();
+    assert!(e.to_string().contains("not merged"), "{e}");
+    let t = block_on(o.get(ids[0].clone())).unwrap();
+    assert_eq!((t.status.as_str(), t.session_id.as_deref()), ("in_progress", Some("s1")), "the ticket and its worker are untouched");
+    assert!(launcher.removed.lock().unwrap().is_empty() && ws.released.lock().unwrap().is_empty());
+    assert_eq!(block_on(o.get(ids[1].clone())).unwrap().status, "todo", "the next ticket did not start");
+    // keepWorktree closes anyway and leaves the worktree to the sweep.
+    let mut keep = close(&ids[0]);
+    keep.keep_worktree = true;
+    let c = block_on(o.close(keep)).unwrap();
+    assert_eq!((c.ticket.status.as_str(), c.worktree_removed), ("done", None));
+    assert!(ws.released.lock().unwrap().is_empty());
+}
+
+#[test]
+fn close_of_a_backlog_ticket_is_refused() {
+    let (f, _l, _w, o) = close_setup("close-backlog", Ok(()));
+    f.env.push_ids(&["ticket-00000001"]);
+    save(&f.orch, r#"{"title":"Later","projectId":"p1","status":"backlog"}"#);
+    assert!(block_on(o.close(close("ticket-00000001"))).is_err());
 }

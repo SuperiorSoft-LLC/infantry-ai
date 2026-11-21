@@ -50,6 +50,22 @@ pub trait WorkspaceProvider: Send + Sync {
         let _ = project_id;
         Ok(None)
     }
+    /// PIPE-CLOSE-1: remove the ticket's worktree when its branch is merged into `base` and it holds no uncommitted
+    /// change. `dry_run` only checks. Ok(Some(path)) = removed (or would be), Ok(None) = no worktree to release,
+    /// Err(why) = refused and KEPT (never deletes unmerged or dirty work).
+    fn release(&self, request: &WorkspaceRelease) -> Result<Option<String>, String> {
+        let _ = request;
+        Ok(None)
+    }
+}
+
+/// What [`WorkspaceProvider::release`] is asked to remove.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspaceRelease {
+    pub project_id: Option<String>,
+    pub branch: String,
+    pub base: Option<String>,
+    pub dry_run: bool,
 }
 
 /// A host with no repositories: every ticket runs in no particular folder, a worktree is refused.
@@ -142,6 +158,11 @@ pub trait SessionLauncher: Send + Sync {
     fn launch(&self, request: &LaunchRequest) -> Result<LaunchedSession, String>;
     /// End a worker (idempotent). `reason` is recorded with the kill.
     fn stop(&self, session_id: &str, reason: &str);
+    /// End a worker AND remove its session record (PIPE-CLOSE-1). True = the session is gone. Default: only stops it.
+    fn remove(&self, session_id: &str, reason: &str) -> bool {
+        self.stop(session_id, reason);
+        false
+    }
     /// The worker's state; an unknown id is [`WorkerState::Ended`].
     fn state(&self, session_id: &str) -> WorkerState;
     /// Deliver a short prompt to a live worker (a handoff request); false = not delivered.
@@ -292,6 +313,42 @@ pub struct DoneAnswer {
     pub ticket: crate::Ticket,
     #[serde(default)]
     pub next: Option<crate::Ticket>,
+}
+
+/// PIPE-CLOSE-1: the lead's one-call close of a ticket: done, its worker stopped and removed, its clean merged
+/// worktree removed, the lane's next ticket started.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TicketClose {
+    pub ticket_id: String,
+    /// The done comment (commit, what changed, what was tested); optional because the worker usually left one.
+    #[serde(default)]
+    pub summary: Option<String>,
+    /// Skip the worktree step (and its merged-and-clean check): the worktree is left for the sweep.
+    #[serde(default)]
+    pub keep_worktree: bool,
+    /// Who closes: a session id, or None for the owner.
+    #[serde(default)]
+    pub closed_by: Option<String>,
+}
+
+/// What a close did, step by step.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloseAnswer {
+    pub ticket: crate::Ticket,
+    /// The worker session stopped and removed, if the ticket had one.
+    #[serde(default)]
+    pub worker_removed: Option<String>,
+    /// The worktree folder removed, if there was one and it was clean and merged.
+    #[serde(default)]
+    pub worktree_removed: Option<String>,
+    /// The ticket the lane started next, if any.
+    #[serde(default)]
+    pub next: Option<crate::Ticket>,
+    /// Anything a step could not finish after the ticket was done, said plainly.
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 // ---- hooks ----------------------------------------------------------------------------------------------

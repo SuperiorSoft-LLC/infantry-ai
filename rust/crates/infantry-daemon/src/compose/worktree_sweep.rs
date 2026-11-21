@@ -258,3 +258,32 @@ impl WorktreeSweep {
         serde_json::to_string(&rows).unwrap_or_else(|_| "[]".into())
     }
 }
+
+/// PIPE-CLOSE-1: the board's one-call close asks to release one ticket's worktree: removed only when its branch is
+/// merged into the project's base branch and it is clean. `dry_run` only checks. Ok(None) = no such worktree,
+/// Err(why) = kept. The same rules as the sweep's `remove_if_merged`; nothing is forced.
+pub fn release_ticket_worktree(projects: &Projects, repo: &Path, req: &infantry_orchestrator_api::WorkspaceRelease) -> Result<Option<String>, String> {
+    let root = projects.branches.main_root(repo);
+    let base = req
+        .base
+        .clone()
+        .filter(|b| !b.trim().is_empty())
+        .or_else(|| req.project_id.as_deref().and_then(|p| projects.store.base_branch_of(p)))
+        .unwrap_or_else(|| "HEAD".into());
+    let git = &projects.git;
+    let Some(l) = stale::list(git, &root).into_iter().find(|l| l.branch.as_deref() == Some(req.branch.as_str())) else { return Ok(None) };
+    let shown = l.path.to_string_lossy().into_owned();
+    if req.dry_run {
+        if !stale::is_merged(git, &root, &req.branch, &base) {
+            return Err(format!("branch '{}' is not merged into '{base}'", req.branch));
+        }
+        if l.path.join(".git").exists() && stale::is_dirty(git, &l.path) {
+            return Err(format!("{shown} has uncommitted changes"));
+        }
+        return Ok(Some(shown));
+    }
+    match stale::remove_if_merged(git, &root, &l.path, &req.branch, &base, false) {
+        Removal::Removed => Ok(Some(shown)),
+        Removal::Skipped(why) => Err(why),
+    }
+}

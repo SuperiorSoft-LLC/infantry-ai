@@ -631,7 +631,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         registry,
         daemon: daemon.clone(),
         projects,
-        board,
+        board: board.clone(),
         dispatcher: dispatcher.clone(),
         orchestrator,
         usage: usage.clone(),
@@ -655,7 +655,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
 
     // ---- RUST-SESS-2: the watchdog (never fails a session) and the done-worker reaper -----------------------
     daemon.start_watchdog(Arc::new(watch::Ports { daemon: daemon.clone(), mail: mail.clone(), attention: attention.clone(), settings: settings::SettingsUnit { db: db.clone() }, prompts: prompts.clone(), bus: bus.clone() }), crate::sessions::WatchConfig::default());
-    watch::spawn_reaper(daemon.clone(), c.projects.clone(), &bus);
+    watch::spawn_reaper(daemon.clone(), c.projects.clone(), board.clone(), settings::SettingsUnit { db: db.clone() }, &bus);
 
     // ---- background: bus -> clients, hooks, timers, usage, mail tick, exec ticker -------------------------
     {

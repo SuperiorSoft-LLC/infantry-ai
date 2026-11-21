@@ -302,6 +302,32 @@
   }
  },
  {
+  "name": "infantry_ticket_close",
+  "readOnly": false,
+  "description": "Close ONE ticket in a single call (the lead's clean finish): the ticket goes to done, its worker is stopped and its session removed, its worktree is removed ONLY when it is clean and merged (otherwise the close is refused with the reason and nothing changes; unmerged work is never deleted), and the lane's next queued ticket starts. A ticket that is already done is cleaned up the same way. Use keepWorktree to leave the worktree for the periodic sweep.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticketId": {
+     "type": "string",
+     "description": "Full ticket id, or its 8-char suffix."
+    },
+    "summary": {
+     "type": "string",
+     "description": "Optional done comment (commit, what changed, what was tested), stored on the ticket."
+    },
+    "keepWorktree": {
+     "type": "boolean",
+     "description": "true = skip the worktree step and its merged-and-clean check."
+    }
+   },
+   "required": [
+    "ticketId"
+   ],
+   "additionalProperties": false
+  }
+ },
+ {
   "name": "infantry_ticket_comment",
   "readOnly": false,
   "description": "Comment on a ticket (the extra channel next to mail): every agent on the ticket's notify list gets ONE short mail line at once. kind done = the work is finished (say the commit), issue = a problem to answer, note = anything else (default). With commentId and no ticketId/body, RESOLVES that comment (no mail). Read them with infantry_ticket_comments.",

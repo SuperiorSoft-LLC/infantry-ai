@@ -11,7 +11,7 @@ use infantry_board::Dispatcher;
 use infantry_mail::mail::router::{MailRouter, ProjectRef, SessionDirectory, SessionInfo as MailSession, TurnSink};
 use infantry_mail::notify::questions::QuestionHost;
 use infantry_orchestrator_api::{
-    DoneReport, LaunchRequest, LaunchedSession, RoutingRule as OrchRule, SessionLauncher, WorkerState, Workspace, WorkspaceProvider, WorkspaceRequest,
+    DoneReport, LaunchRequest, LaunchedSession, RoutingRule as OrchRule, SessionLauncher, WorkerState, Workspace, WorkspaceProvider, WorkspaceRelease, WorkspaceRequest,
 };
 use infantry_projects::ticket_branches::{TicketBranchOutcome, TicketBranchRequest};
 use infantry_projects::Projects;
@@ -325,6 +325,12 @@ impl WorkspaceProvider for DaemonWorkspaces {
     fn folder(&self, project_id: Option<&str>) -> Result<Option<String>, String> {
         Ok(project_id.and_then(|p| super::project_dir(&self.projects, p)).map(|d| d.to_string_lossy().into_owned()))
     }
+    fn release(&self, req: &WorkspaceRelease) -> Result<Option<String>, String> {
+        match self.repo_of(req.project_id.as_deref()) {
+            Some(repo) => super::worktree_sweep::release_ticket_worktree(&self.projects, &repo, req),
+            None => Ok(None),
+        }
+    }
 }
 
 /// Ticket workers through the daemon's session manager.
@@ -377,6 +383,15 @@ impl SessionLauncher for DaemonLauncher {
     fn stop(&self, session_id: &str, reason: &str) {
         let _rt = self.handle.enter();
         let _ = self.daemon.stop_session(session_id, reason);
+    }
+    fn remove(&self, session_id: &str, reason: &str) -> bool {
+        let _rt = self.handle.enter();
+        let _ = self.daemon.stop_session(session_id, reason);
+        match self.daemon.delete_session(session_id) {
+            Ok(()) => true,
+            // Already gone is the goal.
+            Err(_) => self.daemon.record(session_id).is_none(),
+        }
     }
     fn state(&self, session_id: &str) -> WorkerState {
         match self.daemon.record(session_id) {

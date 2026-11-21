@@ -220,6 +220,11 @@ impl Board {
     }
 
     /// Every row, link and run, read in one transaction (no board lock: a plan re-checks at commit).
+    /// Who started the ticket: a session id, `owner`, or None (PIPE-AUTOCLEAN: a lead session started it).
+    pub fn started_by_of(&self, id: &str) -> Option<String> {
+        self.rows().ok()?.0.remove(id)?.started_by
+    }
+
     pub(crate) fn rows(&self) -> Result<(HashMap<String, TicketRow>, Vec<store::LinkRow>, Vec<store::RunRow>), OrchError> {
         let (rows, links, runs) = self
             .db

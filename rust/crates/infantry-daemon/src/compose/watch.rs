@@ -151,8 +151,12 @@ mod tests {
     }
 }
 
+/// Setting `board.autoRemoveDoneLeadWorkers` (default ON): a done ticket that a lead session started has its worker
+/// removed even when the project did not turn `autoRemoveDoneWorkers` on (PIPE-AUTOCLEAN).
+pub const AUTO_REMOVE_LEAD_WORKERS: &str = "board.autoRemoveDoneLeadWorkers";
+
 /// Listens for `ticket` pushes: a ticket in the done column reaps its workers when its project says so.
-pub fn spawn_reaper(daemon: Arc<Daemon>, projects: Arc<Projects>, bus: &EventBus) {
+pub fn spawn_reaper(daemon: Arc<Daemon>, projects: Arc<Projects>, board: Arc<infantry_board::Board>, settings: super::settings::SettingsUnit, bus: &EventBus) {
     let mut rx = bus.subscribe();
     tokio::spawn(async move {
         loop {
@@ -168,7 +172,11 @@ pub fn spawn_reaper(daemon: Arc<Daemon>, projects: Arc<Projects>, bus: &EventBus
             if t.status != status::DONE {
                 continue;
             }
-            let on = t.project_id.as_deref().and_then(|p| projects.store.get(p).ok()).is_some_and(|p| p.auto_remove_done_workers);
+            let project_on = t.project_id.as_deref().and_then(|p| projects.store.get(p).ok()).is_some_and(|p| p.auto_remove_done_workers);
+            let lead_on = !matches!(settings.app(AUTO_REMOVE_LEAD_WORKERS), Some(serde_json::Value::Bool(false)))
+                && !matches!(settings.app(AUTO_REMOVE_LEAD_WORKERS), Some(serde_json::Value::String(ref s)) if matches!(s.trim().to_lowercase().as_str(), "false" | "off" | "0" | "no"))
+                && board.started_by_of(&t.id).is_some_and(|s| !s.trim().is_empty() && s != "owner");
+            let on = project_on || lead_on;
             if !on {
                 continue;
             }

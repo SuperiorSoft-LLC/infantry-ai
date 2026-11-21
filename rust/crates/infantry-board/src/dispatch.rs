@@ -27,8 +27,8 @@ use infantry_core::bus::EventBus;
 use infantry_orchestrator_api::dto::{link_type, status, AgentSwitch, CommentAdd, CommentAuthor, TicketMove, TicketStart};
 use infantry_orchestrator_api::{
     hooks, AgentQueueEntry, AgentQueueRequest, AgentQueueState, DoneAnswer, DoneReport, LaunchRequest, Limit, OrchError,
-    SessionLauncher, StartNextRequest, StartOrigin, TicketAnswer, TicketAssign, TicketDone, TicketUnassign, WorkerState,
-    WorkspaceProvider, WorkspaceRequest,
+    SessionLauncher, StartNextRequest, StartOrigin, TicketAnswer, TicketAssign, TicketClose, CloseAnswer, TicketDone, TicketUnassign, WorkerState,
+    WorkspaceProvider, WorkspaceRelease, WorkspaceRequest,
 };
 use infantry_protocol::Envelope;
 use serde_json::{json, Value};
@@ -1148,6 +1148,95 @@ impl Dispatcher {
         }
         let next = self.drain(&seat).map(|a| a.ticket);
         Ok(DoneAnswer { ticket: answer.ticket, next })
+    }
+
+    /// PIPE-CLOSE-1, the lead's one-call close. In this order: (0) a read-only check that the ticket's worktree may go
+    /// (clean and merged, else the close is REFUSED with the reason and nothing changes, unless `keep_worktree`),
+    /// (1) the ticket is done, (2) its worker is stopped and its session removed, (3) the worktree is removed,
+    /// (4) the lane's next ticket starts. A ticket already done is closed the same way (an idempotent clean-up).
+    pub fn close(&self, req: &TicketClose) -> Result<CloseAnswer, OrchError> {
+        let t = self.board.find(&req.ticket_id)?;
+        let (rows, _, _) = self.board.rows()?;
+        let row = rows.get(&t.id).cloned().ok_or_else(|| OrchError::Refused(format!("no ticket '{}'", t.id)))?;
+        if row.status == status::BACKLOG {
+            return Err(OrchError::Refused(format!("ticket {} is in backlog: it was never started, so there is nothing to close (move it instead)", row.id)));
+        }
+        let release = row.branch.clone().or_else(|| row.worktree_branch.clone()).filter(|_| !req.keep_worktree).map(|branch| WorkspaceRelease {
+            project_id: row.project_id.clone(),
+            branch,
+            base: None,
+            dry_run: true,
+        });
+        if let Some(r) = &release {
+            if let Err(why) = self.workspaces.release(r) {
+                return Err(OrchError::Refused(format!(
+                    "ticket {} was NOT closed: its worktree (branch '{}') is kept: {why}. Merge and commit it first, or close with keepWorktree to leave the worktree for the sweep",
+                    row.id, r.branch
+                )));
+            }
+        }
+        let author = match &req.closed_by {
+            Some(s) => CommentAuthor { kind: CommentAuthor::SESSION.into(), session_id: Some(s.clone()), agent_id: None },
+            None => CommentAuthor::owner(),
+        };
+        let p = row.project_id.as_deref();
+        if let Some(sum) = req.summary.as_deref().filter(|s| !s.trim().is_empty()) {
+            self.comment(&row.id, sum, "done", author.clone())?;
+        }
+        let sid = row.session_id.clone();
+        if row.status != status::DONE {
+            let (tid, run_sid) = (row.id.clone(), sid.clone());
+            self.board.apply(
+                &row.id,
+                None,
+                |s, conn| {
+                    s.require(&tid)?;
+                    s.place(&tid, status::DONE, None);
+                    s.named.insert(tid.clone());
+                    if let Some(sid) = &run_sid {
+                        store::finish_run(conn, &tid, sid, s.now, SUCCEEDED, "closed").map_err(|e| e.to_string())?;
+                    }
+                    Ok(())
+                },
+                &self.publish(),
+            )?;
+            self.hook(hooks::TICKET_MOVED, &row.id, p, Self::moved(&row, &row.status, status::DONE, None));
+            self.hook(hooks::TICKET_DONE, &row.id, p, json!({ "sessionId": sid, "commentId": null }));
+            self.report_done(&row, req.summary.as_deref());
+        }
+        let seat = match &sid {
+            Some(s) => self.leave(s, &row),
+            None => seat_of_row(self.env.as_ref(), &row),
+        };
+        let mut warnings = Vec::new();
+        let worker_removed = match &sid {
+            Some(s) if self.sessions.remove(s, "ticket closed") => Some(s.clone()),
+            Some(s) => {
+                warnings.push(format!("worker session {s} was stopped but its record could not be removed"));
+                None
+            }
+            None => None,
+        };
+        let mut worktree_removed = None;
+        if let Some(mut r) = release {
+            r.dry_run = false;
+            match self.workspaces.release(&r) {
+                Ok(path) => worktree_removed = path,
+                Err(why) => warnings.push(format!("worktree of '{}' was NOT removed: {why}", r.branch)),
+            }
+        }
+        let next = self.drain(&seat).map(|a| a.ticket);
+        let ticket = self.board.get(&row.id)?;
+        self.bus.publish(ticket_envelope(&ticket));
+        let note = format!(
+            "[AUTOMATIC] closed: worker {}; worktree {}; next {}{}",
+            worker_removed.as_deref().map(|s| format!("{s} removed")).unwrap_or_else(|| "none".into()),
+            worktree_removed.as_deref().map(|p| format!("{p} removed")).unwrap_or_else(|| "kept".into()),
+            next.as_ref().map(|n| n.id.as_str()).unwrap_or("none started"),
+            if warnings.is_empty() { String::new() } else { format!(" | {}", warnings.join("; ")) }
+        );
+        let _ = self.comment(&row.id, &note, "note", CommentAuthor::daemon());
+        Ok(CloseAnswer { ticket, worker_removed, worktree_removed, next, warnings })
     }
 
     /// A worker's run ended. A clean end after a done comment closes the ticket (the done protocol); any other end
