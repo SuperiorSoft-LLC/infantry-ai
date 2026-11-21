@@ -745,6 +745,14 @@ impl Dispatcher {
             if let Some(sid) = before.session_id.as_deref() {
                 if a.ticket.status == status::DONE {
                     self.hook(hooks::TICKET_DONE, &id, before.project_id.as_deref(), json!({ "sessionId": sid, "commentId": null }));
+                    // PIPE-WAKE-1: a worker that moves its own ticket to done (not ticket_done) wakes the starter too.
+                    let summary = self
+                        .board
+                        .comment_store()
+                        .ok()
+                        .and_then(|c| c.read(&id, "latestOpen", Some("done"), None).ok())
+                        .and_then(|v| v.into_iter().find(|c| c.author.session_id.as_deref() == Some(sid)).map(|c| c.body));
+                    self.report_done(&before, summary.as_deref());
                 }
                 // AUTOSTART-SAME-AGENT-1: a worker at rest held its seat; no exit follows, so its lane drains now.
                 if self.sessions.state(sid) != WorkerState::Busy {
