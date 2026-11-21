@@ -76,6 +76,17 @@ describe("the Assistant ask", () => {
     expect(s.getState().refusal).toBeNull();
   });
 
+  it("is answered by the Assistant itself: no refusal, and a late refusal of that ask is not taken", () => {
+    const l = link();
+    const s = createAssistantAskStore(l);
+    s.getState().ask();
+    const requestId = l.sent[0].requestId;
+    l.push({ type: "session", data: '{"id":"g","global":true}', sessionId: "g", requestId });
+    expect(s.getState().refusal).toBeNull();
+    l.push({ type: "error", data: "assistant refused: stale", requestId });
+    expect(s.getState().refusal).toBeNull();
+  });
+
   it("says so when the link is down, and stops listening once disposed", () => {
     const down = link(false);
     const s = createAssistantAskStore(down);

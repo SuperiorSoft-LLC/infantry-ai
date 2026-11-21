@@ -314,6 +314,18 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         let roles = knowledge.roles.clone();
         daemon.set_role_brief(Arc::new(move |id: &str| roles.role(id).filter(|r| !r.disabled).map(|r| r.persona)));
     }
+    {
+        // ASSISTANT-1: the installation's Assistant plays the role `assistant.role` names (default: the catalog's `assistant`)
+        // and runs on that role's binding (Roles > binding: harness, model, effort); no binding = the harness defaults.
+        let (library, app_settings) = (knowledge.library.clone(), settings::SettingsUnit { db: db.clone() });
+        daemon.set_assistant_spec(Arc::new(move || {
+            let named = app_settings.app(crate::sessions::ASSISTANT_ROLE_KEY).and_then(|v| v.as_str().map(|r| r.trim().to_lowercase())).filter(|r| !r.is_empty());
+            let role = named.unwrap_or_else(|| crate::sessions::ASSISTANT_ROLE.to_string());
+            let bound = library.role_binding_get(&role).ok();
+            let pick = |f: fn(&infantry_knowledge::library::RoleBinding) -> &Option<String>| bound.as_ref().and_then(|b| f(b).clone());
+            crate::sessions::AssistantSpec { provider: pick(|b| &b.provider), model: pick(|b| &b.model), effort: pick(|b| &b.effort), role }
+        }));
+    }
     let vault_projects = projects.clone();
     let vault = Arc::new(infantry_vault::unit::VaultUnit::open(
         state_dir,

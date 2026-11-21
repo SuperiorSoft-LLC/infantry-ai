@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// The Assistant box asks the daemon for the installation-wide Assistant (frame `assistant`). The daemon answers by pushing the
-// session itself (a `session` frame with `global: true`, which the session store takes in like any other, see `assistantOf`),
-// or by refusing (`assistant refused: ...`). This store only keeps the refusal, so the box can say why it stays empty
-// instead of waiting for ever; the box never starts a session of its own.
+// The Assistant box asks the daemon for the installation-wide Assistant (frame `assistant`). The daemon makes it on the first ask
+// and pushes it to every client (a `session` frame with `global: true`, which the session store takes in like any other, see
+// `assistantOf`); it answers the asker with that session, or refuses (`assistant refused: ...`). This store only keeps the
+// refusal, so the box can say why it stays empty instead of waiting for ever; the box never starts a session of its own.
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { Frame } from "../wire";
 import { requester, type FrameLink } from "./link";
@@ -26,6 +26,8 @@ export function createAssistantAskStore(link: FrameLink): AssistantAskStore {
     const req = requester(link, "assistant", (why) => set({ refusal: why }));
     const off = link.onFrame((env) => {
       if (env.type === Frame.ERROR && req.settle(env)) set({ refusal: env.data });
+      // The Assistant itself is the answer: the ask is done (the session store takes the record in on its own).
+      else if (env.type === Frame.SESSION) req.settle(env);
     });
     return {
       refusal: null,
