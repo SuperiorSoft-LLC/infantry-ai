@@ -3,7 +3,7 @@
 // Custom title bar: brand, project, new/quick, avatars, attention, host, connection, window controls.
 // Empty areas carry data-tauri-drag-region so the window moves by dragging the bar.
 import type { ReactNode } from "react";
-import { BarChart3, LifeBuoy, PanelLeft, PanelRight, Plus, Wand2, Moon, Sun, Settings } from "lucide-react";
+import { BarChart3, LifeBuoy, PanelLeft, PanelRight, Plus, Wand2, Moon, Sun, Settings, Wrench } from "lucide-react";
 import { attentionCount, hostLabel } from "@infantry/client";
 import { useAttention } from "@/components/mail/use-mail";
 import { useDaemon } from "@/daemon/daemon";
@@ -74,6 +74,9 @@ export function TitleBar({ headerActions }: { headerActions?: ReactNode } = {}) 
       </IconButton>
       <IconButton label="Stats" onClick={() => ui.set("dialog", "stats")}>
         <BarChart3 />
+      </IconButton>
+      <IconButton label="Setup" onClick={() => ui.set("dialog", "setup")}>
+        <Wrench />
       </IconButton>
       <IconButton label="Settings" onClick={() => ui.set("dialog", "settings")}>
         <Settings />

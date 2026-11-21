@@ -69,6 +69,17 @@ export interface DaemonAt {
   token: string | null;
 }
 
+/** What the app hears from a login window it owns (the page cannot be framed, so it is a window of its own). */
+export interface LoginWindowHandlers {
+  /** The window moved to [url] (only addresses that start with a watched prefix are reported). */
+  onUrl(url: string): void;
+  /** The window was closed, by the user or by [LoginWindow.close]. */
+  onClosed(): void;
+}
+export interface LoginWindow {
+  close(): void;
+}
+
 export interface Host {
   readonly kind: HostKind;
   /** The frame buttons; null where the platform draws them (a browser) or there is no window frame (a phone). */
@@ -97,6 +108,53 @@ export interface Host {
   daemonGet(path: string, at: DaemonAt): Promise<ArrayBuffer>;
   /** Reloads the window (after pairing). */
   reload(): void;
+  /**
+   * The one way to open a link outside the app: the system browser in the desktop app, a new tab in a browser or on the phone.
+   * Nothing else calls `window.open` or relies on `target="_blank"` (test/open-external.test.ts).
+   */
+  openExternal(url: string): Promise<void>;
+  /**
+   * Opens [url] in a window the app owns and reports the addresses it reaches that start with one of [watch] (the desktop app
+   * reads the navigation itself). A browser popup cannot be read across origins, and the phone has no second window: both
+   * report nothing, so the caller keeps its paste field. Null = no window could be opened.
+   */
+  openLoginWindow(url: string, watch: readonly string[], handlers: LoginWindowHandlers): Promise<LoginWindow | null>;
+}
+
+/** A new tab of the page's own browser: the web and Android way to open a link. The only `window.open` of a link (test/open-external-guard.test.ts). */
+export async function pageOpen(url: string): Promise<void> {
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+/**
+ * [Host.openExternal] for an app: the system browser through [system] (the Tauri opener plugin) while [useSystem] says the window
+ * is the desktop app, the page's own tab ([pageOpen]) otherwise (the phone, or no app at all).
+ */
+export function externalOpener(useSystem: () => boolean, system: (url: string) => Promise<void>, page: (url: string) => Promise<void> = pageOpen): (url: string) => Promise<void> {
+  return (url) => (useSystem() ? system(url) : page(url));
+}
+
+/** The login page's own window features (a popup, not a tab). */
+const POPUP_FEATURES = "popup=yes,width=520,height=760";
+/** How often a popup is asked whether it was closed (a browser gives no close event for another origin). */
+const POPUP_POLL_MS = 500;
+
+/** A browser popup for [url]; null when blocked. Cross-origin, so it reports no addresses. */
+function browserLoginWindow(url: string, handlers: LoginWindowHandlers): LoginWindow | null {
+  const w = window.open(url, "infantry-login", POPUP_FEATURES);
+  if (!w) return null;
+  const t = setInterval(() => {
+    if (w.closed) {
+      clearInterval(t);
+      handlers.onClosed();
+    }
+  }, POPUP_POLL_MS);
+  return {
+    close() {
+      clearInterval(t);
+      w.close();
+    },
+  };
 }
 
 /** `ws://host:port/ws` -> `http://host:port`: where the daemon serves its HTTP routes (`/avatars`, `/ui-plugins`). */
@@ -139,5 +197,7 @@ export function browserHost(): Host {
       return r.arrayBuffer();
     },
     reload: () => location.reload(),
+    openExternal: pageOpen,
+    openLoginWindow: async (url, _watch, handlers) => browserLoginWindow(url, handlers),
   };
 }

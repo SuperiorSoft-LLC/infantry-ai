@@ -361,7 +361,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![endpoint, ui_runner_get, ui_runner_set, local_connect, local_send, local_set_project, local_resumable, perf_report,
             crate::update::update_settings_get, crate::update::update_settings_set, crate::update::update_check, crate::update::update_install, crate::update::update_download,
             crate::update::cli_path_get, crate::update::cli_path_set, crate::pairing::pairing_get, crate::pairing::pairing_set,
-            crate::daemon_http::daemon_get])
+            crate::daemon_http::daemon_get, crate::login_window::login_window_open, crate::login_window::login_window_close])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, e| {

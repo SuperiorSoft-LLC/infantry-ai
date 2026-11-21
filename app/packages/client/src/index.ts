@@ -42,6 +42,7 @@ export * from "./scroll-strip";
 export * from "./tools";
 export * from "./images";
 export * from "./popout";
+export * from "./login-window";
 export * from "./worker-lanes";
 export * from "./chat-view";
 export * from "./stores/pace";
