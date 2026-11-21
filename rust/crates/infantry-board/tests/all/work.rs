@@ -534,3 +534,25 @@ fn restart_refuses_a_live_worker_a_todo_ticket_and_an_unknown_ticket() {
     assert!(block_on(o.restart(restart("nope-nope", false))).is_err());
     assert_eq!(l.n.load(Ordering::SeqCst), 1, "a refusal launches nothing");
 }
+
+/// PIPE-WAKE-1: a `ticket_move` (what `infantry ticket start` sends) and a `ticket_start` frame that carry the
+/// caller's session id record it as `started_by`, so the done notice reaches that session.
+#[test]
+fn a_start_frame_with_a_session_id_records_started_by_and_the_done_notice_reaches_it() {
+    use infantry_core::frames::{FrameCtx, FrameUnit};
+    use infantry_protocol::Envelope;
+    let (f, _l, d, o) = setup("work-frame-starter", StaticEnv { lane_cap: 10, ..kotlin_daemon_env() }, Duration::ZERO);
+    let ids = tickets(&f, 2);
+    let unit = infantry_board::BoardUnit::with_dispatcher(d);
+    let ctx = FrameCtx { conn_id: 1, owner: true, bus: f.bus.clone() };
+    let mut mv = Envelope::new("ticket_move", format!(r#"{{"id":"{}","status":"in_progress"}}"#, ids[0]));
+    mv.session_id = Some("lead-1".into());
+    unit.handle(&mv, &ctx).map_err(|e| e.0).unwrap();
+    let mut st = Envelope::new("ticket_start", format!(r#"{{"id":"{}"}}"#, ids[1]));
+    st.session_id = Some("lead-1".into());
+    unit.handle(&st, &ctx).map_err(|e| e.0).unwrap();
+    for (i, id) in ids.iter().enumerate() {
+        block_on(o.done(TicketDone { ticket_id: id.clone(), session_id: format!("s{}", i + 1), summary: format!("commit abc{i}: ok"), stop_worker: true })).unwrap();
+        assert!(notes(&f).iter().any(|n| n.starts_with("lead-1 ") && n.contains(&format!("commit abc{i}"))), "{id}: {:?}", notes(&f));
+    }
+}
