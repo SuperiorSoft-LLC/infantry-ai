@@ -203,14 +203,10 @@ pub fn config(plugins_dir: &Option<PathBuf>, setting: &dyn Fn(&str) -> Option<Va
         if own.as_ref() == Some(&c) || sources.iter().any(|x| canon(x) == c) {
             continue;
         }
-<<<<<<< HEAD
         if sources.is_empty() && first.as_ref() == Some(&s) {
-            bundled_dir = Some(s.clone());
+            bundled_dir = Some(plain(&s));
         }
-        sources.push(s);
-=======
         sources.push(plain(&s));
->>>>>>> 67612cc0a (Plugin sources show plain paths (no \?\ prefix); Claude usage button reads Set % (#150))
     }
     let named = crate::auth::env(BOOTSTRAP_ENV).or_else(|| one(setting(BOOTSTRAP_KEY)));
     let bootstrap = named.or_else(|| {
