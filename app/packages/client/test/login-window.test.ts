@@ -3,7 +3,7 @@
 // The login window: the declared address carries the code, the watcher submits it once and closes the window, and the link seam
 // picks the system opener in the app and window.open on the web.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { browserHost, externalOpener, friendlyLoginError, isExternalOnlyHost, loginCodeFromUrl, loginWatchList, watchLoginWindow, type LoginWindowHandlers } from "../src";
+import { browserHost, externalOpener, friendlyLoginError, isOutsideAllowedHosts, loginCodeFromUrl, watchLoginWindow, type LoginWindowHandlers } from "../src";
 
 const DECLARED = ["https://platform.claude.com/oauth/code/callback", "https://console.anthropic.com/oauth/code/callback"];
 
@@ -64,26 +64,39 @@ describe("watchLoginWindow", () => {
   });
 });
 
-describe("external-only hosts and friendly errors", () => {
-  const GOOGLE = ["accounts.google.com"];
-  it("a Google page closes the window, opens the same login page in the system browser and shows the hint once", async () => {
+describe("allowed hosts and friendly errors", () => {
+  const ALLOWED = ["claude.ai", "anthropic.com", "platform.claude.com"];
+  const LOGIN = "https://claude.ai/oauth/authorize?state=s1";
+  it("stays in the window on an allowed host or its subdomain", async () => {
     const h = fakeHost();
-    const got: string[] = [];
-    let hinted = 0;
-    await watchLoginWindow(h, "https://claude.ai/login", DECLARED, (c) => got.push(c), undefined, GOOGLE, () => hinted++);
-    expect(h.log.opened[0]![1]).toEqual([...DECLARED, "https://accounts.google.com"]);
-    h.log.handlers!.onUrl("https://accounts.google.com/o/oauth2/v2/auth?x=1");
-    h.log.handlers!.onUrl("https://accounts.google.com/o/oauth2/v2/auth?x=2");
-    expect(h.log.external).toEqual(["https://claude.ai/login"]);
-    expect(h.log.closed).toBe(1);
-    expect(hinted).toBe(1);
-    expect(got).toEqual([]);
+    await watchLoginWindow(h, LOGIN, DECLARED, () => undefined, undefined, ALLOWED, () => undefined);
+    h.log.handlers!.onUrl("https://claude.ai/login");
+    h.log.handlers!.onUrl("https://auth.anthropic.com/x");
+    h.log.handlers!.onUrl("about:blank");
+    expect(h.log.external).toEqual([]);
+    expect(h.log.closed).toBe(0);
   });
-  it("matches the exact host only, and never without a declaration", () => {
-    expect(isExternalOnlyHost("https://accounts.google.com/x", GOOGLE)).toBe(true);
-    expect(isExternalOnlyHost("https://accounts.google.com.evil.example/x", GOOGLE)).toBe(false);
-    expect(isExternalOnlyHost("https://accounts.google.com/x", undefined)).toBe(false);
-    expect(loginWatchList(undefined, undefined)).toEqual([]);
+  it.each(["https://accounts.google.com/o/oauth2/v2/auth?x=1", "https://login.acme-sso.example/saml/start"])(
+    "%s hands off once: the window closes and the ORIGINAL login URL opens in the system browser, with the hint",
+    async (away) => {
+      const h = fakeHost();
+      const got: string[] = [];
+      let hinted = 0;
+      await watchLoginWindow(h, LOGIN, DECLARED, (c) => got.push(c), undefined, ALLOWED, () => hinted++);
+      h.log.handlers!.onUrl(away);
+      h.log.handlers!.onUrl(away + "&again=1");
+      expect(h.log.opened).toHaveLength(1); // the login is not restarted
+      expect(h.log.external).toEqual([LOGIN]);
+      expect(h.log.closed).toBe(1);
+      expect(hinted).toBe(1);
+      expect(got).toEqual([]);
+    },
+  );
+  it("matches whole host labels, and never hands off without a declaration", () => {
+    expect(isOutsideAllowedHosts("https://claude.ai.evil.example/x", ALLOWED)).toBe(true);
+    expect(isOutsideAllowedHosts("https://notclaude.ai/x", ALLOWED)).toBe(true);
+    expect(isOutsideAllowedHosts("https://a.claude.ai/x", ALLOWED)).toBe(false);
+    expect(isOutsideAllowedHosts("https://accounts.google.com/x", undefined)).toBe(false);
   });
   it("never shows the daemon's frame text, and drops a refusal when the login is already over", () => {
     expect(friendlyLoginError("secret_login refused: no sign-in is running; start it again", true)).toBeNull();

@@ -51,8 +51,8 @@ export function SubscriptionSignIn({ id, label, onSignedIn }: { id: string; labe
       row?.loginCodeUrls,
       submitCode,
       undefined,
-      row?.loginExternalHosts,
-      () => setHint("Google sign-in opens in your browser. When the page shows a code, paste it here."),
+      row?.loginAllowedHosts,
+      () => setHint("Finish signing in in your browser. When the page shows a code, paste it here."),
     ).then((w) => (win.current = w));
   };
   useEffect(() => {

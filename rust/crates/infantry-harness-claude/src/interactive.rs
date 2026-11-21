@@ -39,7 +39,7 @@ pub const PASTE_START: &str = "\u{1b}[200~";
 pub const PASTE_END: &str = "\u{1b}[201~";
 
 pub const NOT_SIGNED_IN: &str =
-    "Claude Code is not signed in. Run `claude` once in a terminal and sign in, then restart this agent.";
+    "Claude Code is not signed in. Open Setup and choose Log in again, then restart this agent.";
 pub const DIALOG_DENIED_REASON: &str = "claude showed a permission dialog that no approval answered; it was answered No";
 pub const ASK_MENU_REASON: &str = "claude drew its AskUserQuestion menu with no hook call open; it was cancelled";
 /// FIRST-TURN-1: the prompt's first characters (squeezed) that show it sits in the input box.
