@@ -6,6 +6,8 @@
 use crate::sessions::{Daemon, Pending, WatchPorts};
 use infantry_core::bus::EventBus;
 use infantry_mail::mail::router::MailRouter;
+use infantry_mail::mail::message::{MailSendRequest, SYSTEM};
+use infantry_mail::notify::prompts::PendingPrompts;
 use infantry_mail::notify::attention::{AttentionRaise, AttentionStore};
 use infantry_orchestrator_api::dto::{status, Ticket};
 use infantry_projects::Projects;
@@ -17,6 +19,21 @@ pub struct Ports {
     pub mail: Arc<MailRouter>,
     pub attention: Arc<AttentionStore>,
     pub settings: super::settings::SettingsUnit,
+    pub prompts: Arc<PendingPrompts>,
+    pub bus: EventBus,
+}
+
+/// The generic stall event's name: a session is waiting on a prompt nobody answered, or printed nothing for too long.
+pub const SESSION_STALLED: &str = "session.stalled";
+
+/// `watchdog_blocked` -> `blocked`, `watchdog_quiet` -> `quiet`, `watchdog_stalled` -> `stalled`.
+fn reason_of(outcome: &str) -> &str {
+    outcome.strip_prefix("watchdog_").unwrap_or(outcome)
+}
+
+/// The payload of `session.stalled`: it names the session and its ticket, never a board or a feature.
+pub fn stalled_payload(rec: &SessionRecord, outcome: &str, detail: &str) -> serde_json::Value {
+    serde_json::json!({ "sessionId": rec.id, "ticketId": rec.ticket_id, "projectId": rec.project_id, "leadSessionId": rec.spawner_session_id, "reason": reason_of(outcome), "detail": detail })
 }
 
 impl WatchPorts for Ports {
@@ -28,6 +45,20 @@ impl WatchPorts for Ports {
             .filter(|w| w.waiting_on == rec.id)
             .min_by_key(|w| w.since)
             .map(|w| Pending { key: w.message_id.clone(), since: w.since, summary: format!("mail '{}' waits for your reply", w.subject) })
+    }
+
+    /// The oldest open approval or question card of this session.
+    fn blocked(&self, rec: &SessionRecord, _now: i64) -> Option<Pending> {
+        self.prompts
+            .snapshot()
+            .into_iter()
+            .filter(|p| p.session_id == rec.id)
+            .min_by_key(|p| p.created_at)
+            .map(|p| Pending { key: p.prompt_id.clone(), since: p.created_at, summary: format!("waits on {} '{}'", p.kind, p.tool.clone().or(p.question.clone()).unwrap_or_default()) })
+    }
+
+    fn blocked_limit(&self) -> Option<i64> {
+        self.settings.app("session.blockedMinutes").and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|x| x.trim().parse().ok()))).filter(|n| *n >= 0).map(|n| n * 60_000)
     }
 
     fn limits(&self) -> (Option<i64>, Option<i64>) {
@@ -47,11 +78,76 @@ impl WatchPorts for Ports {
         if let Err(e) = self.attention.raise(&r) {
             eprintln!("[infantry] watchdog could not raise attention for {}: {e}", rec.id);
         }
+        self.bus.emit(SESSION_STALLED, stalled_payload(rec, outcome, detail));
+        // The lead (the session that spawned this worker) is told by mail; no lead = the attention item is the notice.
+        if let Some(lead) = rec.spawner_session_id.as_deref().filter(|l| *l != rec.id) {
+            let ticket = rec.ticket_id.as_deref().map(|t| format!(" (ticket {t})")).unwrap_or_default();
+            let m = MailSendRequest {
+                from: SYSTEM.into(),
+                to: lead.into(),
+                subject: format!("Worker {} is {}{ticket}", label_of(rec), reason_of(outcome)),
+                body: detail.into(),
+                ..Default::default()
+            };
+            let _ = self.mail.send(&m, true);
+        }
     }
 
     fn nudge(&self, rec: &SessionRecord, body: &str) -> bool {
         infantry_mail::mail::watch_meter::WATCH_METER.stall();
         self.daemon.deliver(&rec.id, &format!("[infantry watchdog] {body}")).is_ok()
+    }
+}
+
+fn label_of(rec: &SessionRecord) -> String {
+    rec.agent_id.clone().unwrap_or_else(|| rec.id.chars().take(8).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The real composition (prompt store, bus, mail, attention) with a stub worker: an approval card nobody answers
+    /// raises `session.stalled`, an attention item, and a mail to the lead once the limit passes.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_worker_blocked_on_an_unanswered_approval_card_alerts_the_lead_and_the_owner() {
+        use crate::sessions::{Config, NewOpts, WatchConfig};
+        let dir = std::env::temp_dir().join(format!("infantry-pipe-stall-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let daemon = Daemon::new(Arc::new(crate::harness::stub::Stub { start_ms: 5_000, line_ms: 25 }), Config::new(dir.clone(), dir.clone())).unwrap();
+        let c = crate::compose::build(&daemon, &dir).unwrap();
+        let lead = daemon.launch(NewOpts::default()).unwrap();
+        let worker = daemon.launch(NewOpts { prompt: Some("go".into()), spawner: Some(lead.clone()), ticket_id: Some("t1".into()), ..Default::default() }).unwrap();
+        let mut events = c.bus.subscribe_events();
+        let attention = Arc::new(AttentionStore::new(c.db.clone(), Arc::new(crate::sessions::now_ms)).unwrap());
+        let ports = Ports { daemon: daemon.clone(), mail: c.mail.clone(), attention: attention.clone(), settings: super::super::settings::SettingsUnit { db: c.db.clone() }, prompts: c.prompts.clone(), bus: c.bus.clone() };
+        let (p, w) = (c.prompts.clone(), worker.clone());
+        tokio::spawn(async move { p.request_approval(&w, "Bash", "rm -rf x", None).await });
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let cfg = WatchConfig::default();
+        let d = daemon.clone();
+        let early = crate::sessions::now_ms() + cfg.blocked_ms - 60_000;
+        tokio::task::spawn_blocking(move || d.watch_tick(&ports, &cfg, early)).await.unwrap();
+        assert!(attention.list(true).is_empty(), "under the limit nothing is raised");
+        let ports = Ports { daemon: daemon.clone(), mail: c.mail.clone(), attention: attention.clone(), settings: super::super::settings::SettingsUnit { db: c.db.clone() }, prompts: c.prompts.clone(), bus: c.bus.clone() };
+        let d = daemon.clone();
+        let late = crate::sessions::now_ms() + cfg.blocked_ms + 1_000;
+        tokio::task::spawn_blocking(move || d.watch_tick(&ports, &cfg, late)).await.unwrap();
+        assert_eq!(daemon.record(&worker).unwrap().watch.unwrap().state, "BLOCKED");
+        let items = attention.list(true);
+        assert!(items.iter().any(|i| i.kind == "stalled" && i.outcome == "watchdog_blocked" && i.session_id.as_deref() == Some(worker.as_str())), "{items:?}");
+        let ev = std::iter::from_fn(|| events.try_recv().ok()).find(|e| e.name == SESSION_STALLED).expect("session.stalled");
+        assert_eq!((ev.name.as_str(), ev.payload["reason"].as_str(), ev.payload["leadSessionId"].as_str()), (SESSION_STALLED, Some("blocked"), Some(lead.as_str())));
+        let mail = c.mail.mailbox().inbox(&lead);
+        assert!(mail.iter().any(|m| m.subject.contains("blocked") && m.body.contains("Bash")), "{mail:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_stall_event_names_the_session_and_its_lead_only() {
+        let rec: SessionRecord = serde_json::from_value(serde_json::json!({"id": "w1", "provider": "stub", "workingDir": ".", "spawnedAt": 0, "lastHeartbeat": 0, "state": "BUSY", "ticketId": "t9", "spawnerSessionId": "pm1"})).unwrap();
+        let p = stalled_payload(&rec, "watchdog_blocked", "waits");
+        assert_eq!((p["sessionId"].as_str(), p["ticketId"].as_str(), p["leadSessionId"].as_str(), p["reason"].as_str()), (Some("w1"), Some("t9"), Some("pm1"), Some("blocked")));
     }
 }
 

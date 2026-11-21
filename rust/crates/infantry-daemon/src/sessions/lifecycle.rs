@@ -141,6 +141,14 @@ pub trait WatchPorts: Send + Sync {
     fn limits(&self) -> (Option<i64>, Option<i64>) {
         (None, None)
     }
+    /// The oldest open owner prompt (a tool-approval or question card) this session's CLI waits on, if any.
+    fn blocked(&self, _rec: &SessionRecord, _now: i64) -> Option<Pending> {
+        None
+    }
+    /// `session.blockedMinutes` in ms when set; None keeps the [`WatchConfig`] value.
+    fn blocked_limit(&self) -> Option<i64> {
+        None
+    }
     /// Raises one attention item for the owner (kind `stalled`).
     fn raise(&self, rec: &SessionRecord, outcome: &str, detail: &str);
     /// Sends the session one nudge; false = it could not be sent.
@@ -169,12 +177,14 @@ pub struct WatchConfig {
     pub stall_ms: i64,
     /// Between a nudge and the owner's attention item.
     pub nudge_interval_ms: i64,
+    /// A BUSY turn blocked on an unanswered prompt (approval or question) this long is BLOCKED (`session.blockedMinutes`).
+    pub blocked_ms: i64,
 }
 
 impl Default for WatchConfig {
     fn default() -> Self {
         const MIN: i64 = 60_000;
-        WatchConfig { poll_ms: 30_000, quiet_ms: 15 * MIN, hung_kill_ms: 30 * MIN, stall_ms: 5 * MIN, nudge_interval_ms: 5 * MIN }
+        WatchConfig { poll_ms: 30_000, quiet_ms: 15 * MIN, hung_kill_ms: 30 * MIN, stall_ms: 5 * MIN, nudge_interval_ms: 5 * MIN, blocked_ms: 5 * MIN }
     }
 }
 
@@ -220,6 +230,16 @@ pub fn evaluate(rec: &SessionRecord, turn_active: bool, turn_started: i64, pendi
         }
         None => (w("IDLE", None), None),
     }
+}
+
+/// A BUSY turn whose CLI waits on an open prompt this long reads BLOCKED (pure: the tests call it). Returns the episode
+/// key when it does. The prompt is the generic fact; the card's kind and the board are not named here.
+pub fn apply_blocked(watch: &mut AgentWatch, turn_active: bool, blocked: Option<&Pending>, now: i64, cfg: &WatchConfig) -> Option<String> {
+    let p = blocked.filter(|p| turn_active && cfg.blocked_ms > 0 && now - p.since >= cfg.blocked_ms)?;
+    watch.state = "BLOCKED".into();
+    watch.pending_since = Some(p.since);
+    watch.pending = Some(p.summary.clone());
+    Some(format!("blocked:{}", p.key))
 }
 
 fn label(r: &SessionRecord) -> String {
@@ -528,7 +548,7 @@ impl Daemon {
     /// One watchdog pass: `session.watch` on every record whose watch changed, then the nudges and attention items.
     pub fn watch_tick(self: &Arc<Self>, ports: &dyn WatchPorts, cfg: &WatchConfig, now: i64) {
         let (quiet, hung) = ports.limits();
-        let cfg = &WatchConfig { quiet_ms: quiet.unwrap_or(cfg.quiet_ms), hung_kill_ms: hung.unwrap_or(cfg.hung_kill_ms), ..cfg.clone() };
+        let cfg = &WatchConfig { quiet_ms: quiet.unwrap_or(cfg.quiet_ms), hung_kill_ms: hung.unwrap_or(cfg.hung_kill_ms), blocked_ms: ports.blocked_limit().unwrap_or(cfg.blocked_ms), ..cfg.clone() };
         let entries: Vec<_> = self.list.lock().unwrap().iter().map(|(_, e)| e.clone()).collect();
         let mut acts = Vec::new();
         for entry in entries {
@@ -541,6 +561,12 @@ impl Daemon {
                 evaluate(&e.rec, e.turn_active, e.turn_started, pending.as_ref(), now, cfg)
             } else {
                 (AgentWatch { state: "IDLE".into(), pending_since: None, pending: None, last_activity_at: e.rec.last_heartbeat, nudges: 0 }, None)
+            };
+            let key = if ports.enabled(e.rec.project_id.as_deref()) && e.turn_active {
+                let b = ports.blocked(&e.rec, now);
+                apply_blocked(&mut watch, true, b.as_ref(), now, cfg).or(key)
+            } else {
+                key
             };
             // A BUSY turn silent past the kill limit: its child is hung, the next turn replaces it.
             let silent = now - watch.last_activity_at;
@@ -564,6 +590,15 @@ impl Daemon {
                             format!("Agent {} has printed nothing for {mins} min while its turn runs; it may be stuck (the session is left running).", label(&e.rec)),
                         ));
                     }
+                    "BLOCKED" if !ep.raised => {
+                        ep.raised = true;
+                        let mins = (now - watch.pending_since.unwrap_or(now)) / 60_000;
+                        acts.push(Act::Raise(
+                            e.rec.clone(),
+                            "watchdog_blocked".into(),
+                            format!("Agent {} is BLOCKED for {mins} min: {} (nobody answered; the session is left waiting).", label(&e.rec), watch.pending.clone().unwrap_or_default()),
+                        ));
+                    }
                     "STALLED" => {
                         if ep.nudges < 1 {
                             ep.nudges += 1;
@@ -585,7 +620,11 @@ impl Daemon {
             }
             e.episode = episode;
             // The card's status line: a BUSY turn silent past `session.stalledMinutes` reads as stalled.
-            let label = (watch.state == "QUIET").then(|| format!("stalled: BUSY, no output for {} min", (now - watch.last_activity_at) / 60_000));
+            let label = match watch.state.as_str() {
+                "QUIET" => Some(format!("stalled: BUSY, no output for {} min", (now - watch.last_activity_at) / 60_000)),
+                "BLOCKED" => Some(format!("blocked: {}", watch.pending.clone().unwrap_or_default())),
+                _ => None,
+            };
             let changed = e.rec.watch.as_ref().is_none_or(|w| w.state != watch.state || w.pending != watch.pending || w.nudges != watch.nudges) || e.rec.watch_label != label;
             if changed {
                 e.rec.watch_label = label;
@@ -661,6 +700,28 @@ mod tests {
 
     fn rec(state: &str) -> SessionRecord {
         serde_json::from_value(json!({"id": "s1", "provider": "stub", "workingDir": ".", "spawnedAt": 0, "lastHeartbeat": 0, "state": state})).unwrap()
+    }
+
+    #[test]
+    fn a_turn_blocked_on_an_unanswered_prompt_reads_blocked_after_the_limit() {
+        let cfg = WatchConfig::default();
+        let r = rec("BUSY");
+        let card = Pending { key: "p1".into(), since: 10_000, summary: "approve Bash: rm x".into() };
+        let at = |now: i64, active: bool, p: Option<&Pending>| {
+            let (mut w, key) = evaluate(&r, active, 10_000, None, now, &cfg);
+            let k = apply_blocked(&mut w, active, p, now, &cfg).or(key);
+            (w, k)
+        };
+        let (w, _) = at(10_000 + cfg.blocked_ms - 1, true, Some(&card));
+        assert_eq!(w.state, "WORKING", "under the limit it is still working");
+        let (w, key) = at(10_000 + cfg.blocked_ms, true, Some(&card));
+        assert_eq!((w.state.as_str(), key.as_deref()), ("BLOCKED", Some("blocked:p1")));
+        assert_eq!(w.pending.as_deref(), Some("approve Bash: rm x"));
+        assert_eq!(at(10_000 + cfg.blocked_ms, true, None).0.state, "WORKING", "an answered card clears it");
+        assert_eq!(at(10_000 + cfg.blocked_ms, false, Some(&card)).0.state, "IDLE", "only a running turn blocks");
+        let off = WatchConfig { blocked_ms: 0, ..cfg };
+        let mut w = evaluate(&r, true, 10_000, None, 99_999_999, &off).0;
+        assert!(apply_blocked(&mut w, true, Some(&card), 99_999_999, &off).is_none(), "0 = never");
     }
 
     #[test]

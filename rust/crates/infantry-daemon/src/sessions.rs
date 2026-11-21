@@ -23,7 +23,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
 mod lifecycle;
-pub use lifecycle::{waiting_line, evaluate, Pending, Stats, WatchConfig, WatchPorts, CARRY_MAX_CHARS};
+pub use lifecycle::{waiting_line, evaluate, apply_blocked, Pending, Stats, WatchConfig, WatchPorts, CARRY_MAX_CHARS};
 use infantry_protocol::frames as pf;
 
 /// The inbound frame types this unit serves; the strangler gateway routes these here (with `agent_list`, read from the
