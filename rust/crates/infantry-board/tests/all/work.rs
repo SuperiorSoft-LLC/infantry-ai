@@ -556,3 +556,13 @@ fn a_start_frame_with_a_session_id_records_started_by_and_the_done_notice_reache
         assert!(notes(&f).iter().any(|n| n.starts_with("lead-1 ") && n.contains(&format!("commit abc{i}"))), "{id}: {:?}", notes(&f));
     }
 }
+
+/// PIPE-WAKE-1: a worker that moves its own ticket to done (the live path: `ticket_move`, not `ticket_done`) mails the starter.
+#[test]
+fn a_worker_moving_its_ticket_to_done_mails_the_starter() {
+    let (f, _l, _d, o) = setup("work-move-done-mail", StaticEnv { lane_cap: 10, ..kotlin_daemon_env() }, Duration::ZERO);
+    let ids = tickets(&f, 1);
+    start_by(&o, &ids[0], "lead-1");
+    block_on(o.move_lane(infantry_orchestrator_api::dto::TicketMove { id: ids[0].clone(), status: Some("done".into()), position: None, wont_fix: None })).unwrap();
+    assert!(notes(&f).iter().any(|n| n.starts_with("lead-1 ") && n.contains(&ids[0]) && n.contains("is done")), "{:?}", notes(&f));
+}
