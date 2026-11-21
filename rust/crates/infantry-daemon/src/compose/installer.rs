@@ -171,6 +171,18 @@ pub fn bootstrap_active(plugins_dir: &Path, bootstrap: &str, ui_plugin: Option<&
     ids.contains(bootstrap) && (ids.iter().all(|i| i == bootstrap) || ui_plugin.is_some_and(|u| u != bootstrap && !ids.contains(u)))
 }
 
+/// `p` without the Windows verbatim prefix (`\\?\C:\x` is shown as `C:\x`, `\\?\UNC\h\s` as `\\h\s`).
+pub fn plain(p: &Path) -> PathBuf {
+    let s = p.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{rest}"))
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        p.to_path_buf()
+    }
+}
+
 /// The sources and the bootstrap id from the environment, the settings and the manifests (`setting` reads an app-scope
 /// setting). The bootstrap manifest search covers the installed modules first, then the sources.
 pub fn config(plugins_dir: &Option<PathBuf>, setting: &dyn Fn(&str) -> Option<Value>) -> InstallConfig {
@@ -192,9 +204,9 @@ pub fn config(plugins_dir: &Option<PathBuf>, setting: &dyn Fn(&str) -> Option<Va
             continue;
         }
         if sources.is_empty() && first.as_ref() == Some(&s) {
-            bundled_dir = Some(s.clone());
+            bundled_dir = Some(plain(&s));
         }
-        sources.push(s);
+        sources.push(plain(&s));
     }
     let named = crate::auth::env(BOOTSTRAP_ENV).or_else(|| one(setting(BOOTSTRAP_KEY)));
     let bootstrap = named.or_else(|| {
@@ -471,6 +483,13 @@ impl LateUnits {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn plain_drops_the_verbatim_prefix() {
+        assert_eq!(plain(Path::new(r"\\?\C:\a\src1")), PathBuf::from(r"C:\a\src1"));
+        assert_eq!(plain(Path::new(r"\\?\UNC\host\share")), PathBuf::from(r"\\host\share"));
+        assert_eq!(plain(Path::new(r"C:\a")), PathBuf::from(r"C:\a"));
+    }
 
     fn module(root: &Path, tier: &str, id: &str, extra: Value) {
         let dir = root.join(tier).join(id);

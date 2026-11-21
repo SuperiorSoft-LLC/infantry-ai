@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // One plan account: % used and where it lands at reset on an animated meter, pace and reset, workers against the
-// pacing allowance with a Free slot chip, the override line, every window of the plan, and Type % / Override.
+// pacing allowance with a Free slot chip, the override line, every window of the plan, and Set % / Override.
 import { useState } from "react";
 import { meterLines, meterName, overrideLine, paceWords, resetLine, workersLine, type MeterUsage } from "@infantry/client";
 import { Button, Chip, MeterBar, PanelCard } from "@infantry/ui";
@@ -90,7 +90,7 @@ export function PacingCard({ m, now }: { m: MeterUsage; now: number }) {
 
         <div className="flex gap-2 pt-1">
           <Button variant="outline" size="sm" onClick={() => setDialog("type")}>
-            {m.source === "live" ? "Type %" : "Set %"}
+            Set %
           </Button>
           <Button variant="outline" size="sm" onClick={() => setDialog("override")}>
             Override
