@@ -238,6 +238,11 @@ pub trait BoardEnv: Send + Sync {
     fn max_in_progress(&self, _project_id: Option<&str>, _role: &str) -> u32 {
         1
     }
+    /// PIPE-ROLE-1: the role a ticket with no role starts with (`tickets.defaultRole`, scopes app and project).
+    /// None = the ticket is refused as before.
+    fn default_role(&self, _project_id: Option<&str>) -> Option<String> {
+        None
+    }
     /// The most ticket workers a project may run at once; None = no cap.
     fn max_workers(&self, _project_id: Option<&str>) -> Option<u32> {
         None
@@ -349,6 +354,8 @@ pub struct StaticEnv {
     pub failed: Mutex<Vec<String>>,
     /// `board.restartResumeSeconds` in ms (0 = the default 20 s).
     pub resume_window_ms: u64,
+    /// PIPE-ROLE-1: `tickets.defaultRole`.
+    pub default_role: Option<String>,
 }
 
 impl StaticEnv {
@@ -445,6 +452,9 @@ impl BoardEnv for StaticEnv {
     }
     fn max_parallel_starts(&self) -> usize {
         if self.start_slots == 0 { 4 } else { self.start_slots }
+    }
+    fn default_role(&self, _project_id: Option<&str>) -> Option<String> {
+        self.default_role.clone()
     }
     fn routing_rules(&self, _project_id: Option<&str>) -> Vec<infantry_orchestrator_api::RoutingRule> {
         self.rules.clone()

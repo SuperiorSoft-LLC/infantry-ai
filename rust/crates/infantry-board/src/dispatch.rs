@@ -414,7 +414,9 @@ impl Dispatcher {
         let rule = routing_choice(env, &row, role_of(env, row.agent_id.as_deref()).as_deref());
         let assigned = (if origin == StartOrigin::QueueDrain { row.queued_agent.clone() } else { None })
             .or_else(|| row.agent_id.clone())
-            .or_else(|| rule.as_ref().and_then(|r| r.set_role.clone()).map(|r| format!("role:{r}")));
+            .or_else(|| rule.as_ref().and_then(|r| r.set_role.clone()).map(|r| format!("role:{r}")))
+            // PIPE-ROLE-1: last resort, the project's (else the app's) default role setting.
+            .or_else(|| env.default_role(project.as_deref()).map(|r| format!("role:{r}")));
         let Some(assigned) = assigned else {
             return self.refused(&id, project.as_deref(), "ticket has no role; set one with `infantry ticket update <id> --role <role id>` or infantry_ticket_update's role");
         };
