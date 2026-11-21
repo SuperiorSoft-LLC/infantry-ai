@@ -23,7 +23,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
 mod assistant;
+pub mod workspace;
 mod lifecycle;
+pub use workspace::{WorkspaceSpec, KEEP_KEY as WORKSPACE_KEEP_KEY, ROOT_KEY as WORKSPACE_ROOT_KEY};
 pub use assistant::{AssistantSpec, DIR as ASSISTANT_DIR, ROLE as ASSISTANT_ROLE, ROLE_KEY as ASSISTANT_ROLE_KEY};
 pub use lifecycle::{waiting_line, evaluate, apply_blocked, Pending, Stats, WatchConfig, WatchPorts, CARRY_MAX_CHARS};
 use infantry_protocol::frames as pf;
@@ -290,6 +292,7 @@ pub struct Daemon {
     assistant_spec: std::sync::OnceLock<Arc<dyn Fn() -> AssistantSpec + Send + Sync>>,
     /// ASSISTANT-1: held across "is there an Assistant?" and its creation, so the installation never gets two.
     assistant_lock: Mutex<()>,
+    workspace_spec: std::sync::OnceLock<Arc<dyn Fn() -> Option<WorkspaceSpec> + Send + Sync>>,
 }
 
 fn encode(ty: &str, data: String, session: Option<&str>, seq: Option<i64>) -> String {
@@ -373,6 +376,7 @@ impl Daemon {
             mcp: std::sync::OnceLock::new(),
             assistant_spec: std::sync::OnceLock::new(),
             assistant_lock: Mutex::new(()),
+            workspace_spec: std::sync::OnceLock::new(),
         });
         d.refresh_held();
         Ok(d)
@@ -822,7 +826,11 @@ impl Daemon {
 
     /// A new session's record (not yet listed).
     fn new_record(&self, opts: &NewOpts, state: &str, verb: &str) -> Result<SessionRecord, String> {
-        let cwd = opts.cwd.as_deref().filter(|c| !c.trim().is_empty()).map(PathBuf::from).unwrap_or_else(|| self.cfg.default_cwd.clone());
+        let id = uuid::Uuid::new_v4().to_string();
+        let cwd = match self.own_folder(opts, &id)? {
+            Some(own) => own,
+            None => opts.cwd.as_deref().filter(|c| !c.trim().is_empty()).map(PathBuf::from).unwrap_or_else(|| self.cfg.default_cwd.clone()),
+        };
         if !cwd.is_dir() {
             return Err(format!("{verb} refused: {} is not a folder", cwd.display()));
         }
@@ -831,7 +839,7 @@ impl Daemon {
         })?;
         let now = now_ms();
         let mut rec: SessionRecord = serde_json::from_value(json!({
-            "id": uuid::Uuid::new_v4().to_string(), "provider": harness.name(), "workingDir": cwd.to_string_lossy(),
+            "id": id, "provider": harness.name(), "workingDir": cwd.to_string_lossy(),
             "spawnedAt": now, "lastHeartbeat": now, "state": state,
         }))
         .map_err(|e| e.to_string())?;
@@ -1407,6 +1415,8 @@ impl Daemon {
             }
         }
         self.cache.lock().unwrap().retain(|r| r.id != sid);
+        let wd = entry.lock().unwrap().rec.working_dir.clone();
+        self.drop_own_folder(&wd, sid);
         Stats::remove(&self.cfg.state_dir, sid);
         self.dirty.store(true, Ordering::SeqCst);
         self.broadcast(wire::SESSIONS, self.sessions_json());
