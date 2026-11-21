@@ -198,6 +198,44 @@ pub fn config_dir(probe: &dyn Probe) -> Option<PathBuf> {
     probe.env(CONFIG_DIR_ENV).map(PathBuf::from).or_else(|| probe.home().map(|h| h.join(".claude")))
 }
 
+/// The CLI's global config file (Kotlin `ClaudeSignIn.configFile`): a non-empty legacy `.config.json` in its config dir, else
+/// `.claude.json` in CLAUDE_CONFIG_DIR or the home folder.
+fn config_file(probe: &dyn Probe) -> Option<PathBuf> {
+    let custom = probe.env(CONFIG_DIR_ENV).map(PathBuf::from);
+    let legacy = custom.clone().or_else(|| probe.home().map(|h| h.join(".claude")))?.join(".config.json");
+    if probe.read_to_string(&legacy).is_some_and(|t| !t.is_empty()) {
+        return Some(legacy);
+    }
+    Some(custom.or_else(|| probe.home())?.join(".claude.json"))
+}
+
+/// Before an interactive launch with a subscription token (Kotlin `ClaudeSignIn.prepare`): a CLI that holds a login but never
+/// finished its first-run setup opens on the theme picker, where a turn would wait forever. Marks the setup done, merged into its
+/// config (made when missing). Touches nothing without a token, with a finished setup or a file it cannot parse. True = written.
+pub fn prepare_onboarding(env: &[(String, String)], probe: &dyn Probe) -> bool {
+    if !env.iter().any(|(k, v)| k == OAUTH_TOKEN_ENV && !v.trim().is_empty()) {
+        return false;
+    }
+    let Some(file) = config_file(probe) else { return false };
+    let mut config = match probe.read_to_string(&file) {
+        None if !probe.exists(&file) => serde_json::Map::new(),
+        None => return false,
+        Some(t) => match serde_json::from_str::<serde_json::Value>(&t) {
+            Ok(serde_json::Value::Object(m)) => m,
+            _ => return false,
+        },
+    };
+    if config.get("hasCompletedOnboarding").and_then(|v| v.as_bool()) == Some(true) {
+        return false;
+    }
+    config.insert("hasCompletedOnboarding".into(), serde_json::Value::Bool(true));
+    let Ok(text) = serde_json::to_string(&config) else { return false };
+    if let Some(dir) = file.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    std::fs::write(&file, text).is_ok()
+}
+
 impl Harness for ClaudeHarness {
     /// The session's own transcript, `<config dir>/projects/<any>/<psid>.jsonl` (Kotlin `ClaudeStats`).
     fn store_stats(&self, probe: &dyn Probe, provider_session_id: &str) -> Option<Vec<infantry_harness::stats::StatEvent>> {
@@ -266,6 +304,9 @@ impl Harness for ClaudeHarness {
 
     fn launch(&self, req: &LaunchRequest) -> Result<LaunchPlan, LaunchError> {
         let (session_id, resume) = self.session(req);
+        if self.mode == Mode::Interactive {
+            let _ = prepare_onboarding(&req.env, self.probe.as_ref());
+        }
         let mut spec = ProcessSpec::new(self.program.clone(), self.args(req, &session_id, resume)).cwd(req.cwd.to_string_lossy());
         spec.env = req.env.clone();
         spec.env.push((TODO_ENV.into(), "1".into()));
