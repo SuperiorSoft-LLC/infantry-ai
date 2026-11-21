@@ -255,6 +255,11 @@ pub trait BoardEnv: Send + Sync {
     fn instructions(&self, _role: Option<&str>, _agent_id: Option<&str>, _project_id: Option<&str>) -> Option<String> {
         None
     }
+    /// PIPE-BRIEF-1: the standard DONE-report block the brief appends when the ticket text has none (data, from the
+    /// host's settings). None = append nothing.
+    fn done_report_block(&self, _project_id: Option<&str>) -> Option<String> {
+        None
+    }
     /// Host-rendered brief sections `(source, text)` (knowledge, skills, role notes), in order.
     fn brief_sections(&self, _project_id: Option<&str>, _role: Option<&str>, _agent_id: Option<&str>, _ticket_id: &str) -> Vec<(String, String)> {
         Vec::new()
@@ -315,6 +320,8 @@ pub struct StaticEnv {
     pub rules: Vec<infantry_orchestrator_api::RoutingRule>,
     /// Slow-start slots (0 = the default 4).
     pub start_slots: usize,
+    /// The standard DONE-report block (PIPE-BRIEF-1).
+    pub done_report: Option<String>,
 }
 
 impl StaticEnv {
@@ -407,5 +414,8 @@ impl BoardEnv for StaticEnv {
     }
     fn routing_rules(&self, _project_id: Option<&str>) -> Vec<infantry_orchestrator_api::RoutingRule> {
         self.rules.clone()
+    }
+    fn done_report_block(&self, _project_id: Option<&str>) -> Option<String> {
+        self.done_report.clone()
     }
 }
