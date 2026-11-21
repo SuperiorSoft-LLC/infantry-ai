@@ -113,6 +113,11 @@ impl HarnessInstall {
         if let Some(v) = self.versions.lock().unwrap_or_else(|e| e.into_inner()).get(path) {
             return v.clone();
         }
+        // A running install is polled every 1.5 s: probing four CLIs would delay every answer by seconds (a probe is a process start,
+        // slow under antivirus), and the progress bar would only show once the probes ended. Cached versions only while busy.
+        if self.busy.load(Ordering::SeqCst) {
+            return None;
+        }
         let v = read_version(path);
         // An unreadable version is not cached: it may be a CLI that was still being unpacked.
         if v.is_some() {
@@ -495,5 +500,54 @@ mod tests {
         let ctx = FrameCtx { conn_id: 1, owner: true, bus };
         let e = Envelope::new(pf::HARNESS_INSTALL, json!({"ids":["nope"]}).to_string());
         assert!(u.handle(&e, &ctx).unwrap_err().0.contains("unknown harness"));
+    }
+
+    /// INSTALL-PROGRESS-2: while a harness installs, the status says busy and carries the live `[npm]` line; the start is acked at once.
+    #[test]
+    fn a_harness_install_reports_busy_and_a_live_npm_line_while_it_runs() {
+        let dir = std::env::temp_dir().join(format!("inf-hi-live-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let fake = if cfg!(windows) { dir.join("npm.cmd") } else { dir.join("bin/npm") };
+        std::fs::create_dir_all(fake.parent().unwrap()).unwrap();
+        let body = if cfg!(windows) { "@echo off
+echo npm http fetch GET 200 https://registry.npmjs.org/x 12ms 1>&2
+ping -n 4 127.0.0.1 >nul
+exit /b 1
+" } else { "#!/bin/sh
+echo npm http fetch GET 200 https://registry.npmjs.org/x 12ms >&2
+sleep 3
+exit 1
+" };
+        std::fs::write(&fake, body).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let u = HarnessInstall::new(&dir, Arc::new(|| {}), Arc::new(|| {}));
+        let ctx = FrameCtx { conn_id: 1, owner: true, bus: infantry_core::bus::EventBus::default() };
+        let ack = u.handle(&Envelope::new(pf::HARNESS_INSTALL, json!({"ids":["claude"],"update":true}).to_string()), &ctx).unwrap();
+        assert_eq!(ack[0].r#type, pf::HARNESS_INSTALL_RESULT);
+        let t0 = Instant::now();
+        let r0 = u.report();
+        assert!(t0.elapsed() < Duration::from_secs(2), "a status while busy must not probe CLIs: {:?}", t0.elapsed());
+        assert_eq!(r0["busy"], true, "busy straight after the ack");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let r = u.report();
+            let log: Vec<String> = r["log"].as_array().unwrap().iter().filter_map(|v| v.as_str().map(String::from)).collect();
+            if log.iter().any(|l| l.starts_with("[npm] ") && l.contains("registry.npmjs.org")) {
+                assert_eq!(r["busy"], true, "the npm line is seen while busy");
+                break;
+            }
+            assert!(Instant::now() < deadline, "no [npm] line in {log:?}");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        while u.report()["busy"] == true {
+            assert!(Instant::now() < deadline + Duration::from_secs(10));
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -27,5 +27,10 @@ export function createHarnessInstallStore(link: FrameLink): HarnessInstallStore 
 
 /** Starts an install on the daemon: [ids] empty = every missing one; [runtime] = only Node.js. */
 export function installHarnesses(store: HarnessInstallStore, ids: string[], opts: { update?: boolean; runtime?: boolean } = {}): boolean {
-  return store.getState().send("harness_install", JSON.stringify({ ids, update: !!opts.update, runtime: !!opts.runtime }));
+  const sent = store.getState().send("harness_install", JSON.stringify({ ids, update: !!opts.update, runtime: !!opts.runtime }));
+  // The daemon's answer comes at once but its next status can take seconds: show the install as running now, so the progress view and
+  // the 1.5 s poll start with the click. The next status read corrects it (a refusal because one already runs leaves busy true, right).
+  const data = store.getState().data;
+  if (sent && data && !data.busy) store.setState({ data: { ...data, busy: true } });
+  return sent;
 }
