@@ -84,6 +84,7 @@ fn a_user_added_source_is_searched_installed_from_and_removed() {
     std::fs::write(good.join("module.json"), json!({ "name": "Ps_Good", "version": "1.2.0", "ui": { "apiVersion": 1, "entry": "ui/dist/index.js" } }).to_string()).unwrap();
     let ups: Value = serde_json::from_str(&admin(&c, &["updates"]).1).unwrap();
     assert_eq!((ups[0]["id"].as_str(), ups[0]["installed"].as_str(), ups[0]["available"].as_str()), (Some("Ps_Good"), Some("1.0.0"), Some("1.2.0")));
+    assert!(ups[0]["check"].is_string() && ups[0]["grants"].is_array() && ups[0]["license"].is_string(), "{}", ups[0]);
     let (code, _, err) = admin(&c, &["update", "Ps_Good"]);
     assert_eq!(code, 1, "the digest no longer matches the changed manifest");
     assert!(err.contains("signature check failed"), "{err}");
@@ -111,6 +112,11 @@ fn a_user_added_source_is_searched_installed_from_and_removed() {
     sign(&signed);
     let shown: Value = serde_json::from_str(&admin(&c, &["show", "Ps_Signed"]).1).unwrap();
     assert_eq!((shown["check"].as_str(), shown["license"].as_str()), (Some("untrusted"), Some("Apache-2.0")));
+    // PLUGINS-3: the listing row carries the same check, licence and grants as `show`, so the dialog needs no second call.
+    let rows: Vec<Value> = serde_json::from_str(&admin(&c, &["available"]).1).unwrap();
+    let row = rows.iter().find(|r| r["id"] == "Ps_Signed").expect("the offer is listed");
+    assert_eq!((row["check"].as_str(), row["signed"].as_str(), row["license"].as_str()), (Some("untrusted"), Some("untrusted"), Some("Apache-2.0")));
+    assert!(row["grants"].is_array(), "{row}");
     let (code, _, err) = admin(&c, &["install", "Ps_Signed"]);
     assert_eq!(code, 1);
     assert!(err.contains("not a trusted signer"), "{err}");

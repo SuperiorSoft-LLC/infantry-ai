@@ -33,9 +33,11 @@ export function ApprovalDialog({ a, onClose }: { a: Approval; onClose: () => voi
   const row = a.kind === "install" ? a.row : a.catalog;
   const name = a.kind === "install" ? a.row.displayName : (a.row.ui?.displayName ?? a.row.id);
   const id = a.row.id;
-  const sig = signerText(row?.signed ?? "");
+  const up = a.kind === "update" ? a.update : undefined;
+  const sig = signerText(row?.signed || up?.signed || "");
+  const licence = row?.license || up?.license;
   const version = a.kind === "install" ? a.row.version : a.update.available;
-  const needs = row && row.grants.length > 0 ? row.grants : (row?.requires ?? []);
+  const needs = row && row.grants.length > 0 ? row.grants : up && up.grants.length > 0 ? up.grants : (row?.requires ?? []);
   const verb = a.kind === "install" ? "Install" : "Update";
   const go = () => {
     const store = pluginsStore().getState();
@@ -66,7 +68,7 @@ export function ApprovalDialog({ a, onClose }: { a: Approval; onClose: () => voi
           <Chip tone={sig.tone}>{sig.text}</Chip>
         </Field>
         <Field id="approve-licence" label="Licence">
-          <span>{row?.license || "Not stated"}</span>
+          <span>{licence || "Not stated"}</span>
         </Field>
         <Field id="approve-needs" label="Needs" hint="What the plugin asks of this host">
           <div className="flex flex-wrap gap-1.5">

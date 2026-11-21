@@ -94,13 +94,13 @@ describe("plugin manager: sources, catalog, install, update", () => {
     const s = createPluginsStore(l);
     s.getState().readManager();
     expect(l.sent.map((e) => argsOf(e))).toEqual([["available"], ["sources"], ["updates"]]);
-    answer(l, 0, [{ id: "Acme", displayName: "Acme", version: "1.0", signed: "untrusted", requires: ["http"], source: "/src/a", installed: false }]);
+    answer(l, 0, [{ id: "Acme", displayName: "Acme", version: "1.0", signed: "untrusted", requires: ["http"], source: "/src/a", installed: false, license: "MIT", grants: ["http"] }]);
     answer(l, 1, [{ id: "src-a", kind: "git", location: "https://x/y.git", offers: 2 }, { nope: 1 }]);
-    answer(l, 2, [{ id: "Acme", installed: "1.0", available: "1.1", source: "/src/a" }]);
+    answer(l, 2, [{ id: "Acme", installed: "1.0", available: "1.1", source: "/src/a", check: "signed", license: "MIT", grants: ["http"] }]);
     const st = s.getState();
-    expect(st.catalog[0]).toMatchObject({ id: "Acme", signed: "untrusted", requires: ["http"], installed: false });
+    expect(st.catalog[0]).toMatchObject({ id: "Acme", signed: "untrusted", requires: ["http"], installed: false, license: "MIT", grants: ["http"] });
     expect(st.sources).toEqual([{ id: "src-a", kind: "git", location: "https://x/y.git", offers: 2 }]);
-    expect(st.updates).toEqual([{ id: "Acme", installed: "1.0", available: "1.1", source: "/src/a" }]);
+    expect(st.updates).toEqual([{ id: "Acme", installed: "1.0", available: "1.1", source: "/src/a", signed: "signed", license: "MIT", grants: ["http"] }]);
   });
 
   it("sends add/remove/refresh source, install, update (with --approve) and uninstall as plugin_admin args", () => {
