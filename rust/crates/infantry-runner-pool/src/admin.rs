@@ -140,9 +140,12 @@ impl AdminUnit {
         let harnesses = if harnesses.is_empty() { lend.harnesses() } else { harnesses };
         for h in harnesses {
             let has = stored.iter().any(|n| n == &format!("harness.{h}.key") || n == &format!("harness.{h}.token"));
+            // The runner's own login (a subscription, not an API key) counts: the harness row above already says it is signed in.
+            let signed_in = rows.iter().any(|r| r["id"] == format!("harness:{h}").as_str() && r["ok"] == true);
             let (ok, detail, fix) = match lend.source(name, &h, has) {
                 CredentialSource::Lent => (true, "the key is lent by the orchestrator with each start", None),
                 CredentialSource::StoredOnRunner => (true, "the key is stored on the runner", None),
+                CredentialSource::None if signed_in => (true, "signed in on the runner with its own login (no key needed)", None),
                 CredentialSource::None => (false, "none: nothing is lent and the runner holds no key", Some("store a key on the runner (Settings > Runners, or runner_frame secret_set) or put one in this orchestrator's vault")),
             };
             rows.push(row(&format!("credential:{h}"), ok, detail, fix));
