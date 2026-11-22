@@ -5,6 +5,7 @@
 // A device notification (`notify_push`) toasts, plays the sound the daemon sent (it applied the notify.* settings)
 // and is acked for this device (`notify_ack` {id, device}).
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { createToasts, toastOfFrame, type ToastTone, devicePushOf } from "@infantry/client";
@@ -48,7 +49,9 @@ export function ToastHost() {
     [],
   );
   if (!list.length) return null;
-  return (
+  // Portaled to <body>: a plugin layout draws the shell inside a fixed host element (a stacking context) that would trap z-[100]
+  // under the dialogs, which portal to <body> at z-50, so a refused start from the Board dialog toasted underneath it.
+  return createPortal(
     <div className="pointer-events-none fixed right-4 bottom-10 z-[100] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2" role="status" aria-live="polite">
       {list.map((t) => {
         const Icon = ICON[t.tone];
@@ -68,6 +71,7 @@ export function ToastHost() {
           </div>
         );
       })}
-    </div>
+    </div>,
+    document.body,
   );
 }
