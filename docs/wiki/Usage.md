@@ -12,11 +12,13 @@ Claude's plan endpoint (`/api/oauth/usage`) rate-limits the **token**, and every
 daemon, the dev and test daemons, other tools signed in as the same account. When a read fails:
 
 - The wait before the next read is the **later** of the provider's `Retry-After` and our backoff (`usage.refreshMinutes`,
-  doubling up to `limits.usage.backoffMaxMinutes`). That endpoint answers every 429 with `Retry-After: 0`; a hint can only
+  doubling up to `limits.usage.backoffMaxMinutes`, default 10: no meter is left unread longer than that, even when the provider asks for more). That endpoint answers every 429 with `Retry-After: 0`; a hint can only
   lengthen the wait, so a `0` never turns the backoff into "ask again now".
 - The **last good reading stays on the card**, marked old, for up to `limits.usage.staleMaxHours` hours. The card says its
   age ("updated 12m ago"), the reason once, and when the daemon asks again ("next try in 4m"). With no reading at all it says
-  so, and that pacing is off for the meter.
+  so, and pacing **fails closed**: the meter is held to `limits.pacing.unknownWorkers` workers (default 1; 0 = no limit, the old
+  behaviour) until a reading lands. A provider that is not signed in is not a missing reading and is not held.
+- Every request to a usage endpoint is logged with its caller (`poll`, `pacing refresh`, `manual refresh`).
 - The meter **recovers by itself** at the first read the provider allows; there is nothing to click. Refresh asks only outside
   the manual floor (`limits.usage.manualRefreshFloorSeconds`) and never inside a backoff.
 - The daemons of one machine **share what they read**: the last good reading, the failures in a row and the next time to ask,

@@ -163,6 +163,9 @@ pub struct UsagePacing {
     /// The meter of every live ticket worker (one entry per worker).
     pub worker_meters: Source<Vec<String>>,
     pub clock: Clock,
+    /// Workers allowed on a meter whose reading is missing or failed (`limits.pacing.unknownWorkers`, default 1):
+    /// pacing fails CLOSED, never to "no limit". `None` keeps the old fail-open (the setting's off switch, 0).
+    pub unknown_allowance: Source<Option<i32>>,
 }
 
 impl UsagePacing {
@@ -180,10 +183,11 @@ impl UsagePacing {
             *running.entry(m).or_default() += 1;
         }
         let rule = (self.rule)();
+        let unknown = (self.unknown_allowance)();
         let names: BTreeSet<String> = live.keys().map(|k| k.to_string()).chain(manual.keys().cloned()).chain(overrides.keys().cloned()).chain(running.keys().cloned()).collect();
         let meters = names
             .iter()
-            .map(|m| meter_usage(m, live.get(m.as_str()).copied(), manual.get(m), overrides.get(m), running.get(m).copied().unwrap_or(0), &rule, now))
+            .map(|m| meter_usage(m, live.get(m.as_str()).copied(), manual.get(m), overrides.get(m), running.get(m).copied().unwrap_or(0), &rule, now, unknown))
             .collect();
         UsageReport { meters, rule, observed_at: now }
     }
@@ -199,7 +203,7 @@ impl UsagePacing {
     }
 }
 
-fn meter_usage(meter: &str, live: Option<&ProviderLimits>, manual: Option<&ManualUsage>, ov: Option<&UsageOverride>, running: i32, rule: &PacingRule, now: i64) -> MeterUsage {
+fn meter_usage(meter: &str, live: Option<&ProviderLimits>, manual: Option<&ManualUsage>, ov: Option<&UsageOverride>, running: i32, rule: &PacingRule, now: i64, unknown: Option<i32>) -> MeterUsage {
     let windows: Vec<LimitWindow> = live.map(|l| l.windows.clone()).unwrap_or_default();
     // The governing window allows the fewest workers; ties: the higher percent.
     let governing = windows
@@ -213,12 +217,18 @@ fn meter_usage(meter: &str, live: Option<&ProviderLimits>, manual: Option<&Manua
         _ => ("none", None, None, None, None),
     };
     let judgement = governing.as_ref().map(|(_, j)| j);
-    let rule_allowance = if !rule.enabled || percent.is_none() { None } else { judgement.map(|j| j.allowance).or_else(|| allowance(rule, percent)) };
+    // No reading although one was expected (not read yet, or the read failed and nothing is kept): fail closed to the
+    // safe allowance. A provider that is simply not signed in has no reading to wait for and stays unjudged.
+    let expected = live.is_some_and(|l| l.reason.as_deref().is_none_or(|r| r == crate::limits::reason::NOT_READ_YET || crate::limits::reason::is_transient(r)));
+    let closed = if rule.enabled && percent.is_none() && expected { unknown } else { None };
+    let rule_allowance = if closed.is_some() { closed } else if !rule.enabled || percent.is_none() { None } else { judgement.map(|j| j.allowance).or_else(|| allowance(rule, percent)) };
     let reasoning = rule_allowance.map(|_| judgement.map(|j| j.reason.clone()).unwrap_or_else(|| "bands".into()));
     let allowance_now = if let Some(o) = ov { o.workers } else { rule_allowance };
     let stale = live.is_some_and(|l| l.stale);
     let warning = if ov.is_some() {
         None
+    } else if percent.is_none() && rule.enabled && closed.is_some() {
+        Some(format!("usage unknown{}: pacing holds {meter} to {} worker(s) until a reading lands (fail closed)", live.and_then(|l| l.reason.as_ref()).map(|r| format!(" ({r})")).unwrap_or_default(), closed.unwrap_or(1)))
     } else if percent.is_none() && rule.enabled {
         Some(format!("usage unknown{}: pacing off for {meter} (fail open)", live.and_then(|l| l.reason.as_ref()).map(|r| format!(" ({r})")).unwrap_or_default()))
     } else if governing.is_some() && stale && rule.enabled {
@@ -439,6 +449,7 @@ mod tests {
             overrides: Arc::new(move || ov.lock().unwrap().clone()),
             worker_meters: Arc::new(|| vec!["claude".into(), "claude".into()]),
             clock: Arc::new(move || now),
+            unknown_allowance: Arc::new(|| Some(1)),
         };
         let r = p.report();
         let c = &r.meters[0];
@@ -463,5 +474,27 @@ mod tests {
         assert_eq!(meter_for("pi", Some("anthropic/claude-opus")), "claude");
         assert_eq!(meter_for("opencode", Some("opencode-go/kimi")), "opencode-go");
         assert_eq!(meter_for("Codex", None), "codex");
+    }
+
+    #[test]
+    fn no_reading_holds_the_safe_allowance_never_unlimited() {
+        let now = 1_000_000_000_i64;
+        let mk = |reason: &str, off: bool| UsagePacing {
+            limits: { let l = vec![ProviderLimits::unknown("claude", now, reason)]; Arc::new(move || l.clone()) },
+            pacing_limits: Arc::new(Vec::new),
+            rule: Arc::new(PacingRule::default),
+            manual: Arc::new(BTreeMap::new),
+            overrides: Arc::new(BTreeMap::new),
+            worker_meters: Arc::new(|| vec!["claude".into()]),
+            clock: Arc::new(move || now),
+            unknown_allowance: Arc::new(move || if off { None } else { Some(1) }),
+        };
+        for why in ["rate_limited", "not_read_yet", "network"] {
+            let m = mk(why, false).report().meters.remove(0);
+            assert_eq!((m.allowance, m.can_start), (Some(1), false), "{why}: one worker already runs, a second waits");
+            assert!(m.warning.unwrap().contains("fail closed"));
+        }
+        assert!(mk("rate_limited", true).report().meters[0].can_start, "setting 0 = the old fail-open");
+        assert!(mk("no_credentials", false).report().meters[0].can_start, "not signed in is not a missing reading");
     }
 }

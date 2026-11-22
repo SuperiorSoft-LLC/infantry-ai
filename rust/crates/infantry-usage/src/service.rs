@@ -101,6 +101,7 @@ impl UsageService {
                 overrides: Arc::new(move || c3.overrides()),
                 worker_meters: deps.worker_meters,
                 clock: clock.clone(),
+                unknown_allowance: { let c = config.clone(); Arc::new(move || c.unknown_allowance()) },
             }
         };
         let dir = deps.state_dir.clone();

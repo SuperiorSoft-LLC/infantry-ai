@@ -356,11 +356,15 @@ pub struct ReadTuning {
 
 impl Default for ReadTuning {
     fn default() -> Self {
-        ReadTuning { stale_max_ms: 6 * 3_600_000, backoff_base_ms: LimitService::DEFAULT_MIN_INTERVAL_MS, backoff_max_ms: 60 * 60_000, manual_floor_ms: 60_000 }
+        ReadTuning { stale_max_ms: 6 * 3_600_000, backoff_base_ms: LimitService::DEFAULT_MIN_INTERVAL_MS, backoff_max_ms: ReadTuning::MAX_INTERVAL_MS, manual_floor_ms: 60_000 }
     }
 }
 
 impl ReadTuning {
+    /// The longest the service leaves a meter unread after a failure (`limits.usage.backoffMaxMinutes`): a provider
+    /// that says slow down, or a failure in a row, can never park a meter for an hour (pacing is off without a reading).
+    pub const MAX_INTERVAL_MS: i64 = 10 * 60_000;
+
     pub fn backoff_ms(&self, failures: u32) -> i64 {
         if failures == 0 {
             return 0;
@@ -402,6 +406,8 @@ struct ReadPlan<'a> {
     reuse_ms: i64,
     /// False while a replacement (a demo, a mock) stands in for the real sources: nothing it reads is shared.
     shared: bool,
+    /// Who asked for this pass, logged with every usage request.
+    caller: &'static str,
 }
 
 /// Sources a plugin offered in place of every other source, and whether pacing judges them.
@@ -578,7 +584,7 @@ impl LimitService {
                 }
             }
         }
-        let plan = ReadPlan { now, tuning: &t, reuse_ms: if force { t.manual_floor_ms } else { self.min_interval_ms }, shared: !rep };
+        let plan = ReadPlan { now, tuning: &t, reuse_ms: if force { t.manual_floor_ms } else { self.min_interval_ms }, shared: !rep, caller: if force { "manual refresh" } else { "poll" } };
         let fresh: Vec<ProviderLimits> = self.all_sources().iter().map(|s| self.read_one(s.as_ref(), &plan, &self.live)).collect();
         let mut st = self.live.lock().unwrap_or_else(|p| p.into_inner());
         st.cached = Some(fresh.clone());
@@ -609,6 +615,7 @@ impl LimitService {
                 }
             }
         }
+        (self.log)(&format!("[infantry] limits {provider}: usage request (caller: {}, failures in a row {})", plan.caller, state.lock().unwrap_or_else(|p| p.into_inner()).states.get(&provider).map_or(0, |m| m.failures)));
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| s.read(now)))
             .unwrap_or_else(|_| ProviderLimits::unknown(&provider, now, reason::SOURCE_FAILED));
         let done = (self.clock)();
@@ -713,7 +720,7 @@ impl LimitService {
                 }
             }
         }
-        let plan = ReadPlan { now, tuning: &t, reuse_ms: self.min_interval_ms, shared: true };
+        let plan = ReadPlan { now, tuning: &t, reuse_ms: self.min_interval_ms, shared: true, caller: "pacing refresh" };
         let fresh: Vec<ProviderLimits> = real.iter().map(|s| self.read_one(s.as_ref(), &plan, &self.real)).collect();
         let mut st = self.real.lock().unwrap_or_else(|p| p.into_inner());
         st.cached = Some(fresh.clone());
@@ -943,6 +950,29 @@ mod tests {
         clock.store(NOW + 17 * MIN, Ordering::SeqCst);
         let r = svc.snapshot(false);
         assert_eq!((http.calls(), r[0].status.as_str(), r[0].stale, r[0].reason.clone(), r[0].retry_at), (4, "ok", false, None, None), "the provider allows it: the card loads by itself");
+    }
+
+    #[test]
+    fn a_rate_limit_never_parks_a_meter_past_ten_minutes_and_the_last_reading_is_kept() {
+        let t = ReadTuning::default();
+        assert_eq!(t.backoff_max_ms, 10 * MIN, "default cap: ten minutes");
+        assert_eq!(t.wait_after_failure(Some(24 * 60 * MIN), 1), 10 * MIN, "a provider asking for a day is tried again at 10 min");
+        assert_eq!(t.wait_after_failure(Some(2 * MIN), 1), 5 * MIN);
+        assert_eq!(t.wait_after_failure(None, 12), 10 * MIN, "many failures in a row stay at the cap");
+        // 200, then 429 with a long Retry-After, then 200 within 10 minutes of the 429.
+        let http = ScriptedHttp::new(&[(200, None), (429, Some(3_600_000)), (200, None)]);
+        let clock = clock_at(NOW);
+        let log = no_log();
+        let svc = process(&http, &clock, None, None, &log);
+        assert_eq!(percent(&svc.snapshot(false)[0]), Some(10.0));
+        clock.store(NOW + 6 * MIN, Ordering::SeqCst);
+        let r = svc.snapshot(false);
+        assert_eq!((r[0].stale, percent(&r[0]), r[0].reason.as_deref()), (true, Some(10.0), Some("rate_limited")), "the last reading stays, marked stale");
+        assert!(r[0].retry_at.unwrap() - (NOW + 6 * MIN) <= 10 * MIN, "next try within 10 min");
+        clock.store(NOW + 16 * MIN, Ordering::SeqCst);
+        let r = svc.snapshot(false);
+        assert_eq!((http.calls(), r[0].stale, r[0].reason.clone()), (3, false, None), "recovered inside 10 minutes of the 429");
+        assert!(log.lock().unwrap().iter().any(|l| l.contains("usage request (caller: poll")), "every request is logged with its caller");
     }
 
     #[test]
