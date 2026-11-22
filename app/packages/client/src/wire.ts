@@ -51,6 +51,7 @@ export const Frame = {
   AGENTS: "agents",
   AGENT: "agent",
   TICKET_LIST: "ticket_list",
+  TICKET_GET: "ticket_get",
   TICKETS: "tickets",
   TICKET: "ticket",
   PROJECT_LIST: "project_list",

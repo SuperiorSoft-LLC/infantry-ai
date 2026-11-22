@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 // One lane: a droppable, sortable column of ticket cards. A long lane is virtualized (TanStack Virtual). The header
 // collapses a lane to its title and count (remembered per lane in this browser); a collapsed lane still takes drops.
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -54,8 +54,8 @@ function SortableCard({ t, onOpen }: { t: BoardTicket; onOpen: (id: string) => v
   );
 }
 
-function VirtualCards({ tickets, onOpen, scrollRef }: { tickets: BoardTicket[]; onOpen: (id: string) => void; scrollRef: React.RefObject<HTMLDivElement | null> }) {
-  const v = useVirtualizer({ count: tickets.length, getScrollElement: () => scrollRef.current, estimateSize: () => ESTIMATE_PX + GAP_PX, overscan: 6 });
+function VirtualCards({ tickets, onOpen, scroller }: { tickets: BoardTicket[]; onOpen: (id: string) => void; scroller: HTMLDivElement }) {
+  const v = useVirtualizer({ count: tickets.length, getScrollElement: () => scroller, estimateSize: () => ESTIMATE_PX + GAP_PX, overscan: 6 });
   return (
     <div style={{ height: v.getTotalSize(), position: "relative" }}>
       {v.getVirtualItems().map((row) => (
@@ -69,7 +69,9 @@ function VirtualCards({ tickets, onOpen, scrollRef }: { tickets: BoardTicket[]; 
 
 export function Lane({ status, title, tickets, total, over, onOpen }: { status: string; title: string; tickets: BoardTicket[]; total: number; over: boolean; onOpen: (id: string) => void }) {
   const drop = useDroppable({ id: laneDropId(status) });
-  const scrollRef = useRef<HTMLDivElement>(null);
+  // A state ref, not a ref object: the virtualized list mounts before the scroll box is attached, and must re-render once it is
+  // (a null scroll element rendered an empty lane under a non-zero count).
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   const filtered = tickets.length !== total;
   const [collapsed, setCollapsed] = useState(() => readCollapsed().includes(status));
   const toggle = () => {
@@ -86,12 +88,12 @@ export function Lane({ status, title, tickets, total, over, onOpen }: { status: 
         <span className="font-normal text-muted-foreground">{filtered ? `${tickets.length} of ${total}` : total}</span>
       </h3>
       {!collapsed && (
-      <div ref={scrollRef} className="flex min-h-16 flex-1 flex-col gap-2 overflow-y-auto pr-0.5">
+      <div ref={setScroller} className="flex min-h-16 flex-1 flex-col gap-2 overflow-y-auto pr-0.5">
         <SortableContext items={tickets.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           {tickets.length === 0 ? (
             <p className="px-1 py-3 text-center text-xs text-muted-foreground">{filtered ? "No match" : "Nothing here"}</p>
           ) : tickets.length > VIRTUAL_AFTER ? (
-            <VirtualCards tickets={tickets} onOpen={onOpen} scrollRef={scrollRef} />
+            scroller ? <VirtualCards tickets={tickets} onOpen={onOpen} scroller={scroller} /> : <p className="px-1 py-3 text-center text-xs text-muted-foreground">Loading…</p>
           ) : (
             tickets.map((t) => <SortableCard key={t.id} t={t} onOpen={onOpen} />)
           )}

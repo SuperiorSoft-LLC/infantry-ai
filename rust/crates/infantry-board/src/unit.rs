@@ -119,7 +119,10 @@ impl FrameUnit for BoardUnit {
         match frame {
             "ticket_list" => {
                 let q = TicketListQuery::decode(&env.data).map_err(|m| r(OrchError::Refused(m)))?;
-                let ts = self.board.list(q.project_id.as_deref(), q.epic_id.as_deref()).map_err(r)?;
+                let mut ts = self.board.list(q.project_id.as_deref(), q.epic_id.as_deref()).map_err(r)?;
+                if q.compact {
+                    ts = ts.into_iter().map(|t| t.compacted()).collect();
+                }
                 Ok(answer(false, tickets_envelope(&ts)))
             }
             "ticket_get" => {
