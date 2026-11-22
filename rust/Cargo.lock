@@ -1268,6 +1268,7 @@ name = "infantry-distribution"
 version = "0.4.7"
 dependencies = [
  "infantry-daemon",
+ "infantry-harness",
  "infantry-harness-claude",
  "infantry-harness-codex",
  "infantry-harness-opencode",
@@ -1560,6 +1561,7 @@ dependencies = [
 name = "infantry-runner-api"
 version = "0.4.7"
 dependencies = [
+ "base64",
  "serde",
  "tokio",
 ]

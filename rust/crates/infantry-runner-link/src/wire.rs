@@ -364,7 +364,7 @@ pub struct EventsAnswer {
 }
 
 /// The orchestrator's read-only health check of a runner (the fields a Rust runner reads; the rest are ignored).
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CheckRequest {
     #[serde(default)]
@@ -375,6 +375,16 @@ pub struct CheckRequest {
     pub git_remote: Option<String>,
     #[serde(default)]
     pub contract: Option<String>,
+    /// RR-6 (additive): the git credential a start would lend, so the `git` row proves the access a worker really has.
+    /// Secret values: carried opaque, never logged (Debug names no value).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credentials: Option<serde_json::Value>,
+}
+
+impl std::fmt::Debug for CheckRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CheckRequest").field("harness", &self.harness).field("credentials", &self.credentials.as_ref().map(|_| "redacted")).finish_non_exhaustive()
+    }
 }
 
 /// One checked thing (`contract`, `harness:<id>`, `disk`, ...) and the fix when it failed.

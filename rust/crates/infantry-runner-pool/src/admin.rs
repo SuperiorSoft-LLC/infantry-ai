@@ -10,8 +10,28 @@ use std::sync::Arc;
 pub const ADMIN_FRAME: &str = "runner_admin";
 const FRAMES: &[&str] = &[ADMIN_FRAME];
 
+/// RR-6: what a check needs of the orchestrator's lending policy (the daemon root implements it over its vault and settings).
+pub trait CheckLend: Send + Sync {
+    /// The git credential a start on `runner` would lend for `project`, as the JSON a check request carries; `None` = none.
+    fn git_credentials(&self, runner: &str, project: Option<&str>) -> Option<Value>;
+    /// Where `harness` gets its credential on `runner`: `runner_has_key` is whether the runner's own vault holds its key.
+    fn source(&self, runner: &str, harness: &str, runner_has_key: bool) -> CredentialSource;
+    /// The harnesses this orchestrator knows (a process-only runner does not list its own).
+    fn harnesses(&self) -> Vec<String>;
+}
+
+/// Where a harness's credential comes from, for the check row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CredentialSource {
+    Lent,
+    StoredOnRunner,
+    None,
+}
+
 pub struct AdminUnit {
     pub pool: Arc<RunnerPool>,
+    /// The lending policy; unset = the check shows no credential rows.
+    pub lend: Option<Arc<dyn CheckLend>>,
 }
 
 fn fail(msg: impl std::fmt::Display) -> Value {
@@ -78,6 +98,7 @@ impl AdminUnit {
     fn check(&self, d: &Map<String, Value>) -> Value {
         let Some(name) = text(d, "name") else { return fail("check needs a runner name") };
         let Some((state, ping)) = self.pool.check(name) else { return fail(format!("no runner named '{name}' (infantry runner list)")) };
+        let ping_harnesses: Vec<String> = ping.as_ref().map(|p| p.hello.harnesses.iter().map(|h| h.id.clone()).collect()).unwrap_or_default();
         let rows = match (&state, ping) {
             (RunnerState::Online { rtt_ms, contract }, Some(p)) => vec![
                 row("link", true, format!("pong from '{}' in {rtt_ms} ms", p.hello.runner_name), None),
@@ -91,7 +112,36 @@ impl AdminUnit {
             }
             _ => Vec::new(),
         };
+        let mut rows = rows;
+        if matches!(state, RunnerState::Online { .. }) {
+            rows.extend(self.credential_rows(name, d, ping_harnesses));
+        }
         json!({"ok": true, "name": name, "state": state.word(), "rows": rows})
+    }
+
+    /// RR-6: the runner-side `credentials` and `git` rows, then one `credential:<harness>` row per harness saying where its
+    /// credential comes from (lent / stored on the runner / none). A value is never shown.
+    fn credential_rows(&self, name: &str, d: &Map<String, Value>, harnesses: Vec<String>) -> Vec<Value> {
+        let Some(lend) = &self.lend else { return Vec::new() };
+        let project = text(d, "projectId");
+        let git = lend.git_credentials(name, project);
+        let req = infantry_runner_link::wire::CheckRequest { project_id: project.map(str::to_string), git_remote: text(d, "gitRemote").map(str::to_string), credentials: git, ..Default::default() };
+        let mut rows: Vec<Value> = match self.pool.check_rows(name, &req) {
+            Ok(rs) => rs.into_iter().map(|r| row(&r.id, r.ok, r.detail, r.fix.as_deref())).collect(),
+            Err(e) => vec![row("git", false, format!("the runner did not answer the check: {e}"), None)],
+        };
+        let stored = self.pool.runner_secret_names(name).unwrap_or_default();
+        let harnesses = if harnesses.is_empty() { lend.harnesses() } else { harnesses };
+        for h in harnesses {
+            let has = stored.iter().any(|n| n == &format!("harness.{h}.key") || n == &format!("harness.{h}.token"));
+            let (ok, detail, fix) = match lend.source(name, &h, has) {
+                CredentialSource::Lent => (true, "the key is lent by the orchestrator with each start", None),
+                CredentialSource::StoredOnRunner => (true, "the key is stored on the runner", None),
+                CredentialSource::None => (false, "none: nothing is lent and the runner holds no key", Some("store a key on the runner (Settings > Runners, or runner_frame secret_set) or put one in this orchestrator's vault")),
+            };
+            rows.push(row(&format!("credential:{h}"), ok, detail, fix));
+        }
+        rows
     }
 
     fn detach(&self, d: &Map<String, Value>) -> Value {

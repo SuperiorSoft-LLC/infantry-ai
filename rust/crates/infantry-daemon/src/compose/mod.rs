@@ -408,6 +408,19 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         let _ = creds_cell.set(c.clone());
         let for_sessions = c.clone();
         daemon.set_provider_env(Arc::new(move |provider| for_sessions.session_env(provider)));
+        // RR-6: what a start on a remote runner lends (the harness key, project secrets, a git token).
+        let lender = crate::lender::Lender {
+            setting: Arc::new({
+                let settings = settings::SettingsUnit { db: db.clone() };
+                move |key| settings.app(key)
+            }),
+            keystore: vault.keystore().clone(),
+            harness_env: Arc::new({
+                let c = c.clone();
+                move |provider| c.session_env(provider)
+            }),
+        };
+        daemon.set_lender(Arc::new(lender));
         c
     };
 

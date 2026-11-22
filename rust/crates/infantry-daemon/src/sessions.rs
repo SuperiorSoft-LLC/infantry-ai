@@ -294,6 +294,8 @@ pub struct Daemon {
     env_extra: std::sync::OnceLock<Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>>,
     /// The env one provider's sessions get on top (its stored key or subscription token, the API key variable blanked).
     provider_env: std::sync::OnceLock<Arc<dyn Fn(&str) -> Vec<(String, String)> + Send + Sync>>,
+    /// RR-6: what a start on a REMOTE runner lends `(runner, provider, project)`; unset = nothing is lent.
+    lender: std::sync::OnceLock<Arc<crate::lender::Lender>>,
     /// Whether a role exists (`session_swap` to a role); unset = any well-formed role.
     role_known: std::sync::OnceLock<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
     /// PM-ROLE-1: the text a new conversation of a role starts with (the role catalog's persona); unset = none.
@@ -393,6 +395,7 @@ impl Daemon {
             launch: Mutex::new(Default::default()),
             env_extra: std::sync::OnceLock::new(),
             provider_env: std::sync::OnceLock::new(),
+            lender: std::sync::OnceLock::new(),
             role_known: std::sync::OnceLock::new(),
             role_brief: std::sync::OnceLock::new(),
             prompter: std::sync::OnceLock::new(),
@@ -1200,6 +1203,15 @@ impl Daemon {
 
     /// Env added to every agent process, read at each start (so a setting change applies to the next start).
     /// Sets the env a session of a given provider gets (read at each start).
+    /// RR-6: wires what a remote start lends.
+    pub fn set_lender(&self, l: Arc<crate::lender::Lender>) {
+        let _ = self.lender.set(l);
+    }
+
+    pub fn lender(&self) -> Option<Arc<crate::lender::Lender>> {
+        self.lender.get().cloned()
+    }
+
     pub fn set_provider_env(&self, f: Arc<dyn Fn(&str) -> Vec<(String, String)> + Send + Sync>) {
         let _ = self.provider_env.set(f);
     }
@@ -1277,7 +1289,19 @@ impl Daemon {
         }
         // RR-4: every session, local or remote, is opened on the runner its record names; an unknown, offline or outdated
         // runner fails the start loudly (no local fallback).
-        let entry = self.runner_registry().resolve(&e.rec.runner).map_err(|r| r.to_string())?;
+        let mut entry = self.runner_registry().resolve(&e.rec.runner).map_err(|r| r.to_string())?;
+        // RR-6: a remote runner is lent the harness key, the project's secrets and a git credential with each start, instead
+        // of the key travelling in the plain env. `local` is lent nothing (it uses this machine's own keys).
+        if entry.kind == "remote" {
+            if let Some(f) = self.provider_env.get() {
+                let mine = f(&e.rec.provider);
+                env.retain(|(k, _)| !mine.iter().any(|(mk, _)| mk == k));
+            }
+            if let Some(lend) = self.lender.get() {
+                let lent = lend.lend(&entry.name, &e.rec.provider, e.rec.project_id.as_deref());
+                entry.runner = Arc::new(infantry_runner_api::LendingRunner::new(entry.runner.clone(), lent));
+            }
+        }
         // RR-5: a runner on another machine cannot dial this daemon's loopback: its session (and the infantry MCP it runs)
         // is pointed at a loopback port on the runner host that the link tunnels back here. A runner that shares this machine
         // answers `Unsupported` and the env stays as it is.

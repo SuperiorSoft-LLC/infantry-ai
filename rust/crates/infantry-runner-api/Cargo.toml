@@ -13,3 +13,4 @@ test-support = ["tokio/time"]
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["sync"] }
+base64 = "0.22"
