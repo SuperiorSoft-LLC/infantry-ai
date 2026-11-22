@@ -63,6 +63,9 @@ fn rows_of(id: &str, default: bool, h: &dyn infantry_harness::Harness, probe: &d
         "id": id, "default": default, "models": ids, "available": problem.is_none(), "unavailableReason": problem,
         "efforts": EFFORTS, "effort": "supported",
     });
+    if let Some(at) = h.login_location(probe) {
+        row["loginAt"] = Value::String(at);
+    }
     if let Some(note) = h.usage_note() {
         row["usageNote"] = Value::String(note);
     }

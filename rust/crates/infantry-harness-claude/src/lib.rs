@@ -318,6 +318,13 @@ impl Harness for ClaudeHarness {
         }
     }
 
+    fn login_location(&self, probe: &dyn Probe) -> Option<String> {
+        if probe.env(OAUTH_TOKEN_ENV).is_some() {
+            return Some(format!("the {OAUTH_TOKEN_ENV} environment variable"));
+        }
+        config_dir(probe).map(|d| d.join(CREDENTIALS_FILE).to_string_lossy().to_string())
+    }
+
     fn launch(&self, req: &LaunchRequest) -> Result<LaunchPlan, LaunchError> {
         let (session_id, resume) = self.session(req);
         if self.mode == Mode::Interactive {

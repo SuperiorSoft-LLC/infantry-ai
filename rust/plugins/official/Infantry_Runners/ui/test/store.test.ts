@@ -3,7 +3,7 @@
 // RR-9: Add runner sends `runner_admin add` with the two values and the new row shows; an offline runner shows its reason.
 import { describe, expect, it } from "vitest";
 import type { Envelope } from "@infantry/ui-plugin-api";
-import { createRunnersStore, pingLine, statusOf, summarizeProviders, summaryLine } from "../src/store";
+import { createRunnersStore, joinHarnesses, plainText, pingLine, statusOf, summarizeProviders, summaryLine } from "../src/store";
 
 function link(up = true) {
   const sent: Envelope[] = [];
@@ -104,5 +104,19 @@ describe("RR-14 row summary", () => {
     expect(summaryLine(s.getState().summaries.box)).toBe("Tools: pi · signed in: yes");
     expect(summarizeProviders([{ id: "pi", available: false }], { harnesses: [{ id: "pi", state: "installed", path: "/x" }] })).toEqual({ tools: ["pi"], signedIn: false });
     expect(summaryLine({ tools: [], signedIn: false })).toBe("Tools: none installed · signed in: no");
+  });
+});
+
+describe("RR-VIS detail", () => {
+  it("joins install and providers into one harness row, so credential and harness never disagree", () => {
+    const rows = joinHarnesses({ harnesses: [{ id: "claude", state: "installed", path: "/usr/bin/claude", version: "2.1" }, { id: "pi", state: "missing", path: null }] }, [{ id: "claude", available: false, unavailableReason: "Claude is not signed in. Screen: raw dump", loginAt: "~/.claude/.credentials.json" }]);
+    expect(rows[0]).toMatchObject({ id: "claude", installed: true, signedIn: false, why: "Claude is not signed in.", loginAt: "~/.claude/.credentials.json" });
+    expect(rows[1]).toMatchObject({ id: "pi", installed: false, signedIn: false, why: null });
+    expect(joinHarnesses({ harnesses: [{ id: "claude", state: "installed", path: "/c" }] }, null, [{ id: "claude", loggedIn: true }])[0].signedIn).toBe(true);
+    expect(plainText("a. Screen: junk")).toBe("a.");
+  });
+  it("never prints a bare unknown for tools", () => {
+    expect(summaryLine({ tools: ["pi"], signedIn: false, signedInUnknown: true })).toContain("Update runner");
+    expect(summaryLine({ tools: [], signedIn: false, error: "no route to host" })).toBe("Tools: not readable: no route to host");
   });
 });

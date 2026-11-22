@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-//! The owner-only `runner_admin` frame: `{op: add|list|check|detach, ...}` -> one `runner_admin` answer `{ok, ...}`.
+//! The owner-only `runner_admin` frame: `{op: add|list|check|detail|detach, ...}` -> one `runner_admin` answer `{ok, ...}`.
 use crate::pool::{RunnerPool, RunnerState};
 use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Refusal};
 use infantry_runner_link::pairing::BearerToken;
@@ -113,8 +113,8 @@ impl AdminUnit {
             ],
             (RunnerState::Outdated { contract, reason }, _) => vec![row("contract", false, format!("contract {contract}: {reason}"), Some("update the runner"))],
             (RunnerState::Offline { reason }, _) => {
-                let fix = if reason.contains("not the pinned one") { "add the runner again with its current bearer" } else { "start the runner, then check the endpoint" };
-                vec![row("link", false, reason.clone(), Some(fix))]
+                let (plain, fix) = crate::pool::plain_reason(reason);
+                vec![row("link", false, format!("{plain} ({reason})"), Some(&fix))]
             }
             _ => Vec::new(),
         };
@@ -122,7 +122,52 @@ impl AdminUnit {
         if matches!(state, RunnerState::Online { .. }) {
             rows.extend(self.credential_rows(name, d, ping_harnesses));
         }
+        self.pool.keep_check(name, rows.clone());
         json!({"ok": true, "name": name, "state": state.word(), "rows": rows})
+    }
+
+    /// RR-VIS: everything the connection panel shows about one runner, in one answer. No new probe: it reads what the last
+    /// heartbeat or check learned (`refresh` first for a fresh look).
+    fn detail(&self, d: &Map<String, Value>) -> Value {
+        let Some(name) = text(d, "name") else { return fail("detail needs a runner name") };
+        let last = self.pool.last_check(name).map(|(at, rows)| json!({"at": at, "rows": rows}));
+        if name == "local" {
+            return json!({"ok": true, "name": "local",
+                "runner": {"name": "local", "runnerId": "", "mode": "embedded (this app)", "os": std::env::consts::OS, "appVersion": self.pool.app_version, "contract": infantry_runner_link::wire::CONTRACT, "needs": infantry_runner_link::wire::MIN_RUNNER_CONTRACT},
+                "link": {"url": "", "state": "online", "reasonPlain": "the embedded runner is this app itself: there is no network link"},
+                "lastCheck": last});
+        }
+        let Some(r) = self.pool.runners().into_iter().find(|r| r.name == name) else { return fail(format!("no runner named '{name}' (infantry runner list)")) };
+        let s = self.pool.state(name);
+        let seen = self.pool.seen(name);
+        let mode = match seen.as_ref().and_then(|x| x.kind.as_deref()) {
+            Some("runner") => "remote headless (app --mode runner)".to_string(),
+            Some(k) => k.to_string(),
+            None if seen.is_some() => "remote (a Kotlin runner)".to_string(),
+            None => "remote (not answered yet)".to_string(),
+        };
+        let mut link = json!({"url": r.url, "fingerprint": r.fingerprint, "pairedAt": r.issued_at, "pairedFrom": r.paired_from, "state": s.word()});
+        if let Some(x) = &seen {
+            link["lastPingAt"] = json!(x.at_ms);
+        }
+        match &s {
+            RunnerState::Online { rtt_ms, .. } => link["rttMs"] = json!(rtt_ms),
+            RunnerState::Offline { reason } | RunnerState::Outdated { reason, .. } => {
+                let (plain, fix) = crate::pool::plain_reason(reason);
+                link["reason"] = json!(reason);
+                link["reasonPlain"] = json!(if matches!(s, RunnerState::Outdated { .. }) { "the runner is older than this app".to_string() } else { plain });
+                link["fix"] = json!(if matches!(s, RunnerState::Outdated { .. }) { "Update runner".to_string() } else { fix });
+            }
+            RunnerState::Unknown => link["reasonPlain"] = json!("not probed yet: press Check"),
+        }
+        let harnesses: Vec<Value> = seen.as_ref().map(|x| x.harnesses.iter().map(|(id, li)| json!({"id": id, "loggedIn": li})).collect()).unwrap_or_default();
+        let mut v = json!({"ok": true, "name": name,
+            "runner": {"name": r.name, "runnerId": r.runner_id, "mode": mode, "os": seen.as_ref().map(|x| x.os.clone()).unwrap_or_default(), "appVersion": self.pool.runner_app_version(name), "contract": match &s { RunnerState::Online { contract, .. } | RunnerState::Outdated { contract, .. } => contract.clone(), _ => r.contract.clone() }, "needs": infantry_runner_link::wire::MIN_RUNNER_CONTRACT},
+            "link": link, "offers": seen.as_ref().map(|x| x.offers.clone()).unwrap_or_default(), "helloHarnesses": harnesses, "lastCheck": last});
+        if let Some(u) = self.pool.update_status(name) {
+            v["update"] = json!({"state": u.state, "steps": u.steps, "detail": u.detail});
+        }
+        v
     }
 
     /// RR-6: the runner-side `credentials` and `git` rows, then one `credential:<harness>` row per harness saying where its
@@ -205,11 +250,12 @@ impl FrameUnit for AdminUnit {
             Some("add") => self.add(&d),
             Some("list") => self.list(),
             Some("check") => self.check(&d),
+            Some("detail") => self.detail(&d),
             Some("detach") => self.detach(&d),
             Some("refresh") => self.refresh(),
             Some("update") => self.update(&d),
             Some("update_status") => self.update_status(&d),
-            Some(other) => fail(format!("unknown op '{other}' (add, list, refresh, check, update, update_status, detach)")),
+            Some(other) => fail(format!("unknown op '{other}' (add, list, refresh, check, detail, update, update_status, detach)")),
             None => fail("missing op"),
         };
         let mut out = Envelope::new(ADMIN_FRAME, answer.to_string());

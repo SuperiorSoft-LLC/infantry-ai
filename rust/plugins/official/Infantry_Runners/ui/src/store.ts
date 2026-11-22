@@ -33,6 +33,55 @@ export interface RunnerSummary {
   signedIn: boolean;
   /** Set when the runner could not be read (the refusal text). */
   error?: string;
+  /** RR-VIS: the tools are known (install status answered) but `providers` was refused: an old runner that cannot say who is signed in. */
+  signedInUnknown?: boolean;
+}
+
+/** RR-VIS: one harness of a runner, the install and the providers answers joined by id: the only source of "signed in" in the panel. */
+export interface HarnessRow {
+  id: string;
+  installed: boolean;
+  version: string | null;
+  path: string | null;
+  /** null = unknown (providers not readable and the runner's hello did not say). */
+  signedIn: boolean | null;
+  /** Why it is not signed in (the harness's own words, never a terminal dump). */
+  why: string | null;
+  /** Where the login lives, as the harness reported it. */
+  loginAt: string | null;
+}
+
+/** Everything the Details dialog shows about one runner (the `runner_admin detail` answer, plus the harness join). */
+export interface RunnerDetail {
+  runner?: { name: string; runnerId?: string; mode?: string; os?: string; appVersion?: string | null; contract?: string; needs?: string };
+  link?: { url: string; fingerprint?: string; pairedAt?: number; pairedFrom?: string; lastPingAt?: number; rttMs?: number; state: string; reason?: string; reasonPlain?: string; fix?: string };
+  helloHarnesses?: { id: string; loggedIn: boolean }[];
+  lastCheck?: { at: number; rows: CheckRow[] } | null;
+  update?: { state: string; steps: string[]; detail: string };
+  harnesses?: HarnessRow[];
+  /** Set when the harness answers could not be read (plain words). */
+  harnessError?: string;
+}
+
+/** The text before a raw terminal dump: a refusal like `Claude is not signed in. Screen: ...` shows only its first part. */
+export function plainText(s: string | null | undefined): string | null {
+  if (!s) return null;
+  return s.split(/\s+Screen:/)[0].trim() || null;
+}
+
+/** Joins `harness_install_status` and `providers` (and the hello's login flag as a fallback) into one row per harness. */
+export function joinHarnesses(install: unknown, providers: unknown, hello: { id: string; loggedIn: boolean }[] = []): HarnessRow[] {
+  const inst = Array.isArray((install as { harnesses?: unknown } | null)?.harnesses) ? ((install as { harnesses: (InstallRow & { version?: string | null })[] }).harnesses) : [];
+  const prov = Array.isArray(providers) ? (providers as (ProviderRow & { unavailableReason?: string | null; loginAt?: string | null })[]) : null;
+  const ids = [...new Set([...inst.map((h) => h.id), ...(prov ?? []).map((p) => p.id), ...hello.map((h) => h.id)])];
+  return ids.map((id) => {
+    const i = inst.find((h) => h.id === id);
+    const p = prov?.find((x) => x.id === id);
+    const h = hello.find((x) => x.id === id);
+    const installed = !!i && !!i.path && i.state !== "missing";
+    const signedIn = installed ? (p ? p.available !== false : h ? h.loggedIn : null) : false;
+    return { id, installed, version: i?.version ?? null, path: i?.path ?? null, signedIn, why: signedIn === false && installed ? plainText(p?.unavailableReason) ?? "not signed in" : null, loginAt: p?.loginAt ?? null };
+  });
 }
 
 interface ProviderRow {
@@ -60,7 +109,8 @@ export function summarizeProviders(providers: unknown, install: unknown): Runner
 
 /** `Tools: pi, claude · signed in: yes`. */
 export function summaryLine(s: RunnerSummary): string {
-  if (s.error) return `Tools: unknown (${s.error})`;
+  if (s.error) return `Tools: not readable: ${s.error}`;
+  if (s.signedInUnknown) return `Tools: ${s.tools.length ? s.tools.join(", ") : "none installed"} · signed in: unknown (this runner is too old to report it: Update runner)`;
   return `Tools: ${s.tools.length ? s.tools.join(", ") : "none installed"} · signed in: ${s.signedIn ? "yes" : "no"}`;
 }
 
@@ -85,9 +135,13 @@ export interface RunnersState {
   adding: boolean;
   /** RR-11: what the last Update runner answered (progress, or the command to run on another machine). */
   updateNote: Record<string, string>;
+  /** RR-VIS: the Details panel data of each runner opened. */
+  details: Record<string, RunnerDetail>;
 }
 
 export interface RunnersActions {
+  /** RR-VIS: reads one runner's connection detail (`runner_admin detail`) and its harness rows. */
+  detail(name: string): void;
   refresh(): void;
   /** RR-14: reads [name]'s `providers` (through `runner_frame` for a paired runner) and keeps the summary line. */
   summarize(name: string): void;
@@ -109,6 +163,11 @@ interface Answer {
   name?: string;
   rows?: CheckRow[];
   text?: string;
+  link?: RunnerDetail["link"];
+  runner?: RunnerDetail["runner"];
+  helloHarnesses?: RunnerDetail["helloHarnesses"];
+  lastCheck?: RunnerDetail["lastCheck"];
+  update?: RunnerDetail["update"];
 }
 
 /** The status the row shows: the dot, the word and the reason (an offline or outdated runner always carries one). */
@@ -176,6 +235,11 @@ export function createRunnersStore(link: FrameLink): RunnersStore {
         else set({ refusal: why, checking: null });
         return;
       }
+      if (ask?.op === "detail" && ask.name) {
+        const { ok: _ok, ...rest } = a as Answer & { ok?: boolean };
+        set({ details: { ...get().details, [ask.name]: { ...get().details[ask.name], ...(rest as RunnerDetail) } } });
+        return;
+      }
       if (Array.isArray(a.runners)) {
         set({ runners: a.runners, loaded: true });
         return;
@@ -215,13 +279,32 @@ export function createRunnersStore(link: FrameLink): RunnersStore {
       addError: null,
       adding: false,
       updateNote: {},
+      details: {},
+      detail(name) {
+        send("detail", { name }, name);
+        const keep = (d: Partial<RunnerDetail>) => set({ details: { ...get().details, [name]: { ...get().details[name], ...d } } });
+        Promise.allSettled([runnerRequest(link, name, "providers", JSON.stringify({ refresh: true })), runnerRequest(link, name, "harness_install_status", "{}")]).then(([p, i]) => {
+          if (p.status === "rejected" && i.status === "rejected") {
+            keep({ harnesses: [], harnessError: String(i.reason instanceof Error ? i.reason.message : i.reason).slice(0, 160) });
+            return;
+          }
+          const hello = get().details[name]?.helloHarnesses ?? [];
+          keep({ harnesses: joinHarnesses(i.status === "fulfilled" ? json<unknown>(i.value.data) : null, p.status === "fulfilled" ? json<unknown>(p.value.data) : null, hello), harnessError: undefined });
+        });
+      },
       refresh: () => void send("list", {}),
       summarize(name) {
         const keep = (v: RunnerSummary) => set({ summaries: { ...get().summaries, [name]: v } });
-        Promise.all([runnerRequest(link, name, "providers", JSON.stringify({ refresh: true })), runnerRequest(link, name, "harness_install_status", "{}")]).then(
-          ([p, i]) => keep(summarizeProviders(json<unknown>(p.data), json<unknown>(i.data)) ?? { tools: [], signedIn: false, error: "unreadable answer" }),
-          (why: unknown) => keep({ tools: [], signedIn: false, error: String(why instanceof Error ? why.message : why).slice(0, 120) }),
-        );
+        const why = (r: PromiseRejectedResult) => String(r.reason instanceof Error ? r.reason.message : r.reason).slice(0, 120);
+        Promise.allSettled([runnerRequest(link, name, "providers", JSON.stringify({ refresh: true })), runnerRequest(link, name, "harness_install_status", "{}")]).then(([p, i]) => {
+          if (p.status === "fulfilled" && i.status === "fulfilled") return keep(summarizeProviders(json<unknown>(p.value.data), json<unknown>(i.value.data)) ?? { tools: [], signedIn: false, error: "the runner's answer could not be read" });
+          // The install list still names the tools when only `providers` is refused (an older runner): say what is known and why the rest is not.
+          if (i.status === "fulfilled") {
+            const rows = json<{ harnesses?: InstallRow[] }>(i.value.data)?.harnesses;
+            if (Array.isArray(rows)) return keep({ tools: rows.filter((h) => !!h.path && h.state !== "missing").map((h) => h.id), signedIn: false, signedInUnknown: true });
+          }
+          keep({ tools: [], signedIn: false, error: p.status === "rejected" ? why(p) : i.status === "rejected" ? why(i) : "unreadable answer" });
+        });
       },
       add(endpoint, bearer) {
         set({ adding: true, addError: null });
