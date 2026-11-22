@@ -61,3 +61,12 @@ describe("harness picker and role pin", () => {
     expect(pinOptions([], [], [], "pi")).toEqual({ providers: [], models: [] });
   });
 });
+
+describe("pairedRunners (RR-9)", () => {
+  it("lists the paired runners of a runner_admin list answer, never local, and nothing for a refusal", async () => {
+    const { pairedRunners } = await import("../src/stores/launcher");
+    expect(pairedRunners(JSON.stringify({ ok: true, runners: [{ name: "local" }, { name: "box" }] }))).toEqual(["box"]);
+    expect(pairedRunners(JSON.stringify({ ok: false, error: "owner only" }))).toEqual([]);
+    expect(pairedRunners("not json")).toEqual([]);
+  });
+});

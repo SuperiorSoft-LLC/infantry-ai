@@ -18,7 +18,7 @@ import {
 } from "@infantry/client";
 import { EmptyState, Input, Textarea, cn } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
-import { ExecutorPicker } from "./executor-picker";
+import { ExecutorPicker, RunnerPicker } from "./executor-picker";
 import { RoleAvatar } from "@/components/agents/agent-avatar";
 import { RoleGlyph } from "@/components/agents/role-icon";
 import { useRoles, useRolesLoaded } from "@/components/knowledge/use-knowledge";
@@ -54,7 +54,7 @@ function Step({ n, title, missing, children }: { n: number; title: string; missi
 
 export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDraft; onChange: (d: NewAgentDraft) => void; onSubmit: () => void }) {
   useRolesLoaded();
-  const { harnesses, catalog } = useLauncher();
+  const { harnesses, catalog, runners } = useLauncher();
   const rolesById = useRoles((s) => s.roles);
   const bindings = useRoles((s) => s.bindings);
   const loaded = useRoles((s) => s.loaded);
@@ -127,7 +127,13 @@ export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDra
         </Step>
       )}
 
-      <Step n={3} title="First task" missing={!draft.task.trim()}>
+      {runners.length > 0 && (
+        <Step n={3} title="Runner (optional)">
+          <RunnerPicker idPrefix="new-agent" value={draft.runner ?? null} runners={runners} onChange={(runner) => onChange({ ...draft, runner })} />
+        </Step>
+      )}
+
+      <Step n={runners.length > 0 ? 4 : 3} title="First task" missing={!draft.task.trim()}>
         <Textarea
           aria-label="First task"
           placeholder="What should this agent do first?"
@@ -152,5 +158,6 @@ export function addAgent(d: NewAgentDraft): void {
   if (d.harness) opts.provider = d.harness;
   if (d.model) opts.model = d.model;
   if (d.effort) opts.effort = d.effort;
+  if (d.runner) opts.runner = d.runner;
   if (store.spawnWith(opts)) store.sendFrame({ type: "prompt", data: d.task.trim() });
 }

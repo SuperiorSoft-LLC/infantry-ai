@@ -33,6 +33,8 @@ export interface LauncherState {
   harnesses: HarnessInfo[];
   catalog: ModelGroup[];
   loaded: boolean;
+  /** RR-9: the paired runners' names (`runner_admin list`, owner-only; empty when none is paired or the answer is refused). */
+  runners: string[];
 }
 export interface LauncherActions {
   ensureLoaded(): void;
@@ -49,6 +51,17 @@ function list<T>(data: string): T[] {
   }
 }
 
+/** The names of the paired runners in a `runner_admin list` answer (`local` is always there and is not paired); [] for any other answer. */
+export function pairedRunners(data: string): string[] {
+  try {
+    const v = JSON.parse(data) as { ok?: boolean; runners?: { name?: string }[] };
+    if (!v.ok || !Array.isArray(v.runners)) return [];
+    return v.runners.map((r) => r.name ?? "").filter((n) => n && n !== "local");
+  } catch {
+    return [];
+  }
+}
+
 export function createLauncherStore(link: FrameLink): LauncherStore {
   let asked = false;
   let off: (() => void) | null = null;
@@ -56,13 +69,16 @@ export function createLauncherStore(link: FrameLink): LauncherStore {
     harnesses: [],
     catalog: [],
     loaded: false,
+    runners: [],
     ensureLoaded() {
       off ??= link.onFrame((e: Envelope) => {
         if (e.type === "providers") set({ harnesses: list<HarnessInfo>(e.data), loaded: true });
         else if (e.type === "models") set({ catalog: list<ModelGroup>(e.data) });
+        else if (e.type === "runner_admin") set({ runners: pairedRunners(e.data) });
       });
       if (asked) return;
       asked = link.sendFrame({ type: "providers", data: "" }) && link.sendFrame({ type: "models", data: "" });
+      if (asked) link.sendFrame({ type: "runner_admin", data: JSON.stringify({ op: "list" }) });
     },
     dispose() {
       off?.();
@@ -79,6 +95,8 @@ export interface NewAgentDraft {
   group: string | null;
   model: string | null;
   effort?: string | null;
+  /** RR-9: where the agent runs: a runner name, `local` or `any`; null = the project default (nothing is sent). */
+  runner?: string | null;
   task: string;
 }
 export const EMPTY_DRAFT: NewAgentDraft = { roleId: null, harness: null, group: null, model: null, effort: null, task: "" };
