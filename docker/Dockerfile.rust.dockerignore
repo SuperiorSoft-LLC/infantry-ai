@@ -3,6 +3,7 @@
 !rust
 !superiorSoftLibrary/infantryCore/src/main/sqldelight
 !superiorSoftLibrary/infantryCore/src/main/sqldelight
+!superiorSoftLibrary/infantryProtocol/src/main/kotlin/com/superiorsoftllc/infantry/protocol/EventVocabulary.kt
 !docker/entrypoint-rust.sh
 rust/target
 **/target
