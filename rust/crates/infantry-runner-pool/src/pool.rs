@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
+use crate::update::{self, CliDocker, Docker};
 
 /// The setting that sets the heartbeat interval (seconds), and its default.
 pub const HEARTBEAT_KEY: &str = "limits.runners.heartbeatSec";
@@ -62,12 +63,33 @@ pub struct RunnerPool {
     slots: Mutex<BTreeMap<String, i32>>,
     /// RR-8: each remote process's consumed stream position, kept across a restart of this orchestrator.
     cursors: Arc<infantry_runner_link::Cursors>,
+    /// RR-11: the app version each runner reported in hello (absent for a Kotlin runner).
+    app_versions: Mutex<BTreeMap<String, String>>,
+    /// RR-11: the running or last update of each runner.
+    updates: Mutex<BTreeMap<String, UpdateStatus>>,
+    /// Reads `limits.runners.updateWaitSec` live; unset = the default.
+    update_wait: OnceLock<Arc<dyn Fn() -> u64 + Send + Sync>>,
+    /// The docker engine an update uses (tests swap it).
+    docker: Mutex<Arc<dyn Docker>>,
+    /// The version this app is (an older runner app is outdated, and an update moves the image to this tag).
+    pub app_version: String,
+    dir: PathBuf,
+}
+
+/// RR-11: how an Update runner is going.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateStatus {
+    /// `running`, `done` or `failed`.
+    pub state: &'static str,
+    pub steps: Vec<String>,
+    /// The final text: the new image, or why it failed (the old runner is restored).
+    pub detail: String,
 }
 
 impl RunnerPool {
     /// The pool of `<state_dir>/runner-link`.
     pub fn open(state_dir: &Path) -> Arc<RunnerPool> {
-        Arc::new(RunnerPool { store: store_for(state_dir), states: Mutex::new(BTreeMap::new()), call_timeout: CALL_TIMEOUT, allow_plain: OnceLock::new(), slots: Mutex::new(BTreeMap::new()), cursors: Arc::new(infantry_runner_link::Cursors::open(&state_dir.join(LINK_DIR))) })
+        Arc::new(RunnerPool { store: store_for(state_dir), states: Mutex::new(BTreeMap::new()), call_timeout: CALL_TIMEOUT, allow_plain: OnceLock::new(), slots: Mutex::new(BTreeMap::new()), cursors: Arc::new(infantry_runner_link::Cursors::open(&state_dir.join(LINK_DIR))), app_versions: Mutex::new(BTreeMap::new()), updates: Mutex::new(BTreeMap::new()), update_wait: OnceLock::new(), docker: Mutex::new(Arc::new(CliDocker)), app_version: env!("CARGO_PKG_VERSION").to_string(), dir: state_dir.join(LINK_DIR) })
     }
 
     /// Wires the live reader of `runners.allowPlainTailnet`.
@@ -133,6 +155,11 @@ impl RunnerPool {
         let r = self.store.runner(name)?;
         let client = self.client(&r);
         let (state, ping) = match client.ping() {
+            // RR-11: one app, one runner model: a runner whose APP is older than this one is outdated even when its contract matches.
+            Ok(p) if wire::contract_older(p.hello.app_version.as_deref(), &self.app_version) => {
+                let why = format!("runner '{}' runs app {} and this app is {}: {}", p.hello.runner_name, p.hello.app_version.as_deref().unwrap_or("?"), self.app_version, wire::OUTDATED_HINT);
+                (RunnerState::Outdated { contract: p.hello.contract.clone(), reason: why }, Some(p))
+            }
             Ok(p) => (RunnerState::Online { rtt_ms: p.rtt.as_millis() as u64, contract: p.hello.contract.clone() }, Some(p)),
             Err(CallError::Refused(reason)) if reason.contains(wire::OUTDATED_HINT) => {
                 let contract = client.typed::<_, HelloAnswer>(wire::HELLO, &serde_json::json!({})).map(|h| h.contract).unwrap_or_default();
@@ -140,6 +167,9 @@ impl RunnerPool {
             }
             Err(e) => (RunnerState::Offline { reason: e.to_string() }, None),
         };
+        if let Some(v) = ping.as_ref().and_then(|p| p.hello.app_version.clone()) {
+            self.app_versions.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), v);
+        }
         {
             let mut slots = self.slots.lock().unwrap_or_else(|e| e.into_inner());
             match ping.as_ref().map(|p| p.health.free_slots) {
@@ -164,6 +194,84 @@ impl RunnerPool {
         let answer = entry.scope.request("secret_status", "{}").ok()?;
         let v: serde_json::Value = serde_json::from_str(&answer).ok()?;
         Some(v["secrets"].as_array()?.iter().filter(|s| s["set"].as_bool() == Some(true)).filter_map(|s| s["name"].as_str().map(str::to_string)).collect())
+    }
+
+    /// The app version runner `name` reported at its last answer.
+    pub fn runner_app_version(&self, name: &str) -> Option<String> {
+        self.app_versions.lock().unwrap_or_else(|e| e.into_inner()).get(name).cloned()
+    }
+
+    pub fn set_update_wait(&self, f: Arc<dyn Fn() -> u64 + Send + Sync>) {
+        let _ = self.update_wait.set(f);
+    }
+
+    pub fn set_docker(&self, d: Arc<dyn Docker>) {
+        *self.docker.lock().unwrap_or_else(|e| e.into_inner()) = d;
+    }
+
+    pub fn update_status(&self, name: &str) -> Option<UpdateStatus> {
+        self.updates.lock().unwrap_or_else(|e| e.into_inner()).get(name).cloned()
+    }
+
+    fn note(&self, name: &str, state: &'static str, step: Option<&str>, detail: &str) {
+        let mut all = self.updates.lock().unwrap_or_else(|e| e.into_inner());
+        let u = all.entry(name.to_string()).or_insert(UpdateStatus { state: "running", steps: vec![], detail: String::new() });
+        u.state = state;
+        if let Some(s) = step {
+            u.steps.push(s.to_string());
+        }
+        if !detail.is_empty() {
+            u.detail = detail.to_string();
+        }
+    }
+
+    /// Update runner `name`, answered at once; the work runs on its own thread (poll `update_status`). A runner in a
+    /// Docker container on this machine is recreated on this app's image tag; any other gets the command to run there.
+    pub fn update(self: &Arc<Self>, name: &str) -> Result<String, String> {
+        let r = self.store.runner(name).ok_or_else(|| format!("no runner named '{name}'"))?;
+        if self.update_status(name).is_some_and(|u| u.state == "running") {
+            return Err(format!("runner '{name}' is already updating"));
+        }
+        let host_port = r.url.split("://").nth(1).unwrap_or(&r.url).split('/').next().unwrap_or("");
+        let (host, port) = host_port.rsplit_once(':').map(|(h, p)| (h.trim_matches(|c| c == '[' || c == ']'), p.parse::<u16>().ok())).unwrap_or((host_port, None));
+        let local = matches!(host, "127.0.0.1" | "localhost" | "::1");
+        let docker = self.docker.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let found = match (local, port) {
+            (true, Some(p)) => update::find_container(&*docker, p).map_err(|e| format!("docker: {e}"))?,
+            _ => None,
+        };
+        let Some(inspect) = found else {
+            return Ok(format!(
+                "runner '{name}' is not a Docker container on this machine. On the machine it runs on, pull the app's image and recreate the container with the same name, volumes, ports and env: `docker pull <image>:{v}` then `docker rm -f <container>` and the same `docker run ... <image>:{v}`.",
+                v = self.app_version
+            ));
+        };
+        let plan = update::plan_from_inspect(&inspect, &self.app_version)?;
+        self.updates.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), UpdateStatus { state: "running", steps: vec![], detail: String::new() });
+        let image = plan.image.clone();
+        let (pool, name, dir) = (self.clone(), name.to_string(), self.store_dir());
+        let _ = std::thread::Builder::new().name("runner-update".into()).spawn(move || {
+            // The env goes through a file (it may hold secrets), removed when the work ends.
+            let env_path = dir.join(format!("update-{}.env", std::process::id()));
+            let have_env = !plan.env.is_empty() && std::fs::write(&env_path, plan.env.join("
+")).is_ok();
+            let wait = Duration::from_secs(pool.update_wait.get().map(|f| f()).filter(|n| *n > 0).unwrap_or(update::DEFAULT_UPDATE_WAIT_SEC));
+            let env_arg = env_path.to_string_lossy().to_string();
+            let (p2, n2) = (pool.clone(), name.clone());
+            let answers = move || matches!(p2.check(&n2).map(|(s, _)| s), Some(RunnerState::Online { .. }));
+            let progress = |s: &str| pool.note(&name, "running", Some(s), "");
+            let out = update::recreate(&*docker, &plan, have_env.then_some(env_arg.as_str()), wait, &answers, &progress);
+            let _ = std::fs::remove_file(&env_path);
+            match out {
+                Ok(img) => pool.note(&name, "done", Some("done"), &format!("runner '{name}' now runs {img}")),
+                Err(e) => pool.note(&name, "failed", Some("failed"), &e),
+            }
+        });
+        Ok(format!("updating runner '{}' to {image}: started", r.name))
+    }
+
+    fn store_dir(&self) -> PathBuf {
+        self.dir.clone()
     }
 
     /// Forgets runner `name`; tells the runner too when it answers. Returns what happened at the runner.

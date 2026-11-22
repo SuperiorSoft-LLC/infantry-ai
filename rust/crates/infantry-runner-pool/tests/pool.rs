@@ -88,3 +88,35 @@ fn add_check_list_offline_detach() {
     assert_eq!(after["runners"][0]["name"], "local");
     assert_eq!(call(&unit, true, json!({"op": "check", "name": "test-box"})).unwrap()["ok"], false);
 }
+
+/// RR-11: a runner whose app is older than this one is `outdated`; a start on it is refused up front with the text, the
+/// list row says so, and `refresh` re-reads it.
+#[test]
+fn an_outdated_hello_refuses_a_start_with_the_update_text() {
+    use infantry_runner_source::RunnerSource;
+    let (rdir, state) = (temp("old-runner"), temp("old-state"));
+    let bearer = Bearer::of(&rdir);
+    let v = bearer.ensure(Some("old-box"), false).unwrap();
+    let token = BearerToken { name: v.name, fingerprint: None, secret: v.secret }.text();
+    let server = LinkServer::new(LinkStore::in_memory(), None, Some(bearer), Box::new(InfoOnly), None).with_log(|_| {}).with_identity("runner", "0.0.1");
+    let serving = serve(Arc::new(server), "127.0.0.1", 0, None).unwrap();
+    let pool = RunnerPool::open(&state);
+    pool.set_allow_plain(Arc::new(|| true));
+    let unit = AdminUnit { pool: pool.clone(), lend: None };
+    let url = format!("ws://127.0.0.1:{}", serving.port);
+    assert_eq!(call(&unit, true, json!({"op": "add", "endpoint": url, "bearer": token})).unwrap()["ok"], true);
+
+    let l = call(&unit, true, json!({"op": "refresh"})).unwrap();
+    let row = &l["runners"][1];
+    assert_eq!((row["state"].as_str(), row["outdated"].clone(), row["appVersion"].as_str()), (Some("outdated"), json!(true), Some("0.0.1")), "{l}");
+    assert_eq!(row["needs"], infantry_runner_link::wire::MIN_RUNNER_CONTRACT);
+    assert!(row["reason"].as_str().unwrap().contains("update it: Settings > Runners > Update runner"), "{row}");
+
+    match RunnerSource::refresh(&*pool, "old-box") {
+        infantry_runner_source::Availability::Outdated(why) => assert!(why.contains("update it: Settings > Runners > Update runner"), "{why}"),
+        other => panic!("expected outdated, got {other:?}"),
+    }
+    // update of a runner that is not a local container answers with the command to run there; the embedded one cannot be updated.
+    assert_eq!(call(&unit, true, json!({"op": "update", "name": "local"})).unwrap()["ok"], false);
+    serving.close();
+}

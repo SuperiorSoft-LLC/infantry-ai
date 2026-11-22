@@ -1606,6 +1606,7 @@ name = "infantry-runner-pool"
 version = "0.4.7"
 dependencies = [
  "infantry-core",
+ "infantry-proc",
  "infantry-projects",
  "infantry-protocol",
  "infantry-runner-api",
