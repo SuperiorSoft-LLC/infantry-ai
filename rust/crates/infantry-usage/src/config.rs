@@ -20,6 +20,8 @@ pub const RULE_SETTING: &str = "usage.pacing";
 pub const MANUAL_SETTING: &str = "usage.manual";
 pub const OVERRIDES_SETTING: &str = "usage.overrides";
 pub const REFRESH_MINUTES: &str = "usage.refreshMinutes";
+/// Whether this daemon polls the providers' usage endpoints. Unset: on only for the installed app's own state dir.
+pub const POLL_ENABLED: &str = "usage.poll.enabled";
 pub const OVERRIDE_ROLES: &str = "usage.overrideRoles";
 pub const CEILING: &str = "limits.pacing.maxWorkersCeiling";
 pub const STALE_MAX_HOURS: &str = "limits.usage.staleMaxHours";
@@ -114,6 +116,14 @@ impl UsageConfig {
 
     pub fn ceiling(&self) -> i32 {
         self.num(CEILING).map(|n| n as i32).filter(|n| *n >= 1).unwrap_or(pacing::DEFAULT_CEILING)
+    }
+
+    /// The `usage.poll.enabled` setting when set, else `default_on` (see [`default_poll_on`]).
+    pub fn poll_enabled(&self, default_on: bool) -> bool {
+        match self.store.get(POLL_ENABLED) {
+            Some(Value::Bool(b)) => b,
+            _ => default_on,
+        }
     }
 
     pub fn refresh_minutes(&self) -> i64 {
@@ -249,5 +259,56 @@ mod tests {
         FileStore::open(&p).set(REFRESH_MINUTES, serde_json::json!(7)).unwrap();
         assert_eq!(UsageConfig::new(Arc::new(FileStore::open(&p))).refresh_minutes(), 7);
         let _ = std::fs::remove_file(&p);
+    }
+}
+
+/// A daemon polls provider usage by default only when it is the operator's own: its state dir is the installed app's
+/// (`<data root>/SuperiorSoft/InfantryAI-Rust`) and `INFANTRY_TEST` is not set. A test daemon (temp state dir, a test
+/// port, `INFANTRY_TEST=1`) stays silent so the operator's login is not asked by every daemon on the machine.
+pub fn default_poll_on(state_dir: &std::path::Path, env: &crate::credentials::Env) -> bool {
+    if matches!(env("INFANTRY_TEST").map(|v| v.trim().to_lowercase()).as_deref(), Some("1" | "true" | "yes" | "on")) {
+        return false;
+    }
+    let norm = |p: &std::path::Path| p.to_string_lossy().replace('\\', "/").trim_end_matches('/').to_lowercase();
+    let want = |root: String| norm(&std::path::PathBuf::from(root).join("SuperiorSoft").join("InfantryAI-Rust"));
+    let me = norm(state_dir);
+    if let Some(l) = env("LOCALAPPDATA").filter(|v| !v.trim().is_empty()) {
+        return me == want(l);
+    }
+    let home = crate::credentials::user_home();
+    me == norm(&home.join(".infantry-rust"))
+}
+
+#[cfg(test)]
+mod poll_tests {
+    use super::*;
+    use std::path::Path;
+
+    fn env(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> + Send + Sync {
+        move |k| pairs.iter().find(|(a, _)| *a == k).map(|(_, v)| v.to_string())
+    }
+
+    #[test]
+    fn only_the_installed_state_dir_polls_by_default() {
+        let e = env(&[("LOCALAPPDATA", r"C:\Users\me\AppData\Local")]);
+        assert!(default_poll_on(Path::new(r"C:\Users\me\AppData\Local\SuperiorSoft\InfantryAI-Rust"), &e));
+        assert!(!default_poll_on(Path::new(r"C:\Temp\test-state"), &e));
+    }
+
+    #[test]
+    fn infantry_test_turns_polling_off_even_in_the_installed_dir() {
+        let e = env(&[("LOCALAPPDATA", r"C:\L"), ("INFANTRY_TEST", "1")]);
+        assert!(!default_poll_on(Path::new(r"C:\L\SuperiorSoft\InfantryAI-Rust"), &e));
+    }
+
+    #[test]
+    fn the_setting_wins_over_the_default() {
+        let dir = std::env::temp_dir().join(format!("poll-set-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let c = UsageConfig::new(Arc::new(FileStore::open(dir.join("s.json"))));
+        assert!(!c.poll_enabled(false));
+        assert!(c.poll_enabled(true));
+        c.store().set(POLL_ENABLED, serde_json::json!(false)).unwrap();
+        assert!(!c.poll_enabled(true));
     }
 }

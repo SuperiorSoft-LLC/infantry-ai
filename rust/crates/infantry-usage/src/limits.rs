@@ -435,6 +435,8 @@ pub struct LimitService {
     extra: RwLock<Arc<dyn Fn() -> Vec<Arc<dyn LimitSource>> + Send + Sync>>,
     replacement: RwLock<Option<Replacement>>,
     live_enabled: Arc<dyn Fn() -> bool + Send + Sync>,
+    /// A second, settable gate (`usage.poll.enabled`): a daemon that is not the operator's own turns provider polling off.
+    poll_gate: Mutex<Option<Arc<dyn Fn() -> bool + Send + Sync>>>,
     tuning: RwLock<Arc<dyn Fn() -> ReadTuning + Send + Sync>>,
     cache: RwLock<Option<Arc<dyn ReadingCache>>>,
     clock: Clock,
@@ -459,6 +461,7 @@ impl LimitService {
             extra: RwLock::new(Arc::new(Vec::new)),
             replacement: RwLock::new(None),
             live_enabled,
+            poll_gate: Mutex::new(None),
             tuning: RwLock::new(Arc::new(ReadTuning::default)),
             cache: RwLock::new(None),
             clock,
@@ -471,6 +474,15 @@ impl LimitService {
             cache_warned: AtomicBool::new(false),
             logged_duplicates: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Sets the gate [`UsageConfig::poll_enabled`](crate::config::UsageConfig::poll_enabled) feeds.
+    pub fn set_poll_gate(&self, gate: Arc<dyn Fn() -> bool + Send + Sync>) {
+        *self.poll_gate.lock().unwrap_or_else(|p| p.into_inner()) = Some(gate);
+    }
+
+    fn live(&self) -> bool {
+        (self.live_enabled)() && self.poll_gate.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map_or(true, |g| g())
     }
 
     pub fn live_from_env(env: &credentials::Env) -> bool {
@@ -566,7 +578,7 @@ impl LimitService {
     /// A fresh read when the cache is older than the minimum interval (or `force`, outside the manual floor).
     pub fn snapshot(&self, force: bool) -> Vec<ProviderLimits> {
         let rep = self.replaced();
-        if !(self.live_enabled)() && !rep {
+        if !self.live() && !rep {
             return self.all_unknown(&self.all_sources(), (self.clock)(), reason::LIVE_SOURCES_OFF);
         }
         let _one = self.read_lock.lock().unwrap_or_else(|p| p.into_inner());
@@ -666,7 +678,7 @@ impl LimitService {
     pub fn cached_or_refresh(self: &Arc<Self>) -> Vec<ProviderLimits> {
         let now = (self.clock)();
         let rep = self.replaced();
-        if !(self.live_enabled)() && !rep {
+        if !self.live() && !rep {
             return self.all_unknown(&self.all_sources(), now, reason::LIVE_SOURCES_OFF);
         }
         let (last, at) = {
@@ -707,7 +719,7 @@ impl LimitService {
     fn real_snapshot(&self) -> Vec<ProviderLimits> {
         let real = self.real_sources();
         let now = (self.clock)();
-        if !(self.live_enabled)() {
+        if !self.live() {
             return self.all_unknown(&real, now, reason::LIVE_SOURCES_OFF);
         }
         let _one = self.read_lock.lock().unwrap_or_else(|p| p.into_inner());
@@ -835,6 +847,17 @@ mod tests {
         assert_eq!((r[0].status.as_str(), r[0].reason.as_deref()), ("unknown", Some("no_credentials")));
         let off = LimitService::new(vec![src], Arc::new(|| false), Arc::new(|| NOW), 0, Arc::new(|_| {}));
         assert_eq!(off.snapshot(true)[0].reason.as_deref(), Some("live_sources_off"));
+    }
+
+    #[test]
+    fn a_daemon_whose_poll_gate_is_off_never_calls_the_usage_endpoint() {
+        let http = Arc::new(FakeHttp { status: Mutex::new(200), body: r#"{"five_hour":{"utilization":10}}"#.into(), calls: AtomicUsize::new(0), seen_auth: Mutex::new(vec![]) });
+        let src: Arc<dyn LimitSource> = Arc::new(AnthropicOAuthSource::new(http.clone(), Arc::new(|| Some("T".into()))));
+        let svc = LimitService::new(vec![src], Arc::new(|| true), Arc::new(|| NOW), 0, Arc::new(|_| {}));
+        svc.set_poll_gate(Arc::new(|| false));
+        assert_eq!(svc.snapshot(false)[0].reason.as_deref(), Some("live_sources_off"));
+        assert_eq!(svc.snapshot(true)[0].reason.as_deref(), Some("live_sources_off"));
+        assert_eq!(http.calls.load(Ordering::SeqCst), 0, "a test daemon makes no request");
     }
 
     #[test]

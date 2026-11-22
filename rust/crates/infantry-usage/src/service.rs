@@ -72,7 +72,14 @@ impl UsageService {
     pub fn open(deps: UsageDeps) -> Arc<Self> {
         let store: Arc<dyn UsageStore> = deps.store.unwrap_or_else(|| Arc::new(FileStore::open(file_in(&deps.state_dir, "usage-settings.json"))));
         let config = UsageConfig::new(store);
+        let injected = deps.limits.is_some();
         let limits = deps.limits.unwrap_or_else(|| Arc::new(LimitService::from_env()));
+        // Only the real network sources are gated; an injected (fake) meter is what a test daemon uses for usage.
+        if !injected {
+            let c = config.clone();
+            let default_on = crate::config::default_poll_on(&deps.state_dir, &crate::credentials::process_env);
+            limits.set_poll_gate(Arc::new(move || c.poll_enabled(default_on)));
+        }
         {
             let c = config.clone();
             limits.set_tuning(Arc::new(move || c.tuning()));
