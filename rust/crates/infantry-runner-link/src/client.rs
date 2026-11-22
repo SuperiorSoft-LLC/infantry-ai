@@ -145,6 +145,7 @@ impl LinkClient {
             issued_at: crate::server::now_ms(),
             runner_id: a.runner_id,
             contract: a.contract,
+            paired_from: orchestrator_name.into(),
         })
     }
 

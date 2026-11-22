@@ -3,10 +3,10 @@
 // The Runners card (RR-9): the runner list with each runner's status, Check / Rotate / Detach, and Add runner (two fields).
 // Kit parts reused: PanelCard, AppDialog, Field, Input, Button, StatusDot, RefusalBanner, EmptyState, Chip.
 import { useEffect, useState } from "react";
-import { Plug, Plus, RefreshCw, RotateCcw, ShieldCheck, Unplug, Wrench } from "lucide-react";
+import { Info, Plug, Plus, RefreshCw, RotateCcw, ShieldCheck, Unplug, Wrench } from "lucide-react";
 import { AppDialog, Button, EmptyState, Field, Input, PanelCard, RefusalBanner, StatusDot } from "@infantry/ui";
 import { openRunnerSetup, useLinkState } from "@infantry/ui-plugin-api";
-import { pingLine, runnersStore, statusOf, summaryLine, useRunners, type CheckRow, type RunnerSummary, type RunnerView } from "./store";
+import { plainText, pingLine, runnersStore, statusOf, summaryLine, useRunners, type CheckRow, type RunnerDetail, type RunnerSummary, type RunnerView } from "./store";
 
 /** Add runner: exactly two fields, the endpoint and the pasted bearer. `endpoint` prefills a Rotate. */
 export function AddRunnerDialog({ open, endpoint, onClose }: { open: boolean; endpoint: string; onClose: () => void }) {
@@ -94,8 +94,110 @@ function CheckRows({ rows }: { rows: CheckRow[] }) {
   );
 }
 
+const when = (ms?: number) => (ms ? new Date(ms).toLocaleString() : "never");
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-lg border bg-card p-3">
+      <h3 className="mb-1 text-xs font-medium">{title}</h3>
+      <dl className="space-y-0.5 text-xs">{children}</dl>
+    </section>
+  );
+}
+
+function Line({ k, v }: { k: string; v?: React.ReactNode }) {
+  return (
+    <div className="flex gap-2">
+      <dt className="w-28 shrink-0 text-muted-foreground">{k}</dt>
+      <dd className="min-w-0 break-words font-mono">{v ?? "not reported"}</dd>
+    </div>
+  );
+}
+
+/** RR-VIS: how one runner is connected, in plain words: which runner, the link, its harnesses and logins, and the last check. */
+export function DetailDialog({ name, detail, onClose }: { name: string; detail?: RunnerDetail; onClose: () => void }) {
+  const r = detail?.runner;
+  const l = detail?.link;
+  const remote = (r?.mode ?? "").startsWith("remote");
+  const place = (at: string | null) => (at ? (remote && /^(~|\/data)/.test(at) ? `${at} (inside the runner's /data volume)` : at) : "the harness did not say");
+  return (
+    <AppDialog open onOpenChange={(o) => !o && onClose()} title={`Runner ${name}`} description="How this runner is connected" footer={<Button variant="outline" size="sm" onClick={onClose}>Close</Button>}>
+      {!detail ? (
+        <p className="text-xs text-muted-foreground">Reading the runner…</p>
+      ) : (
+        <div className="space-y-2" data-testid="runner-detail">
+          <Section title="Runner">
+            <Line k="Name" v={r?.name} />
+            <Line k="Runner id" v={r?.runnerId || (name === "local" ? "this app" : undefined)} />
+            <Line k="Mode" v={r?.mode} />
+            <Line k="Version" v={`app ${r?.appVersion ?? "not reported"} · contract ${r?.contract || "?"} (this app needs ${r?.needs ?? "?"})`} />
+            {r?.os && <Line k="OS" v={r.os} />}
+          </Section>
+          <Section title="Connection">
+            <Line k="Endpoint" v={l?.url || "in this app (no link)"} />
+            {l?.fingerprint !== undefined && <Line k="Pinned cert" v={l.fingerprint || "none (plain link)"} />}
+            {l?.pairedAt !== undefined && <Line k="Paired" v={`${when(l.pairedAt)} from ${l.pairedFrom || "not recorded (paired before this was kept)"}`} />}
+            {l?.lastPingAt !== undefined && <Line k="Last ping" v={`${when(l.lastPingAt)}${typeof l.rttMs === "number" ? ` · ${l.rttMs} ms` : ""}`} />}
+            <Line k="State" v={`${l?.state ?? "unknown"}${l?.reasonPlain ? ` — ${l.reasonPlain}` : ""}`} />
+            {l?.reason && <Line k="Detail" v={l.reason} />}
+            {l?.fix && <Line k="Next" v={l.fix} />}
+          </Section>
+          <Section title="Harnesses on this runner">
+            {detail.harnessError && <p className="text-danger" data-testid="runner-harness-error">Not readable: {detail.harnessError}. {l?.state === "offline" ? "The runner is offline." : "Update runner, then check again."}</p>}
+            {!detail.harnesses && !detail.harnessError && <p className="text-muted-foreground">Reading…</p>}
+            {detail.harnesses?.length === 0 && !detail.harnessError && <p className="text-muted-foreground">No harness reported.</p>}
+            {detail.harnesses?.map((h) => (
+              <div key={h.id} className="border-t pt-1" data-testid={`harness-${h.id}`}>
+                <div className="font-medium">
+                  {h.id} — {!h.installed ? "not installed" : h.signedIn === null ? "installed, sign-in unknown" : h.signedIn ? "installed, signed in" : "installed, NOT signed in"}
+                </div>
+                {h.installed && <Line k="Version" v={h.version ?? "not reported"} />}
+                {h.installed && <Line k="Path" v={h.path} />}
+                {h.installed && <Line k="Login at" v={place(h.loginAt)} />}
+                {h.why && (
+                  <p className="text-warn">
+                    {h.why}. Sign in: Set up this runner → Sign in.
+                  </p>
+                )}
+              </div>
+            ))}
+          </Section>
+          <Section title="Setup log">
+            {(detail.log ?? []).length === 0 && <p className="text-muted-foreground">Nothing has run on this runner yet.</p>}
+            <ul aria-label="Setup log" className="max-h-48 space-y-1 overflow-auto font-mono">
+              {(detail.log ?? []).map((e, i) => (
+                <li key={`${e.at}:${i}`} className={e.exit ? "text-danger" : ""} data-testid="log-step">
+                  {new Date(e.at).toLocaleTimeString()} · {e.runner} · {e.step} · <span className="text-muted-foreground">{e.command}</span> · exit {e.exit ?? "—"}
+                  {e.output && <span className="block whitespace-pre-wrap text-muted-foreground">{plainText(e.output) ?? e.output}</span>}
+                  {e.reason && <span className="block text-warn">{e.reason}</span>}
+                </li>
+              ))}
+            </ul>
+          </Section>
+          <Section title="Runner log (tail)">
+            {detail.runnerLogError && <p className="text-warn" data-testid="runner-log-error">{detail.runnerLogError}</p>}
+            {detail.runnerLog && detail.runnerLog.length === 0 && <p className="text-muted-foreground">The runner has answered nothing yet.</p>}
+            <pre aria-label="Runner log" className="max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">{(detail.runnerLog ?? []).slice(-60).map((l) => l.replace(/^(\d{12,}) /, (_m, t: string) => `${new Date(Number(t)).toLocaleTimeString()} `)).join(String.fromCharCode(10))}</pre>
+          </Section>
+          <Section title="Last check">
+            {detail.lastCheck ? (
+              <>
+                <Line k="When" v={when(detail.lastCheck.at)} />
+                <CheckRows rows={detail.lastCheck.rows.map((c) => ({ ...c, detail: plainText(c.detail) ?? c.detail }))} />
+              </>
+            ) : (
+              <p className="text-muted-foreground">No check yet: press Check.</p>
+            )}
+            {detail.update && <Line k="Update" v={`${detail.update.state}${detail.update.detail ? ` — ${detail.update.detail}` : ""}`} />}
+          </Section>
+        </div>
+      )}
+    </AppDialog>
+  );
+}
+
 /** One runner: name and endpoint, the status dot with its reason, the contract and ping, the buttons. */
-export function RunnerRow({ runner, rows, checking, summary, onCheck, onSetup, onRotate, onDetach, onUpdate, note }: { runner: RunnerView; rows: CheckRow[]; checking: boolean; summary?: RunnerSummary; onCheck: () => void; onSetup: () => void; onRotate: () => void; onDetach: () => void; onUpdate?: () => void; note?: string }) {
+export function RunnerRow({ runner, rows, checking, summary, onCheck, onSetup, onRotate, onDetach, onUpdate, onDetails, note }: { runner: RunnerView; rows: CheckRow[]; checking: boolean; summary?: RunnerSummary; onCheck: () => void; onSetup: () => void; onRotate: () => void; onDetach: () => void; onUpdate?: () => void; onDetails?: () => void; note?: string }) {
   const st = statusOf(runner);
   const local = runner.name === "local";
   const ping = pingLine(runner);
@@ -115,7 +217,7 @@ export function RunnerRow({ runner, rows, checking, summary, onCheck, onSetup, o
           {runner.update && (
             <p className={`text-[11px] ${runner.update.state === "failed" ? "text-danger" : "text-muted-foreground"}`} data-testid="runner-update">
               Update: {runner.update.state}
-              {runner.update.state === "running" ? ` � ${runner.update.steps[runner.update.steps.length - 1] ?? "starting"}` : runner.update.detail ? ` � ${runner.update.detail}` : ""}
+              {runner.update.state === "running" ? ` — ${runner.update.steps[runner.update.steps.length - 1] ?? "starting"}` : runner.update.detail ? ` — ${runner.update.detail}` : ""}
             </p>
           )}
           {note && !runner.update && <p className="text-[11px] text-muted-foreground">{note}</p>}
@@ -129,6 +231,11 @@ export function RunnerRow({ runner, rows, checking, summary, onCheck, onSetup, o
           <Button variant="outline" size="xs" disabled={checking} onClick={onCheck}>
             <ShieldCheck className="size-3" /> {checking ? "Checking…" : "Check"}
           </Button>
+          {onDetails && (
+            <Button variant="outline" size="xs" onClick={onDetails} title="How this runner is connected">
+              <Info className="size-3" /> Details
+            </Button>
+          )}
           <Button variant="outline" size="xs" onClick={onSetup} title="Install tools, sign in and set keys on this runner">
             <Wrench className="size-3" /> Set up this runner
           </Button>
@@ -163,7 +270,15 @@ export function RunnersCard() {
   const updateNote = useRunners((s) => s.updateNote);
   const summaries = useRunners((s) => s.summaries);
   const refusal = useRunners((s) => s.refusal);
+  const details = useRunners((s) => s.details);
   const [dialog, setDialog] = useState<{ endpoint: string } | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  // The setup log is live: while the Details dialog is open the runner is re-read every 2 s.
+  useEffect(() => {
+    if (!open) return;
+    const t = setInterval(() => runnersStore().getState().detail(open), 2000);
+    return () => clearInterval(t);
+  }, [open]);
   useEffect(() => {
     if (link === "open") runnersStore().getState().refresh();
   }, [link]);
@@ -205,11 +320,16 @@ export function RunnersCard() {
               onRotate={() => setDialog({ endpoint: r.url })}
               onDetach={() => store.detach(r.name)}
               onUpdate={() => store.update(r.name)}
+              onDetails={() => {
+                setOpen(r.name);
+                store.detail(r.name);
+              }}
               note={updateNote[r.name]}
             />
           ))}
         </ul>
       )}
+      {open && <DetailDialog name={open} detail={details[open]} onClose={() => setOpen(null)} />}
       <AddRunnerDialog open={dialog !== null} endpoint={dialog?.endpoint ?? ""} onClose={() => setDialog(null)} />
     </PanelCard>
   );

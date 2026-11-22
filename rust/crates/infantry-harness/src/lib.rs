@@ -468,6 +468,10 @@ pub trait Harness: Send + Sync {
     fn models(&self, probe: &dyn Probe) -> Vec<ModelInfo>;
     /// Why the CLI cannot run there (not installed, not signed in); None = fine as far as files and env tell.
     fn sign_in_problem(&self, probe: &dyn Probe) -> Option<String>;
+    /// RR-VIS: where the login this harness checks lives on that machine (a file path or an env var name); None = it does not say.
+    fn login_location(&self, _probe: &dyn Probe) -> Option<String> {
+        None
+    }
     /// The files this launch needs on the runner's host (staged by the driver before [`Harness::launch`]).
     fn assets(&self, _req: &LaunchRequest) -> Vec<Asset> {
         Vec::new()

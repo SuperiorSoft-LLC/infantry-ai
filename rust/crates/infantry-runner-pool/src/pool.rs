@@ -18,6 +18,9 @@ pub const DEFAULT_HEARTBEAT_SEC: u64 = 30;
 /// runner credential, every command and its output unencrypted: anyone on the path can read it or take the runner over.
 /// Turn it on only for a private network you trust, on the runner and on the orchestrator.
 pub const ALLOW_PLAIN_KEY: &str = "runners.allowPlainTailnet";
+/// RR-VIS: the setup log keeps this many entries per runner, and this many characters of each step's output.
+pub const LOG_ENTRIES_MAX: usize = 200;
+pub const LOG_OUTPUT_MAX: usize = 2000;
 const LINK_DIR: &str = "runner-link";
 const SLEEP_STEP: Duration = Duration::from_millis(100);
 const CALL_TIMEOUT: Duration = Duration::from_secs(20);
@@ -73,7 +76,45 @@ pub struct RunnerPool {
     docker: Mutex<Arc<dyn Docker>>,
     /// The version this app is (an older runner app is outdated, and an update moves the image to this tag).
     pub app_version: String,
+    /// RR-VIS: what the last answered ping said (kind, os, offers, harness login), for the detail panel.
+    seen: Mutex<BTreeMap<String, Seen>>,
+    /// RR-VIS: the rows of the last `check` of each runner, with the time.
+    last_checks: Mutex<BTreeMap<String, (i64, Vec<serde_json::Value>)>>,
+    /// RR-VIS: the setup log of each runner: one entry per check, install or update step (runner, command, output, exit, reason).
+    steps: Mutex<BTreeMap<String, Vec<serde_json::Value>>>,
     dir: PathBuf,
+}
+
+/// RR-VIS: facts from a runner's last answered ping.
+#[derive(Debug, Clone, Default)]
+pub struct Seen {
+    pub kind: Option<String>,
+    pub os: String,
+    pub offers: Vec<String>,
+    /// (harness id, logged in) as the runner's hello says.
+    pub harnesses: Vec<(String, bool)>,
+    pub at_ms: i64,
+}
+
+/// RR-VIS: a link error in plain words, with the next thing to do. The raw text stays as the detail beside it.
+pub fn plain_reason(raw: &str) -> (String, String) {
+    let l = raw.to_lowercase();
+    let (w, f) = if l.contains("not the pinned one") || l.contains("pin") && l.contains("certificate") {
+        ("TLS handshake failed: the certificate is not the pinned one", "add the runner again with its current bearer")
+    } else if l.contains("tls") || l.contains("handshake") || l.contains("certificate") {
+        ("TLS handshake failed", "check the runner serves wss:// and the bearer's certificate is its own")
+    } else if l.contains("refused") && (l.contains("connection") || l.contains("os error 111") || l.contains("10061")) {
+        ("nothing is listening at that address: the runner is stopped", "start the runner, then check again")
+    } else if l.contains("no route") || l.contains("unreachable") || l.contains("dns") || l.contains("resolve") || l.contains("lookup") {
+        ("no route to host", "check the host name and the network between this machine and the runner")
+    } else if l.contains("timed out") || l.contains("timeout") {
+        ("the runner did not answer in time", "check the runner is running and the port is open")
+    } else if l.contains("401") || l.contains("unauthor") || l.contains("bearer") && l.contains("reject") {
+        ("the runner rejected this app's credential", "pair the runner again with a fresh bearer")
+    } else {
+        ("the runner could not be reached", "start the runner, then check the endpoint")
+    };
+    (w.to_string(), f.to_string())
 }
 
 /// RR-11: how an Update runner is going.
@@ -89,7 +130,7 @@ pub struct UpdateStatus {
 impl RunnerPool {
     /// The pool of `<state_dir>/runner-link`.
     pub fn open(state_dir: &Path) -> Arc<RunnerPool> {
-        Arc::new(RunnerPool { store: store_for(state_dir), states: Mutex::new(BTreeMap::new()), call_timeout: CALL_TIMEOUT, allow_plain: OnceLock::new(), slots: Mutex::new(BTreeMap::new()), cursors: Arc::new(infantry_runner_link::Cursors::open(&state_dir.join(LINK_DIR))), app_versions: Mutex::new(BTreeMap::new()), updates: Mutex::new(BTreeMap::new()), update_wait: OnceLock::new(), docker: Mutex::new(Arc::new(CliDocker)), app_version: env!("CARGO_PKG_VERSION").to_string(), dir: state_dir.join(LINK_DIR) })
+        Arc::new(RunnerPool { store: store_for(state_dir), states: Mutex::new(BTreeMap::new()), call_timeout: CALL_TIMEOUT, allow_plain: OnceLock::new(), slots: Mutex::new(BTreeMap::new()), cursors: Arc::new(infantry_runner_link::Cursors::open(&state_dir.join(LINK_DIR))), app_versions: Mutex::new(BTreeMap::new()), updates: Mutex::new(BTreeMap::new()), update_wait: OnceLock::new(), docker: Mutex::new(Arc::new(CliDocker)), app_version: env!("CARGO_PKG_VERSION").to_string(), seen: Mutex::new(BTreeMap::new()), last_checks: Mutex::new(BTreeMap::new()), steps: Mutex::new(BTreeMap::new()), dir: state_dir.join(LINK_DIR) })
     }
 
     /// Wires the live reader of `runners.allowPlainTailnet`.
@@ -170,6 +211,10 @@ impl RunnerPool {
         if let Some(v) = ping.as_ref().and_then(|p| p.hello.app_version.clone()) {
             self.app_versions.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), v);
         }
+        if let Some(p) = ping.as_ref() {
+            let seen = Seen { kind: p.hello.kind.clone(), os: p.hello.os.clone(), offers: p.hello.offers.clone(), harnesses: p.hello.harnesses.iter().map(|h| (h.id.clone(), h.logged_in)).collect(), at_ms: infantry_runner_link::server::now_ms() };
+            self.seen.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), seen);
+        }
         {
             let mut slots = self.slots.lock().unwrap_or_else(|e| e.into_inner());
             match ping.as_ref().map(|p| p.health.free_slots) {
@@ -196,9 +241,55 @@ impl RunnerPool {
         Some(v["secrets"].as_array()?.iter().filter(|s| s["set"].as_bool() == Some(true)).filter_map(|s| s["name"].as_str().map(str::to_string)).collect())
     }
 
+    /// RR-VIS: the runner's own `providers` answer, as (id, signed in, where the login lives): what its harnesses really test.
+    pub fn runner_logins(&self, name: &str) -> Option<Vec<(String, bool, Option<String>, Option<String>)>> {
+        let entry = RunnerSource::entry(self, name)?;
+        let answer = entry.scope.request("providers", "{\"refresh\":true}").ok()?;
+        let v: serde_json::Value = serde_json::from_str(&answer).ok()?;
+        Some(v.as_array()?.iter().filter_map(|p| Some((p["id"].as_str()?.to_string(), p["available"].as_bool() != Some(false), p["loginAt"].as_str().map(str::to_string), p["unavailableReason"].as_str().map(str::to_string)))).collect())
+    }
+
+    /// RR-VIS: the runner daemon's own log tail (its `runner_log` frame); Err = why it could not be read, in plain words.
+    pub fn runner_log(&self, name: &str) -> Result<Vec<String>, String> {
+        let entry = RunnerSource::entry(self, name).ok_or_else(|| "the runner is not reachable".to_string())?;
+        let answer = entry.scope.request("runner_log", "{}").map_err(|e| if e.contains("not offered") { "this runner is too old to serve its log: Update runner".to_string() } else { e.to_string() })?;
+        let v: serde_json::Value = serde_json::from_str(&answer).map_err(|_| "the runner's log answer could not be read".to_string())?;
+        Ok(v["lines"].as_array().map(|a| a.iter().filter_map(|l| l.as_str().map(str::to_string)).collect()).unwrap_or_default())
+    }
+
     /// The app version runner `name` reported at its last answer.
     pub fn runner_app_version(&self, name: &str) -> Option<String> {
         self.app_versions.lock().unwrap_or_else(|e| e.into_inner()).get(name).cloned()
+    }
+
+    /// RR-VIS: appends one step to runner `name`'s setup log. `output` is trimmed to [`LOG_OUTPUT_MAX`] chars (a named bound).
+    pub fn log_step(&self, name: &str, step: &str, command: &str, output: &str, exit: Option<i32>, reason: &str) {
+        let out: String = output.chars().take(LOG_OUTPUT_MAX).collect();
+        let e = serde_json::json!({"at": infantry_runner_link::server::now_ms(), "runner": name, "step": step, "command": command, "output": out, "exit": exit, "reason": reason});
+        let mut all = self.steps.lock().unwrap_or_else(|e| e.into_inner());
+        let v = all.entry(name.to_string()).or_default();
+        v.push(e);
+        if v.len() > LOG_ENTRIES_MAX {
+            let cut = v.len() - LOG_ENTRIES_MAX;
+            v.drain(..cut);
+        }
+    }
+
+    pub fn step_log(&self, name: &str) -> Vec<serde_json::Value> {
+        self.steps.lock().unwrap_or_else(|e| e.into_inner()).get(name).cloned().unwrap_or_default()
+    }
+
+    pub fn seen(&self, name: &str) -> Option<Seen> {
+        self.seen.lock().unwrap_or_else(|e| e.into_inner()).get(name).cloned()
+    }
+
+    /// Keeps the rows of a check so the panel shows them after a reload.
+    pub fn keep_check(&self, name: &str, rows: Vec<serde_json::Value>) {
+        self.last_checks.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), (infantry_runner_link::server::now_ms(), rows));
+    }
+
+    pub fn last_check(&self, name: &str) -> Option<(i64, Vec<serde_json::Value>)> {
+        self.last_checks.lock().unwrap_or_else(|e| e.into_inner()).get(name).cloned()
     }
 
     pub fn set_update_wait(&self, f: Arc<dyn Fn() -> u64 + Send + Sync>) {
@@ -220,6 +311,12 @@ impl RunnerPool {
         if let Some(s) = step {
             u.steps.push(s.to_string());
         }
+        drop(all);
+        if let Some(s) = step {
+            self.log_step(name, "update", "update runner", s, None, if state == "failed" { detail } else { "" });
+        }
+        let mut all = self.updates.lock().unwrap_or_else(|e| e.into_inner());
+        let u = all.entry(name.to_string()).or_insert(UpdateStatus { state: "running", steps: vec![], detail: String::new() });
         if !detail.is_empty() {
             u.detail = detail.to_string();
         }
@@ -373,5 +470,19 @@ impl RunnerSource for RunnerPool {
             Some(RunnerState::Outdated { reason, .. }) => Availability::Outdated(reason),
             _ => Availability::Unknown,
         }
+    }
+}
+
+#[cfg(test)]
+mod plain_reason_tests {
+    use super::plain_reason;
+
+    #[test]
+    fn link_errors_become_plain_words_with_a_next_step() {
+        assert!(plain_reason("TLS: the certificate is not the pinned one").0.starts_with("TLS handshake failed"));
+        assert!(plain_reason("tcp connect: Connection refused (os error 111)").0.contains("runner is stopped"));
+        assert_eq!(plain_reason("dns error: failed to lookup address").0, "no route to host");
+        assert!(plain_reason("operation timed out").0.contains("did not answer in time"));
+        assert!(!plain_reason("weird").1.is_empty());
     }
 }

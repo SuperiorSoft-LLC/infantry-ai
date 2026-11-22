@@ -37,6 +37,9 @@ pub struct PairedRunner {
     pub runner_id: String,
     #[serde(default)]
     pub contract: String,
+    /// RR-VIS: the orchestrator name this runner was paired as (empty = paired before RR-VIS).
+    #[serde(default)]
+    pub paired_from: String,
 }
 
 impl std::fmt::Debug for PairedRunner {

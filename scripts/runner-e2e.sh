@@ -115,6 +115,9 @@ if [ -n "${E2E_COMMANDCODE_KEY_FILE:-}" ]; then
   # lent to every remote start (RR-6); stdin only
   tr -d '\r\n' < "$E2E_COMMANDCODE_KEY_FILE" | I harness key commandcode >/dev/null
 fi
+# The owner's click on every approval card (the harness asks about each shell command): a node client answering allow_once.
+node "$ROOT/scripts/lib/e2e-approver.mjs" "ws://127.0.0.1:$ORCH_PORT/ws" "$(native_path "$T/orch/tok")" 7200 >"$T/approver.log" 2>&1 &
+PIDS+=($!)
 PROJECT="$(I project create e2e --location "$(native_path "$T/work/project")" | grep -o 'project-[0-9a-f]*' | head -1)"
 [ -n "$PROJECT" ] || { echo "project create failed" >&2; exit 2; }
 
@@ -133,23 +136,32 @@ new_ticket() {
 start_ticket() { I ticket start --project "$PROJECT" "$1"; }
 # session id of a ticket's worker: the first session-looking id on a list line that names the ticket
 session_of() { M infantry_list_sessions '{}' | grep -i "$1" | grep -oE '[0-9a-f]{8}-[0-9a-f-]{27}|session-[0-9a-f]+' | head -1; }
-transcript() { M infantry_get_session "{\"sessionId\":\"$1\"}"; }
+transcript() { M infantry_get_session "{\"sessionId\":\"$1\",\"lines\":200}" | sed "s/^[a-z_]*: //" | tr -d '\n'; }  # the text arrives in small deltas: last 200 frames, joined
 has_marker() { transcript "$1" | grep -q "$2"; }
 MARK_DEADLINE="${E2E_TURN_SECONDS:-420}"
 
 # one scenario run: create + start a ticket on a runner, wait for the marker word in the session. Sets TID, SID, TRANSCRIPT.
 run_ticket() { # <label> <runner> <extra instruction>
-  local label="$1" rn="$2" extra="${3:-}"
-  local desc="You are in a git worktree. Run the shell command hostname and write its output to a file named host.txt, then commit the file with git. ${extra} Finish your reply with the single word E2E-DONE-${label}."
+  local label="$1" rn="$2" extra="${3:-}"; CUR_RUNNER="$rn"
+  local desc="You are in a git worktree. Run the shell command hostname and write its output to a file named host.txt, then commit the file with git. Then create an empty file named E2E-DONE-${label} in the worktree root. ${extra} Finish your reply with the single word E2E-DONE-${label}."
   TID="$(new_ticket "e2e $label" "$rn" "$desc")"; [ -n "$TID" ] || { START_ERR="ticket create failed"; return 1; }
   START_ERR="$(start_ticket "$TID")"; case "$START_ERR" in *error*) return 1 ;; esac
   wait_for 120 "the session of $TID" _have_session || { START_ERR="no session appeared for $TID"; return 1; }
-  wait_for "$MARK_DEADLINE" "the marker E2E-DONE-$label" _have_marker "$label" || { TRANSCRIPT="$(transcript "$SID")"; START_ERR="no E2E-DONE-$label in the transcript"; return 1; }
-  TRANSCRIPT="$(transcript "$SID")"; return 0
+  wait_for "$MARK_DEADLINE" "the marker E2E-DONE-$label" _have_marker "$label" || { TRANSCRIPT="$(transcript "$SID")"; START_ERR="no E2E-DONE-$label marker file or text"; return 1; }
+  TRANSCRIPT="$(transcript "$SID") $(wt_host "$label")"; I ticket move --project "$PROJECT" "$TID" done >/dev/null  # frees the lane (one worker per role)
+  return 0
 }
 _link_ok() { I runner check "$RNAME" | grep -qE '^link +ok'; }
 _have_session() { SID="$(session_of "$TID")"; [ -n "$SID" ]; }
-_have_marker() { has_marker "$SID" "E2E-DONE-$1"; }
+# Deterministic proof first (the weak free models rarely echo the marker word): the marker FILE in the worktree, on the runner
+# (docker exec) or on this machine. The chat text counts too. wt_host prints the host.txt beside the marker file.
+wt_find() { # <label>: the marker file's path (inside the container for a runner run, on this machine for local)
+  if [ "${CUR_RUNNER:-}" = local ]; then find "$T/work/project/.worktrees" -name "E2E-DONE-$1" 2>/dev/null | head -1
+  else docker exec "$RUNNER_CT" sh -c "find /tmp /data -name 'E2E-DONE-$1' -path '*worktrees*' 2>/dev/null | head -1" 2>/dev/null | tr -d ''; fi
+}
+wt_host() { local f; f="$(wt_find "$1")"; [ -z "$f" ] && return 0
+  if [ "${CUR_RUNNER:-}" = local ]; then cat "$(dirname "$f")/host.txt" 2>/dev/null; else docker exec "$RUNNER_CT" cat "$(dirname "$f")/host.txt" 2>/dev/null; fi; }
+_have_marker() { [ -n "$(wt_find "$1")" ] || has_marker "$SID" "E2E-DONE-$1"; }
 
 # ============================ scenarios =============================================================================
 # S0: install the harness ON the runner through runner_frame {harness_install}; harness_install_status then says installed.
@@ -181,8 +193,9 @@ fi
 
 # S3: an approval card reaches the orchestrator (a command the harness must ask about; the card is answered, allowed).
 if want S3; then
+  A0="$(grep -c '^approved' "$T/approver.log")"
   if [ $S2_OK = 1 ] && run_ticket S3 "$RNAME" "Then run the shell command: curl -s -o /dev/null http://127.0.0.1:1/ (it needs approval)."; then
-    row S3 PASS "turn with an approval-needing command finished; cards seen: $(M infantry_waiting '{}' | grep -ci 'approv')"
+    row S3 PASS "turn with an approval-needing command finished; approval cards answered: $(( $(grep -c '^approved' "$T/approver.log") - A0 ))"
   else row S3 FAIL "${START_ERR:-needs S2}"; fi
 fi
 
@@ -208,7 +221,7 @@ if want S6; then
   if [ -n "$LONG_SID" ]; then
     docker restart "$RUNNER_CT" >/dev/null; runner_up
     wait_for 90 "the link after the restart" _link_ok
-    M infantry_prompt "{\"sessionId\":\"$LONG_SID\",\"text\":\"Reply with exactly E2E-RESUMED-OK\"}" >/dev/null
+    M infantry_prompt "{\"sessionId\":\"$LONG_SID\",\"prompt\":\"Reply with exactly E2E-RESUMED-OK\"}" >/dev/null
     ok=0; for _ in $(seq 1 60); do transcript "$LONG_SID" | grep -q 'E2E-RESUMED-OK' && { ok=1; break; }; sleep 3; done
     [ $ok = 1 ] && row S6 PASS "after docker restart the session answered again" || row S6 FAIL "no output after docker restart"
   else row S6 FAIL "needs S2 (no long-running session)"; fi
@@ -223,6 +236,8 @@ if want S5; then
     [ "$LEFT" = 0 ] && row S5 PASS "kill reached the runner; 0 harness processes left" || row S5 FAIL "$LEFT harness process(es) left in $RUNNER_CT"
   else row S5 FAIL "needs S2 (no long-running session)"; fi
 fi
+
+[ -n "$LONG_TID" ] && I ticket move --project "$PROJECT" "$LONG_TID" done >/dev/null
 
 # S7: docker rm + a new run on the same volume: no re-pair, the fingerprint is the same, the harness install (logins) is kept.
 if want S7; then

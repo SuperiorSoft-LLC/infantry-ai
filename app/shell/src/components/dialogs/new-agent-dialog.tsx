@@ -14,6 +14,8 @@ import {
   withDefaults,
   withRole,
   isLocalRunner,
+  runnerRequest,
+  type HarnessInfo,
   type LauncherStore,
   type NewAgentDraft,
 } from "@infantry/client";
@@ -60,8 +62,17 @@ export function useExecutorLists(runner: string | null | undefined) {
   const loaded = useStore(st.providers, (s) => s.loaded);
   const refusal = useStore(st.providers, (s) => s.refusal);
   const catalog = useStore(st.catalog, (s) => s.data);
+  // RR-VIS: an old runner refuses `providers`: fall back to the harnesses its hello named, so the list is never stuck.
+  const [hello, setHello] = useState<HarnessInfo[]>([]);
+  useEffect(() => {
+    if (!remote || !refusal || !open) return;
+    runnerRequest(daemonStore().getState(), null, "runner_admin", JSON.stringify({ op: "detail", name: runner }), 8000).then(
+      (e) => setHello(((JSON.parse(e.data).helloHarnesses ?? []) as { id: string; loggedIn: boolean }[]).map((h) => ({ id: h.id, available: h.loggedIn, models: [] }) as unknown as HarnessInfo)),
+      () => setHello([]),
+    );
+  }, [remote, refusal, open, runner]);
   if (!remote) return { harnesses: here.harnesses, catalog: here.catalog, runners: here.runners, remote, loaded: here.loaded, refusal: null as string | null };
-  return { harnesses: providers, catalog, runners: here.runners, remote, loaded, refusal };
+  return { harnesses: providers.length === 0 && refusal ? hello : providers, catalog, runners: here.runners, remote, loaded, refusal };
 }
 
 function Step({ n, title, missing, children }: { n: number; title: string; missing?: boolean; children: React.ReactNode }) {
@@ -146,11 +157,12 @@ export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDra
             value={{ harness: draft.harness, group: draft.group, model: draft.model, effort: draft.effort ?? null }}
             harnesses={harnesses}
             catalog={catalog}
+            emptyText={remote && refusal ? "Could not read this runner's tools" : remote && listsLoaded ? "Nothing installed on this runner" : undefined}
             onChange={(v) => onChange({ ...draft, ...v })}
           />
           {remote && refusal && (
             <p role="alert" className="text-xs text-danger">
-              Could not read the tools on runner {draft.runner}: {refusal}
+              Could not read the tools on runner {draft.runner}: {refusal}. The runner may be too old to answer: Settings &gt; Runners &gt; Update runner.
             </p>
           )}
           {remote && !refusal && listsLoaded && harnesses.length === 0 && (

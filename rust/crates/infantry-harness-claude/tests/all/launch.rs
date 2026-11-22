@@ -200,3 +200,36 @@ fn a_token_launch_marks_the_first_run_setup_done_and_keeps_the_rest_of_the_confi
     assert!(!prepare_onboarding(&token, &probe), "a file it cannot parse is left alone");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// RR-VIS: a subscription login (only the OAuth credentials file, no env) counts as signed in, and the harness says where it lives;
+/// an API key alone counts too and is named; nothing at all is not signed in.
+#[test]
+fn subscription_file_or_api_key_counts_as_signed_in_and_names_its_source() {
+    struct P {
+        file: bool,
+        key: bool,
+    }
+    impl infantry_harness::Probe for P {
+        fn env(&self, n: &str) -> Option<String> {
+            (self.key && n == "ANTHROPIC_API_KEY").then(|| "sk-test".to_string())
+        }
+        fn home(&self) -> Option<std::path::PathBuf> {
+            Some("/data".into())
+        }
+        fn read_to_string(&self, p: &std::path::Path) -> Option<String> {
+            (self.file && p.ends_with(".credentials.json")).then(|| "{\"claudeAiOauth\":{}}".to_string())
+        }
+        fn exists(&self, _: &std::path::Path) -> bool {
+            self.file
+        }
+    }
+    let h = ClaudeHarness::default();
+    let sub = P { file: true, key: false };
+    assert!(h.sign_in_problem(&sub).is_none());
+    assert!(h.login_location(&sub).unwrap().ends_with(".credentials.json"));
+    let key = P { file: false, key: true };
+    assert!(h.sign_in_problem(&key).is_none());
+    assert!(h.login_location(&key).unwrap().contains("ANTHROPIC_API_KEY"));
+    let none = P { file: false, key: false };
+    assert!(h.sign_in_problem(&none).is_some());
+}

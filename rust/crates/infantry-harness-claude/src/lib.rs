@@ -308,7 +308,7 @@ impl Harness for ClaudeHarness {
     fn sign_in_problem(&self, probe: &dyn Probe) -> Option<String> {
         // An API_KEY_ENV key does not count as signed in yet: that check is part of the credential detection that is
         // not switched on (WIP 4097d75b, harness/credentials.rs is not compiled). Backlog #51 finishes it and adds it here.
-        if probe.env(OAUTH_TOKEN_ENV).is_some() {
+        if probe.env(OAUTH_TOKEN_ENV).is_some() || probe.env(API_KEY_ENV).is_some_and(|k| !k.trim().is_empty()) {
             return None;
         }
         let creds = config_dir(probe).map(|d| d.join(CREDENTIALS_FILE));
@@ -316,6 +316,20 @@ impl Harness for ClaudeHarness {
             Some(t) if !t.trim().is_empty() => None,
             _ => Some(interactive::NOT_SIGNED_IN.into()),
         }
+    }
+
+    fn login_location(&self, probe: &dyn Probe) -> Option<String> {
+        if probe.env(OAUTH_TOKEN_ENV).is_some() {
+            return Some(format!("the {OAUTH_TOKEN_ENV} environment variable"));
+        }
+        let creds_file = config_dir(probe).map(|d| d.join(CREDENTIALS_FILE));
+        if creds_file.as_ref().and_then(|p| probe.read_to_string(p)).is_some_and(|t| !t.trim().is_empty()) {
+            return creds_file.map(|p| p.to_string_lossy().to_string());
+        }
+        if probe.env(API_KEY_ENV).is_some_and(|k| !k.trim().is_empty()) {
+            return Some(format!("the {API_KEY_ENV} environment variable"));
+        }
+        config_dir(probe).map(|d| d.join(CREDENTIALS_FILE).to_string_lossy().to_string())
     }
 
     fn launch(&self, req: &LaunchRequest) -> Result<LaunchPlan, LaunchError> {
