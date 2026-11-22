@@ -168,6 +168,8 @@ fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, stat
     let c = composed.clone();
     let c2 = composed.clone();
     pool.set_allow_plain(Arc::new(move || plain_allowed(&|k: &str| read_setting(&c2, k))));
+    let c3 = composed.clone();
+    pool.set_update_wait(Arc::new(move || read_setting(&c3, infantry_runner_pool::update::UPDATE_WAIT_KEY).and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))).unwrap_or(0)));
     pool.start_heartbeat(Arc::new(move || {
         let ask = infantry_protocol::envelope::Envelope::new("settings", serde_json::json!({"key": infantry_runner_pool::HEARTBEAT_KEY}).to_string());
         c.request(&ask, true)

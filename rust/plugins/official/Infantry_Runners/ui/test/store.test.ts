@@ -68,6 +68,18 @@ describe("the Runners store", () => {
     expect(s.getState().checks.box).toBeUndefined();
   });
 
+  it("RR-11: Update runner sends runner_admin update, keeps the answer text and re-reads the list", () => {
+    const l = link();
+    const s = createRunnersStore(l);
+    s.getState().update("box");
+    expect(JSON.parse(l.sent[0].data)).toEqual({ op: "update", name: "box" });
+    answer(l, 0, { ok: true, name: "box", text: "updating runner 'box' to img:0.4.7: started" });
+    expect(s.getState().updateNote.box).toContain("started");
+    expect(JSON.parse(l.sent[1].data)).toEqual({ op: "list" });
+    answer(l, 1, { ok: true, runners: [{ name: "box", url: "wss://x", state: "outdated", outdated: true, needs: "1.11.0", update: { state: "running", steps: ["pulling img"], detail: "" } }] });
+    expect(s.getState().runners[0].update?.state).toBe("running");
+  });
+
   it("a down link is a refusal, not a silent no-op", () => {
     const s = createRunnersStore(link(false));
     s.getState().add("wss://a", "b");

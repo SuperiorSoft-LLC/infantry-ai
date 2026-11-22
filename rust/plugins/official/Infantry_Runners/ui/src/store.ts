@@ -20,6 +20,11 @@ export interface RunnerView {
   rttMs?: number | null;
   reason?: string | null;
   runnerId?: string | null;
+  /** RR-11: the oldest contract the app drives, whether this runner is older, the app it runs, and its Update runner progress. */
+  needs?: string;
+  outdated?: boolean;
+  appVersion?: string;
+  update?: { state: "running" | "done" | "failed"; steps: string[]; detail: string };
 }
 
 /** What a runner's `providers` answer says about its machine: the agent tools that are there, and whether any can answer. */
@@ -78,6 +83,8 @@ export interface RunnersState {
   /** The last Add runner refusal, shown inside the dialog (cleared by the next `add`). */
   addError: string | null;
   adding: boolean;
+  /** RR-11: what the last Update runner answered (progress, or the command to run on another machine). */
+  updateNote: Record<string, string>;
 }
 
 export interface RunnersActions {
@@ -86,6 +93,8 @@ export interface RunnersActions {
   summarize(name: string): void;
   add(endpoint: string, bearer: string): void;
   check(name: string): void;
+  /** RR-11: Update runner. Answered at once; the rows then carry the progress, so the list is re-read until it ends. */
+  update(name: string): void;
   detach(name: string): void;
   clearRefusal(): void;
   dispose(): void;
@@ -99,6 +108,7 @@ interface Answer {
   runners?: RunnerView[];
   name?: string;
   rows?: CheckRow[];
+  text?: string;
 }
 
 /** The status the row shows: the dot, the word and the reason (an offline or outdated runner always carries one). */
@@ -138,6 +148,14 @@ export function createRunnersStore(link: FrameLink): RunnersStore {
       set({ refusal: "runner_admin not sent: the daemon link is down" });
       return false;
     };
+    /** While any runner is updating, re-read the list every 2 s. */
+    const schedulePoll = () => {
+      if (!get().runners.some((r) => r.update?.state === "running")) return;
+      setTimeout(() => {
+        get().refresh();
+        schedulePoll();
+      }, 2000);
+    };
     const off = link.onFrame((env: Envelope) => {
       if (env.type === "ready") {
         if (get().loaded) get().refresh();
@@ -173,6 +191,11 @@ export function createRunnersStore(link: FrameLink): RunnersStore {
           get().refresh();
           return;
         }
+        case "update":
+          if (a.text) set({ updateNote: { ...get().updateNote, [ask.name ?? ""]: a.text } });
+          get().refresh();
+          schedulePoll();
+          return;
         case "detach":
           if (ask.name) {
             const rest = { ...get().checks };
@@ -191,6 +214,7 @@ export function createRunnersStore(link: FrameLink): RunnersStore {
       refusal: null,
       addError: null,
       adding: false,
+      updateNote: {},
       refresh: () => void send("list", {}),
       summarize(name) {
         const keep = (v: RunnerSummary) => set({ summaries: { ...get().summaries, [name]: v } });
@@ -207,6 +231,7 @@ export function createRunnersStore(link: FrameLink): RunnersStore {
         set({ checking: name });
         if (!send("check", { name }, name)) set({ checking: null });
       },
+      update: (name) => void send("update", { name }, name),
       detach: (name) => void send("detach", { name }, name),
       clearRefusal: () => set({ refusal: null }),
       dispose: off,

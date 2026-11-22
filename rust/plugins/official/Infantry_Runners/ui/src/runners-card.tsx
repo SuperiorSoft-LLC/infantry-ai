@@ -95,7 +95,7 @@ function CheckRows({ rows }: { rows: CheckRow[] }) {
 }
 
 /** One runner: name and endpoint, the status dot with its reason, the contract and ping, the buttons. */
-export function RunnerRow({ runner, rows, checking, summary, onCheck, onSetup, onRotate, onDetach }: { runner: RunnerView; rows: CheckRow[]; checking: boolean; summary?: RunnerSummary; onCheck: () => void; onSetup: () => void; onRotate: () => void; onDetach: () => void }) {
+export function RunnerRow({ runner, rows, checking, summary, onCheck, onSetup, onRotate, onDetach, onUpdate, note }: { runner: RunnerView; rows: CheckRow[]; checking: boolean; summary?: RunnerSummary; onCheck: () => void; onSetup: () => void; onRotate: () => void; onDetach: () => void; onUpdate?: () => void; note?: string }) {
   const st = statusOf(runner);
   const local = runner.name === "local";
   const ping = pingLine(runner);
@@ -112,6 +112,13 @@ export function RunnerRow({ runner, rows, checking, summary, onCheck, onSetup, o
           <p className="truncate font-mono text-[11px] text-muted-foreground">{local ? "in this app (no link)" : runner.url}</p>
           {st.reason && <p className="text-xs text-danger">{st.reason}</p>}
           {ping && <p className="text-[11px] text-muted-foreground">{ping}</p>}
+          {runner.update && (
+            <p className={`text-[11px] ${runner.update.state === "failed" ? "text-danger" : "text-muted-foreground"}`} data-testid="runner-update">
+              Update: {runner.update.state}
+              {runner.update.state === "running" ? ` — ${runner.update.steps[runner.update.steps.length - 1] ?? "starting"}` : runner.update.detail ? ` — ${runner.update.detail}` : ""}
+            </p>
+          )}
+          {note && !runner.update && <p className="text-[11px] text-muted-foreground">{note}</p>}
           {summary && (
             <p className="text-[11px] text-muted-foreground" data-testid="runner-summary">
               {summaryLine(summary)}
@@ -127,6 +134,11 @@ export function RunnerRow({ runner, rows, checking, summary, onCheck, onSetup, o
           </Button>
           {!local && (
             <>
+              {onUpdate && (
+                <Button variant={runner.outdated ? "default" : "outline"} size="xs" disabled={runner.update?.state === "running"} onClick={onUpdate} title="Recreate this runner on the app's own version">
+                  <RefreshCw className="size-3" /> Update runner
+                </Button>
+              )}
               <Button variant="outline" size="xs" onClick={onRotate} title="Pair again with a new bearer">
                 <RotateCcw className="size-3" /> Rotate
               </Button>
@@ -148,6 +160,7 @@ export function RunnersCard() {
   const loaded = useRunners((s) => s.loaded);
   const checks = useRunners((s) => s.checks);
   const checking = useRunners((s) => s.checking);
+  const updateNote = useRunners((s) => s.updateNote);
   const summaries = useRunners((s) => s.summaries);
   const refusal = useRunners((s) => s.refusal);
   const [dialog, setDialog] = useState<{ endpoint: string } | null>(null);
@@ -191,6 +204,8 @@ export function RunnersCard() {
               onSetup={() => openRunnerSetup(r.name)}
               onRotate={() => setDialog({ endpoint: r.url })}
               onDetach={() => store.detach(r.name)}
+              onUpdate={() => store.update(r.name)}
+              note={updateNote[r.name]}
             />
           ))}
         </ul>

@@ -75,7 +75,13 @@ impl AdminUnit {
             .into_iter()
             .map(|r| {
                 let s = self.pool.state(&r.name);
-                let mut v = json!({"name": r.name, "url": r.url, "runnerId": r.runner_id, "contract": r.contract, "state": s.word()});
+                let mut v = json!({"name": r.name, "url": r.url, "runnerId": r.runner_id, "contract": r.contract, "state": s.word(), "needs": infantry_runner_link::wire::MIN_RUNNER_CONTRACT, "outdated": matches!(s, RunnerState::Outdated { .. })});
+                if let Some(a) = self.pool.runner_app_version(&r.name) {
+                    v["appVersion"] = json!(a);
+                }
+                if let Some(u) = self.pool.update_status(&r.name) {
+                    v["update"] = json!({"state": u.state, "steps": u.steps, "detail": u.detail});
+                }
                 match s {
                     RunnerState::Online { rtt_ms, contract } => {
                         v["rttMs"] = json!(rtt_ms);
@@ -144,6 +150,31 @@ impl AdminUnit {
         rows
     }
 
+    /// A heartbeat now, then the list.
+    fn refresh(&self) -> Value {
+        self.pool.beat();
+        self.list()
+    }
+
+    fn update(&self, d: &Map<String, Value>) -> Value {
+        let Some(name) = text(d, "name") else { return fail("update needs a runner name") };
+        if name == "local" {
+            return fail("the embedded runner is the app itself: update the app");
+        }
+        match self.pool.update(name) {
+            Ok(text) => json!({"ok": true, "name": name, "text": text, "container": !text.contains("is not a Docker container")}),
+            Err(e) => fail(e),
+        }
+    }
+
+    fn update_status(&self, d: &Map<String, Value>) -> Value {
+        let Some(name) = text(d, "name") else { return fail("update_status needs a runner name") };
+        match self.pool.update_status(name) {
+            Some(u) => json!({"ok": true, "name": name, "state": u.state, "steps": u.steps, "detail": u.detail}),
+            None => json!({"ok": true, "name": name, "state": "none", "steps": [], "detail": ""}),
+        }
+    }
+
     fn detach(&self, d: &Map<String, Value>) -> Value {
         let Some(name) = text(d, "name") else { return fail("detach needs a runner name") };
         match self.pool.detach(name) {
@@ -172,7 +203,10 @@ impl FrameUnit for AdminUnit {
             Some("list") => self.list(),
             Some("check") => self.check(&d),
             Some("detach") => self.detach(&d),
-            Some(other) => fail(format!("unknown op '{other}' (add, list, check, detach)")),
+            Some("refresh") => self.refresh(),
+            Some("update") => self.update(&d),
+            Some("update_status") => self.update_status(&d),
+            Some(other) => fail(format!("unknown op '{other}' (add, list, refresh, check, update, update_status, detach)")),
             None => fail("missing op"),
         };
         let mut out = Envelope::new(ADMIN_FRAME, answer.to_string());
