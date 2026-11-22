@@ -109,7 +109,7 @@ impl AdminUnit {
             (RunnerState::Online { rtt_ms, contract }, Some(p)) => vec![
                 row("link", true, format!("pong from '{}' in {rtt_ms} ms", p.hello.runner_name), None),
                 row("contract", true, format!("contract {contract}"), None),
-                row("health", true, format!("{}, {} running, {} free slots", p.health.state, p.health.running, p.health.free_slots), None),
+                row("health", true, format!("{}, {} running, {}", p.health.state, p.health.running, if p.health.free_slots < 0 { "no slot limit".to_string() } else { format!("{} free slots", p.health.free_slots) }), None),
             ],
             (RunnerState::Outdated { contract, reason }, _) => vec![row("contract", false, format!("contract {contract}: {reason}"), Some("update the runner"))],
             (RunnerState::Offline { reason }, _) => {

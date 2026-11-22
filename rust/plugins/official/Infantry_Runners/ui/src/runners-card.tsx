@@ -115,7 +115,7 @@ export function RunnerRow({ runner, rows, checking, summary, onCheck, onSetup, o
           {runner.update && (
             <p className={`text-[11px] ${runner.update.state === "failed" ? "text-danger" : "text-muted-foreground"}`} data-testid="runner-update">
               Update: {runner.update.state}
-              {runner.update.state === "running" ? ` — ${runner.update.steps[runner.update.steps.length - 1] ?? "starting"}` : runner.update.detail ? ` — ${runner.update.detail}` : ""}
+              {runner.update.state === "running" ? ` â€” ${runner.update.steps[runner.update.steps.length - 1] ?? "starting"}` : runner.update.detail ? ` â€” ${runner.update.detail}` : ""}
             </p>
           )}
           {note && !runner.update && <p className="text-[11px] text-muted-foreground">{note}</p>}
