@@ -12,6 +12,8 @@ export * from "./contract";
 // small and pure), so a plugin's store runs in a plain test with no app around it.
 export { json, type Envelope } from "../../client/src/wire";
 export { requester } from "../../client/src/stores/link";
+// RR-14: the one helper that aims a frame at a runner (plain for `local`, `runner_frame` for any other); a plugin reuses it, never copies it.
+export { runnerRequest, isLocalRunner } from "../../client/src/runner-request";
 
 function host(): UiHost {
   const h = (globalThis as Record<string, unknown>)[HOST_GLOBAL] as UiHost | undefined;
@@ -41,6 +43,9 @@ export const windowFrame = (): WindowFrame | null => lent("windowFrame")();
 
 /** The shell's own updater (Tauri updater + release feed), or null in a browser or on a phone (ARMORY-3). */
 export const shellUpdater = (): ShellUpdater | null => lent("shellUpdater")();
+
+/** RR-14: opens the app's setup wizard aimed at [runner] (Runners tab: "Set up this runner"). */
+export const openRunnerSetup = (runner: string): void => lent("openRunnerSetup")(runner);
 
 /** The app's pixel-bot avatar for an agent's session id. */
 export function AgentAvatar(props: { agentId: string; size?: "xs" | "sm" }): ReactElement {

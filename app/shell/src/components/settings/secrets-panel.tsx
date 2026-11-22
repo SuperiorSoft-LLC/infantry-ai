@@ -9,6 +9,9 @@ import { placeholderOf, secretId, signInRow, type SecretEntryRow } from "@infant
 import { Button, Input, Label } from "@infantry/ui";
 import { secretsStore } from "@/daemon/secrets-store";
 import { SubscriptionSignIn } from "@/components/setup/subscription-sign-in";
+import { runnerStores } from "@/daemon/runner-stores";
+import { useLauncher } from "@/components/dialogs/new-agent-dialog";
+import { RunnerPicker } from "@/components/dialogs/executor-picker";
 
 function FieldRow({ entry, field, tail }: { entry: SecretEntryRow; field: string; tail: string }) {
   const s = secretsStore().getState();
@@ -99,11 +102,47 @@ function AddField({ name: initial }: { name?: string }) {
   );
 }
 
-export function SecretsPanel() {
-  const st = useStore(secretsStore());
+/** RR-14: the harness sign-ins of ONE other machine (a paired runner), read and written through the runner link. Project secrets stay here. */
+function RunnerSignIns({ runner }: { runner: string }) {
+  const store = runnerStores(runner).secrets;
+  const st = useStore(store);
   useEffect(() => st.ensureLoaded(), [st]);
+  const rows = st.builtIns.filter((r) => r.name.endsWith(".token") && signInRow(r.name.slice("harness.".length, -".token".length), st.builtIns));
   return (
     <div className="space-y-2">
+      {st.refusal && (
+        <div role="alert" className="cursor-pointer rounded-lg border border-danger/60 bg-danger/10 p-3 text-xs text-danger" onClick={st.clearRefusal}>
+          {st.refusal}
+        </div>
+      )}
+      {!st.loaded && !st.refusal && <p className="text-xs text-muted-foreground">Asking runner {runner}...</p>}
+      {st.loaded && rows.length === 0 && <p className="rounded-lg border bg-card p-3 text-xs text-muted-foreground">Runner {runner} has no harness that signs in from the app yet. Set up this runner installs the tools.</p>}
+      {rows.map((r) => (
+        <div key={r.name} className="space-y-2 rounded-lg border bg-card p-3">
+          <SubscriptionSignIn id={r.name.slice("harness.".length, -".token".length)} label={r.label.replace(/ subscription token$/, "")} onSignedIn={() => store.getState().refresh()} secrets={store} runner={runner} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function SecretsPanel() {
+  const [runner, setRunner] = useState("local");
+  const { runners } = useLauncher();
+  const st = useStore(secretsStore());
+  useEffect(() => st.ensureLoaded(), [st]);
+  const picker = runners.length > 0 && <RunnerPicker idPrefix="secrets" machine value={runner} runners={runners} onChange={(r) => setRunner(r ?? "local")} />;
+  if (runner !== "local") {
+    return (
+      <div className="space-y-2">
+        {picker}
+        <RunnerSignIns runner={runner} />
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {picker}
       <div className="rounded-lg border bg-card p-3 text-xs text-muted-foreground">
         Protected by {st.protection || "..."}. Values never leave the daemon except Reveal and Copy, which ask Windows Hello first.
         Agents use placeholders such as <span className="font-mono">{"{{secret:NAME#FIELD}}"}</span>.

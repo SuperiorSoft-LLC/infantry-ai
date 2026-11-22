@@ -6,7 +6,7 @@
 // daemon's (`loginState` on the row), so every window agrees. Nothing here names a harness; the token itself never comes here.
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
-import { friendlyLoginError, loginRow, signInPhase, watchLoginWindow } from "@infantry/client";
+import { friendlyLoginError, isLocalRunner, loginRow, signInPhase, watchLoginWindow, type SecretsStore } from "@infantry/client";
 import { Button, Input } from "@infantry/ui";
 import { daemonStore } from "@/daemon/daemon";
 import { secretsStore } from "@/daemon/secrets-store";
@@ -15,8 +15,13 @@ import { host } from "@/host";
 /** How often the sign-in's state is read while it runs (a state read, not a limit). */
 const POLL_MS = 1500;
 
-export function SubscriptionSignIn({ id, label, onSignedIn }: { id: string; label: string; onSignedIn: () => void }) {
-  const st = useStore(secretsStore());
+/**
+ * [secrets] is the store of the machine the login runs on (default: this one); for another runner its state is re-read through that
+ * runner's link. The login page and the code field are the same: the page opens on THIS machine and the code is pasted back.
+ */
+export function SubscriptionSignIn({ id, label, onSignedIn, secrets, runner }: { id: string; label: string; onSignedIn: () => void; secrets?: SecretsStore; runner?: string }) {
+  const store = secrets ?? secretsStore();
+  const st = useStore(store);
   const row = loginRow(id, st.builtIns);
   const phase = signInPhase(row);
   const [code, setCode] = useState("");
@@ -30,9 +35,9 @@ export function SubscriptionSignIn({ id, label, onSignedIn }: { id: string; labe
   useEffect(() => st.ensureLoaded(), [st]);
   useEffect(() => {
     if (phase !== "running") return;
-    const t = setInterval(() => daemonStore().getState().sendFrame({ type: "secret_status", data: "" }), POLL_MS);
+    const t = setInterval(() => (isLocalRunner(runner) ? daemonStore().getState().sendFrame({ type: "secret_status", data: "" }) : store.getState().refresh()), POLL_MS);
     return () => clearInterval(t);
-  }, [phase]);
+  }, [phase, runner, store]);
   // The login page opens by itself in a window of the app, which reads the code off the page it ends on; the paste field below
   // covers every flow where no code is read. Closed with the sign-in (done, failed, cancelled) and with this screen.
   // One submit per code, and none once the login is over: the page can report its address more than once.

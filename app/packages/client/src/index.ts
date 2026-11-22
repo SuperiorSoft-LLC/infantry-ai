@@ -48,5 +48,6 @@ export * from "./worker-lanes";
 export * from "./chat-view";
 export * from "./stores/pace";
 export * from "./setup-wizard";
+export * from "./runner-request";
 export * from "./stores/harness-install";
 export * from "./transport-select";
