@@ -12,8 +12,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { SubscriptionSignIn } from "@/components/setup/subscription-sign-in";
 import {
-  createHarnessInstallStore,
-  createQueryStore,
   defaultPick,
   credentialOk,
   elapsedText,
@@ -36,6 +34,8 @@ import {
   STARTER_PROJECT,
   statusText,
   installed,
+  isLocalRunner,
+  LOCAL_RUNNER,
   type CatalogGroup,
   type HarnessInfo,
   type HarnessInstallReport,
@@ -44,41 +44,15 @@ import {
 } from "@infantry/client";
 import { AppDialog, Button, cn, Input, ProgressLine } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
-import { secretsStore } from "@/daemon/secrets-store";
+import { runnerStores, type RunnerStores } from "@/daemon/runner-stores";
 import { useUi } from "@/state/ui-state";
 import { host } from "@/host";
 
-let installStore: ReturnType<typeof createHarnessInstallStore> | null = null;
-let providersStore: ReturnType<typeof createQueryStore<HarnessInfo[]>> | null = null;
-let catalogStore: ReturnType<typeof createQueryStore<CatalogGroup[]>> | null = null;
-
-function stores() {
-  const link = daemonStore().getState();
-  installStore ??= createHarnessInstallStore(link);
-  // `refresh` makes the daemon rebuild its harness list now (it serves a cached one otherwise): sign-in and installs show at once.
-  providersStore ??= createQueryStore<HarnessInfo[]>(link, {
-    prefix: "setup-p",
-    request: "providers",
-    body: () => JSON.stringify({ refresh: true }),
-    answers: ["providers"],
-    empty: [],
-    parse: (raw) => (Array.isArray(raw) ? (raw as HarnessInfo[]) : null),
-  });
-  catalogStore ??= createQueryStore<CatalogGroup[]>(link, {
-    prefix: "setup-m",
-    request: "models",
-    answers: ["models"],
-    empty: [],
-    parse: (raw) => (Array.isArray(raw) ? (raw as CatalogGroup[]) : null),
-  });
-  return { install: installStore, providers: providersStore, catalog: catalogStore };
-}
-
 /** The daemon's three answers the setup reads, asked once the link is open; `recheck` asks them again. */
-export function useSetupData() {
+export function useSetupData(runner: string = LOCAL_RUNNER) {
   const open = useDaemon((s) => s.connection.state) === "open";
-  const s = stores();
-  const secrets = secretsStore();
+  const s = runnerStores(runner);
+  const secrets = s.secrets;
   const report = useStore(s.install, (x) => x.data);
   const secretsLoaded = useStore(secrets, (x) => x.loaded);
   const rows = useStore(secrets, (x) => x.builtIns);
@@ -94,7 +68,7 @@ export function useSetupData() {
   useEffect(() => {
     if (open) recheck();
   }, [open, recheck]);
-  return { report, secrets: secretsLoaded ? rows : null, providers: providersLoaded ? providers : null, catalog, recheck };
+  return { report, secrets: secretsLoaded ? rows : null, providers: providersLoaded ? providers : null, catalog, recheck, st: s };
 }
 
 /**
@@ -164,27 +138,27 @@ function Log({ lines }: { lines: string[] }) {
   return <pre className="max-h-24 overflow-auto rounded-md border bg-muted/40 p-2 font-mono text-[11px] text-muted-foreground">{shown.join("\n")}</pre>;
 }
 
-function NodeStep({ report, recheck }: { report: HarnessInstallReport; recheck: () => void }) {
+function NodeStep({ report, recheck, st, where }: { report: HarnessInstallReport; recheck: () => void; st: RunnerStores; where: string }) {
   const started = useRef(false);
   const outcome = outcomeFor("node", report.log);
   // The owner's call (Kotlin): install it automatically when it is missing; started once on this screen, "Try again" after a failure.
   useEffect(() => {
     if (report.nodeInstallable && !report.busy && !started.current) {
       started.current = true;
-      installHarnesses(stores().install, [], { runtime: true });
+      installHarnesses(st.install, [], { runtime: true });
     }
-  }, [report.nodeInstallable, report.busy]);
+  }, [report.nodeInstallable, report.busy, st]);
   return (
     <div className="space-y-2.5">
-      <p className="text-[13px]">The agent tools run on Node.js, and this computer does not have it yet.</p>
+      <p className="text-[13px]">The agent tools run on Node.js, and {where} does not have it yet.</p>
       {report.nodeInstallable ? (
         <>
-          <p className="text-xs text-muted-foreground">Installing it for you now: about 40 MB, into Infantry AI's own folder. No admin prompt, nothing else on your PC changes.</p>
+          <p className="text-xs text-muted-foreground">Installing it for you now: about 40 MB, into Infantry AI's own folder. No admin prompt, nothing else on {where === "this computer" ? "your PC" : "that machine"} changes.</p>
           {report.busy ? <InstallProgressView log={report.log} /> : <Log lines={report.log} />}
           {outcome && !outcome.ok && !report.busy && (
             <>
               <p role="alert" className="text-xs text-danger">{outcome.text}</p>
-              <Button size="sm" onClick={() => installHarnesses(stores().install, [], { runtime: true })}>
+              <Button size="sm" onClick={() => installHarnesses(st.install, [], { runtime: true })}>
                 Try again
               </Button>
             </>
@@ -207,7 +181,7 @@ function NodeStep({ report, recheck }: { report: HarnessInstallReport; recheck: 
   );
 }
 
-function HarnessStep({ report, pick, onPick }: { report: HarnessInstallReport; pick: string | null; onPick: (id: string) => void }) {
+function HarnessStep({ report, pick, onPick, st }: { report: HarnessInstallReport; pick: string | null; onPick: (id: string) => void; st: RunnerStores }) {
   const outcome = pick ? outcomeFor(pick, report.log) : null;
   return (
     <div className="space-y-2.5">
@@ -223,7 +197,7 @@ function HarnessStep({ report, pick, onPick }: { report: HarnessInstallReport; p
           {report.harnesses.filter((h) => h.privateCopy).map((h) => (
             <div key={h.id} className="flex items-center justify-between gap-2">
               <span className="truncate text-xs text-muted-foreground" title={h.privateCopy ?? ""}>{h.label || h.id}: {h.privateCopy}</span>
-              <Button size="sm" variant="outline" onClick={() => removePrivateCopies(stores().install, [h.id])}>Remove</Button>
+              <Button size="sm" variant="outline" onClick={() => removePrivateCopies(st.install, [h.id])}>Remove</Button>
             </div>
           ))}
         </ChoiceCard>
@@ -249,7 +223,7 @@ function ChoiceCard({ title, subtitle, children }: { title: string; subtitle?: s
 }
 
 /** The sign-in step, as the Kotlin screen: the harness's name, then the ways it declares (a subscription login, an API key). */
-function SignInStep({ id, label, rows, recheck }: { id: string; label: string; rows: SecretRow[]; recheck: () => void }) {
+function SignInStep({ id, label, rows, recheck, st }: { id: string; label: string; rows: SecretRow[]; recheck: () => void; st: RunnerStores }) {
   const [key, setKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const { login, key: keyRowOf, keyNeeded } = signInChoices(id, rows);
@@ -260,7 +234,7 @@ function SignInStep({ id, label, rows, recheck }: { id: string; label: string; r
       <p className="text-xs text-muted-foreground">{login && showKey ? `Choose one way to connect ${label}.` : `Connect ${label} so your agent can answer.`}</p>
       {login && (
         <ChoiceCard title={`Log in with your ${label} subscription`} subtitle={`A login window opens so you can log in to your ${label} account.`}>
-          <SubscriptionSignIn id={id} label={label} onSignedIn={recheck} />
+          <SubscriptionSignIn id={id} label={label} onSignedIn={recheck} secrets={st.secrets} runner={st.runner} />
         </ChoiceCard>
       )}
       {showKey && keyRowOf && (
@@ -271,7 +245,7 @@ function SignInStep({ id, label, rows, recheck }: { id: string; label: string; r
               <Button
                 size="sm"
                 disabled={!key.trim()}
-                onClick={() => secretsStore().getState().setField(keyRowOf.name, "value", key.trim()).then(() => (setKey(""), recheck()), (why: unknown) => setError(String(why)))}
+                onClick={() => st.secrets.getState().setField(keyRowOf.name, "value", key.trim()).then(() => (setKey(""), recheck()), (why: unknown) => setError(String(why)))}
               >
                 Save key
               </Button>
@@ -291,7 +265,7 @@ function SignInStep({ id, label, rows, recheck }: { id: string; label: string; r
 }
 
 /** The project the first agent runs in: the first there is, else a starter the daemon makes (zero typing). */
-function FirstAgentStep({ id, secrets, providers, catalog }: { id: string; secrets: SecretRow[]; providers: HarnessInfo[]; catalog: CatalogGroup[] }) {
+function FirstAgentStep({ id, secrets, providers, catalog, runner }: { id: string; secrets: SecretRow[]; providers: HarnessInfo[]; catalog: CatalogGroup[]; runner: string }) {
   const projects = useDaemon((s) => s.projects);
   const sessions = useDaemon((s) => s.sessions);
   const before = useRef(new Set(Object.keys(daemonStore().getState().sessions)));
@@ -312,9 +286,10 @@ function FirstAgentStep({ id, secrets, providers, catalog }: { id: string; secre
     const opts: Record<string, unknown> = { provider: id, name: "First agent", prompt: HELLO_PROMPT };
     const model = firstModel(id, secrets, providers, catalog);
     if (model) opts.model = model;
+    if (!isLocalRunner(runner)) opts.runner = runner;
     if (project.directory) opts.cwd = project.directory;
     if (!store.spawnWith(opts)) setError("the daemon link is down");
-  }, [projects, id, secrets, providers, catalog]);
+  }, [projects, id, secrets, providers, catalog, runner]);
   const mine = Object.values(sessions).find((v) => !before.current.has(v.record.id) && v.record.provider === id);
   const reply = mine?.items.filter((i) => i.kind === "text").map((i) => (i as { text: string }).text).join("").trim() ?? "";
   const failed = error ?? (mine?.record.state === "FAILED" ? (mine.record.lastError ?? "the agent failed") : mine?.items.find((i) => i.kind === "note" && i.tone === "danger") && "the agent reported an error");
@@ -335,13 +310,22 @@ function FirstAgentStep({ id, secrets, providers, catalog }: { id: string; secre
   );
 }
 
-export function SetupWizardDialog({ onClose }: { onClose: () => void }) {
-  const { report, secrets, providers, catalog, recheck } = useSetupData();
-  if (!report) return <AppDialog open onOpenChange={(o) => !o && onClose()} title="Setup" description="Asking the daemon what is installed..." footer={null}>{null}</AppDialog>;
-  return <Wizard report={report} secrets={secrets ?? []} providers={providers ?? []} catalog={catalog} recheck={recheck} onClose={onClose} />;
+/** The guided setup, aimed at [runner] (`local` = this machine, as on app start). Every frame it sends goes through the runner link. */
+export function SetupWizardDialog({ onClose, runner = LOCAL_RUNNER }: { onClose: () => void; runner?: string }) {
+  const { report, secrets, providers, catalog, recheck, st } = useSetupData(runner);
+  const local = isLocalRunner(runner);
+  const title = local ? "Setup" : `Set up runner ${runner}`;
+  if (!report) {
+    return (
+      <AppDialog open onOpenChange={(o) => !o && onClose()} title={title} description={local ? "Asking the daemon what is installed..." : `Asking runner ${runner} what is installed...`} footer={null}>
+        {null}
+      </AppDialog>
+    );
+  }
+  return <Wizard report={report} secrets={secrets ?? []} providers={providers ?? []} catalog={catalog} recheck={recheck} onClose={onClose} st={st} title={title} />;
 }
 
-function Wizard({ report, secrets, providers, catalog, recheck, onClose }: { report: HarnessInstallReport; secrets: SecretRow[]; providers: HarnessInfo[]; catalog: CatalogGroup[]; recheck: () => void; onClose: () => void }) {
+function Wizard({ report, secrets, providers, catalog, recheck, onClose, st, title }: { report: HarnessInstallReport; secrets: SecretRow[]; providers: HarnessInfo[]; catalog: CatalogGroup[]; recheck: () => void; onClose: () => void; st: RunnerStores; title: string }) {
   const [step, setStep] = useState<SetupStep>(() => firstStep(report));
   const [pick, setPick] = useState<string | null>(() => defaultPick(report));
   const picked = report.harnesses.find((h) => h.id === pick);
@@ -352,19 +336,19 @@ function Wizard({ report, secrets, providers, catalog, recheck, onClose }: { rep
   // While an install runs the daemon's log is the progress: read it again every 1.5 s.
   useEffect(() => {
     if (!report.busy) return;
-    const t = setInterval(() => stores().install.getState().refresh(), 1500);
+    const t = setInterval(() => st.install.getState().refresh(), 1500);
     return () => clearInterval(t);
-  }, [report.busy]);
+  }, [report.busy, st]);
   // An install finished, here, in another window or in the CLI (the report is re-read on the daemon's push): what is installed
   // changed, so the sign-in rows, the harness list and the models are read again.
   const seenInstalled = useRef(installedKey);
   useEffect(() => {
     if (seenInstalled.current === installedKey) return;
     seenInstalled.current = installedKey;
-    stores().providers.getState().refresh();
-    stores().catalog.getState().refresh();
-    secretsStore().getState().refresh();
-  }, [installedKey]);
+    st.providers.getState().refresh();
+    st.catalog.getState().refresh();
+    st.secrets.getState().refresh();
+  }, [installedKey, st]);
   // The pick follows what is really installed.
   useEffect(() => {
     setPick((p) => followInstalled(p, report));
@@ -381,6 +365,7 @@ function Wizard({ report, secrets, providers, catalog, recheck, onClose }: { rep
     if (step === "sign-in" && pick && pickedInstalled && credentialOk(pick, secrets, providers, catalog)) setStep("first-agent");
   }, [step, pick, pickedInstalled, secrets, providers, catalog]);
 
+  const local = isLocalRunner(st.runner);
   const idx = SETUP_STEPS.findIndex((s) => s.id === step);
   const footer = (
     <>
@@ -391,7 +376,7 @@ function Wizard({ report, secrets, providers, catalog, recheck, onClose }: { rep
         (pickedInstalled ? (
           <Button onClick={() => setStep("sign-in")}>Next</Button>
         ) : (
-          <Button disabled={report.busy || !pick} onClick={() => pick && installHarnesses(stores().install, [pick])}>
+          <Button disabled={report.busy || !pick} onClick={() => pick && installHarnesses(st.install, [pick])}>
             {report.busy ? "Installing..." : `Install ${picked?.label ?? ""}`.trim()}
           </Button>
         ))}
@@ -401,11 +386,11 @@ function Wizard({ report, secrets, providers, catalog, recheck, onClose }: { rep
     </>
   );
   return (
-    <AppDialog open onOpenChange={() => {}} title={SETUP_STEPS[idx].title} description={`Step ${idx + 1} of ${SETUP_STEPS.length}`} footer={footer}>
-      {step === "node" && <NodeStep report={report} recheck={recheck} />}
-      {step === "harness" && <HarnessStep report={report} pick={pick} onPick={setPick} />}
-      {step === "sign-in" && pick && <SignInStep id={pick} label={picked?.label || pick} rows={secrets} recheck={recheck} />}
-      {step === "first-agent" && pick && <FirstAgentStep id={pick} secrets={secrets} providers={providers} catalog={catalog} />}
+    <AppDialog open onOpenChange={() => {}} title={local ? SETUP_STEPS[idx].title : title} description={local ? `Step ${idx + 1} of ${SETUP_STEPS.length}` : `Step ${idx + 1} of ${SETUP_STEPS.length}: ${SETUP_STEPS[idx].title}`} footer={footer}>
+      {step === "node" && <NodeStep report={report} recheck={recheck} st={st} where={local ? "this computer" : `runner ${st.runner}`} />}
+      {step === "harness" && <HarnessStep report={report} pick={pick} onPick={setPick} st={st} />}
+      {step === "sign-in" && pick && <SignInStep id={pick} label={picked?.label || pick} rows={secrets} recheck={recheck} st={st} />}
+      {step === "first-agent" && pick && <FirstAgentStep id={pick} secrets={secrets} providers={providers} catalog={catalog} runner={st.runner} />}
     </AppDialog>
   );
 }

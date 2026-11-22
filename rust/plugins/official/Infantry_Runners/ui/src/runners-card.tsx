@@ -3,10 +3,10 @@
 // The Runners card (RR-9): the runner list with each runner's status, Check / Rotate / Detach, and Add runner (two fields).
 // Kit parts reused: PanelCard, AppDialog, Field, Input, Button, StatusDot, RefusalBanner, EmptyState, Chip.
 import { useEffect, useState } from "react";
-import { Plug, Plus, RefreshCw, RotateCcw, ShieldCheck, Unplug } from "lucide-react";
+import { Plug, Plus, RefreshCw, RotateCcw, ShieldCheck, Unplug, Wrench } from "lucide-react";
 import { AppDialog, Button, EmptyState, Field, Input, PanelCard, RefusalBanner, StatusDot } from "@infantry/ui";
-import { useLinkState } from "@infantry/ui-plugin-api";
-import { pingLine, runnersStore, statusOf, useRunners, type CheckRow, type RunnerView } from "./store";
+import { openRunnerSetup, useLinkState } from "@infantry/ui-plugin-api";
+import { pingLine, runnersStore, statusOf, summaryLine, useRunners, type CheckRow, type RunnerSummary, type RunnerView } from "./store";
 
 /** Add runner: exactly two fields, the endpoint and the pasted bearer. `endpoint` prefills a Rotate. */
 export function AddRunnerDialog({ open, endpoint, onClose }: { open: boolean; endpoint: string; onClose: () => void }) {
@@ -95,7 +95,7 @@ function CheckRows({ rows }: { rows: CheckRow[] }) {
 }
 
 /** One runner: name and endpoint, the status dot with its reason, the contract and ping, the buttons. */
-export function RunnerRow({ runner, rows, checking, onCheck, onRotate, onDetach }: { runner: RunnerView; rows: CheckRow[]; checking: boolean; onCheck: () => void; onRotate: () => void; onDetach: () => void }) {
+export function RunnerRow({ runner, rows, checking, summary, onCheck, onSetup, onRotate, onDetach }: { runner: RunnerView; rows: CheckRow[]; checking: boolean; summary?: RunnerSummary; onCheck: () => void; onSetup: () => void; onRotate: () => void; onDetach: () => void }) {
   const st = statusOf(runner);
   const local = runner.name === "local";
   const ping = pingLine(runner);
@@ -112,10 +112,18 @@ export function RunnerRow({ runner, rows, checking, onCheck, onRotate, onDetach 
           <p className="truncate font-mono text-[11px] text-muted-foreground">{local ? "in this app (no link)" : runner.url}</p>
           {st.reason && <p className="text-xs text-danger">{st.reason}</p>}
           {ping && <p className="text-[11px] text-muted-foreground">{ping}</p>}
+          {summary && (
+            <p className="text-[11px] text-muted-foreground" data-testid="runner-summary">
+              {summaryLine(summary)}
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Button variant="outline" size="xs" disabled={checking} onClick={onCheck}>
             <ShieldCheck className="size-3" /> {checking ? "Checking…" : "Check"}
+          </Button>
+          <Button variant="outline" size="xs" onClick={onSetup} title="Install tools, sign in and set keys on this runner">
+            <Wrench className="size-3" /> Set up this runner
           </Button>
           {!local && (
             <>
@@ -140,11 +148,16 @@ export function RunnersCard() {
   const loaded = useRunners((s) => s.loaded);
   const checks = useRunners((s) => s.checks);
   const checking = useRunners((s) => s.checking);
+  const summaries = useRunners((s) => s.summaries);
   const refusal = useRunners((s) => s.refusal);
   const [dialog, setDialog] = useState<{ endpoint: string } | null>(null);
   useEffect(() => {
     if (link === "open") runnersStore().getState().refresh();
   }, [link]);
+  // One read of each reachable runner's machine for the row summary (an offline runner is not asked: it would only time out).
+  useEffect(() => {
+    for (const r of runners) if (r.state !== "offline" && !(r.name in summaries)) runnersStore().getState().summarize(r.name);
+  }, [runners, summaries]);
   const store = runnersStore().getState();
   return (
     <PanelCard
@@ -173,7 +186,9 @@ export function RunnersCard() {
               runner={r}
               rows={checks[r.name] ?? []}
               checking={checking === r.name}
+              summary={summaries[r.name]}
               onCheck={() => store.check(r.name)}
+              onSetup={() => openRunnerSetup(r.name)}
               onRotate={() => setDialog({ endpoint: r.url })}
               onDetach={() => store.detach(r.name)}
             />

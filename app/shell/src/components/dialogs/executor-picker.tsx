@@ -113,17 +113,20 @@ export function ExecutorPicker({
 }
 
 /** RR-9: where the agent runs. "Project default" stores nothing; then `local`, `any` and each paired runner (from `runner_admin list`). */
-export function RunnerPicker({ idPrefix, value, runners, onChange }: { idPrefix: string; value: string | null; runners: string[]; onChange: (runner: string | null) => void }) {
+/**
+ * RR-14: with `machine`, the picker names a machine to configure (Settings), not a placement: no "Project default" and no "any"; `local` is the default.
+ */
+export function RunnerPicker({ idPrefix, value, runners, onChange, machine }: { idPrefix: string; value: string | null; runners: string[]; onChange: (runner: string | null) => void; machine?: boolean }) {
   return (
     <Field id={`${idPrefix}-runner`} label="Runner">
-      <Select value={value ?? DEFAULT} onValueChange={(v) => onChange(v === DEFAULT ? null : v)}>
+      <Select value={value ?? (machine ? "local" : DEFAULT)} onValueChange={(v) => onChange(v === DEFAULT ? null : v)}>
         <SelectTrigger id={`${idPrefix}-runner`} className="w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={DEFAULT}>Project default</SelectItem>
+          {!machine && <SelectItem value={DEFAULT}>Project default</SelectItem>}
           <SelectItem value="local">local</SelectItem>
-          <SelectItem value="any">any</SelectItem>
+          {!machine && <SelectItem value="any">any</SelectItem>}
           {runners.map((r) => (
             <SelectItem key={r} value={r}>
               {r}

@@ -3,6 +3,7 @@
 // The ONE owner of view state. Components read it through useUi(); nothing duplicates it.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { layoutFor, type Layout } from "@infantry/client";
+import { OPEN_RUNNER_SETUP_EVENT } from "@infantry/ui-plugin-api/contract";
 
 /** A right-panel view id; which ones exist comes from the plugin registry (plugins/catalog.tsx). */
 export type RightTab = string;
@@ -21,6 +22,8 @@ interface UiState {
   leftOpen: boolean;
   rightOpen: boolean;
   dialog: DialogId;
+  /** RR-14: the runner the setup dialog is aimed at (`local` = this machine); reset when the dialog closes. */
+  setupRunner: string;
   /** Chat maximized: the header and tab bar step aside so the transcript and composer fill the column. */
   chatMax: boolean;
   /** The Assistant box (floating chat) is open. Its position and size are remembered by the window itself. */
@@ -72,6 +75,7 @@ export function UiProvider({ children }: { children: ReactNode }) {
     leftOpen: !narrow,
     rightOpen: !narrow,
     dialog: null,
+    setupRunner: "local",
     chatMax: false,
     assistantOpen: false,
     popouts: [],
@@ -96,6 +100,19 @@ export function UiProvider({ children }: { children: ReactNode }) {
     }
     if (!state.globalWorkers && state.workersOpen) setState((s) => ({ ...s, workersOpen: false }));
   }, [state.globalWorkers, state.workersOpen]);
+
+  // RR-14: a plugin (the Runners tab) asks for the setup of one runner through the host api; the same wizard opens aimed at it.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const runner = (e as CustomEvent<{ runner?: string }>).detail?.runner;
+      if (runner) setState((s) => ({ ...s, setupRunner: runner, dialog: "setup" }));
+    };
+    window.addEventListener(OPEN_RUNNER_SETUP_EVENT, on);
+    return () => window.removeEventListener(OPEN_RUNNER_SETUP_EVENT, on);
+  }, []);
+  useEffect(() => {
+    if (state.dialog !== "setup" && state.setupRunner !== "local") setState((s) => ({ ...s, setupRunner: "local" }));
+  }, [state.dialog, state.setupRunner]);
 
   const set = useCallback<UiActions["set"]>((key, value) => setState((s) => ({ ...s, [key]: value })), []);
   const toggle = useCallback<UiActions["toggle"]>((key) => setState((s) => ({ ...s, [key]: !s[key] })), []);

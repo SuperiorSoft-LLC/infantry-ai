@@ -146,6 +146,9 @@ export interface UiPluginModule {
  * The app state a plugin may read, besides its daemon link. The UI itself (the kit, TabPage, Field, RefusalBanner, `ago`)
  * is `@infantry/ui`, one of the HOST_MODULES.
  */
+/** The window event that asks the shell to open the setup wizard for one runner (`detail: {runner}`). */
+export const OPEN_RUNNER_SETUP_EVENT = "infantry:setup-runner";
+
 export interface HostApi {
   /** The daemon link's state (`open`, `connecting`, `closed`...); re-renders when it changes. */
   useLinkState(): string;
@@ -165,6 +168,8 @@ export interface HostApi {
   windowFrame(): WindowFrame | null;
   /** The shell's own updater, or null where it has none (a browser, a phone) (ARMORY-3). */
   shellUpdater(): ShellUpdater | null;
+  /** RR-14: opens the app's setup wizard aimed at the runner [runner] (`local` = this machine): tools, sign-in, keys and models there. */
+  openRunnerSetup(runner: string): void;
 }
 
 /** One busy agent, as a taskbar shows it. */

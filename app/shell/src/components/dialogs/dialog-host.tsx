@@ -44,7 +44,7 @@ export function DialogHost() {
   if (dialog === "new-ticket") return <TicketDialog ticketId={null} creating onClose={() => ui.set("dialog", null)} />;
   if (dialog === "board") return <BoardDialog onClose={() => ui.set("dialog", null)} />;
   if (dialog === "stats") return <StatsDialog onClose={() => ui.set("dialog", null)} />;
-  if (dialog === "setup") return <SetupWizardDialog onClose={() => ui.set("dialog", null)} />;
+  if (dialog === "setup") return <SetupWizardDialog runner={ui.setupRunner} onClose={() => ui.set("dialog", null)} />;
   const c = config[dialog];
   const close = () => ui.set("dialog", null);
   const blocked = dialog === "new-agent" ? addBlockedReason(agent) : null;

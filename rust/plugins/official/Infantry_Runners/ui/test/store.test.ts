@@ -3,7 +3,7 @@
 // RR-9: Add runner sends `runner_admin add` with the two values and the new row shows; an offline runner shows its reason.
 import { describe, expect, it } from "vitest";
 import type { Envelope } from "@infantry/ui-plugin-api";
-import { createRunnersStore, pingLine, statusOf } from "../src/store";
+import { createRunnersStore, pingLine, statusOf, summarizeProviders, summaryLine } from "../src/store";
 
 function link(up = true) {
   const sent: Envelope[] = [];
@@ -73,5 +73,23 @@ describe("the Runners store", () => {
     s.getState().add("wss://a", "b");
     expect(s.getState().adding).toBe(false);
     expect(s.getState().refusal).toMatch(/link is down/);
+  });
+});
+
+describe("RR-14 row summary", () => {
+  it("reads each reachable runner's providers (local plain, a paired one through runner_frame) and keeps one line", async () => {
+    const l = link();
+    const s = createRunnersStore(l);
+    s.getState().refresh();
+    answer(l, 0, { ok: true, runners: [LOCAL, { name: "box", url: "wss://x", state: "online" }] });
+    s.getState().summarize("local");
+    s.getState().summarize("box");
+    const asks = l.sent.slice(1).map((e) => (e.type === "runner_frame" ? JSON.parse(e.data) : { plain: e.type }));
+    expect(asks).toEqual([{ plain: "providers" }, { runner: "box", frame: "providers", data: JSON.stringify({ refresh: true }) }]);
+    l.push({ type: "providers", requestId: l.sent[2].requestId, data: JSON.stringify([{ id: "pi", available: true }, { id: "codex", available: false, unavailableReason: "codex is not installed (not on PATH)" }]) });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(summaryLine(s.getState().summaries.box)).toBe("Tools: pi · signed in: yes");
+    expect(summarizeProviders([{ id: "pi", available: false, unavailableReason: "pi is not signed in" }])).toEqual({ tools: ["pi"], signedIn: false });
+    expect(summaryLine({ tools: [], signedIn: false })).toBe("Tools: none installed · signed in: no");
   });
 });

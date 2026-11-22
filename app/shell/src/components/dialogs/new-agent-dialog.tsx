@@ -13,11 +13,13 @@ import {
   roleList,
   withDefaults,
   withRole,
+  isLocalRunner,
   type LauncherStore,
   type NewAgentDraft,
 } from "@infantry/client";
 import { EmptyState, Input, Textarea, cn } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
+import { runnerStores } from "@/daemon/runner-stores";
 import { ExecutorPicker, RunnerPicker } from "./executor-picker";
 import { RoleAvatar } from "@/components/agents/agent-avatar";
 import { RoleGlyph } from "@/components/agents/role-icon";
@@ -40,6 +42,28 @@ export function useLauncher() {
   return useStore(launcherStore(), (s) => s);
 }
 
+/**
+ * RR-14: the harnesses and model groups to pick from. With no runner, `local` or `any` they are this machine's (the launcher's own);
+ * with a paired runner picked they are THAT runner's `providers` and `models`, read through `runner_frame`, so only what is installed there shows.
+ */
+export function useExecutorLists(runner: string | null | undefined) {
+  const here = useLauncher();
+  const remote = !isLocalRunner(runner) && runner !== "any";
+  const st = runnerStores(remote ? runner : "local");
+  const open = useDaemon((s) => s.connection.state) === "open";
+  useEffect(() => {
+    if (!remote || !open) return;
+    st.providers.getState().refresh();
+    st.catalog.getState().refresh();
+  }, [remote, open, st]);
+  const providers = useStore(st.providers, (s) => s.data);
+  const loaded = useStore(st.providers, (s) => s.loaded);
+  const refusal = useStore(st.providers, (s) => s.refusal);
+  const catalog = useStore(st.catalog, (s) => s.data);
+  if (!remote) return { harnesses: here.harnesses, catalog: here.catalog, runners: here.runners, remote, loaded: here.loaded, refusal: null as string | null };
+  return { harnesses: providers, catalog, runners: here.runners, remote, loaded, refusal };
+}
+
 function Step({ n, title, missing, children }: { n: number; title: string; missing?: boolean; children: React.ReactNode }) {
   return (
     <section className="space-y-2" aria-label={title}>
@@ -54,7 +78,7 @@ function Step({ n, title, missing, children }: { n: number; title: string; missi
 
 export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDraft; onChange: (d: NewAgentDraft) => void; onSubmit: () => void }) {
   useRolesLoaded();
-  const { harnesses, catalog, runners } = useLauncher();
+  const { harnesses, catalog, runners, remote, loaded: listsLoaded, refusal } = useExecutorLists(draft.runner);
   const rolesById = useRoles((s) => s.roles);
   const bindings = useRoles((s) => s.bindings);
   const loaded = useRoles((s) => s.loaded);
@@ -124,12 +148,20 @@ export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDra
             catalog={catalog}
             onChange={(v) => onChange({ ...draft, ...v })}
           />
+          {remote && refusal && (
+            <p role="alert" className="text-xs text-danger">
+              Could not read the tools on runner {draft.runner}: {refusal}
+            </p>
+          )}
+          {remote && !refusal && listsLoaded && harnesses.length === 0 && (
+            <p className="text-xs text-muted-foreground">Nothing is installed on runner {draft.runner} yet. Settings &gt; Runners &gt; Set up this runner.</p>
+          )}
         </Step>
       )}
 
       {runners.length > 0 && (
         <Step n={3} title="Runner (optional)">
-          <RunnerPicker idPrefix="new-agent" value={draft.runner ?? null} runners={runners} onChange={(runner) => onChange({ ...draft, runner })} />
+          <RunnerPicker idPrefix="new-agent" value={draft.runner ?? null} runners={runners} onChange={(runner) => onChange(draft.runner === runner ? draft : { ...draft, runner, harness: null, group: null, model: null, effort: null })} />
         </Step>
       )}
 

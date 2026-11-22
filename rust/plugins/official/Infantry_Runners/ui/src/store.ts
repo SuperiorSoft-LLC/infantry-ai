@@ -6,7 +6,7 @@
 // sent once and never kept in the store.
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
-import { json, type Envelope, type FrameLink } from "@infantry/ui-plugin-api";
+import { json, runnerRequest, type Envelope, type FrameLink } from "@infantry/ui-plugin-api";
 
 export type RunnerWord = "online" | "offline" | "outdated" | "unknown";
 
@@ -22,6 +22,37 @@ export interface RunnerView {
   runnerId?: string | null;
 }
 
+/** What a runner's `providers` answer says about its machine: the agent tools that are there, and whether any can answer. */
+export interface RunnerSummary {
+  tools: string[];
+  signedIn: boolean;
+  /** Set when the runner could not be read (the refusal text). */
+  error?: string;
+}
+
+interface ProviderRow {
+  id: string;
+  available?: boolean;
+  unavailableReason?: string | null;
+}
+
+/** A tool counts as installed unless the runner says it is not (an unavailable one with another reason, such as not signed in, is installed). */
+const missingReason = /not installed|not on path|not found|missing/i;
+
+/** The summary of a `providers` answer; null when the answer is not a list. */
+export function summarizeProviders(raw: unknown): RunnerSummary | null {
+  if (!Array.isArray(raw)) return null;
+  const rows = raw as ProviderRow[];
+  const tools = rows.filter((h) => h.available !== false || !missingReason.test(h.unavailableReason ?? "")).map((h) => h.id);
+  return { tools, signedIn: rows.some((h) => h.available !== false) };
+}
+
+/** `Tools: pi, claude · signed in: yes`. */
+export function summaryLine(s: RunnerSummary): string {
+  if (s.error) return `Tools: unknown (${s.error})`;
+  return `Tools: ${s.tools.length ? s.tools.join(", ") : "none installed"} · signed in: ${s.signedIn ? "yes" : "no"}`;
+}
+
 export interface CheckRow {
   id: string;
   ok: boolean;
@@ -33,6 +64,8 @@ export interface RunnersState {
   runners: RunnerView[];
   loaded: boolean;
   checks: Record<string, CheckRow[]>;
+  /** RR-14: the one-line summary of each runner's machine, from its own `providers` answer (absent until read; error set when it could not be read). */
+  summaries: Record<string, RunnerSummary>;
   /** The runner a check is running for. */
   checking: string | null;
   refusal: string | null;
@@ -43,6 +76,8 @@ export interface RunnersState {
 
 export interface RunnersActions {
   refresh(): void;
+  /** RR-14: reads [name]'s `providers` (through `runner_frame` for a paired runner) and keeps the summary line. */
+  summarize(name: string): void;
   add(endpoint: string, bearer: string): void;
   check(name: string): void;
   detach(name: string): void;
@@ -144,12 +179,20 @@ export function createRunnersStore(link: FrameLink): RunnersStore {
     return {
       runners: [],
       loaded: false,
+      summaries: {},
       checks: {},
       checking: null,
       refusal: null,
       addError: null,
       adding: false,
       refresh: () => void send("list", {}),
+      summarize(name) {
+        const keep = (v: RunnerSummary) => set({ summaries: { ...get().summaries, [name]: v } });
+        runnerRequest(link, name, "providers", JSON.stringify({ refresh: true })).then(
+          (a) => keep(summarizeProviders(json<unknown>(a.data)) ?? { tools: [], signedIn: false, error: "unreadable answer" }),
+          (why: unknown) => keep({ tools: [], signedIn: false, error: String(why instanceof Error ? why.message : why).slice(0, 120) }),
+        );
+      },
       add(endpoint, bearer) {
         set({ adding: true, addError: null });
         if (!send("add", { endpoint: endpoint.trim(), bearer: bearer.trim() })) set({ adding: false });

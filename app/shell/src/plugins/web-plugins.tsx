@@ -29,7 +29,7 @@ import {
   type UiPluginsStore,
   type UiView,
 } from "@infantry/client";
-import { HOST_GLOBAL, SCOPE_ATTRIBUTE, UI_API_VERSION, type UiHost } from "@infantry/ui-plugin-api/contract";
+import { HOST_GLOBAL, OPEN_RUNNER_SETUP_EVENT, SCOPE_ATTRIBUTE, UI_API_VERSION, type UiHost } from "@infantry/ui-plugin-api/contract";
 import { host } from "@/host";
 import { daemonLink, daemonStore, useDaemon } from "@/daemon/daemon";
 import { pluginsStore, usePlugins } from "./use-plugins";
@@ -42,7 +42,8 @@ function installHost(): void {
   const lent: UiHost = {
     apiVersion: UI_API_VERSION,
     modules: { react: React, "react/jsx-runtime": JsxRuntime, "react-dom": ReactDom, "@infantry/ui": Kit },
-    api: { useLinkState: () => useDaemon((s) => s.connection.state), usePreference, useAgentActivity, AgentAvatar: HostAgentAvatar, windowFrame: () => host.window, shellUpdater: () => shellUpdater(host) },
+    api: { useLinkState: () => useDaemon((s) => s.connection.state), usePreference, useAgentActivity, AgentAvatar: HostAgentAvatar, windowFrame: () => host.window, shellUpdater: () => shellUpdater(host),
+      openRunnerSetup: (runner) => window.dispatchEvent(new CustomEvent(OPEN_RUNNER_SETUP_EVENT, { detail: { runner } })) },
   };
   (globalThis as Record<string, unknown>)[HOST_GLOBAL] = Object.freeze(lent);
 }
