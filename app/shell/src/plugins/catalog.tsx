@@ -162,7 +162,8 @@ function arrange(container: "center" | "right", tabs: TabEntry[]): TabEntry[] {
 export function tabsFor(container: "center" | "right", reg: SlotRegistry | null): TabEntry[] {
   const defs = container === "center" ? CENTRE : RIGHT;
   if (!reg) return arrange(container, defs.map((d) => ({ ...d, plugin: null })));
-  const declared = reg.tabs.filter((t) => (t.decl.container ?? "center") === container);
+  // A declaration with `"bar": false` stays registered (a layout or the bootstrap window draws it) but gets no tab in the bar.
+  const declared = reg.tabs.filter((t) => (t.decl.container ?? "center") === container && t.decl.bar !== false);
   const byId = new Map(declared.map((t) => [t.decl.id, t]));
   const known = new Set(defs.map((d) => d.declared).filter(Boolean) as string[]);
   // A catalog renderer serves its tab in whichever container declares it.

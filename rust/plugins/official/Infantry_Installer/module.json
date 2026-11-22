@@ -23,7 +23,7 @@
         "name": "infantry_installer_available",
         "action": "installer.read",
         "kind": "read",
-        "description": "Every plugin the sources offer and every plugin installed: id, name, version, what it requires, whether it is installed and enabled. Installs nothing: the owner installs from the Apps tab."
+        "description": "Every plugin the sources offer and every plugin installed: id, name, version, what it requires, whether it is installed and enabled. Installs nothing: the owner installs from the Apps screen of the desktop."
       }
     ]
   },
@@ -38,6 +38,7 @@
         "slot": "tab",
         "id": "infantry.installer",
         "label": "Apps",
+        "bar": false,
         "order": 2200
       }
     ]
