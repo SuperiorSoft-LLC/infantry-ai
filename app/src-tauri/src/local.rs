@@ -247,6 +247,10 @@ impl Agent {
             // Approvals are answered by the worker; a PTY's raw stdout is screen bytes; tool ends draw nothing yet.
             // Questions (RUST-PROMPT-1) are answered by the daemon path; the embedded runner has no prompt card yet.
             Ev::ApprovalRequested { .. } | Ev::QuestionAsked { .. } | Ev::ToolFinished { .. } | Ev::Stdout(_) => {}
+            // Background tasks (92d015d0): the daemon turns `Background` into task cards and wakes; the embedded runner has no
+            // task panel yet, so both are dropped here on purpose. `TaskNotice` is the CLI's own end notice, which the
+            // driver already folds into `Background`.
+            Ev::TaskNotice { .. } | Ev::Background(_) => {}
         }
     }
 
