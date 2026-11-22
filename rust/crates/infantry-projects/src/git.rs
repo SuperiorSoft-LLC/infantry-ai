@@ -167,7 +167,8 @@ pub fn run(git: &dyn GitCli, cwd: &Path, args: &[&str]) -> GitResult {
 
 /// True when `dir` is inside a git work tree (the main checkout or a linked worktree).
 pub fn is_repo(git: &dyn GitCli, dir: &Path) -> bool {
-    dir.is_dir() && {
+    // `path_exists` asks the host git runs on (a runner's disk, not this machine's, for a remote clone).
+    git.path_exists(dir) && {
         let r = run(git, dir, &["rev-parse", "--is-inside-work-tree"]);
         r.ok() && r.out() == "true"
     }
@@ -194,11 +195,16 @@ pub fn main_root(git: &dyn GitCli, repo: &Path) -> PathBuf {
     let r = run(git, repo, &["rev-parse", "--path-format=absolute", "--git-common-dir"]);
     if r.ok() {
         let common = PathBuf::from(r.out().lines().next().unwrap_or("").trim());
-        if common.is_dir() && common.file_name().is_some_and(|n| n == ".git") {
+        if git.path_exists(&common) && common.file_name().is_some_and(|n| n == ".git") {
             if let Some(parent) = common.parent() {
-                return crate::paths::native(parent);
+                // A path git printed on a remote host stays as that host wrote it; only a local one is made native.
+                return if common.is_dir() { crate::paths::native(parent) } else { parent.to_path_buf() };
             }
         }
+    }
+    // Never canonicalize a path that exists only on another host: it would gain this machine's drive and separators.
+    if !repo.exists() && git.path_exists(repo) {
+        return repo.to_path_buf();
     }
     crate::paths::canonical(repo)
 }
@@ -211,4 +217,28 @@ pub fn common_dir(git: &dyn GitCli, dir: &Path) -> Option<PathBuf> {
     let r = run(git, dir, &["rev-parse", "--path-format=absolute", "--git-common-dir"]);
     let line = r.some_out()?.lines().next()?.trim().to_string();
     (!line.is_empty()).then(|| crate::paths::canonical(Path::new(&line)))
+}
+
+#[cfg(test)]
+mod remote_host_tests {
+    use super::*;
+
+    /// A git on another host: every path exists there, none exists on this machine.
+    struct Elsewhere;
+    impl GitCli for Elsewhere {
+        fn run(&self, _cwd: &Path, args: &[&str]) -> std::io::Result<GitResult> {
+            let out = if args.contains(&"--git-common-dir") { "/tmp/x/clones/p/.git\n" } else { "true\n" };
+            Ok(GitResult { args: args.iter().map(|s| s.to_string()).collect(), exit_code: 0, stdout: out.into(), stderr: String::new() })
+        }
+        fn path_exists(&self, _path: &Path) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn a_path_that_exists_only_on_the_git_host_is_a_repo_and_keeps_its_form() {
+        let p = Path::new("/tmp/x/clones/p");
+        assert!(is_repo(&Elsewhere, p));
+        assert_eq!(main_root(&Elsewhere, p), PathBuf::from("/tmp/x/clones/p"));
+    }
 }
