@@ -170,7 +170,8 @@ resets a key to its default. These keys are app-scope only. Daemon code reads th
 | `INFANTRY_DOCKER_IMAGE` | `urls.dockerImage` | `infantryai/infantry-ai` | The image a Docker install reports for `docker pull` |
 
 Not in the registry, because they are not the product's own addresses: `INFANTRY_WEB_HOSTS` (the host names the
-browser client may use), `INFANTRY_DOMAIN` (Caddy's site address in `docker/compose.yaml`'s `tls` profile) and
+browser client may use), `INFANTRY_WEB_ORIGINS` (extra app-webview origins admitted on `/ws` next to the Tauri ones),
+`INFANTRY_UI_TRANSPORT` (`direct`, default: the desktop window's own WebSocket; `plugin`: tauri-plugin-websocket; the phone always uses the plugin), `INFANTRY_DOMAIN` (Caddy's site address in `docker/compose.yaml`'s `tls` profile) and
 `INFANTRY_IMAGE` (the image compose runs). The browser client dials the host that served it, so the web demo needs no
 daemon URL setting. Build-time links (`gradle/sdk-central.gradle.kts`: `-Pinfantry.url`, `-Pinfantry.scm.url`) are
 Gradle properties; the CI workflows use `${GITHUB_REPOSITORY}`.

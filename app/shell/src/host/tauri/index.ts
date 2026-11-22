@@ -8,7 +8,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { browserHost, daemonGetRefusal, externalOpener, type Host, type HostEndpoint, type HostWindow, type QrScanner } from "@infantry/client";
+import { browserHost, browserTransport, chooseTransport, daemonGetRefusal, parseTransportSetting, withFallback, externalOpener, type Host, type HostEndpoint, type HostWindow, type QrScanner } from "@infantry/client";
 import { tauriTransport } from "./transport";
 import { embeddedRunner } from "./embedded";
 
@@ -51,6 +51,7 @@ const browser = browserHost();
 export function tauriHost(): Host {
   // A phone build connects to a remote daemon and runs none; its `endpoint` says mode `remote` (mobile.rs), which settles
   // it before the first render. Until then the WebView's platform is the guess.
+  let setting = parseTransportSetting(null);
   let phone = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   return {
     get kind() {
@@ -69,9 +70,15 @@ export function tauriHost(): Host {
     async endpoint() {
       const e = await invoke<HostEndpoint>("endpoint");
       phone = e.mode === "remote";
+      setting = parseTransportSetting(e.transport);
       return e;
     },
-    transport: (url, token) => tauriTransport(url, token),
+    // PERF: the webview's own WebSocket (no plugin IPC message per frame); the plugin when the setting says so, on an https
+    // page (cleartext ws is mixed content there), or when the direct socket cannot open.
+    transport: (url, token) =>
+      chooseTransport(setting, url, location.protocol) === "plugin"
+        ? tauriTransport(url, token)
+        : withFallback(browserTransport(url, token), tauriTransport(url, token), (r) => console.warn(`direct daemon socket failed (${r}); using the plugin`)),
     call: <T>(command: string, args?: Record<string, unknown>) => invoke<T>(command, args),
     listen: <T>(event: string, handler: (payload: T) => void) => listen<T>(event, (e) => handler(e.payload)),
     async pickFolder(title) {

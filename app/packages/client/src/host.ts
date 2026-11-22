@@ -26,6 +26,8 @@ export interface HostEndpoint {
   error?: string | null;
   /** Daemon mode: the running sidecar is older than the daemon binary on disk (restart it). */
   note?: string | null;
+  /** The desktop window's daemon socket: `direct` (the webview's own WebSocket, default) or `plugin` (INFANTRY_UI_TRANSPORT). */
+  transport?: string | null;
   /** Remote mode: the paired daemon's display name. */
   name?: string | null;
 }
