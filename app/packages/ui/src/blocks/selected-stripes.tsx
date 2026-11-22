@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// RUST-UI-2: slowly scrolling diagonal stripes behind a selected card (mimics SelectedStripes.kt: accent at 14%,
-// 10px stripes every 28px along x, one period per 3s). Pure CSS transform on the compositor; static under reduced motion.
+// RUST-UI-2: slowly drifting plaid (crossing bands, accent at 10%, 28px period, 3s) behind a selected card. Pure CSS transform on the compositor; static under reduced motion.
 import { useEffect } from "react";
 import { cn } from "../lib/utils";
 
