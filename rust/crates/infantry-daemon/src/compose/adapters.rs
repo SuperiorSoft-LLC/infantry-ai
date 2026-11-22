@@ -290,6 +290,19 @@ impl BoardEnv for DaemonBoardEnv {
             }
         }
     }
+    fn notify_inbox(&self, session_id: &str, subject: &str, line: &str) -> bool {
+        if let Some((_, attention)) = self.lead_notice.get() {
+            let _ = attention.raise(&infantry_mail::notify::attention::AttentionRaise {
+                kind: "notice".into(),
+                session_id: Some(session_id.to_string()),
+                outcome: "inbox:ticket.notify".into(),
+                detail: format!("{subject}
+{line}"),
+                ..Default::default()
+            });
+        }
+        true
+    }
     fn alert_session(&self, session_id: &str, subject: &str, line: &str, ticket_id: &str) -> bool {
         let t0 = std::time::Instant::now();
         let r = self.daemon.deliver_urgent(session_id, &format!("{subject}\n{line}"));

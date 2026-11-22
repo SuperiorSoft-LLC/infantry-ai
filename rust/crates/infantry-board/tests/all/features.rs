@@ -204,3 +204,49 @@ fn a_comment_notifies_under_its_wake_kind_and_key() {
     let notices = f.env.notices.lock().unwrap().clone();
     assert_eq!(notices[2], "sess-qa-1 comment.done ticket-00000001", "{notices:?}");
 }
+
+/// WAKE-UI-2: the creator is on a new ticket's notify list by default (the picker only adds), a comment reaches them, and
+/// a recipient set to Inbox is kept out of the wake path; a session matched by agent, role and session hears it once.
+#[test]
+fn creator_is_notified_by_default_and_recipients_take_a_mode() {
+    let mut env = kotlin_daemon_env();
+    env.registry = vec!["dev".into(), "pm".into()];
+    env.live = vec![("pm".into(), "sess-pm".into())];
+    env.live_roles = vec![("pm".into(), "sess-pm".into()), ("qa".into(), "sess-qa".into())];
+    let f = fixture("notifymodes", env);
+    three(&f);
+    let creator = CommentAuthor { kind: CommentAuthor::SESSION.into(), session_id: Some("sess-dev".into()), agent_id: Some("dev".into()) };
+    block_on(f.orch.record_creator("ticket-00000001".into(), creator, None)).unwrap();
+    // The creator is on the list with no picker involved.
+    let n = block_on(f.orch.notify_edit(NotifyEdit { ticket_id: "ticket-00000001".into(), ..Default::default() })).unwrap();
+    assert!(n.contains(&"dev".to_string()), "{n:?}");
+    // The picker adds: the pm agent and its role (wake) and qa (inbox); the creator stays.
+    let n = block_on(f.orch.notify_edit(NotifyEdit {
+        ticket_id: "ticket-00000001".into(),
+        add: vec!["pm".into(), "role:pm#wake".into(), "role:qa#inbox".into()],
+        ..Default::default()
+    }))
+    .unwrap();
+    assert!(n.contains(&"dev".to_string()) && n.contains(&"role:qa#inbox".to_string()), "{n:?}");
+    // Changing a mode replaces the entry; removing by bare name drops it whatever its mode.
+    let n = block_on(f.orch.notify_edit(NotifyEdit { ticket_id: "ticket-00000001".into(), add: vec!["role:qa#wake".into()], ..Default::default() })).unwrap();
+    assert!(n.contains(&"role:qa".to_string()) && !n.iter().any(|e| e.starts_with("role:qa#")), "{n:?}");
+    block_on(f.orch.notify_edit(NotifyEdit { ticket_id: "ticket-00000001".into(), add: vec!["role:qa#inbox".into()], ..Default::default() })).unwrap();
+    block_on(f.orch.comment_add(CommentAdd {
+        ticket_id: "00000001".into(),
+        body: "ping".into(),
+        kind: None,
+        state: None,
+        author: CommentAuthor::owner(),
+        wake_kind: None,
+        wake_key: None,
+    }))
+    .unwrap();
+    let got = f.env.notified.lock().unwrap().clone();
+    // pm matches by agent and by role but is woken once; qa is inbox; the creator's live session (none here) is not mailed twice.
+    assert_eq!(got.iter().filter(|l| l.starts_with("sess-pm ")).count(), 1, "{got:?}");
+    assert_eq!(got.iter().filter(|l| l.starts_with("inbox sess-qa ")).count(), 1, "{got:?}");
+    assert!(!got.iter().any(|l| l.starts_with("sess-qa ")), "{got:?}");
+    let n = block_on(f.orch.notify_edit(NotifyEdit { ticket_id: "ticket-00000001".into(), remove: vec!["role:qa".into()], ..Default::default() })).unwrap();
+    assert!(!n.iter().any(|e| e.starts_with("role:qa")), "{n:?}");
+}

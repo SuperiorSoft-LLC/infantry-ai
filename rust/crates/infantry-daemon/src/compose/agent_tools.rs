@@ -651,6 +651,18 @@ mod wake_route_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// WAKE-UI-2: a plain COMMS mail has no kind: it is `mail.direct` and is delivered (it wakes), not parked. A build notice
+    /// that reads green only when its sender names kind `build.success`; the live-test fixture line carried no conclusion.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_mail_without_a_kind_is_direct_and_delivered() {
+        let (dir, _daemon, c, pm) = setup();
+        let inv = ToolInvoker::automation(None, "script:test");
+        let a = json!({"to": pm, "body": "plain", "subject": "plain"});
+        assert!(c.tools.invoke("infantry_message", a.as_object().unwrap(), &inv).text.starts_with("sent"));
+        assert_eq!(c.mail.mailbox().inbox(&pm).len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn a_failure_comment_and_the_failure_mail_wake_once() {
         let (dir, _daemon, c, pm) = setup();

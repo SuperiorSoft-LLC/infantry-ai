@@ -63,6 +63,18 @@ fn comment_of(r: &Row<'_>) -> rusqlite::Result<Comment> {
     })
 }
 
+/// WAKE-UI-2: the suffix of a notify entry that is delivered to the inbox only.
+pub const INBOX_MODE: &str = "#inbox";
+
+/// `(<target>, inbox?)` of a notify entry (`agent`, `session`, `role:<name>`, `owner`, each with an optional `#wake` / `#inbox`).
+pub fn split_mode(entry: &str) -> (&str, bool) {
+    if let Some(t) = entry.strip_suffix(INBOX_MODE) {
+        (t.trim(), true)
+    } else {
+        (entry.strip_suffix("#wake").unwrap_or(entry).trim(), false)
+    }
+}
+
 /// A ticket's creator and notify list.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Meta {
@@ -119,7 +131,8 @@ impl Comments {
     pub fn validate_targets(&self, ids: &[String]) -> Result<Vec<String>, OrchError> {
         let mut out: Vec<String> = Vec::new();
         for raw in ids {
-            let id = raw.trim();
+            // WAKE-UI-2: `<target>#inbox` keeps the notice in the inbox (no turn); `#wake` (the default) is not stored.
+            let (id, inbox) = split_mode(raw.trim());
             if id.is_empty() {
                 return Err(refused("a notify target is a non-blank agent id"));
             }
@@ -137,9 +150,10 @@ impl Comments {
                     "'{id}' is not an agent id, a session id or a role; notify takes agent ids, session ids and `role:<name>`"
                 )));
             };
-            if !out.contains(&ok) {
-                out.push(ok);
-            }
+            let ok = if inbox { format!("{ok}{INBOX_MODE}") } else { ok };
+            // The same recipient twice keeps the later mode.
+            out.retain(|o| split_mode(o).0 != split_mode(&ok).0);
+            out.push(ok);
         }
         Ok(out)
     }
@@ -173,7 +187,7 @@ impl Comments {
                     v.push(OWNER_ENTRY.to_string()); // a human creator hears it in the app
                 }
                 for d in self.project_defaults(project_id) {
-                    if !v.contains(&d) {
+                    if !v.iter().any(|x| split_mode(x).0 == split_mode(&d).0) {
                         v.push(d);
                     }
                 }
@@ -219,11 +233,15 @@ impl Comments {
             // A ticket saved over the wire has no row yet: it starts from the project's default list.
             None => current.as_ref().map(|m| m.notify.clone()).unwrap_or_else(|| self.project_defaults(project_id)),
         };
-        let gone: Vec<String> = remove.iter().map(|r| r.trim()).flat_map(|r| [r.to_string(), format!("role:{r}")]).collect();        let mut next: Vec<String> = Vec::new();
+        let gone: Vec<String> = remove.iter().map(|r| split_mode(r.trim()).0.to_string()).flat_map(|r| [r.clone(), format!("role:{r}")]).collect();
+        let mut next: Vec<String> = Vec::new();
         for id in base.into_iter().chain(self.validate_targets(add)?) {
-            if !next.contains(&id) && !gone.contains(&id) {
-                next.push(id);
+            if gone.iter().any(|g| g == split_mode(&id).0) {
+                continue;
             }
+            // An added entry for a recipient already listed replaces it (this is how a mode changes).
+            next.retain(|n| split_mode(n).0 != split_mode(&id).0);
+            next.push(id);
         }
         let text = next.join("\n");
         self.db
@@ -324,7 +342,12 @@ impl Comments {
         let subject = format!("ticket comment {short}");
         let mut missed = Vec::new();
         let mut sent: Vec<String> = Vec::new();
-        for entry in agents {
+        // A wake recipient is handled before an inbox one, so a session that matches both is woken, not parked.
+        let mut agents = agents;
+        agents.sort_by_key(|e| split_mode(e).1);
+        for full in agents {
+            let (entry, inbox) = split_mode(&full);
+            let entry = entry.to_string();
             if author.agent_id.as_deref() == Some(entry.as_str()) || author.session_id.as_deref() == Some(entry.as_str()) {
                 continue;
             }
@@ -349,6 +372,11 @@ impl Comments {
             for s in &sessions {
                 if sent.contains(s) {
                     delivered += 1; // already got this comment through another entry
+                } else if inbox {
+                    if self.env.notify_inbox(s, &subject, &line) {
+                        sent.push(s.clone());
+                        delivered += 1;
+                    }
                 } else if self.env.notify_notice(s, wake.map_or_else(|| format!("comment.{kind}"), |w| w.0.clone()).as_str(), wake.filter(|w| !w.1.is_empty()).map_or(if kind == "done" { ticket_id } else { comment_id }, |w| w.1.as_str()), &subject, &line) {
                     sent.push(s.clone());
                     delivered += 1;
