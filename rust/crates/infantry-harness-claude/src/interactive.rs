@@ -529,7 +529,7 @@ impl Interactive {
                     Some(Turn { own: true, submitted: true, opened_at: now, stop_at: self.unclaimed_stop_at.take(), ..Default::default() });
                 out.push(HarnessEvent::Warning(format!("claude: started a turn of its own ({why})")));
             } else if !self.queue.is_empty() && self.started_at.is_none() && screen::setup_screen(&screen::squeeze_rows(&self.rows)) {
-                let reason = format!("{NOT_SIGNED_IN} Screen: {}", self.screen_tail());
+                let reason = NOT_SIGNED_IN.to_string();
                 self.fail_queue(&reason, out);
             } else if !self.queue.is_empty() && self.ready() {
                 let prompt = self.queue.pop_front().unwrap_or_default();

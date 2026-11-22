@@ -212,14 +212,11 @@ fn config_file(probe: &dyn Probe) -> Option<PathBuf> {
 /// Before an interactive launch with a subscription token (Kotlin `ClaudeSignIn.prepare`): a CLI that holds a login but never
 /// finished its first-run setup opens on the theme picker, where a turn would wait forever. Marks the setup done, merged into its
 /// config (made when missing). A login is a subscription token in [env] or the CLI's own credentials file (`claude auth login`).
-/// Touches nothing without a login, with a finished setup (onboarding done and a theme chosen) or a file it cannot parse.
+/// Touches nothing with a finished setup (onboarding done and a theme chosen) or a file it cannot parse.
 /// True = written. The theme picker is the first screen of an unseeded config, so a `theme` is seeded next to the flag.
 pub fn prepare_onboarding(env: &[(String, String)], probe: &dyn Probe) -> bool {
-    let token = env.iter().any(|(k, v)| k == OAUTH_TOKEN_ENV && !v.trim().is_empty());
-    let credentials = config_dir(probe).map(|d| d.join(CREDENTIALS_FILE)).and_then(|p| probe.read_to_string(&p)).is_some_and(|t| !t.trim().is_empty());
-    if !token && !credentials {
-        return false;
-    }
+    // Seeded with or without a login: a fresh runner has none yet, and the theme picker would hide the login step.
+    let _ = env;
     let Some(file) = config_file(probe) else { return false };
     let mut config = match probe.read_to_string(&file) {
         None if !probe.exists(&file) => serde_json::Map::new(),
