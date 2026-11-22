@@ -411,6 +411,15 @@ pub fn call(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> Opti
             }
             Ok(out)
         })(),
+        "infantry_ticket_notify" => (|| {
+            let t = board.find(&s(a, "ticketId").ok_or("ticketId is required")?).map_err(err)?;
+            let m = board.comment_store().map_err(err)?.meta(&t.id).map_err(err)?;
+            let (by, list) = match m {
+                Some(m) => (m.created_by, m.notify),
+                None => (String::new(), board.comment_store().map_err(err)?.project_defaults(t.project_id.as_deref())),
+            };
+            Ok(serde_json::json!({ "createdBy": by, "notify": list }).to_string())
+        })(),
         "infantry_ticket_comments" => (|| {
             let full = s(a, "detail").as_deref() == Some("full");
             let comments = if let Some(cid) = s(a, "commentId") {
@@ -489,7 +498,7 @@ mod tests {
     #[test]
     fn descriptors_name_the_pm_tools() {
         let n = names();
-        for t in ["infantry_agent_switch", "infantry_agent_queue", "infantry_ticket_create", "infantry_ticket_get", "infantry_ticket_update", "infantry_ticket_move", "infantry_ticket_start", "infantry_ticket_close", "infantry_ticket_restart", "infantry_ticket_comment", "infantry_ticket_comments", "infantry_board", "infantry_epic_base"] {
+        for t in ["infantry_agent_switch", "infantry_agent_queue", "infantry_ticket_create", "infantry_ticket_get", "infantry_ticket_update", "infantry_ticket_move", "infantry_ticket_start", "infantry_ticket_close", "infantry_ticket_restart", "infantry_ticket_comment", "infantry_ticket_comments", "infantry_ticket_notify", "infantry_board", "infantry_epic_base"] {
             assert!(n.iter().any(|x| x == t), "{t}");
         }
         assert_eq!(short("0123456789abcdef"), "89abcdef");

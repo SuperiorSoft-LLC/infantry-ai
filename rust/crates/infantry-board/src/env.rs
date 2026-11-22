@@ -215,6 +215,11 @@ pub trait BoardEnv: Send + Sync {
     fn notify_notice(&self, session_id: &str, _kind: &str, _key: &str, subject: &str, line: &str) -> bool {
         self.notify_session(session_id, subject, line)
     }
+    /// WAKE-UI-2: a notice for a notify recipient set to Inbox: kept in the attention list, never a turn.
+    /// Default: delivered like `notify_session`.
+    fn notify_inbox(&self, session_id: &str, subject: &str, line: &str) -> bool {
+        self.notify_session(session_id, subject, line)
+    }
     /// Like `notify_session` for a notice that needs action now (a worker failed, was killed, or ended without a done
     /// comment): the host should put it into the receiver's running turn and log it with its timestamp.
     fn alert_session(&self, session_id: &str, subject: &str, line: &str, _ticket_id: &str) -> bool {
@@ -440,6 +445,10 @@ impl BoardEnv for StaticEnv {
     }
     fn notify_owner(&self, title: &str, body: &str, _ticket_id: &str, _project_id: Option<&str>) -> bool {
         self.notified.lock().unwrap_or_else(|p| p.into_inner()).push(format!("owner {title} {body}"));
+        true
+    }
+    fn notify_inbox(&self, session_id: &str, _subject: &str, line: &str) -> bool {
+        self.notified.lock().unwrap_or_else(|p| p.into_inner()).push(format!("inbox {session_id} {line}"));
         true
     }
     fn is_live_session(&self, id: &str) -> bool {

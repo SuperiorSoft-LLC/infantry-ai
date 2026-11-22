@@ -389,6 +389,22 @@
   }
  },
  {
+  "name": "infantry_ticket_notify",
+  "readOnly": true,
+  "description": "Read a ticket's notify list as JSON {createdBy, notify:[entry]}. An entry is an agent id, session id, role:<name> or owner, with an optional #inbox (kept in the inbox, no turn; the default #wake is not written). Change it with infantry_ticket_update notify/addNotify/removeNotify.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticketId": {
+     "type": "string",
+     "description": "Full ticket id, or its 8-char suffix."
+    }
+   },
+   "required": ["ticketId"],
+   "additionalProperties": false
+  }
+ },
+ {
   "name": "infantry_ticket_comments",
   "readOnly": true,
   "description": "Read a ticket's comments, one compact line each (id, kind/state, author, time, text). which = latestOpen (default: the newest unresolved one), latest, first or all; kind filters done|issue|note|handoff; limit keeps the newest N of all. detail=full gives the whole body of every comment; commentId fetches ONE comment in full.",
