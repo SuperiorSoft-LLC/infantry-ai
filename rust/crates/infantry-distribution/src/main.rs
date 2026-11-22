@@ -58,7 +58,7 @@ fn main() {
         return;
     }
     if a.iter().any(|x| x == "--help" || x == "-h") {
-        println!("infantry-daemon [--port N] [--host H] [--mode both|runner|orchestrator] [--state-dir DIR] [--provider NAME] [--legacy-backend CMD] [--legacy-port N] [--gateway-routes JSON]");
+        println!("infantry-daemon [--port N] [--host H] [--mode both|runner|orchestrator] [--link-port N] [--link-bind H] [--runner-host H] [--runner-public-port N] [--state-dir DIR] [--provider NAME] [--legacy-backend CMD] [--legacy-port N] [--gateway-routes JSON]");
         return;
     }
     let port: u16 = match arg("--port").or_else(|| auth::env("INFANTRY_PORT")) {
@@ -91,7 +91,7 @@ fn main() {
     let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap_or_else(|e| fail(e.to_string()));
     // Every unit, registered over the session manager (inside the runtime: units start background tasks).
     match rt.block_on(async { infantry_daemon::compose::build_with_mode(&daemon, &state_dir, mode) }) {
-        Ok(composed) => register_runner_pool(&composed, &state_dir, mode),
+        Ok(composed) => register_runner_pool(&composed, &state_dir, mode, &arg),
         Err(e) => eprintln!("[infantry] units not composed, serving the sessions frames only: {e}"),
     }
     let gateway = arg("--legacy-backend").or_else(|| auth::env("INFANTRY_LEGACY_BACKEND")).map(|cmdline| {
@@ -145,8 +145,9 @@ fn main() {
 
 /// RUNNER POOL REGISTRATION SPOT (RR-1): the paired remote runners and the owner-only `runner_admin` frame. The daemon core
 /// never names the pool; this root adds it as a late unit. A runner-only daemon has no runners to drive.
-fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, state_dir: &std::path::Path, mode: infantry_daemon::mode::Mode) {
+fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, state_dir: &std::path::Path, mode: infantry_daemon::mode::Mode, arg: &dyn Fn(&str) -> Option<String>) {
     if mode == infantry_daemon::mode::Mode::Runner {
+        serve_runner_link(composed, state_dir, arg);
         return;
     }
     let pool = infantry_runner_pool::RunnerPool::open(state_dir);
@@ -165,4 +166,50 @@ fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, stat
             .filter(|n| *n > 0)
             .unwrap_or(infantry_runner_pool::DEFAULT_HEARTBEAT_SEC)
     }));
+}
+
+/// RUNNER SERVE SPOT (RR-2): a `--mode runner` daemon serves the runner link from start, over its own LocalRunner. The port
+/// is `--link-port`, else `INFANTRY_RUNNER_LINK_PORT`, else the setting `limits.runners.linkPort` (8790); the bind host
+/// `--link-bind`, `INFANTRY_RUNNER_BIND`, the setting `runners.linkBindHost` (127.0.0.1). The printed endpoint is
+/// `--runner-host` / `--runner-public-port`, then `INFANTRY_RUNNER_HOST` / `INFANTRY_RUNNER_PUBLIC_PORT`, then the setting
+/// `runners.advertiseHosts`, then `localhost`.
+fn serve_runner_link(composed: &Arc<infantry_daemon::compose::Composed>, state_dir: &std::path::Path, arg: &dyn Fn(&str) -> Option<String>) {
+    let setting = |key: &str| -> Option<serde_json::Value> {
+        let ask = infantry_protocol::envelope::Envelope::new("settings", serde_json::json!({"key": key}).to_string());
+        let v = composed.request(&ask, true).ok()?.into_iter().next().and_then(|e| serde_json::from_str::<serde_json::Value>(&e.data).ok())?;
+        Some(v["value"].clone()).filter(|v| !v.is_null() && v.as_str().map_or(true, |s| !s.trim().is_empty()))
+    };
+    let num = |v: Option<serde_json::Value>| v.and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))).and_then(|n| u16::try_from(n).ok());
+    let env = |k: &str| infantry_daemon::auth::env(k).filter(|s| !s.trim().is_empty());
+    let port = arg("--link-port")
+        .or_else(|| env("INFANTRY_RUNNER_LINK_PORT"))
+        .and_then(|s| s.trim().parse().ok())
+        .or_else(|| num(setting(infantry_runner_pool::LINK_PORT_KEY)))
+        .unwrap_or(infantry_runner_pool::DEFAULT_LINK_PORT);
+    if [8787, 8788, 8797, 8798].contains(&port) {
+        fail(format!("the runner link port {port} belongs to the owner's daemon or PM; pick another (limits.runners.linkPort)"));
+    }
+    let bind_host = arg("--link-bind")
+        .or_else(|| env("INFANTRY_RUNNER_BIND"))
+        .or_else(|| setting(infantry_runner_pool::LINK_BIND_KEY).and_then(|v| v.as_str().map(str::to_string)))
+        .unwrap_or_else(|| infantry_runner_pool::DEFAULT_LINK_BIND.into());
+    let opts = infantry_runner_pool::ServeOptions {
+        bind_host,
+        port,
+        name: env("INFANTRY_RUNNER_NAME"),
+        public_host: arg("--runner-host").or_else(|| env("INFANTRY_RUNNER_HOST")),
+        public_port: arg("--runner-public-port").or_else(|| env("INFANTRY_RUNNER_PUBLIC_PORT")).and_then(|s| s.trim().parse().ok()),
+        advertise_hosts: setting(infantry_runner_pool::ADVERTISE_KEY).map(|v| infantry_runner_pool::advertise_hosts(&v)).unwrap_or_default(),
+        allow_projects: env("INFANTRY_RUNNER_ALLOW_PROJECTS").unwrap_or_else(|| "*".into()),
+        allow_harnesses: env("INFANTRY_RUNNER_ALLOW_HARNESSES").unwrap_or_else(|| "*".into()),
+        app_version: env!("CARGO_PKG_VERSION").into(),
+    };
+    let backend = infantry_runner_link::process::ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default()));
+    match infantry_runner_pool::RunnerServe::start(state_dir, Box::new(backend), opts) {
+        Ok(serve) => {
+            let frames = [infantry_runner_pool::ADMIN_FRAME.to_string()];
+            composed.late.add("runner-pool", &frames, Arc::new(infantry_runner_pool::RunnerSideAdmin { serve }));
+        }
+        Err(e) => fail(e),
+    }
 }

@@ -7,6 +7,8 @@
 
 mod admin;
 mod pool;
+mod serve;
 
 pub use admin::{AdminUnit, ADMIN_FRAME};
+pub use serve::{advertise_hosts, RunnerServe, RunnerSideAdmin, ServeOptions, ADVERTISE_KEY, DEFAULT_LINK_BIND, DEFAULT_LINK_PORT, LINK_BIND_KEY, LINK_PORT_KEY};
 pub use pool::{RunnerPool, RunnerState, DEFAULT_HEARTBEAT_SEC, HEARTBEAT_KEY};

@@ -86,6 +86,8 @@ pub struct LinkServer {
     bearer: Option<Bearer>,
     backend: Box<dyn Backend>,
     audit: Option<PathBuf>,
+    /// What the hello says this runner is: (kind, app version).
+    identity: Option<(String, String)>,
     /// The longest a frames_pull is held here (below the caller's call timeout).
     pub push_wait_cap: Duration,
     pub push_frames_max: usize,
@@ -130,6 +132,7 @@ impl LinkServer {
             bearer,
             backend,
             audit,
+            identity: None,
             push_wait_cap: Duration::from_secs(20),
             push_frames_max: 500,
             clock: Box::new(now_ms),
@@ -139,6 +142,12 @@ impl LinkServer {
 
     pub fn with_clock(mut self, clock: impl Fn() -> i64 + Send + Sync + 'static) -> Self {
         self.clock = Box::new(clock);
+        self
+    }
+
+    /// The kind (`runner`) and app version the hello carries.
+    pub fn with_identity(mut self, kind: &str, app_version: &str) -> Self {
+        self.identity = Some((kind.into(), app_version.into()));
         self
     }
 
@@ -211,6 +220,8 @@ impl LinkServer {
                     capacity: info.capacity,
                     os: info.os,
                     offers: info.offers,
+                    kind: self.identity.as_ref().map(|i| i.0.clone()),
+                    app_version: self.identity.as_ref().map(|i| i.1.clone()),
                 };
                 self.ok(&seat, t, from, &a)
             }

@@ -12,4 +12,11 @@ publish = false
 infantry-core = { path = "../infantry-core" }
 infantry-protocol = { path = "../infantry-protocol" }
 infantry-runner-link = { path = "../infantry-runner-link" }
+infantry-runner-api = { path = "../infantry-runner-api" }
 serde_json = { version = "1", features = ["preserve_order"] }
+
+[dev-dependencies]
+infantry-runner-local = { path = "../infantry-runner-local" }
+infantry-runner-api = { path = "../infantry-runner-api" }
+tokio = { version = "1", features = ["rt", "macros"] }
+uuid = { version = "1", features = ["v4"] }

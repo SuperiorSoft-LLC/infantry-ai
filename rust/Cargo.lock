@@ -1263,6 +1263,8 @@ dependencies = [
  "infantry-harness-opencode",
  "infantry-harness-pi",
  "infantry-protocol",
+ "infantry-runner-link",
+ "infantry-runner-local",
  "infantry-runner-pool",
  "serde_json",
  "tokio",
@@ -1589,8 +1591,12 @@ version = "0.4.7"
 dependencies = [
  "infantry-core",
  "infantry-protocol",
+ "infantry-runner-api",
  "infantry-runner-link",
+ "infantry-runner-local",
  "serde_json",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
