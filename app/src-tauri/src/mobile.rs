@@ -25,6 +25,8 @@ struct Endpoint {
     perf: Option<String>,
     /// The paired daemon's display name, when the link carried one.
     name: Option<String>,
+    /// The phone keeps the plugin socket (its WebView rules are untested for a direct one): INFANTRY_UI_TRANSPORT is a desktop knob.
+    transport: &'static str,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -123,7 +125,7 @@ fn endpoint(app: AppHandle) -> Endpoint {
         Ok(t) => (t, None),
         Err(e) => (None, Some(format!("the token could not be read from the keystore: {e}"))),
     };
-    Endpoint { url: r.url.unwrap_or_default(), token, stress: false, local: false, mode: "remote", error, perf: None, name: r.name }
+    Endpoint { url: r.url.unwrap_or_default(), token, stress: false, local: false, mode: "remote", error, perf: None, name: r.name, transport: "plugin" }
 }
 
 /// Pairs with a daemon: keeps the address and name, puts the token in the keystore (none = removes it). Answers the

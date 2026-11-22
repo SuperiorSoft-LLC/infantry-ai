@@ -8,6 +8,9 @@
 //! - A request with an Origin header is refused, except a same-origin browser on `/ws` whose Host is in
 //!   `INFANTRY_WEB_HOSTS`, on a token daemon, presenting the bearer (header, or the `infantry.bearer.<base64url>`
 //!   subprotocol, answered with `infantry`).
+//! - The app's own webview (Tauri, `TAURI_ORIGINS` plus `INFANTRY_WEB_ORIGINS`) is the one Origin admitted on `/ws` like
+//!   a non-browser client: a web page cannot forge it, so the loopback Host check (no token) or the bearer (header or
+//!   subprotocol) is all it needs. The desktop window opens its own `WebSocket` this way (no plugin IPC hop).
 
 use base64::Engine;
 use sha2::{Digest, Sha256};
@@ -16,6 +19,10 @@ pub const MIN_TOKEN_LENGTH: usize = 32;
 pub const TOKEN_ENV: &str = "INFANTRY_TOKEN";
 pub const TOKEN_FILE_ENV: &str = "INFANTRY_TOKEN_FILE";
 pub const WEB_HOSTS_ENV: &str = "INFANTRY_WEB_HOSTS";
+/// Extra app-webview origins (comma separated) admitted on `/ws` next to [`TAURI_ORIGINS`].
+pub const WEB_ORIGINS_ENV: &str = "INFANTRY_WEB_ORIGINS";
+/// The origins Tauri 2 serves its page from: macOS/Linux, Windows, and Android/Windows with `useHttpsScheme`.
+pub const TAURI_ORIGINS: [&str; 3] = ["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"];
 pub const OPEN_PATH: &str = "/health";
 pub const BEARER_PROTOCOL_PREFIX: &str = "infantry.bearer.";
 /// The subprotocol the daemon answers a browser with.
@@ -69,6 +76,7 @@ pub struct Refusal {
 pub struct AccessPolicy {
     digest: Option<[u8; 32]>,
     browser_hosts: Vec<String>,
+    app_origins: Vec<String>,
 }
 
 fn digest(s: &str) -> [u8; 32] {
@@ -110,7 +118,11 @@ impl AccessPolicy {
         let browser_hosts = env(WEB_HOSTS_ENV)
             .map(|v| v.split(',').map(|h| h.trim().to_ascii_lowercase()).filter(|h| !h.is_empty()).collect())
             .unwrap_or_default();
-        Ok(AccessPolicy { digest: token.map(digest), browser_hosts })
+        let mut app_origins: Vec<String> = TAURI_ORIGINS.iter().map(|o| o.to_string()).collect();
+        if let Some(v) = env(WEB_ORIGINS_ENV) {
+            app_origins.extend(v.split(',').map(|o| o.trim().trim_end_matches('/').to_ascii_lowercase()).filter(|o| !o.is_empty()));
+        }
+        Ok(AccessPolicy { digest: token.map(digest), browser_hosts, app_origins })
     }
 
     pub fn token_required(&self) -> bool {
@@ -140,6 +152,9 @@ impl AccessPolicy {
     pub fn check(&self, path: &str, host: Option<&str>, origin: Option<&str>, authorization: Option<&str>, protocols: Option<&str>) -> Option<Refusal> {
         const LOOPBACK: &str = "the Host header must name the loopback address (localhost, 127.0.0.1 or [::1])";
         if let Some(o) = origin {
+            if path == "/ws" && self.is_app_origin(o) {
+                return self.check_app(host, authorization, protocols);
+            }
             if path != "/ws" {
                 return Some(Refusal { status: 403, reason: "requests carrying an Origin header are refused: this daemon is not a browser API", challenge_bearer: false });
             }
@@ -153,6 +168,28 @@ impl AccessPolicy {
             };
         }
         if path == OPEN_PATH || self.bearer_matches(authorization) {
+            None
+        } else {
+            Some(Refusal { status: 401, reason: "a bearer token is required", challenge_bearer: true })
+        }
+    }
+
+    /// True when [origin] is one of the app webview's own origins.
+    pub fn is_app_origin(&self, origin: &str) -> bool {
+        let o = origin.trim().trim_end_matches('/').to_ascii_lowercase();
+        self.app_origins.iter().any(|a| *a == o)
+    }
+
+    /// The app webview: a loopback Host with no token, else the bearer (header or subprotocol).
+    fn check_app(&self, host: Option<&str>, authorization: Option<&str>, protocols: Option<&str>) -> Option<Refusal> {
+        if self.digest.is_none() {
+            return if host.is_some_and(|h| is_loopback_host(&host_name(h))) {
+                None
+            } else {
+                Some(Refusal { status: 403, reason: "the Host header must name the loopback address (localhost, 127.0.0.1 or [::1])", challenge_bearer: false })
+            };
+        }
+        if self.bearer_matches(authorization) || bearer_from_protocols(protocols).is_some_and(|t| self.matches(&t)) {
             None
         } else {
             Some(Refusal { status: 401, reason: "a bearer token is required", challenge_bearer: true })
@@ -211,6 +248,26 @@ mod tests {
         let p = AccessPolicy::new("127.0.0.1", Some(T)).unwrap();
         let auth = format!("Bearer {T}");
         assert_eq!(p.check("/ws", Some("127.0.0.1"), Some("http://evil.example"), Some(&auth), None).unwrap().status, 403);
+    }
+
+    #[test]
+    fn the_app_webview_origin_is_admitted_like_a_native_client() {
+        // No token: loopback Host only, whatever the Tauri origin is.
+        let open = AccessPolicy::new("127.0.0.1", None).unwrap();
+        for o in TAURI_ORIGINS {
+            assert_eq!(open.check("/ws", Some("127.0.0.1:18990"), Some(o), None, None), None, "{o}");
+        }
+        assert_eq!(open.check("/ws", Some("evil.example"), Some("tauri://localhost"), None, None).unwrap().status, 403);
+        // A web page's origin is still refused, and the app origin is still refused off `/ws`.
+        assert_eq!(open.check("/ws", Some("127.0.0.1"), Some("http://evil.example"), None, None).unwrap().status, 403);
+        assert_eq!(open.check("/health", Some("127.0.0.1"), Some("tauri://localhost"), None, None).unwrap().status, 403);
+        // A token daemon: the bearer rides the header or the subprotocol; none is 401.
+        let p = AccessPolicy::new("0.0.0.0", Some(T)).unwrap();
+        let enc = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(T);
+        let sub = format!("infantry, {BEARER_PROTOCOL_PREFIX}{enc}");
+        assert_eq!(p.check("/ws", Some("100.1.2.3:18990"), Some("http://tauri.localhost"), None, Some(&sub)), None);
+        assert_eq!(p.check("/ws", Some("100.1.2.3:18990"), Some("https://tauri.localhost/"), Some(&format!("Bearer {T}")), None), None);
+        assert_eq!(p.check("/ws", Some("100.1.2.3:18990"), Some("tauri://localhost"), None, None).unwrap().status, 401);
     }
 
     #[test]

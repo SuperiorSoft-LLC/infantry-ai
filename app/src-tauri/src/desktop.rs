@@ -34,6 +34,8 @@ struct Endpoint {
     perf: Option<String>,
     /// Hop timings are on (`debugHopTimings` in ui.json, or INFANTRY_UI_HOPS=1): the page stamps each hop (hops.ts).
     hops: Option<String>,
+    /// INFANTRY_UI_TRANSPORT: `direct` (default: the webview's own WebSocket) or `plugin` (tauri-plugin-websocket).
+    transport: String,
 }
 
 /// INFANTRY_URL, else INFANTRY_PORT on loopback; None when unset or when it names a foreign daemon.
@@ -240,7 +242,8 @@ async fn endpoint(state: State<'_, AppState>) -> Result<Endpoint, String> {
         Some(v) => Some(v),
         None => state.settings.lock().unwrap().debug_hop_timings.unwrap_or(false).then(|| "1".to_string()),
     };
-    Ok(Endpoint { url, token, stress, local: mode == "embedded", mode, error, note, perf, hops })
+    let transport = if env("UI_TRANSPORT").is_some_and(|v| v.trim().eq_ignore_ascii_case("plugin")) { "plugin" } else { "direct" }.to_string();
+    Ok(Endpoint { url, token, stress, local: mode == "embedded", mode, error, note, perf, hops, transport })
 }
 
 /// The `runner` setting (`embedded` | `daemon`); applies on the next start.
