@@ -1,0 +1,9 @@
+# Build context = the repo root; only rust/ is copied in (docker/Dockerfile.rust). Keep everything else out of the context.
+*
+!rust
+!superiorSoftLibrary/infantryCore/src/main/sqldelight
+!superiorSoftLibrary/infantryCore/src/main/sqldelight
+!docker/entrypoint-rust.sh
+rust/target
+**/target
+**/node_modules

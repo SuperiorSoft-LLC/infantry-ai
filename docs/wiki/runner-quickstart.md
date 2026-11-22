@@ -4,10 +4,34 @@
 
 ## Rust runners (current)
 
+A remote runner is the SAME app binary (`infantry-daemon`) started with `--mode runner` (headless). The Linux image is built from
+`docker/Dockerfile.rust` and holds only git, ca-certificates, curl and ripgrep: Node.js and the harness CLIs are installed from the
+app (they land in `/data/harness-tools`). Two steps:
+
+**Step 1, on the server** (any machine with Docker), from the repository root:
+
+```
+docker build -f docker/Dockerfile.rust -t infantry-runner-rust .
+docker run -d --restart unless-stopped --name infantry-runner -e INFANTRY_RUNNER_HOST=<this server's address> -p 8790:8790 -v infantry-runner:/data infantry-runner-rust
+docker logs infantry-runner
+```
+
+The log shows the `==== INFANTRY RUNNER ====` block: `endpoint:` and `bearer:`. If you publish another port (`-p 18921:8790`), also
+pass `-e INFANTRY_RUNNER_PUBLIC_PORT=18921`; the entrypoint warns when it is unset. `INFANTRY_RUNNER_HOST=host.docker.internal` is
+warned about too: only the container can resolve it.
+
+**Step 2, in the app:** Settings > Runners > **Add runner**, paste the endpoint and the bearer, **Connect**. Install the harnesses
+you want from the runner's page.
+
+What survives `docker rm` + a new `docker run` on the same volume: the bearer and certificate pin (`/data`), the harness sign-ins
+(`/data/claude`, `/data/pi`, `/data/xdg-data`) and the installed harness CLIs (`/data/harness-tools`). Build arg
+`PREINSTALL_HARNESSES=pi,claude` bakes the CLIs in instead (CI, quick tests). Publishing the image from CI is not set up yet.
+
+The pieces:
+
 - `infantry-runner-local` runs agents on this machine (pseudo-terminals, Job Objects on Windows).
-- `infantry-runner-link` is the remote link: pairing (one-time codes, a long-lived bearer), the `LinkClient` on the orchestrator and the runner agent on the far side. Contract version 1.11.0, byte-compatible with the Kotlin link.
-- A runner-only daemon: `infantry-daemon --mode runner` (or `INFANTRY_MODE=runner`). It holds no board and refuses orchestration frames. Other modes: `both` (default) and `orchestrator`.
-- CLI: `infantry runner` (subcommands in code include `pair`, `up`, `list`, `check`, `test`, `rotate`, `audit`; exact options not verified, run `infantry runner` for usage).
+- `infantry-runner-link` is the remote link: pairing, the bearer, the `LinkClient` on the orchestrator and the runner agent on the far side.
+- Modes: `both` (default, the desktop app), `runner` and `orchestrator`. A runner holds no board and refuses orchestration frames.
 - Build from `rust/`: `cargo build -p infantry-distribution`. The default port is 18990.
 
 The setup steps below use the Kotlin app and Gradle.
