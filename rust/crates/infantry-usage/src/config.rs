@@ -25,6 +25,8 @@ pub const CEILING: &str = "limits.pacing.maxWorkersCeiling";
 pub const STALE_MAX_HOURS: &str = "limits.usage.staleMaxHours";
 pub const BACKOFF_MAX_MINUTES: &str = "limits.usage.backoffMaxMinutes";
 pub const MANUAL_FLOOR_SECONDS: &str = "limits.usage.manualRefreshFloorSeconds";
+/// Workers a meter may run while its reading is missing (0 = no limit, the old fail-open).
+pub const UNKNOWN_WORKERS: &str = "limits.pacing.unknownWorkers";
 pub const QUOTA_HIT_HOLD_MINUTES: &str = "limits.usage.quotaHitHoldMinutes";
 
 /// Read-write key/value settings (JSON values).
@@ -116,6 +118,14 @@ impl UsageConfig {
 
     pub fn refresh_minutes(&self) -> i64 {
         self.num(REFRESH_MINUTES).map(|n| n as i64).filter(|n| *n >= 0).unwrap_or(5)
+    }
+
+    pub fn unknown_allowance(&self) -> Option<i32> {
+        match self.num(UNKNOWN_WORKERS).map(|n| n as i32) {
+            Some(0) => None,
+            Some(n) if (1..=self.ceiling()).contains(&n) => Some(n),
+            _ => Some(1),
+        }
     }
 
     pub fn quota_hit_hold_ms(&self) -> i64 {
