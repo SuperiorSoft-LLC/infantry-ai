@@ -42,7 +42,7 @@ export function AgentSidebar() {
   return (
     <aside aria-label="Agents" className="flex h-full w-[268px] shrink-0 flex-col border-r bg-background">
       <div className="space-y-3 p-2.5 pb-2">
-        <SidebarCounters agents={agents} onBoard={() => ui.set("sessionTab", "board")} />
+        <SidebarCounters agents={agents} onBoard={() => ui.set("dialog", "board")} />
         <div className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input

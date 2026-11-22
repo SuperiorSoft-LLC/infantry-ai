@@ -41,7 +41,6 @@ import { TabPage } from "@/components/tabs/tab-page";
 import { EpicsTab, PodsTab, ProfilesTab } from "@/components/panels/board-panels";
 import { McpPanel, ReviewPanel, ServicesTab, SitesPanel } from "@/components/panels/service-panels";
 import { SettingsPage } from "@/components/panels/settings-page";
-import { BoardTab } from "@/components/tabs/board-tab";
 import { CalendarTab } from "@/components/tabs/calendar-tab";
 import { RolesTab } from "@/components/roles/roles-tab";
 import { NotesTab } from "@/components/knowledge/notes-tab";
@@ -125,9 +124,6 @@ const FALLBACK_ICONS: Record<string, LucideIcon> = {
   "infantry.review": GitCompare,
 };
 
-/** The Board is opened from the sidebar, not the tab bar; it is still a centre view. */
-export const BOARD: TabEntry = { id: "board", label: "Board", icon: Layers, render: () => <BoardTab />, builtin: true, plugin: null };
-
 /** A declared tab's key hint, as its declaration gives it. Where it sits is the layout's call (default-layout.ts), never the plugin's. */
 function placed(c: Contribution): Pick<TabEntry, "hint"> {
   return { hint: typeof c.decl.hint === "string" && c.decl.hint ? c.decl.hint : undefined };
@@ -174,9 +170,8 @@ export function tabsFor(container: "center" | "right", reg: SlotRegistry | null)
   return arrange(container, [...shown, ...extra]);
 }
 
-/** Finds the entry for a stored view id across both containers (or the Board). */
+/** Finds the entry for a stored view id across both containers. */
 export function entryFor(id: string, reg: SlotRegistry | null): TabEntry | undefined {
-  if (id === BOARD.id) return BOARD;
   return tabsFor("center", reg).find((t) => t.id === id) ?? tabsFor("right", reg).find((t) => t.id === id);
 }
 

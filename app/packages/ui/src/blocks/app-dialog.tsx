@@ -26,18 +26,21 @@ export function AppDialog({
   title: string;
   description?: string;
   footer?: ReactNode;
-  /** true: a roomy form dialog; "fill": grows with the window (min(1100px, 92vw) by min(85vh, 820px)), for settings-like content. */
-  wide?: boolean | "fill" | "image" | "full";
+  /** "screen": the whole window minus a 1rem gutter, full height (the Board). true: a roomy form dialog; "fill": grows with the window (min(1100px, 92vw) by min(85vh, 820px)), for settings-like content. */
+  wide?: boolean | "fill" | "image" | "full" | "screen";
   children: ReactNode;
 }) {
   const fill = wide === "fill";
   const image = wide === "image";
+  const screen = wide === "screen";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
           "flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0",
-          fill
+          screen
+            ? "h-[calc(100dvh-2rem)] max-h-none w-[calc(100vw-2rem)] sm:max-w-none"
+            : fill
             ? "h-[min(85vh,820px)] w-[min(1100px,92vw)] min-w-[min(480px,92vw)] sm:max-w-none"
             : image
               ? "h-auto max-h-[88vh] w-fit max-w-[92vw] min-w-[min(480px,92vw)] sm:max-w-[92vw] max-sm:h-dvh max-sm:max-h-none max-sm:w-screen max-sm:max-w-none max-sm:rounded-none"
