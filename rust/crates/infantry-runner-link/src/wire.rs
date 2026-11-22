@@ -432,7 +432,8 @@ pub const CMD_RESIZE: &str = "proc_resize";
 /// of the stream id closes the endpoint. The pairing is what authorises it; nothing but a call's body and answer crosses.
 pub const HOOK_OPEN: &str = "runner_link_hook_open";
 pub const HOOK_CALL: &str = "runner_hook_call";
-/// RR-5 `tail`: follows a hook channel's events file on the runner host; each line is a [`TAIL_LINE`] frame.
+/// RR-5 `tail`: follows a file on the runner host (a hook channel's events file, a harness transcript); each line is a
+/// [`TAIL_LINE`] frame. The paired orchestrator can already start any process there, so a tail reads nothing more.
 pub const TAIL_OPEN: &str = "runner_link_tail_open";
 pub const TAIL_LINE: &str = "runner_tail_line";
 /// The offers words of a runner that answers [`HOOK_OPEN`] and [`TAIL_OPEN`].

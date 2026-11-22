@@ -15,8 +15,8 @@
 //! RR-5, a pty process (`ProcessSpec::pty`): the orchestrator keeps its own vt100 [`Screen`] fed by the pushed output
 //! bytes, so `screen` and `screen_text_since` answer from it and no screen frame crosses the link; `resize` is a
 //! `proc_resize` command; `hook_channel` opens a hook endpoint on the runner host (`runner_link_hook_open`) whose blocking
-//! calls arrive as `runner_hook_call` frames and are answered with `runner_link_forward_answer`; `tail` follows that
-//! endpoint's events file. A runner that does not offer `hook-channel` answers [`RunnerError::Unsupported`].
+//! calls arrive as `runner_hook_call` frames and are answered with `runner_link_forward_answer`; `tail` follows a file on the runner host
+//! (that endpoint's events file, a harness transcript). A runner that does not offer `hook-channel` answers [`RunnerError::Unsupported`].
 //! A Kotlin runner runs harness sessions, not processes, so `spawn` on it is `Unsupported` too (its hello offers nothing).
 
 use crate::client::{CallError, LinkClient};

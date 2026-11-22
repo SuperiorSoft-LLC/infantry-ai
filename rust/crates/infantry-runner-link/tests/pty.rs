@@ -139,7 +139,14 @@ async fn a_hook_post_and_an_mcp_call_from_the_runner_arrive_at_the_orchestrator(
     let mut lines = remote.tail(TailSpec { path: events.clone(), from: TailFrom::Start }).await.unwrap();
     std::fs::OpenOptions::new().create(true).append(true).open(&events).unwrap().write_all(b"stop\r\n").unwrap();
     assert_eq!(tokio::time::timeout(Duration::from_secs(20), lines.recv()).await.expect("event line"), Some("stop".into()));
-    assert!(matches!(remote.tail(TailSpec { path: "C:/Windows/win.ini".into(), from: TailFrom::Start }).await, Err(RunnerError::Unsupported(_))));
+    // Any file of the runner's host (a harness transcript): a line appended after the tail started is read.
+    let transcript = std::env::temp_dir().join(format!("rr5-transcript-{}.jsonl", uuid::Uuid::new_v4()));
+    std::fs::write(&transcript, b"").unwrap();
+    let mut t = remote.tail(TailSpec { path: transcript.to_string_lossy().into_owned(), from: TailFrom::End }).await.unwrap();
+    std::fs::OpenOptions::new().append(true).open(&transcript).unwrap().write_all(b"{\"type\":\"assistant\"}
+").unwrap();
+    assert_eq!(tokio::time::timeout(Duration::from_secs(20), t.recv()).await.expect("transcript line"), Some(r#"{"type":"assistant"}"#.into()));
+    let _ = std::fs::remove_file(&transcript);
 
     drop(hook);
     drop(mcp);

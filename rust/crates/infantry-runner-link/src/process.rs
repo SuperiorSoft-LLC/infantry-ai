@@ -39,8 +39,6 @@ pub struct ProcessBackend {
     runner: Arc<dyn Runner>,
     /// Open hook streams (and tail streams): the task that owns the endpoint (or the tail) and the calls it waits on.
     streams: Mutex<HashMap<String, (tokio::task::JoinHandle<()>, Pending)>>,
-    /// The events files of open hook channels: the only files a tail may follow.
-    event_files: Mutex<HashMap<String, String>>,
     rt: tokio::runtime::Runtime,
     shared: Arc<(Mutex<Shared>, Condvar)>,
 }
@@ -59,7 +57,7 @@ fn is_link_stream(id: &str) -> bool {
 impl ProcessBackend {
     pub fn new(runner: Arc<dyn Runner>) -> Self {
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().thread_name("runner-link-proc").build().expect("runtime");
-        ProcessBackend { runner, streams: Mutex::new(HashMap::new()), event_files: Mutex::new(HashMap::new()), rt, shared: Arc::new((Mutex::new(Shared::default()), Condvar::new())) }
+        ProcessBackend { runner, streams: Mutex::new(HashMap::new()), rt, shared: Arc::new((Mutex::new(Shared::default()), Condvar::new())) }
     }
 
     fn push(shared: &(Mutex<Shared>, Condvar), sid: &str, t: &str, data: String) {
@@ -148,7 +146,6 @@ impl Backend for ProcessBackend {
         if let Some((task, _)) = self.streams.lock().unwrap().remove(session_id) {
             task.abort();
         }
-        self.event_files.lock().unwrap().remove(session_id);
         let mut s = self.shared.0.lock().unwrap();
         s.sessions.remove(session_id);
         s.events.retain(|e| e.session_id != session_id);
@@ -266,7 +263,6 @@ impl Backend for ProcessBackend {
             }
         });
         self.streams.lock().unwrap().insert(sid.clone(), (task, pending));
-        self.event_files.lock().unwrap().insert(sid.clone(), events_file.clone());
         HookOpenAnswer { stream_id: Some(sid), url, events_file, ..Default::default() }
     }
 
@@ -282,10 +278,6 @@ impl Backend for ProcessBackend {
     }
 
     fn tail_open(&self, r: &TailOpenRequest) -> HttpOpenAnswer {
-        let allowed = self.event_files.lock().unwrap().values().any(|f| *f == r.path);
-        if !allowed {
-            return HttpOpenAnswer { refusal: Some("only the events file of an open hook channel can be followed".into()), error_type: "unsupported".into(), ..Default::default() };
-        }
         let from = match r.from.as_str() {
             "end" => TailFrom::End,
             n => n.parse::<u64>().map(TailFrom::Offset).unwrap_or(TailFrom::Start),
