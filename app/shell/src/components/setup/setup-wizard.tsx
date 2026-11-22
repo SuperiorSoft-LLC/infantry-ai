@@ -28,6 +28,7 @@ import {
   firstStep,
   HELLO_PROMPT,
   installHarnesses,
+  removePrivateCopies,
   needed,
   nodeNote,
   outcomeFor,
@@ -217,6 +218,16 @@ function HarnessStep({ report, pick, onPick }: { report: HarnessInstallReport; p
         ))}
       </div>
       {report.busy ? <InstallProgressView log={report.log} /> : <Log lines={report.log} />}
+      {!report.busy && report.harnesses.some((h) => h.privateCopy) && (
+        <ChoiceCard title="A leftover private copy" subtitle="Infantry AI once installed its own copy of these tools. You already have your own, so the extra copy can go.">
+          {report.harnesses.filter((h) => h.privateCopy).map((h) => (
+            <div key={h.id} className="flex items-center justify-between gap-2">
+              <span className="truncate text-xs text-muted-foreground" title={h.privateCopy ?? ""}>{h.label || h.id}: {h.privateCopy}</span>
+              <Button size="sm" variant="outline" onClick={() => removePrivateCopies(stores().install, [h.id])}>Remove</Button>
+            </div>
+          ))}
+        </ChoiceCard>
+      )}
       {!report.busy && outcome && !outcome.ok && (
         <p role="alert" className="text-xs text-danger">
           {outcome.text} Press Install to try again.
