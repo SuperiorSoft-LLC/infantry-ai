@@ -140,7 +140,7 @@ impl Backend for FrameBackend {
         match (self.ask)(frame, data) {
             Ok((t, d)) => {
                 // The answer of an install or login is the step's output; a read frame logs only that it was answered.
-                let shown = if frame.contains("install") || frame.contains("login") { d.as_str() } else { "" };
+                let shown = if frame == "harness_install" || frame == "secret_login" { d.as_str() } else { "" };
                 runner_log_push(&format!("{frame} ok {} ms {shown}", started.elapsed().as_millis()));
                 Ok(FrameAnswer { r#type: t, data: d })
             }

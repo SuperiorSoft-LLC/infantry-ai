@@ -197,9 +197,9 @@ impl AdminUnit {
             let has = stored.iter().any(|n| n == &format!("harness.{h}.key") || n == &format!("harness.{h}.token"));
             // The runner's own login (a subscription, not an API key) counts: the harness row above already says it is signed in.
             // What the runner's own harness tests (OAuth credentials file, CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY), asked of the runner itself.
-            let login = logins.iter().find(|(id, _, _)| id == &h);
-            let signed_in = login.is_some_and(|(_, ok, _)| *ok);
-            let how = match login.and_then(|(_, _, at)| at.as_deref()) {
+            let login = logins.iter().find(|(id, _, _, _)| id == &h);
+            let signed_in = login.is_some_and(|(_, ok, _, _)| *ok);
+            let how = match login.and_then(|(_, _, at, _)| at.as_deref()) {
                 Some(a) if a.contains("API_KEY") => format!("signed in by API key: {a}"),
                 Some(a) => format!("signed in by subscription: {a}"),
                 None => "signed in on the runner (its own login)".to_string(),
@@ -208,6 +208,7 @@ impl AdminUnit {
                 CredentialSource::Lent => (true, "the key is lent by the orchestrator with each start".to_string(), None),
                 CredentialSource::StoredOnRunner => (true, "the key is stored on the runner".to_string(), None),
                 CredentialSource::None if signed_in => (true, format!("{how}; nothing to lend"), None),
+                CredentialSource::None if login.and_then(|(_, _, _, why)| why.as_deref()).is_some_and(|w| w.contains("not installed")) => (false, format!("{h} is not installed on this runner, so it cannot be signed in yet"), Some("Set up this runner → install it, then sign in")),
                 CredentialSource::None => (false, "not signed in on the runner, and no key is lent or stored".to_string(), Some("Set up this runner → Sign in, or set the key in the runner's provider section")),
             };
             rows.push(row(&format!("credential:{h}"), ok, detail, fix));

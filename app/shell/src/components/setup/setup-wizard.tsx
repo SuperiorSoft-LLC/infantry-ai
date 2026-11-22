@@ -354,7 +354,7 @@ function SetupLog({ runner }: { runner: string }) {
         ))}
       </ul>
       {log?.runnerLogError && <p className="text-warn">{log.runnerLogError}</p>}
-      <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-muted-foreground">{(log?.runnerLog ?? []).slice(-30).join(String.fromCharCode(10))}</pre>
+      <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-muted-foreground">{(log?.runnerLog ?? []).slice(-30).map((l) => l.replace(/^(\d{12,}) /, (_m, t: string) => `${new Date(Number(t)).toLocaleTimeString()} `)).join(String.fromCharCode(10))}</pre>
     </details>
   );
 }

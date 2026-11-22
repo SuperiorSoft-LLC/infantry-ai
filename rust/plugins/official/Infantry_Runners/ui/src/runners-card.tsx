@@ -177,7 +177,7 @@ export function DetailDialog({ name, detail, onClose }: { name: string; detail?:
           <Section title="Runner log (tail)">
             {detail.runnerLogError && <p className="text-warn" data-testid="runner-log-error">{detail.runnerLogError}</p>}
             {detail.runnerLog && detail.runnerLog.length === 0 && <p className="text-muted-foreground">The runner has answered nothing yet.</p>}
-            <pre aria-label="Runner log" className="max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">{(detail.runnerLog ?? []).slice(-60).join(String.fromCharCode(10))}</pre>
+            <pre aria-label="Runner log" className="max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">{(detail.runnerLog ?? []).slice(-60).map((l) => l.replace(/^(\d{12,}) /, (_m, t: string) => `${new Date(Number(t)).toLocaleTimeString()} `)).join(String.fromCharCode(10))}</pre>
           </Section>
           <Section title="Last check">
             {detail.lastCheck ? (
