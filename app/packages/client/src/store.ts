@@ -219,7 +219,7 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
             }
             out({ type: Frame.AGENT_LIST, data: "" });
             out({ type: Frame.PROJECT_LIST, data: "" });
-            out({ type: Frame.TICKET_LIST, data: "" });
+            out({ type: Frame.TICKET_LIST, data: JSON.stringify({ compact: true }) }); // summaries only
             break;
           }
           case Frame.SESSIONS: {

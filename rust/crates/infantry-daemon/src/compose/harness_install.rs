@@ -31,6 +31,9 @@ const NPM_TIMEOUT: Duration = Duration::from_secs(900);
 const NPM_LIVE: &str = "[npm] ";
 /// The log line that carries the Node.js download's progress, rewritten in place.
 const NODE_DOWNLOAD: &str = "[node] downloading ";
+/// How long a probed status is served as is before a background refresh (`INFANTRY_HARNESS_STATUS_TTL_SECS` overrides it). The
+/// answer never waits for the probes: it is the last good one, and a changed refresh is pushed to the clients.
+const STATUS_TTL_SECS: u64 = 300;
 const VERSION_TIMEOUT: Duration = Duration::from_secs(8);
 const NODE_GUIDANCE: &str = "Node.js is not installed on this machine. Infantry AI can install it for you into its own folder (no admin prompt).";
 const NODE_MANUAL: &str = "Install Node.js from nodejs.org, then press Check again.";
@@ -53,6 +56,10 @@ pub struct HarnessInstall {
     /// Runs when the install is over and the report no longer says busy: the daemon pushes it to every client, so a window that
     /// did not start the install (another window, the CLI) re-reads the report.
     on_done: Arc<dyn Fn() + Send + Sync>,
+    /// The last probed report and when it was made; served at once, refreshed behind the answer.
+    snapshot: Mutex<Option<(Instant, Value)>>,
+    refreshing: AtomicBool,
+    me: std::sync::Weak<HarnessInstall>,
 }
 
 impl HarnessInstall {
@@ -60,7 +67,47 @@ impl HarnessInstall {
         let prefix = state_dir.join("harness-tools");
         infantry_proc::user_path::refresh_with(infantry_proc::user_path::registry_dirs, true);
         add_to_path(&prefix);
-        Arc::new(HarnessInstall { prefix, log: Arc::default(), busy: Arc::default(), versions: Arc::default(), on_changed, on_done })
+        let me = Arc::new_cyclic(|w| HarnessInstall { prefix, log: Arc::default(), busy: Arc::default(), versions: Arc::default(), on_changed, on_done, snapshot: Mutex::new(None), refreshing: AtomicBool::new(false), me: w.clone() });
+        me.refresh_behind(); // warm: the first UI open finds a probed answer
+        me
+    }
+
+    /// The last good report at once (never a probe on the caller's thread); a stale or missing one is refreshed on a thread.
+    fn report_cached(&self) -> Value {
+        if self.busy.load(Ordering::SeqCst) {
+            return self.report_with(false); // an install is polled every 1.5 s; cached versions only
+        }
+        let ttl = Duration::from_secs(std::env::var("INFANTRY_HARNESS_STATUS_TTL_SECS").ok().and_then(|v| v.parse().ok()).unwrap_or(STATUS_TTL_SECS));
+        let snap = self.snapshot.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        match snap {
+            Some((at, mut v)) => {
+                if at.elapsed() > ttl {
+                    self.refresh_behind();
+                }
+                v["busy"] = json!(false);
+                v["log"] = json!(*self.log.lock().unwrap_or_else(|e| e.into_inner()));
+                v
+            }
+            None => {
+                self.refresh_behind();
+                self.report_with(false)
+            }
+        }
+    }
+
+    fn refresh_behind(&self) {
+        if self.refreshing.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let Some(me) = self.me.upgrade() else { return };
+        std::thread::spawn(move || {
+            let fresh = me.report_with(true);
+            let changed = me.snapshot.lock().unwrap_or_else(|e| e.into_inner()).replace((Instant::now(), fresh.clone())).is_none_or(|(_, old)| old["harnesses"] != fresh["harnesses"]);
+            me.refreshing.store(false, Ordering::SeqCst);
+            if changed {
+                (me.on_done)();
+            }
+        });
     }
 
     /// A progress line that is rewritten in place (the latest npm line, the download percent) instead of piling up: it replaces the
@@ -82,7 +129,13 @@ impl HarnessInstall {
         }
     }
 
+    #[cfg(test)]
     fn report(&self) -> Value {
+        self.report_with(true)
+    }
+
+    /// [probe] false: no `--version` process is started; a version not yet known reads as installed with no version.
+    fn report_with(&self, probe: bool) -> Value {
         infantry_proc::user_path::refresh();
         let npm = find_npm(&self.prefix);
         let installable = npm.is_none() && node_platform().is_some();
@@ -92,8 +145,9 @@ impl HarnessInstall {
                 let path = find_cli(&self.prefix, cmd);
                 let (state, version) = match &path {
                     None => ("missing", None),
-                    Some(p) => match self.version_of(p) {
+                    Some(p) => match self.version_of(p, probe) {
                         Some(v) => ("installed", Some(v)),
+                        None if !probe => ("installed", None),
                         None => ("unreadable", None),
                     },
                 };
@@ -113,13 +167,13 @@ impl HarnessInstall {
     }
 
     /// `<cli> --version`, once per path (a probe can cost a process start).
-    fn version_of(&self, path: &Path) -> Option<String> {
+    fn version_of(&self, path: &Path, probe: bool) -> Option<String> {
         if let Some(v) = self.versions.lock().unwrap_or_else(|e| e.into_inner()).get(path) {
             return v.clone();
         }
         // A running install is polled every 1.5 s: probing four CLIs would delay every answer by seconds (a probe is a process start,
         // slow under antivirus), and the progress bar would only show once the probes ended. Cached versions only while busy.
-        if self.busy.load(Ordering::SeqCst) {
+        if !probe || self.busy.load(Ordering::SeqCst) {
             return None;
         }
         let v = read_version(path);
@@ -135,11 +189,14 @@ impl HarnessInstall {
             return Err("an install is already running".into());
         }
         let (prefix, log, busy) = (self.prefix.clone(), self.log.clone(), self.busy.clone());
-        let (versions, on_changed, on_done) = (self.versions.clone(), self.on_changed.clone(), self.on_done.clone());
+        let (versions, on_changed, on_done, me) = (self.versions.clone(), self.on_changed.clone(), self.on_done.clone(), self.me.clone());
         std::thread::spawn(move || {
             run_install(&prefix, &log, &ids, update, runtime);
             add_to_path(&prefix);
             versions.lock().unwrap_or_else(|e| e.into_inner()).clear();
+            if let Some(me) = me.upgrade() {
+                *me.snapshot.lock().unwrap_or_else(|e| e.into_inner()) = None; // the CLIs changed: no stale answer
+            }
             on_changed();
             busy.store(false, Ordering::SeqCst);
             on_done();
@@ -157,7 +214,7 @@ impl FrameUnit for HarnessInstall {
     }
     fn handle(&self, env: &Envelope, _ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
         let (ty, data) = match env.r#type.as_str() {
-            pf::HARNESS_INSTALL_STATUS => (pf::HARNESS_INSTALL_STATUS, self.report()),
+            pf::HARNESS_INSTALL_STATUS => (pf::HARNESS_INSTALL_STATUS, self.report_cached()),
             pf::HARNESS_INSTALL => {
                 let req: Value = if env.data.trim().is_empty() { json!({}) } else { serde_json::from_str(&env.data).map_err(|e| Refusal::new(pf::HARNESS_INSTALL, e))? };
                 let ids: Vec<String> = req["ids"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
@@ -177,6 +234,7 @@ impl FrameUnit for HarnessInstall {
                         removed.push(id.to_string());
                     }
                     self.versions.lock().unwrap_or_else(|e| e.into_inner()).clear();
+                    *self.snapshot.lock().unwrap_or_else(|e| e.into_inner()) = None;
                     (self.on_changed)();
                     let mut e = Envelope::new(pf::HARNESS_INSTALL_RESULT, json!({ "started": false, "removed": removed }).to_string());
                     e.session_id = env.session_id.clone();

@@ -154,10 +154,16 @@ export function createBoardStore(link: BoardLink): BoardStore {
       return restore;
     };
 
+    // One `ticket_list` per connection: the first caller asks, the rest wait for the answer. The session store asks too on READY
+    // (compact), so a fresh connection counts as asked.
+    let asked = false;
     const off = link.onFrame((env) => {
       const rid = env.requestId;
       const mine = rid !== undefined && rid in get().inflight;
       switch (env.type) {
+        case Frame.READY:
+          asked = true;
+          return;
         case Frame.TICKETS: {
           const list = timedHop("board.parse", () => json<BoardTicket[]>(env.data), { bytes: env.data.length });
           if (!list) return;
@@ -189,7 +195,8 @@ export function createBoardStore(link: BoardLink): BoardStore {
       inflight: {},
 
       ensureLoaded() {
-        if (!get().loaded) {
+        if (!get().loaded && !asked) {
+          asked = true;
           hop("board.request");
           link.sendFrame({ type: Frame.TICKET_LIST, data: JSON.stringify({ compact: true }) });
         }
