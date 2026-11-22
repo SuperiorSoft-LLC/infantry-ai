@@ -70,6 +70,10 @@ pub trait Backend: Send + Sync + 'static {
     fn stage_file(&self, _r: &StageFileRequest) -> StageFileAnswer {
         StageFileAnswer { refusal: Some("this runner stages no files".into()), error_type: "unsupported".into(), ..Default::default() }
     }
+    /// RR-13: one runner-scope frame. `Err` = refused (the reason names the frame); the default offers none.
+    fn frame(&self, frame: &str, _data: &str) -> Result<crate::wire::FrameAnswer, String> {
+        Err(format!("frame '{frame}' is {NOT_OFFERED} this runner offers"))
+    }
     /// `loopback-http` on the runner's host: the stream id whose frames carry the response.
     fn http_open(&self, _r: &HttpOpenRequest) -> HttpOpenAnswer {
         HttpOpenAnswer { refusal: Some("this runner makes no loopback http requests".into()), error_type: "unsupported".into(), ..Default::default() }
@@ -297,6 +301,17 @@ impl LinkServer {
                     let a = self.backend.stage_file(&r);
                     self.ok(&seat, t, from, &a)
                 }
+                None => malformed(),
+            },
+            wire::FRAME => match decode::<wire::FrameRequest>(data) {
+                // The audit line records the op and the frame NAME, never the data (it can carry a key).
+                Some(r) => match self.backend.frame(&r.frame, &r.data) {
+                    Ok(a) => {
+                        self.record(&seat, &format!("{t}:{}", shown(&r.frame)), "ok", from);
+                        Answer::reply(serde_json::to_string(&a).expect("frame answer"))
+                    }
+                    Err(why) => self.refuse(&seat, &format!("{t}:{}", shown(&r.frame)), from, why),
+                },
                 None => malformed(),
             },
             wire::HTTP_OPEN => match decode::<HttpOpenRequest>(data) {

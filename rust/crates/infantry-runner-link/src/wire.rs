@@ -37,6 +37,8 @@ pub const PROMPT_ANSWER: &str = "runner_link_prompt_answer";
 pub const FRAMES_PULL: &str = "runner_link_frames_pull";
 pub const FORWARD_PULL: &str = "runner_link_forward_pull";
 pub const FORWARD_ANSWER: &str = "runner_link_forward_answer";
+/// RR-13: one runner-scope frame answered by the runner's own units (the plugin decides which frames it offers).
+pub const FRAME: &str = "runner_link_frame";
 pub const REPLY: &str = "runner_link_reply";
 pub const ERROR: &str = "runner_link_error";
 /// The words every runner's refusal of an operation it does not know starts its reason with.
@@ -526,4 +528,23 @@ mod tests {
             r#"{"runnerId":"inf-x","runnerName":"r","credential":"c","contract":"1.11.0","grantedProjects":[],"grantedHarnesses":[],"grantRefusal":null,"replacedOrchestrator":null}"#
         );
     }
+}
+
+/// [`FRAME`] request: the frame name and its JSON data text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameRequest {
+    pub frame: String,
+    #[serde(default)]
+    pub data: String,
+}
+
+/// [`FRAME`] answer: the envelope type and data the runner's own unit answered with.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameAnswer {
+    #[serde(rename = "type")]
+    pub r#type: String,
+    #[serde(default)]
+    pub data: String,
 }

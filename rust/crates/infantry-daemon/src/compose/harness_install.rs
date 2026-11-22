@@ -462,15 +462,24 @@ fn npm_install(npm: &Path, prefix: &Path, pkg: &str, log_arc: Arc<Mutex<Vec<Stri
 
 // ---- Node.js ----
 
-/// `win-x64` / `win-arm64`; None = no automatic install on this machine.
+/// `win-x64` / `win-arm64` (zip) or `linux-x64` / `linux-arm64` (tar.gz); None = no automatic install on this machine.
 fn node_platform() -> Option<&'static str> {
-    if !cfg!(windows) {
-        return None;
-    }
-    match std::env::consts::ARCH {
-        "x86_64" => Some("win-x64"),
-        "aarch64" => Some("win-arm64"),
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("windows", "x86_64") => Some("win-x64"),
+        ("windows", "aarch64") => Some("win-arm64"),
+        ("linux", "x86_64") => Some("linux-x64"),
+        ("linux", "aarch64") => Some("linux-arm64"),
         _ => None,
+    }
+}
+
+/// The nodejs.org archive of [version] for [platform]: (file name, the key `index.json` lists it under). Windows ships a zip;
+/// Linux the tar.gz (every SHASUMS256.txt lists it, and a slim image needs no xz to unpack it).
+fn node_archive(version: &str, platform: &str) -> (String, String) {
+    if platform.starts_with("win-") {
+        (format!("node-{version}-{platform}.zip"), format!("{platform}-zip"))
+    } else {
+        (format!("node-{version}-{platform}.tar.gz"), platform.to_string())
     }
 }
 
@@ -523,9 +532,9 @@ fn http_get_with(url: &str, progress: &dyn Fn(u64, Option<u64>)) -> Result<Vec<u
     Ok(buf)
 }
 
-/// The newest release in nodejs.org's `index.json` that is an LTS and ships a [platform] zip.
+/// The newest release in nodejs.org's `index.json` that is an LTS and ships a [platform] archive.
 fn latest_lts(index: &str, platform: &str) -> Option<String> {
-    let want = format!("{platform}-zip");
+    let want = node_archive("", platform).1;
     let releases: Value = serde_json::from_str(index).ok()?;
     releases.as_array()?.iter().find_map(|r| {
         let lts = r["lts"].is_string();
@@ -549,7 +558,7 @@ fn install_node(prefix: &Path, platform: &str, note: &dyn Fn(String), live: Opti
         note("[node] looking up the current Node.js LTS release".into());
         let index = String::from_utf8_lossy(&http_get(&format!("{DIST_BASE}/index.json"))?).to_string();
         let version = latest_lts(&index, platform).ok_or_else(|| format!("nodejs.org lists no LTS release for {platform}"))?;
-        let zip_name = format!("node-{version}-{platform}.zip");
+        let (zip_name, _) = node_archive(&version, platform);
         let sums = String::from_utf8_lossy(&http_get(&format!("{DIST_BASE}/{version}/SHASUMS256.txt"))?).to_string();
         let want = sha_for(&sums, &zip_name).ok_or_else(|| format!("the Node.js checksums do not list {zip_name}"))?;
         note(format!("{NODE_DOWNLOAD}{zip_name}"));
@@ -565,13 +574,14 @@ fn install_node(prefix: &Path, platform: &str, note: &dyn Fn(String), live: Opti
         let zip = work.join(&zip_name);
         std::fs::write(&zip, &bytes).map_err(|e| format!("cannot write the download: {e}"))?;
         note(format!("[node] unpacking into {}", prefix.display()));
-        // bsdtar ships with Windows 10+ and reads zip; --strip-components drops the archive's top folder.
+        // bsdtar ships with Windows 10+ and reads zip; tar reads the Linux tar.gz; --strip-components drops the top folder.
         let out = infantry_proc::command("tar").arg("-xf").arg(&zip).arg("-C").arg(prefix).args(["--strip-components", "1"]).output().map_err(|e| format!("cannot run tar: {e}"))?;
         if !out.status.success() {
             return Err(format!("unpacking failed: {}", String::from_utf8_lossy(&out.stderr).trim()));
         }
-        if !prefix.join("node.exe").is_file() || !prefix.join("npm.cmd").is_file() {
-            return Err("the Node.js archive did not contain node.exe and npm.cmd".into());
+        let (node, npm) = if platform.starts_with("win-") { (prefix.join("node.exe"), prefix.join("npm.cmd")) } else { (prefix.join("bin").join("node"), prefix.join("bin").join("npm")) };
+        if !node.is_file() || !npm.exists() {
+            return Err(format!("the Node.js archive did not contain {} and {}", node.file_name().unwrap_or_default().to_string_lossy(), npm.file_name().unwrap_or_default().to_string_lossy()));
         }
         note(format!("[node] Node.js {version} is ready"));
         Ok(())
@@ -592,6 +602,25 @@ mod tests {
         assert_eq!(latest_lts(idx, "win-x64").as_deref(), Some("v24.11.0"));
         assert_eq!(latest_lts(idx, "win-ia32"), None);
         assert_eq!(latest_lts("not json", "win-x64"), None);
+    }
+
+    #[test]
+    fn linux_node_url_and_checksum_come_from_the_shasums_file() {
+        let idx = r#"[{"version":"v25.1.0","lts":false,"files":["linux-x64"]},
+            {"version":"v24.11.0","lts":"Krypton","files":["linux-x64","linux-arm64","win-x64-zip"]},
+            {"version":"v22.1.0","lts":"Jod","files":["linux-x64"]}]"#;
+        assert_eq!(latest_lts(idx, "linux-arm64").as_deref(), Some("v24.11.0"));
+        assert_eq!(latest_lts(idx, "linux-x64").as_deref(), Some("v24.11.0"));
+        assert_eq!(latest_lts(idx, "linux-s390x"), None);
+        let (name, key) = node_archive("v24.11.0", "linux-x64");
+        assert_eq!((name.as_str(), key.as_str()), ("node-v24.11.0-linux-x64.tar.gz", "linux-x64"));
+        assert_eq!(node_archive("v24.11.0", "win-x64"), ("node-v24.11.0-win-x64.zip".to_string(), "win-x64-zip".to_string()));
+        let (h1, h2) = ("1".repeat(64), "2".repeat(64));
+        let sums = format!("{h1}  node-v24.11.0-linux-arm64.tar.gz
+{h2}  node-v24.11.0-linux-x64.tar.gz
+{h1}  node-v24.11.0-linux-x64.tar.xz");
+        assert_eq!(sha_for(&sums, &name).as_deref(), Some(h2.as_str()));
+        assert_eq!(format!("{DIST_BASE}/v24.11.0/{name}"), "https://nodejs.org/dist/v24.11.0/node-v24.11.0-linux-x64.tar.gz");
     }
 
     #[test]
