@@ -15,4 +15,5 @@ mod slow_frame;
 mod sessions_suite;
 mod spawn_load;
 mod stats_consistency;
+mod tunnel_token;
 mod waiting_flag;

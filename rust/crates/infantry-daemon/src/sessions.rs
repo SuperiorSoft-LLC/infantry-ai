@@ -296,6 +296,8 @@ pub struct Daemon {
     provider_env: std::sync::OnceLock<Arc<dyn Fn(&str) -> Vec<(String, String)> + Send + Sync>>,
     /// RR-6: what a start on a REMOTE runner lends `(runner, provider, project)`; unset = nothing is lent.
     lender: std::sync::OnceLock<Arc<crate::lender::Lender>>,
+    /// RR-6b: the per-session tokens of the tunnel listener.
+    pub tunnel: Arc<crate::tunnel::TunnelGate>,
     /// Whether a role exists (`session_swap` to a role); unset = any well-formed role.
     role_known: std::sync::OnceLock<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
     /// PM-ROLE-1: the text a new conversation of a role starts with (the role catalog's persona); unset = none.
@@ -314,6 +316,11 @@ pub struct Daemon {
     workspace_spec: std::sync::OnceLock<Arc<dyn Fn() -> Option<WorkspaceSpec> + Send + Sync>>,
     /// RR-4: the runners a session can be placed on, by name (`local` built in; the composition root adds the paired ones).
     runners: std::sync::OnceLock<Arc<infantry_runner_source::RunnerRegistry>>,
+}
+
+/// RR-6b: one encoded frame with no session or sequence (the tunnel's hello).
+pub fn encode_frame(ty: &str, data: String) -> String {
+    encode(ty, data, None, None)
 }
 
 fn encode(ty: &str, data: String, session: Option<&str>, seq: Option<i64>) -> String {
@@ -396,6 +403,7 @@ impl Daemon {
             env_extra: std::sync::OnceLock::new(),
             provider_env: std::sync::OnceLock::new(),
             lender: std::sync::OnceLock::new(),
+            tunnel: Arc::default(),
             role_known: std::sync::OnceLock::new(),
             role_brief: std::sync::OnceLock::new(),
             prompter: std::sync::OnceLock::new(),
@@ -1306,8 +1314,17 @@ impl Daemon {
         // is pointed at a loopback port on the runner host that the link tunnels back here. A runner that shares this machine
         // answers `Unsupported` and the env stays as it is.
         if let Some(port) = env.iter().find(|(k, _)| k == "INFANTRY_PORT").and_then(|(_, v)| v.parse::<u16>().ok()) {
-            if let Some(remote) = forward_to_runner(&entry, port)? {
+            // RR-6b: the forward targets the tunnel listener, never the main port (which trusts loopback), and the session
+            // carries its own scoped token. No tunnel listener = no safe way to forward: the start fails loudly.
+            let tunnel_port = self.tunnel.port();
+            if entry.kind == "remote" && tunnel_port == 0 {
+                return Err("a remote session needs the daemon's tunnel listener (not open on this daemon)".into());
+            }
+            let target = if tunnel_port != 0 { tunnel_port } else { port };
+            if let Some(remote) = forward_to_runner(&entry, target)? {
                 reroute_daemon_env(&mut env, &mut mcp, port, remote);
+                let token = self.tunnel.mint(&e.rec.id);
+                set_token(&mut env, &mut mcp, &token);
             }
         }
         let req = OpenRequest {
@@ -1538,6 +1555,7 @@ impl Daemon {
 
     fn kill(self: &Arc<Self>, sid: &str, force: bool) -> Result<(), String> {
         let entry = self.find(sid).ok_or("kill refused: no such session")?;
+        self.tunnel.revoke(sid);
         let mut e = entry.lock().unwrap();
         if e.rec.state == SessionState::Exited {
             return Ok(());
@@ -1598,6 +1616,7 @@ impl Daemon {
             list.remove(i).1
         };
         {
+            self.tunnel.revoke(sid);
             let mut e = entry.lock().unwrap();
             e.removed = true;
             if let Some(mut hs) = e.hs.take() {
@@ -1697,6 +1716,20 @@ fn forward_to_runner(entry: &infantry_runner_source::RunnerEntry, port: u16) -> 
         Ok(p) => Ok(Some(p)),
         Err(RunnerError::Unsupported(_)) => Ok(None),
         Err(e) => Err(format!("runner '{}' cannot reach this daemon: {e}", entry.name)),
+    }
+}
+
+/// RR-6b: lends the session's tunnel token as `INFANTRY_TOKEN` (and in its MCP servers' env), replacing any other.
+fn set_token(env: &mut Vec<(String, String)>, mcp: &mut infantry_harness::McpPlan, token: &str) {
+    let put = |kv: &mut Vec<(String, String)>| {
+        kv.retain(|(k, _)| k != "INFANTRY_TOKEN" && k != "INFANTRY_TOKEN_FILE");
+        kv.push(("INFANTRY_TOKEN".into(), token.to_string()));
+    };
+    put(env);
+    for spec in mcp.add.iter_mut() {
+        if let infantry_harness::McpTransport::Stdio { env, .. } = &mut spec.transport {
+            put(env);
+        }
     }
 }
 
