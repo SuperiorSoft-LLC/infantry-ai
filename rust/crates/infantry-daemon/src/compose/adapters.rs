@@ -77,6 +77,8 @@ pub struct DaemonBoardEnv {
     hooks: std::sync::OnceLock<Arc<infantry_scripting::hooks::HookStore>>,
     /// The mail router and the attention list a worker's bad end is told through (PIPE-RESTART-1; set once they exist).
     lead_notice: std::sync::OnceLock<(Arc<infantry_mail::mail::router::MailRouter>, Arc<infantry_mail::notify::attention::AttentionStore>)>,
+    /// WAKE-1: remembers which (session, kind, key) already woke.
+    wake_gate: infantry_mail::notify::wake::WakeGate,
 }
 
 /// `board.restartResumeSeconds`: how long a resumed session must live before a restart counts as working.
@@ -110,6 +112,7 @@ impl DaemonBoardEnv {
             settings: super::settings::SettingsUnit { db },
             hooks: std::sync::OnceLock::new(),
             lead_notice: std::sync::OnceLock::new(),
+            wake_gate: infantry_mail::notify::wake::WakeGate::new(2000),
         }
     }
 
@@ -221,6 +224,30 @@ impl BoardEnv for DaemonBoardEnv {
     }
     fn notify_session(&self, session_id: &str, subject: &str, line: &str) -> bool {
         self.daemon.deliver(session_id, &format!("{subject}\n{line}")).is_ok()
+    }
+    fn notify_notice(&self, session_id: &str, kind: &str, key: &str, subject: &str, line: &str) -> bool {
+        use infantry_mail::notify::wake::{Wake, WakePolicy, WAKE_KINDS_SETTING};
+        let role = self.daemon.record(session_id).and_then(|r| r.role);
+        let d = serde_json::json!({ "role": role });
+        let raw = self.settings.resolve(WAKE_KINDS_SETTING, &d)["value"].as_str().map(str::to_string);
+        match self.wake_gate.decide(&WakePolicy::parse(raw.as_deref()), session_id, kind, key) {
+            Wake::Now => self.notify_session(session_id, subject, line),
+            Wake::Duplicate => true,
+            Wake::Inbox => {
+                // Not a turn: the line waits in the attention list, read on the next real turn.
+                if let Some((_, attention)) = self.lead_notice.get() {
+                    let _ = attention.raise(&infantry_mail::notify::attention::AttentionRaise {
+                        kind: "notice".into(),
+                        session_id: Some(session_id.to_string()),
+                        outcome: format!("inbox:{kind}"),
+                        detail: format!("{subject}
+{line}"),
+                        ..Default::default()
+                    });
+                }
+                true
+            }
+        }
     }
     fn alert_session(&self, session_id: &str, subject: &str, line: &str, ticket_id: &str) -> bool {
         let t0 = std::time::Instant::now();

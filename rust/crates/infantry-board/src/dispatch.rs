@@ -1520,7 +1520,7 @@ impl Dispatcher {
             take(first, 200),
             facts.map(|f| format!(" | {f}")).unwrap_or_default()
         );
-        self.env.notify_session(&starter, "[AUTOMATIC] ticket done", &line);
+        self.env.notify_notice(&starter, "ticket.done.auto", &row.id, "[AUTOMATIC] ticket done", &line);
     }
 
     fn failure(&self, row: &TicketRow, report: &DoneReport, what: &str) {

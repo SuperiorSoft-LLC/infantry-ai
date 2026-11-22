@@ -347,7 +347,7 @@ impl Comments {
             for s in &sessions {
                 if sent.contains(s) {
                     delivered += 1; // already got this comment through another entry
-                } else if self.env.notify_session(s, &subject, &line) {
+                } else if self.env.notify_notice(s, &format!("comment.{kind}"), comment_id, &subject, &line) {
                     sent.push(s.clone());
                     delivered += 1;
                 }
