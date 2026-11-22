@@ -20,6 +20,10 @@
 #   E2E_HARNESS/E2E_MODEL  the harness and model of the ticket runs (default opencode / opencode/beam-free: a keyless free model)
 #   E2E_COMMANDCODE_KEY_FILE  a file holding a Command Code key: the harness becomes pi on commandcode/<E2E_MODEL> and the key is
 #                        lent by the orchestrator (RR-6). The key is read from the file, piped on stdin, never put in argv or logs.
+#   E2E_RUNNER_ENV       space-separated NAMES of host env vars passed into the runner container (`docker run -e NAME`: the value is
+#                        read from this shell's environment, never put in argv or logs), e.g. E2E_RUNNER_ENV=DEEPSEEK_API_KEY with
+#                        E2E_HARNESS=opencode E2E_MODEL=deepseek/deepseek-flash. The native test daemon (the `local` runner) inherits it too.
+#   E2E_TURN_END_SECONDS  how long to wait for a turn to end after its marker file shows (default 600; a slow model keeps working after the marker)
 #   E2E_KEEP=1           leave containers and temp dirs after the run (debugging)
 #   E2E_ONLY="S0 S1"     run only those scenarios (the setup always runs)
 set -uo pipefail
@@ -61,6 +65,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# ---- leftovers of an earlier (killed or E2E_KEEP) run: our own orchestrator port and container names only ----------------------------
+# A daemon still listening on our orchestrator/link/origin port, or an old container, makes a run attach to the wrong state.
+stale_listener() { # <port>: the pid listening on it (Windows netstat / lsof or ss elsewhere)
+  if [ "$WIN" = 1 ]; then netstat -ano 2>/dev/null | tr -d '' | awk -v p=":$1" '$2 ~ p"$" && /LISTENING/ {print $5; exit}'
+  else (ss -ltnp 2>/dev/null | awk -v p=":$1" '$4 ~ p"$" {print $NF}' | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2); fi; }
+for _p in $ORCH_PORT; do  # only the native test daemon: the link and origin ports are Docker proxies (docker rm below frees them)
+  _pid="$(stale_listener "$_p")"
+  if [ -n "$_pid" ]; then log "port $_p is held by pid $_pid (a leftover of an earlier run): stopping it"; if [ "$WIN" = 1 ]; then taskkill //PID "$_pid" //F >/dev/null 2>&1; else kill "$_pid" 2>/dev/null; fi; sleep 1; fi
+done
+docker rm -f "$RUNNER_CT" "$ORIGIN_CT" >/dev/null 2>&1
+
 # ---- results table -------------------------------------------------------------------------------------------------
 declare -a ROW_ID ROW_RES ROW_NOTE
 row() { ROW_ID+=("$1"); ROW_RES+=("$2"); ROW_NOTE+=("$3"); log "$1 $2: $3"; }
@@ -78,8 +93,9 @@ wait_for() { local s="$1"; shift; local what="$1"; shift; local end=$((SECONDS +
 newest_bearer() { docker logs "$RUNNER_CT" 2>&1 | awk '/^bearer:/ {b=$2} END {print b}'; }
 runner_start() { # <extra docker args...>
   docker rm -f "$RUNNER_CT" >/dev/null 2>&1
+  local envargs=() n; for n in ${E2E_RUNNER_ENV:-}; do envargs+=(-e "$n"); done
   docker run -d --name "$RUNNER_CT" -v "$VOLUME:/data" -e INFANTRY_RUNNER_NAME="$RNAME" -e INFANTRY_RUNNER_HOST=127.0.0.1 \
-    -e INFANTRY_RUNNER_PUBLIC_PORT="$LINK_PORT" -p "127.0.0.1:$LINK_PORT:8790" "$@" "$IMAGE" >/dev/null
+    -e INFANTRY_RUNNER_PUBLIC_PORT="$LINK_PORT" -p "127.0.0.1:$LINK_PORT:8790" "${envargs[@]}" "$@" "$IMAGE" >/dev/null
 }
 runner_up() { wait_for 60 "the runner banner" sh -c "docker logs $RUNNER_CT 2>&1 | grep -q '^bearer:'"; }
 
@@ -148,10 +164,14 @@ run_ticket() { # <label> <runner> <extra instruction>
   START_ERR="$(start_ticket "$TID")"; case "$START_ERR" in *error*) return 1 ;; esac
   wait_for 120 "the session of $TID" _have_session || { START_ERR="no session appeared for $TID"; return 1; }
   wait_for "$MARK_DEADLINE" "the marker E2E-DONE-$label" _have_marker "$label" || { TRANSCRIPT="$(transcript "$SID")"; START_ERR="no E2E-DONE-$label marker file or text"; return 1; }
+  # The marker file shows up mid-turn: let the turn END first (the session goes IDLE; a remote worker's branch is pushed at turn end),
+  # else host.txt is read half written and the ticket is moved done under the running harness.
+  wait_for "${E2E_TURN_END_SECONDS:-600}" "the turn of $SID to end" _turn_idle || log "turn of $SID still busy after ${E2E_TURN_END_SECONDS:-600}s"
   TRANSCRIPT="$(transcript "$SID") $(wt_host "$label")"; I ticket move --project "$PROJECT" "$TID" done >/dev/null  # frees the lane (one worker per role)
   return 0
 }
 _link_ok() { I runner check "$RNAME" | grep -qE '^link +ok'; }
+_turn_idle() { M infantry_list_sessions '{}' | grep -F "$SID" | grep -q ' IDLE'; }
 _have_session() { SID="$(session_of "$TID")"; [ -n "$SID" ]; }
 # Deterministic proof first (the weak free models rarely echo the marker word): the marker FILE in the worktree, on the runner
 # (docker exec) or on this machine. The chat text counts too. wt_host prints the host.txt beside the marker file.
@@ -185,9 +205,11 @@ fi
 S2_OK=0
 if want S2 || want S3 || want S4 || want S5 || want S6 || want S7; then
   if run_ticket S2 "$RNAME"; then
+    wait_for 60 "the ticket branch on the origin" sh -c "git ls-remote --heads git://127.0.0.1:$ORIGIN_PORT/repo.git | grep -q refs/heads/ticket/" || true
     BR="$(origin_branches | grep -o 'refs/heads/ticket/.*' | head -1)"
     if printf '%s' "$TRANSCRIPT" | grep -q "$CT_HOST" && [ -n "$BR" ]; then S2_OK=1; row S2 PASS "turn ran on the runner (hostname $CT_HOST); pushed ${BR#refs/heads/}"
-    else row S2 FAIL "hostname in output: $(printf '%s' "$TRANSCRIPT" | grep -c "$CT_HOST"); branches on origin: ${BR:-none}"; fi
+    else row S2 FAIL "hostname $CT_HOST in output: $(printf '%s' "$TRANSCRIPT" | grep -c "$CT_HOST"); host.txt: '$(wt_host S2 | head -c 60 | tr '
+' ' ')'; branches on origin: ${BR:-none}"; fi
   else row S2 FAIL "$(printf '%s' "${START_ERR:-turn did not complete}" | head -n 1 | cut -c1-300)"; fi
 fi
 
@@ -202,7 +224,7 @@ fi
 # S4: an MCP board call from the runner session works (the agent comments on its own ticket through the infantry tools).
 if want S4; then
   if [ $S2_OK = 1 ] && run_ticket S4 "$RNAME" "Then use the infantry MCP tool infantry_ticket_comment to post the comment e2e-mcp-ok on this ticket."; then
-    M infantry_ticket_comments "{\"ticketId\":\"$TID\"}" | grep -q 'e2e-mcp-ok' && row S4 PASS "comment e2e-mcp-ok on $TID posted from the runner session" || row S4 FAIL "no e2e-mcp-ok comment on $TID"
+    M infantry_ticket_comments "{\"ticketId\":\"$TID\",\"kind\":\"note\"}" | grep -q 'e2e-mcp-ok' && row S4 PASS "comment e2e-mcp-ok on $TID posted from the runner session" || row S4 FAIL "no e2e-mcp-ok comment on $TID"
   else row S4 FAIL "${START_ERR:-needs S2}"; fi
 fi
 

@@ -1902,8 +1902,46 @@ fn reroute_daemon_env(env: &mut Vec<(String, String)>, mcp: &mut infantry_harnes
     env.retain(|(k, _)| k != "INFANTRY_STATE_DIR" && k != "INFANTRY_BIN");
     fix(env);
     for spec in mcp.add.iter_mut() {
-        if let infantry_harness::McpTransport::Stdio { env, .. } = &mut spec.transport {
+        if let infantry_harness::McpTransport::Stdio { command, env, .. } = &mut spec.transport {
             fix(env);
+            // The orchestrator's path to its `infantry` launcher means nothing on the runner host: the bridge is the `infantry`
+            // on the runner's own PATH (the runner image ships it). RR-QA2: S4 failed because the Windows path was run in a container.
+            env.retain(|(k, _)| k != "INFANTRY_STATE_DIR" && k != "INFANTRY_BIN");
+            if spec.name == infantry_harness::INFANTRY_MCP_SERVER {
+                if let Some(first) = command.first_mut() {
+                    *first = "infantry".to_string();
+                }
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod rr_qa2_tests {
+    use super::reroute_daemon_env;
+    use infantry_harness::{McpPlan, McpServerSpec, McpTransport, INFANTRY_MCP_SERVER};
+
+    #[test]
+    fn a_remote_sessions_infantry_mcp_runs_the_runners_own_infantry_not_the_orchestrators_path() {
+        let kv = |k: &str, v: &str| (k.to_string(), v.to_string());
+        let mut env = vec![kv("INFANTRY_BIN", r"C:\app\infantry.exe"), kv("INFANTRY_PORT", "18940")];
+        let mut mcp = McpPlan {
+            add: vec![McpServerSpec {
+                name: INFANTRY_MCP_SERVER.into(),
+                transport: McpTransport::Stdio {
+                    command: vec![r"C:\app\infantry.exe".into(), "mcp".into(), "serve".into()],
+                    env: vec![kv("INFANTRY_BIN", r"C:\app\infantry.exe"), kv("INFANTRY_STATE_DIR", r"C:\state"), kv("INFANTRY_PORT", "18940")],
+                    working_dir: None,
+                },
+                source: INFANTRY_MCP_SERVER.into(),
+                local_only: true,
+            }],
+            deny: Vec::new(),
+        };
+        reroute_daemon_env(&mut env, &mut mcp, 18940, 31000);
+        let McpTransport::Stdio { command, env: menv, .. } = &mcp.add[0].transport else { panic!("stdio") };
+        assert_eq!(command, &vec!["infantry".to_string(), "mcp".into(), "serve".into()]);
+        assert!(menv.iter().all(|(k, _)| k != "INFANTRY_BIN" && k != "INFANTRY_STATE_DIR"));
+        assert!(menv.contains(&kv("INFANTRY_PORT", "31000")));
     }
 }

@@ -15,12 +15,15 @@ WORKDIR /src
 COPY rust ./rust
 # The daemon embeds the shared database schema (crates/infantry-daemon/build.rs reads it from the Kotlin tree).
 COPY superiorSoftLibrary/infantryCore/src/main/sqldelight ./superiorSoftLibrary/infantryCore/src/main/sqldelight
+# The CLI (the MCP bridge) stamps the contract version from the shared vocabulary file (crates/infantry-cli/build.rs).
+COPY superiorSoftLibrary/infantryProtocol/src/main/kotlin/com/superiorsoftllc/infantry/protocol/EventVocabulary.kt ./superiorSoftLibrary/infantryProtocol/src/main/kotlin/com/superiorsoftllc/infantry/protocol/EventVocabulary.kt
 WORKDIR /src/rust
 # The distribution profile is `release` (LTO) by default; CARGO_PROFILE picks `owner-test` for a quicker local build.
 ARG CARGO_PROFILE=release
 RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/src/rust/target \
-    cargo build --profile "$CARGO_PROFILE" -p infantry-distribution \
-    && install -D "target/$( [ "$CARGO_PROFILE" = dev ] && echo debug || echo "$CARGO_PROFILE" )/infantry-daemon" /out/infantry-daemon
+    cargo build --profile "$CARGO_PROFILE" -p infantry-distribution -p infantry-cli \
+    && install -D "target/$( [ "$CARGO_PROFILE" = dev ] && echo debug || echo "$CARGO_PROFILE" )/infantry-daemon" /out/infantry-daemon \
+    && install -D "target/$( [ "$CARGO_PROFILE" = dev ] && echo debug || echo "$CARGO_PROFILE" )/infantry" /out/infantry
 
 FROM debian:bookworm-slim
 LABEL org.opencontainers.image.title="Infantry AI runner" org.opencontainers.image.description="Infantry AI daemon in runner mode (headless remote runner)"
@@ -55,6 +58,8 @@ RUN set -eu; \
     rm -rf /tmp/node
 
 COPY --from=build /out/infantry-daemon /usr/local/bin/infantry-daemon
+# The CLI: the infantry MCP bridge (`infantry mcp serve`) every agent session on this runner starts.
+COPY --from=build /out/infantry /usr/local/bin/infantry
 COPY docker/entrypoint-rust.sh /usr/local/bin/infantry-entrypoint
 RUN chmod 755 /usr/local/bin/infantry-entrypoint
 
