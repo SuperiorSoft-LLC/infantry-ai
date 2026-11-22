@@ -23,6 +23,13 @@ describe("toasts", () => {
     expect(toastOfFrame({ type: "error", data: "x" })).toBeNull();
     expect(toastOfFrame({ type: "notification_push", data: '{"id":"n","title":"Built","level":"success"}' })).toEqual({ tone: "ok", text: "Built", detail: undefined });
   });
+  it("toasts a refused ticket start, naming the cause", () => {
+    const t = (start: object, requestId = "ui:start:1") => ({ type: "ticket", requestId, data: JSON.stringify({ id: "t1", start }) });
+    expect(toastOfFrame(t({ ok: false, reason: "start_refused", detail: "runner e2e-box is offline\nmore" }))).toEqual({ tone: "error", text: "runner e2e-box is offline" });
+    expect(toastOfFrame(t({ ok: false, reason: "held" }))).toEqual({ tone: "warn", text: "The ticket was not started (held)" });
+    expect(toastOfFrame(t({ ok: true, reason: "started" }))).toBeNull();
+    expect(toastOfFrame(t({ ok: false, reason: "start_refused", detail: "x" }, "board:1"))).toBeNull();
+  });
   it("reads a device push for this device only", () => {
     const env = (o: object) => ({ type: "notify_push", data: JSON.stringify({ id: "n1", title: "Done", body: "", level: "milestone", target: "all", at: 1, ...o }) });
     expect(devicePushOf(env({}), "desktop")).toEqual({ id: "n1", toast: { tone: "ok", text: "Done", detail: undefined }, sound: undefined });
