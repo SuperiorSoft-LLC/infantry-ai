@@ -1887,7 +1887,7 @@ fn set_token(env: &mut Vec<(String, String)>, mcp: &mut infantry_harness::McpPla
 }
 
 /// Points the daemon address in a session's env (and in its MCP servers' env) at [remote] on the runner host.
-fn reroute_daemon_env(env: &mut [(String, String)], mcp: &mut infantry_harness::McpPlan, port: u16, remote: u16) {
+fn reroute_daemon_env(env: &mut Vec<(String, String)>, mcp: &mut infantry_harness::McpPlan, port: u16, remote: u16) {
     let fix = |kv: &mut [(String, String)]| {
         for (k, v) in kv.iter_mut() {
             match k.as_str() {
@@ -1898,6 +1898,8 @@ fn reroute_daemon_env(env: &mut [(String, String)], mcp: &mut infantry_harness::
         }
     };
     let _ = port;
+    // Orchestrator-local paths mean nothing on the runner host (QA: a Windows state dir made a stray `C:` folder in the worktree).
+    env.retain(|(k, _)| k != "INFANTRY_STATE_DIR" && k != "INFANTRY_BIN");
     fix(env);
     for spec in mcp.add.iter_mut() {
         if let infantry_harness::McpTransport::Stdio { env, .. } = &mut spec.transport {
