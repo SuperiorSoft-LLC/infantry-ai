@@ -979,3 +979,19 @@ fn a_task_notification_becomes_a_task_notice_in_both_modes() {
     let h = infantry_harness_claude::stream::events(&v);
     assert!(h.iter().any(|e| matches!(e, HarnessEvent::TaskNotice { .. })));
 }
+
+/// NEEDS-INPUT-1: the headless translator answers AskUserQuestion exactly as the interactive one (the same hook channel
+/// and `Answers`): the call becomes a question event, the hook waits, and the answer fills the tool input.
+#[test]
+fn headless_ask_user_question_waits_for_the_answer_and_returns_it_to_the_tool() {
+    let ask = r#"{"hook_event_name":"PreToolUse","tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Which db?","header":"DB","multiSelect":false,"options":[{"label":"Postgres"},{"label":"SQLite"}]}]}}"#;
+    let mut h = Headless::new(ApprovalMode::Ask);
+    let evs = h.feed(TranslatorInput::Hook { id: 7, body: ask.into() });
+    assert!(h.take_outbound().is_empty(), "the hook call waits for the answer");
+    let key = evs.iter().find_map(|e| match e { HarnessEvent::QuestionAsked { id, .. } => Some(id.clone()), _ => None }).expect("a question event");
+    h.answer_questions(&key, vec![infantry_harness::HarnessAnswer { answered: true, answers: vec!["SQLite".into()], other_text: None }]);
+    let out = h.take_outbound();
+    let body = out.iter().find_map(|o| match o { Outbound::HookReply { id: 7, body } => Some(serde_json::from_str::<Value>(body).unwrap()), _ => None }).expect("the hook reply");
+    assert_eq!(body["hookSpecificOutput"]["permissionDecision"], "allow");
+    assert_eq!(body["hookSpecificOutput"]["updatedInput"]["answers"]["Which db?"], "SQLite");
+}

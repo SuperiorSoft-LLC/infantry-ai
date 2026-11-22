@@ -25,6 +25,7 @@ pub mod project_files;
 pub mod timeline;
 pub mod plugins;
 pub mod ui_bundles;
+mod needs_input;
 mod prompter;
 mod settings;
 pub mod scope;
@@ -284,6 +285,14 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         settings: settings::SettingsUnit { db: db.clone() },
         handle: handle.clone(),
     }));
+    // NEEDS-INPUT-1: the `session.needs_input` / `session.input_answered` hook events and the PM routing of a card.
+    needs_input::wire(&prompts, &daemon, &db, &env, &bus);
+    {
+        let b = bus.clone();
+        daemon.set_event_sink(Arc::new(move |name, payload| {
+            b.emit(name, payload);
+        }));
+    }
     // The `notify.*` settings (Infantry_Notify module.json), read on every request so a change applies at once.
     let notify_settings = {
         let s = settings::SettingsUnit { db: db.clone() };
@@ -453,6 +462,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             project_dir: Arc::new(move |id: &str| project_dir(&p, id)),
             wake_gate: env.wake_gate(),
             settings: settings::SettingsUnit { db: db.clone() },
+            prompts: prompts.clone(),
         }));
     }
     tools.set_knowledge(knowledge.clone());

@@ -55,3 +55,23 @@ describe("prompts store", () => {
     expect(s.getState().open).toEqual({});
   });
 });
+
+describe("NEEDS-INPUT-1: routed cards and the waiting split", () => {
+  it("draws no owner card for a question routed to the PM, and draws it once escalated", () => {
+    const l = link();
+    const s = createPromptsStore(l);
+    l.push(req("p1", { route: "pm-then-owner" }));
+    expect(s.getState().open.p1).toBeUndefined();
+    l.push(req("p1"));
+    expect(s.getState().open.p1?.question).toBe("Which?");
+  });
+
+  it("a waiting flag is `waiting`, an open question is `needs-input`, and the question outranks the flag", async () => {
+    const { holdOf } = await import("../src");
+    const waiting = { reason: "cargo build", since: 1, untilAt: 2, expiresAt: 3 } as never;
+    expect(holdOf({ state: "BUSY", waiting })).toBe("waiting");
+    expect(holdOf({ state: "WAITING_INPUT", waiting: undefined })).toBe("needs-input");
+    expect(holdOf({ state: "WAITING_INPUT", waiting })).toBe("needs-input");
+    expect(holdOf({ state: "BUSY", waiting: undefined })).toBeNull();
+  });
+});

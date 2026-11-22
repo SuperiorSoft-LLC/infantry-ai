@@ -70,6 +70,12 @@ export function createPromptsStore(link: PromptsLink): PromptsStore {
       if (env.type === "prompt_request") {
         const r = json<Record<string, unknown>>(env.data);
         if (!r || typeof r.promptId !== "string") return;
+        // NEEDS-INPUT-1: a card routed to the PM (`route` set) is the PM's to answer, not the owner's: no card here. An
+        // escalation sends it again with no route, and then it is drawn.
+        if (typeof r.route === "string" && r.route) {
+          if (get().open[r.promptId]) drop(r.promptId);
+          return;
+        }
         const p: OpenPrompt = {
           promptId: r.promptId,
           sessionId: String(r.sessionId ?? env.sessionId ?? ""),

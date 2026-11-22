@@ -147,8 +147,9 @@ impl FrameUnit for PromptsUnit {
                 let r: PromptResponse = parse(env)?;
                 let who = if ctx.owner { "owner".to_string() } else { format!("client:{}", ctx.conn_id) };
                 // The resolution is broadcast as `prompt_resolved` by the prompts sink.
-                self.prompts.respond(&r, &who).map_err(|e| Refusal::new(t, e))?;
-                Ok(vec![])
+                let done = self.prompts.respond(&r, &who).map_err(|e| Refusal::new(t, e))?;
+                // An escalation closes nothing, so no `prompt_resolved` is broadcast: the caller gets the outcome itself.
+                Ok(if done.outcome == "escalated" { vec![reply(env, f::PROMPT_RESOLVED, to_json(&done))] } else { vec![] })
             }
             // A session's blocking question (Kotlin `prompt_ask`): a card now, its `prompt_answer` (to the asking
             // session) once the owner answers, the timer fires or the session ends.

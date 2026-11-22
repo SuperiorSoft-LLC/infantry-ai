@@ -41,6 +41,8 @@ pub struct AgentTools {
     /// WAKE-2: the shared wake gate and settings `infantry_message` with a `kind` is decided by.
     pub wake_gate: Arc<infantry_mail::notify::wake::WakeGate>,
     pub settings: super::settings::SettingsUnit,
+    /// NEEDS-INPUT-1: the open question and approval cards `infantry_prompt_answer` answers.
+    pub prompts: Arc<infantry_mail::notify::prompts::PendingPrompts>,
 }
 
 fn infos(raw: &str) -> Vec<ToolInfo> {
@@ -490,6 +492,28 @@ impl AgentTools {
                 let req = infantry_protocol::session::WaitingRequest { op, reason: s(a, "reason"), minutes: n(a, "untilMinutes").map(|m| m.clamp(i32::MIN as i64, i32::MAX as i64) as i32) };
                 let w = self.daemon.waiting(&session, &req)?;
                 Ok(crate::sessions::waiting_line(w.as_ref(), crate::sessions::now_ms()))
+            })(),
+            "infantry_prompt_answer" => (|| {
+                if !pm(inv) {
+                    return Err("only the pm or the owner answers an agent's question".to_string());
+                }
+                let mine = self.caller_project(inv);
+                let open: Vec<_> = self.prompts.snapshot().into_iter().filter(|r| mine.is_none() || self.daemon.record(&r.session_id).and_then(|x| x.project_id) == mine).collect();
+                let Some(id) = s(a, "promptId") else {
+                    if open.is_empty() {
+                        return Ok("no open prompts".into());
+                    }
+                    return Ok(open.iter().map(|r| format!("{} session {} [{}{}] {}", r.prompt_id, r.session_id.chars().take(8).collect::<String>(), r.kind, r.route.as_deref().map(|x| format!(", route {x}")).unwrap_or_default(), r.question.clone().or_else(|| r.tool.clone()).unwrap_or_default().replace('\n', " ").chars().take(160).collect::<String>())).collect::<Vec<_>>().join("\n"));
+                };
+                if !open.iter().any(|r| r.prompt_id == id) {
+                    return Err(format!("no open prompt '{id}' in your project (infantry_prompt_answer with no promptId lists them)"));
+                }
+                let answers: Vec<String> = a.get("answers").and_then(Value::as_array).map(|v| v.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default();
+                let decision = if flag(a, "escalate") { Some(infantry_mail::notify::prompts::ESCALATE.to_string()) } else { s(a, "decision") };
+                let resp = infantry_protocol::prompts::PromptResponse { prompt_id: id.clone(), decision, answers, other_text: s(a, "otherText") };
+                let who = if inv.owner { "owner".to_string() } else { format!("pm:{}", inv.session_id.clone().unwrap_or_default().chars().take(8).collect::<String>()) };
+                let done = self.prompts.respond(&resp, &who)?;
+                Ok(format!("{}: {}", done.prompt_id, done.outcome))
             })(),
             "infantry_session_restart" => (|| {
                 let r = self.find(&s(a, "sessionId").unwrap_or_default())?;

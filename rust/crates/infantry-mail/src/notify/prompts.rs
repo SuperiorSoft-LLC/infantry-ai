@@ -158,6 +158,21 @@ struct State {
 
 type Sink = Arc<dyn Fn(&str, String, &str) + Send + Sync>;
 type Notice = Arc<dyn Fn(&str, &str) + Send + Sync>;
+/// NEEDS-INPUT-1: the route of a new card, from its session: `Some("pm")` = the PM answers first (`questions.route`).
+type Router = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
+type Observer = Arc<dyn Fn(PromptEvent<'_>) + Send + Sync>;
+
+/// What the observer hears: a card opened (`session.needs_input`) or closed (`session.input_answered`).
+pub enum PromptEvent<'a> {
+    Asked(&'a PromptRequest),
+    Resolved(&'a PromptRequest, &'a PromptResolved),
+}
+
+/// The `decision` a PM sends to hand a routed card to the owner.
+pub const ESCALATE: &str = "escalate";
+/// The route values a card carries (`questions.route`; `owner` is no route).
+pub const ROUTE_PM: &str = "pm";
+pub const ROUTE_PM_THEN_OWNER: &str = "pm-then-owner";
 
 /// Who: the outcome of an approval request.
 #[derive(Debug, Clone, PartialEq)]
@@ -175,6 +190,8 @@ pub struct PendingPrompts {
     sink: RwLock<Option<Sink>>,
     /// One transcript line for a session.
     notice: RwLock<Option<Notice>>,
+    router: RwLock<Option<Router>>,
+    observer: RwLock<Option<Observer>>,
     state: Mutex<State>,
 }
 
@@ -195,11 +212,28 @@ impl PendingPrompts {
         policy_for: Arc<dyn Fn(&str) -> TimeoutPolicy + Send + Sync>,
         clock: Arc<dyn Fn() -> i64 + Send + Sync>,
     ) -> Self {
-        PendingPrompts { rules, project_of, policy_for, clock, sink: RwLock::new(None), notice: RwLock::new(None), state: Mutex::new(State::default()) }
+        PendingPrompts { rules, project_of, policy_for, clock, sink: RwLock::new(None), notice: RwLock::new(None), router: RwLock::new(None), observer: RwLock::new(None), state: Mutex::new(State::default()) }
     }
 
     pub fn set_sink(&self, f: impl Fn(&str, String, &str) + Send + Sync + 'static) {
         *self.sink.write().unwrap() = Some(Arc::new(f));
+    }
+    /// Which route a session's new cards take (None = the owner). Read on every card, so a setting change applies at once.
+    pub fn set_router(&self, f: impl Fn(&str) -> Option<String> + Send + Sync + 'static) {
+        *self.router.write().unwrap() = Some(Arc::new(f));
+    }
+    /// Hears every card opened and closed (the daemon turns them into the `session.*` hook events and the PM wake).
+    pub fn set_observer(&self, f: impl Fn(PromptEvent<'_>) + Send + Sync + 'static) {
+        *self.observer.write().unwrap() = Some(Arc::new(f));
+    }
+    fn observe(&self, e: PromptEvent<'_>) {
+        if let Some(o) = self.observer.read().unwrap().clone() {
+            o(e);
+        }
+    }
+    fn route_of(&self, session: &str) -> Option<String> {
+        let r = self.router.read().unwrap().clone()?;
+        r(session)
     }
     pub fn set_notice(&self, f: impl Fn(&str, &str) + Send + Sync + 'static) {
         *self.notice.write().unwrap() = Some(Arc::new(f));
@@ -253,6 +287,7 @@ impl PendingPrompts {
             expires_at: (policy.timeout_ms > 0).then_some(now + policy.timeout_ms),
             on_timeout: Some(auto.unwrap_or(policy.on_timeout).wire().into()),
             recommended: auto.map(|d| d.wire().into()),
+            route: None,
         };
         let (res, resolved_by) = self.wait(request, Some(input.to_string()), policy).await;
         let decision = match res {
@@ -280,6 +315,7 @@ impl PendingPrompts {
             expires_at: (policy.timeout_ms > 0).then_some(now + policy.timeout_ms),
             on_timeout: None,
             recommended: spec.recommended.clone(),
+            route: None,
         };
         match self.wait(request, None, policy).await.0 {
             Resolution::Question(a) => a,
@@ -287,7 +323,8 @@ impl PendingPrompts {
         }
     }
 
-    async fn wait(&self, request: PromptRequest, full_input: Option<String>, policy: TimeoutPolicy) -> (Resolution, String) {
+    async fn wait(&self, mut request: PromptRequest, full_input: Option<String>, policy: TimeoutPolicy) -> (Resolution, String) {
+        request.route = self.route_of(&request.session_id);
         let (tx, rx) = oneshot::channel();
         let id = request.prompt_id.clone();
         let session = request.session_id.clone();
@@ -297,6 +334,7 @@ impl PendingPrompts {
             s.open.insert(id.clone(), Open { request: request.clone(), full_input, tx: Some(tx) });
         }
         self.emit(f::PROMPT_REQUEST, serde_json::to_string(&request).unwrap_or_default(), &session);
+        self.observe(PromptEvent::Asked(&request));
         // The asker went away (its future dropped): close the card everywhere.
         let guard = CancelGuard { prompts: self, id: id.clone(), armed: true };
         let got = if policy.timeout_ms <= 0 { rx.await.ok() } else { tokio::time::timeout(Duration::from_millis(policy.timeout_ms as u64), rx).await.ok().and_then(Result::ok) };
@@ -326,8 +364,28 @@ impl PendingPrompts {
                 None => return Err(format!("unknown prompt '{}'", id.chars().take(80).collect::<String>())),
             }
         };
+        if response.decision.as_deref().map(str::trim) == Some(ESCALATE) {
+            return self.escalate(id, resolved_by);
+        }
         let resolution = validate(&request, response)?;
         self.resolve(id, resolved_by, resolution).ok_or_else(|| format!("prompt '{}' is already resolved", id.chars().take(80).collect::<String>()))
+    }
+
+    /// The PM hands a routed card to the owner: the route clears and the card is sent again (same id).
+    fn escalate(&self, id: &str, by_whom: &str) -> Result<PromptResolved, String> {
+        let request = {
+            let mut s = self.state.lock().unwrap();
+            let o = s.open.get_mut(id).ok_or_else(|| format!("unknown prompt '{}'", id.chars().take(80).collect::<String>()))?;
+            match o.request.route.as_deref() {
+                Some(ROUTE_PM_THEN_OWNER) => {}
+                Some(_) => return Err("this question is routed to the PM only (questions.route = pm): answer it".into()),
+                None => return Err("this prompt is already the owner's: nothing to escalate".into()),
+            }
+            o.request.route = None;
+            o.request.clone()
+        };
+        self.emit(f::PROMPT_REQUEST, serde_json::to_string(&request).unwrap_or_default(), &request.session_id);
+        Ok(PromptResolved { prompt_id: id.into(), resolved_by: by_whom.into(), outcome: "escalated".into() })
     }
 
     /// The session ended: its prompts close with `session_end` and its grants go.
@@ -375,6 +433,7 @@ impl PendingPrompts {
             let _ = tx.send((resolution, resolved_by.to_string()));
         }
         self.emit(f::PROMPT_RESOLVED, serde_json::to_string(&frame).unwrap_or_default(), &entry.request.session_id);
+        self.observe(PromptEvent::Resolved(&entry.request, &frame));
         Some(frame)
     }
 }
@@ -513,6 +572,72 @@ mod tests {
         let a = q.request_approval("s", "Write", "x", None).await;
         assert!(a.timed_out && a.decision == Decision::Deny);
         assert!(q.respond(&PromptResponse { prompt_id: "nope".into(), decision: None, answers: vec![], other_text: None }, "o").unwrap_err().starts_with("unknown prompt"));
+    }
+
+    fn spec() -> QuestionSpec {
+        QuestionSpec { question: "Which?".into(), options: vec![PromptOption { label: "A".into(), description: String::new() }, PromptOption { label: "B".into(), description: String::new() }], multi_select: false, allow_other: false, timeout_ms: None, recommended: None }
+    }
+
+    /// NEEDS-INPUT-1: a routed card is announced ONCE to the observer (the one PM wake), the PM's answer returns to the asker
+    /// and closes the card (`session.input_answered`), and a card with no route is announced with route None (the owner).
+    #[tokio::test]
+    async fn a_routed_question_is_announced_once_and_the_pms_answer_unblocks_the_asker() {
+        let p = prompts(0);
+        p.set_router(|session| (session == "worker").then(|| ROUTE_PM.to_string()));
+        let heard: Arc<Mutex<Vec<String>>> = Arc::default();
+        let (h, p2) = (heard.clone(), p.clone());
+        p.set_observer(move |e| match e {
+            PromptEvent::Asked(r) => {
+                h.lock().unwrap().push(format!("asked:{}:{}", r.session_id, r.route.clone().unwrap_or_else(|| "owner".into())));
+                let (p3, id) = (p2.clone(), r.prompt_id.clone());
+                tokio::spawn(async move {
+                    let a = PromptResponse { prompt_id: id.clone(), decision: None, answers: vec!["B".into()], other_text: None };
+                    p3.respond(&a, "client:pm").unwrap();
+                });
+            }
+            PromptEvent::Resolved(r, done) => h.lock().unwrap().push(format!("answered:{}:{}:{}", r.session_id, done.outcome, done.resolved_by)),
+        });
+        let a = p.ask_question("worker", &spec()).await;
+        assert!(a.answered && a.answers == vec!["B".to_string()], "the PM's answer reached the blocked asker: {a:?}");
+        let b = p.ask_question("other", &spec()).await;
+        assert!(b.answered);
+        assert_eq!(*heard.lock().unwrap(), vec!["asked:worker:pm", "answered:worker:answered:client:pm", "asked:other:owner", "answered:other:answered:client:pm"]);
+    }
+
+    /// A `pm` card cannot be escalated; a `pm-then-owner` card can: the route clears and the card is sent again, still open.
+    #[tokio::test]
+    async fn only_a_pm_then_owner_card_escalates_to_the_owner() {
+        for (route, ok) in [(ROUTE_PM, false), (ROUTE_PM_THEN_OWNER, true)] {
+            let p = prompts(0);
+            p.set_router(move |_| Some(route.to_string()));
+            let sent: Arc<Mutex<Vec<PromptRequest>>> = Arc::default();
+            let s = sent.clone();
+            p.set_sink(move |t, d, _| {
+                if t == f::PROMPT_REQUEST {
+                    s.lock().unwrap().push(serde_json::from_str(&d).unwrap());
+                }
+            });
+            let p2 = p.clone();
+            let asker = tokio::spawn(async move { p2.ask_question("worker", &spec()).await });
+            for _ in 0..200 {
+                if !sent.lock().unwrap().is_empty() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            let id = sent.lock().unwrap()[0].prompt_id.clone();
+            let esc = PromptResponse { prompt_id: id.clone(), decision: Some(ESCALATE.into()), answers: vec![], other_text: None };
+            let r = p.respond(&esc, "client:pm");
+            assert_eq!(r.is_ok(), ok, "{route}: {r:?}");
+            if ok {
+                assert_eq!(r.unwrap().outcome, "escalated");
+                let again = sent.lock().unwrap().last().unwrap().clone();
+                assert!(sent.lock().unwrap().len() == 2 && again.route.is_none() && again.prompt_id == id, "the card is sent again with no route");
+                assert_eq!(p.snapshot().len(), 1, "an escalation closes nothing");
+            }
+            p.close_all("test");
+            assert!(!asker.await.unwrap().answered);
+        }
     }
 
     #[test]

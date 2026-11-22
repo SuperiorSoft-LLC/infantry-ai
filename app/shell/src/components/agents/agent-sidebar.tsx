@@ -36,8 +36,8 @@ export function AgentSidebar() {
   );
   const waiting = visible.filter((a) => a.status === "needs-input");
   const review = visible.filter((a) => a.status === "review");
-  const running = visible.filter((a) => a.status === "working");
-  const quiet = visible.filter((a) => a.status !== "needs-input" && a.status !== "review" && a.status !== "working");
+  const running = visible.filter((a) => a.status === "working" || a.status === "waiting");
+  const quiet = visible.filter((a) => a.status !== "needs-input" && a.status !== "review" && a.status !== "working" && a.status !== "waiting");
 
   return (
     <aside aria-label="Agents" className="flex h-full w-[268px] shrink-0 flex-col border-r bg-background">

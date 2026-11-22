@@ -4,4 +4,9 @@ import type { PromptOption } from "./PromptOption";
 /**
  * Daemon -> client: an open tool-approval prompt or question.
  */
-export type PromptRequest = { promptId: string, sessionId: string, kind: string, createdAt: bigint, tool: string | null, input: string | null, question: string | null, options: Array<PromptOption>, multiSelect: boolean, allowOther: boolean, expiresAt: bigint | null, onTimeout: string | null, recommended: string | null, };
+export type PromptRequest = { promptId: string, sessionId: string, kind: string, createdAt: bigint, tool: string | null, input: string | null, question: string | null, options: Array<PromptOption>, multiSelect: boolean, allowOther: boolean, expiresAt: bigint | null, onTimeout: string | null, recommended: string | null, 
+/**
+ * NEEDS-INPUT-1: who must answer first. `pm` = the project's PM session (the owner's client does not draw the card);
+ * absent = the owner. The PM escalates with `decision: "escalate"`, which clears it and re-sends the card.
+ */
+route: string | null, };

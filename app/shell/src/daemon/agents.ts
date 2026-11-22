@@ -4,15 +4,20 @@
 // a card whose session did not change in a flush keeps the same object and does not re-render.
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { inProject, isRunning, withoutAssistant, type AgentProfile, type ProjectSummary, type SessionView, type TicketSummary } from "@infantry/client";
+import { holdOf, inProject, isRunning, withoutAssistant, type AgentProfile, type ProjectSummary, type SessionView, type TicketSummary } from "@infantry/client";
 import type { Agent, AgentStatus } from "@/mock/types";
 import { useDaemon } from "./daemon";
 import { useProjects } from "@/components/git/use-projects";
 
-/** [ticketStatus]: the board lane of the session's ticket; a quiet session whose ticket is Pending is ready to check. */
+/**
+ * [ticketStatus]: the board lane of the session's ticket; a quiet session whose ticket is Pending is ready to check.
+ * NEEDS-INPUT-1: `needs-input` is an agent that needs an ANSWER (WAITING_INPUT: a question or approval card is open).
+ * `waiting` is the flag a worker sets with `infantry waiting on` while a build or process runs: calm, no attention.
+ */
 function statusOf(v: SessionView, ticketStatus?: string): AgentStatus {
   const s = v.record.state;
-  if (s === "WAITING_INPUT" || v.record.waiting) return "needs-input";
+  const hold = holdOf(v.record);
+  if (hold) return hold;
   if (isRunning(v.record)) return "working";
   if (ticketStatus === "pending") return "review";
   if (s === "FAILED" || s === "ORPHANED") return "error";
@@ -23,6 +28,7 @@ function statusOf(v: SessionView, ticketStatus?: string): AgentStatus {
 function statusLine(v: SessionView): string {
   const r = v.record;
   if (r.heldBy) return `live in ${r.heldBy}`;
+  if (r.state === "WAITING_INPUT") return "needs input";
   if (r.watchLabel) return r.watchLabel;
   if (r.waiting?.reason) return `waiting: ${r.waiting.reason}`;
   const st = v.status;
@@ -85,7 +91,7 @@ export function toAgent(
     age: ago(r.lastHeartbeat),
     activityAt: v.activityAt ?? r.lastEventAt ?? r.lastHeartbeat,
     lastLine: v.lastLine || r.workingDir,
-    group: status === "working" || status === "needs-input" ? "running" : "quiet",
+    group: status === "working" || status === "waiting" || status === "needs-input" ? "running" : "quiet",
     provider: r.provider,
     model: r.model ?? "default",
     runs: r.runCount ?? 0,

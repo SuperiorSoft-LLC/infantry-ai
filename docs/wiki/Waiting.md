@@ -54,3 +54,7 @@ In Progress ticket that is idle (turn ended), runs no background job and is not 
 `idleSeconds` (60) through `queue_add`: update the ticket, report done or blocked, or set waiting. A flag that ran out gets one
 "still waiting?" nudge. It never nudges a flagged session and never twice for one idle period. Kill switch: arg `enabled`.
 The silent-worker alerts to the PM (`worker-silent-ping`) only look at busy sessions, so a flagged idle session raises none.
+
+## Waiting is not needing an answer (NEEDS-INPUT-1)
+
+The card status `waiting` (this flag: `waiting: <reason>`, calm, no attention) is separate from `needs-input` (an open question or `ask`-mode approval: it needs an ANSWER, attention style). Setting and clearing the flag publishes the hook events `session.waiting_on` / `session.waiting_off`; a question publishes `session.needs_input` / `session.input_answered` (see [Scripting](Scripting.md) hooks). Who answers a question is the setting `questions.route` ([Settings](Settings.md)).

@@ -3,7 +3,7 @@
 // Typed shapes for every mock the GUI template renders.
 // When the daemon is wired in, these become the API types; components only read them.
 
-export type AgentStatus = "idle" | "working" | "needs-input" | "review" | "done" | "error";
+export type AgentStatus = "idle" | "working" | "waiting" | "needs-input" | "review" | "done" | "error";
 export type { Tone, NamedRow } from "@infantry/ui";
 
 export interface Role {

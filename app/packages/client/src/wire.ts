@@ -228,6 +228,16 @@ export function isRunning(r: Pick<SessionRecord, "state" | "turnActive">): boole
   return r.turnActive === true || r.state === "BUSY" || r.state === "STARTING" || r.state === "WAITING_INPUT";
 }
 
+/**
+ * NEEDS-INPUT-1: the two ways a live session is "held". `needs-input` = it needs an ANSWER (a question or approval card
+ * is open: WAITING_INPUT), which asks for attention. `waiting` = the worker flagged itself with `infantry waiting on`
+ * while a build or process runs: calm, no attention. null = neither. A question outranks the flag.
+ */
+export function holdOf(r: Pick<SessionRecord, "state" | "waiting">): "needs-input" | "waiting" | null {
+  if (r.state === "WAITING_INPUT") return "needs-input";
+  return r.waiting ? "waiting" : null;
+}
+
 /** Sessions of the selected project. A session with no projectId is global (e.g. the Assistant) and always shows; no selected project shows all. */
 export function inProject<T extends { record: Pick<SessionRecord, "projectId"> }>(items: T[], projectId: string | null | undefined): T[] {
   if (!projectId) return items;
