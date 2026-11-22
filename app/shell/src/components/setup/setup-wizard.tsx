@@ -22,7 +22,9 @@ import {
   installProgress,
   followInstalled,
   signInChoices,
-  opensNow,
+  autoOpens,
+  markSetupDone,
+  setupDone,
   firstStep,
   HELLO_PROMPT,
   installHarnesses,
@@ -104,7 +106,13 @@ export function useAutoSetup(): void {
   const before = useRef<boolean | null>(null);
   const want = needed(report, secrets, providers, catalog);
   useEffect(() => {
-    if (opensNow(before.current, want) && !ui.dialog) ui.set("dialog", "setup");
+    const store = typeof localStorage === "undefined" ? null : localStorage;
+    // Everything is fine now, or the setup has been shown once: it never opens by itself again (Settings > Daemon still opens it).
+    if (want === false) markSetupDone(store);
+    if (autoOpens(setupDone(store), before.current, want) && !ui.dialog) {
+      markSetupDone(store);
+      ui.set("dialog", "setup");
+    }
     // Another dialog was open: the next render tries again, so the setup is not lost behind it.
     if (want !== true || !ui.dialog || ui.dialog === "setup") before.current = want;
   }, [want, ui]);

@@ -58,6 +58,7 @@ pub struct HarnessInstall {
 impl HarnessInstall {
     pub fn new(state_dir: &Path, on_changed: Arc<dyn Fn() + Send + Sync>, on_done: Arc<dyn Fn() + Send + Sync>) -> Arc<HarnessInstall> {
         let prefix = state_dir.join("harness-tools");
+        infantry_proc::user_path::refresh_with(infantry_proc::user_path::registry_dirs, true);
         add_to_path(&prefix);
         Arc::new(HarnessInstall { prefix, log: Arc::default(), busy: Arc::default(), versions: Arc::default(), on_changed, on_done })
     }
@@ -82,6 +83,7 @@ impl HarnessInstall {
     }
 
     fn report(&self) -> Value {
+        infantry_proc::user_path::refresh();
         let npm = find_npm(&self.prefix);
         let installable = npm.is_none() && node_platform().is_some();
         let harnesses: Vec<Value> = KNOWN

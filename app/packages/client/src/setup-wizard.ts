@@ -114,6 +114,33 @@ export function needed(report: HarnessInstallReport | null, secrets: SecretRow[]
  */
 export const opensNow = (before: boolean | null, now: boolean | null): boolean => now === true && before !== true;
 
+/** Persistent "the first-time setup has been seen or was never needed" flag (webview storage lives in app data: it survives updates). */
+export const SETUP_DONE_KEY = "infantry.setup.done";
+
+type FlagStore = Pick<Storage, "getItem" | "setItem">;
+
+export function setupDone(store: FlagStore | null): boolean {
+  try {
+    return store?.getItem(SETUP_DONE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function markSetupDone(store: FlagStore | null): void {
+  try {
+    store?.setItem(SETUP_DONE_KEY, "1");
+  } catch {
+    /* storage unavailable: the setup may show again next start */
+  }
+}
+
+/**
+ * Whether the setup opens by ITSELF: only on a true first install (flag never set). After that, a tool that is "not found right
+ * now" (an update relaunch, a different PATH) never reopens it; the user opens it from Settings.
+ */
+export const autoOpens = (done: boolean, before: boolean | null, now: boolean | null): boolean => !done && opensNow(before, now);
+
 /** The harness the pick follows: [pick] while it is installed (or nothing is), else the first that is. */
 export function followInstalled(pick: string | null, report: HarnessInstallReport): string | null {
   const ids = report.harnesses.filter(installed).map((h) => h.id);

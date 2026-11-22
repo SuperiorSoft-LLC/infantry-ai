@@ -5,6 +5,8 @@
 //! on one built elsewhere); `NoSpawnWindowGuard` in this crate's tests fails when a spawn bypasses it. Stdio pipes are
 //! untouched (this is not `DETACHED_PROCESS`).
 
+pub mod user_path;
+
 use std::ffi::OsStr;
 use std::process::Command;
 
