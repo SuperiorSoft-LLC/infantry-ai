@@ -71,6 +71,31 @@ pub fn status_activity(tool: &str, activity: &str) -> String {
     json!({"state": "BUSY", "detail": "", "tool": tool, "activity": activity}).to_string()
 }
 
+/// The longest tool activity text, in characters (the chat shows one line per tool call; the rest is cut with an ellipsis).
+pub const TOOL_ACTIVITY_MAX_CHARS: usize = 160;
+
+/// What a tool call is doing, as one line: the command or path of its input (a JSON object's `command`, `cmd`, `file_path`,
+/// `filePath`, `path`, `pattern`, `url` or `query`, else its first string value; a plain string as it is), cut to
+/// [`TOOL_ACTIVITY_MAX_CHARS`].
+pub fn tool_activity(input: &str) -> String {
+    let text = match serde_json::from_str::<Value>(input) {
+        Ok(Value::Object(o)) => ["command", "cmd", "file_path", "filePath", "path", "pattern", "url", "query"]
+            .iter()
+            .find_map(|k| o.get(*k).and_then(Value::as_str))
+            .or_else(|| o.values().find_map(Value::as_str))
+            .unwrap_or("")
+            .to_string(),
+        Ok(Value::String(s)) => s,
+        _ => input.to_string(),
+    };
+    let one_line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if one_line.chars().count() <= TOOL_ACTIVITY_MAX_CHARS {
+        return one_line;
+    }
+    let cut: String = one_line.chars().take(TOOL_ACTIVITY_MAX_CHARS).collect();
+    format!("{cut}...")
+}
+
 /// A file write (a change box): `{"state":"BUSY","detail":"","write":{...}}`; [write] is the `FileWrite` JSON.
 pub fn status_write(write: &str) -> String {
     let w: Value = serde_json::from_str(write).unwrap_or(Value::Null);
@@ -97,6 +122,18 @@ pub fn array(items: Vec<Value>) -> String {
 #[cfg(test)]
 mod write_tests {
     use super::*;
+
+    #[test]
+    fn a_tool_activity_is_the_command_or_path_on_one_line() {
+        assert_eq!(tool_activity(r#"{"command":"ls -la\n  /tmp","description":"list"}"#), "ls -la /tmp");
+        assert_eq!(tool_activity(r#"{"filePath":"/a/b.rs"}"#), "/a/b.rs");
+        assert_eq!(tool_activity(r#"{"other":"first string","n":1}"#), "first string");
+        assert_eq!(tool_activity("echo hi"), "echo hi");
+        assert_eq!(tool_activity("{}"), "");
+        let long = tool_activity(&format!(r#"{{"command":"{}"}}"#, "x".repeat(500)));
+        assert_eq!(long.chars().count(), TOOL_ACTIVITY_MAX_CHARS + 3);
+        assert!(long.ends_with("..."));
+    }
 
     #[test]
     fn a_write_status_carries_the_file_write_object() {

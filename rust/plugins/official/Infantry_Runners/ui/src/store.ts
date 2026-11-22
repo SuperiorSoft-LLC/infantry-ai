@@ -19,6 +19,8 @@ export interface RunnerView {
   contract?: string | null;
   rttMs?: number | null;
   reason?: string | null;
+  /** The reason in plain words (the list row shows this; `reason` keeps the raw error for the Details panel). */
+  reasonPlain?: string | null;
   runnerId?: string | null;
   /** RR-11: the oldest contract the app drives, whether this runner is older, the app it runs, and its Update runner progress. */
   needs?: string;
@@ -96,7 +98,7 @@ export function joinHarnesses(install: unknown, providers: unknown, hello: { id:
     const h = hello.find((x) => x.id === id);
     const installed = !!i && !!i.path && i.state !== "missing";
     const signedIn = installed ? (p ? p.available !== false : h ? h.loggedIn : null) : false;
-    return { id, installed, version: i?.version ?? null, path: i?.path ?? null, signedIn, why: signedIn === false && installed ? plainText(p?.unavailableReason) ?? "not signed in" : null, loginAt: p?.loginAt ?? null };
+    return { id, installed, version: i?.installedVersion ?? i?.version ?? null, path: i?.path ?? null, signedIn, why: signedIn === false && installed ? plainText(p?.unavailableReason) ?? "not signed in" : null, loginAt: p?.loginAt ?? null };
   });
 }
 
@@ -110,6 +112,8 @@ interface InstallRow {
   id: string;
   state?: string;
   path?: string | null;
+  /** What `harness_install_status` sends: the CLI's `--version` text (null when it could not be read). */
+  installedVersion?: string | null;
 }
 
 /**
@@ -195,9 +199,9 @@ export function statusOf(r: RunnerView): { dot: "done" | "needs-input" | "error"
     case "online":
       return { dot: "done", word: "online", reason: null };
     case "outdated":
-      return { dot: "needs-input", word: "outdated", reason: r.reason ?? "this runner speaks another contract" };
+      return { dot: "needs-input", word: "outdated", reason: r.reasonPlain ?? r.reason ?? "this runner speaks another contract" };
     case "offline":
-      return { dot: "error", word: "offline", reason: r.reason ?? "no answer" };
+      return { dot: "error", word: "offline", reason: r.reasonPlain ?? r.reason ?? "no answer" };
     default:
       return { dot: "idle", word: "not checked", reason: null };
   }

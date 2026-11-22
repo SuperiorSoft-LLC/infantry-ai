@@ -1537,9 +1537,14 @@ impl Daemon {
                 self.emit(&mut e, wire::TEXT_DELTA, t);
             }
             HarnessEvent::Stderr(l) => self.emit(&mut e, wire::STDERR, l),
-            HarnessEvent::Tool(name) => {
+            HarnessEvent::Tool { name, input } => {
                 e.rec.last_output_at = Some(now_ms());
                 e.stats.tool(&name);
+                // The chat draws a tool line from a status frame with `tool` and `activity` (transcript.ts).
+                if e.turn_active {
+                    e.hung = false;
+                    self.emit(&mut e, wire::STATUS, wire::status_activity(&name, &wire::tool_activity(&input)));
+                }
             }
             HarnessEvent::Write(w) if e.turn_active => {
                 e.hung = false;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// The window's toast stack (@infantry/client createToasts), bottom right. It raises a toast for each daemon frame
+// The window's toast stack (@infantry/client createToasts), bottom right, above every dialog (z-[100]: a dialog is z-50, and a refused start from the Board dialog must show). It raises a toast for each daemon frame
 // toastOfFrame maps (a refused UI request with no inline view, a pushed notification); `toast()` posts one from code.
 // A device notification (`notify_push`) toasts, plays the sound the daemon sent (it applied the notify.* settings)
 // and is acked for this device (`notify_ack` {id, device}).
@@ -49,7 +49,7 @@ export function ToastHost() {
   );
   if (!list.length) return null;
   return (
-    <div className="pointer-events-none fixed right-4 bottom-10 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2" role="status" aria-live="polite">
+    <div className="pointer-events-none fixed right-4 bottom-10 z-[100] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2" role="status" aria-live="polite">
       {list.map((t) => {
         const Icon = ICON[t.tone];
         return (
