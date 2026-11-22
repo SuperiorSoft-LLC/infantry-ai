@@ -138,6 +138,8 @@ pub struct LocalRunner {
     owns_scratch: bool,
     procs: Mutex<HashMap<ProcId, Arc<Proc>>>,
     next: AtomicU64,
+    /// RR-8: a per-boot tag in every id (`p<tag>-<n>`), so a restarted runner never reuses an id a peer still holds a cursor for.
+    id_tag: Option<String>,
     hooks: Mutex<Option<Arc<HookServer>>>,
 }
 
@@ -153,7 +155,13 @@ impl LocalRunner {
             Some(d) => (d.clone(), false),
             None => (std::env::temp_dir().join(format!("infantry-runner-local-{}", uuid::Uuid::new_v4())), true),
         };
-        LocalRunner { cfg, scratch, owns_scratch, procs: Mutex::default(), next: AtomicU64::new(1), hooks: Mutex::default() }
+        LocalRunner { cfg, scratch, owns_scratch, procs: Mutex::default(), next: AtomicU64::new(1), id_tag: None, hooks: Mutex::default() }
+    }
+
+    /// Process ids carry `tag` (`p<tag>-<n>`): a runner that persists its link sessions across restarts passes a per-boot tag.
+    pub fn with_id_tag(mut self, tag: impl Into<String>) -> Self {
+        self.id_tag = Some(tag.into());
+        self
     }
 
     fn proc(&self, id: &ProcId) -> Result<Arc<Proc>, RunnerError> {
@@ -250,7 +258,13 @@ impl Runner for LocalRunner {
             let hub = Arc::new(Hub::new(self.cfg.backlog_max_bytes));
             let grace = self.cfg.drain_grace;
             let p = blocking(move || spawn::start(&spec, hub, grace).map_err(RunnerError::from)).await?;
-            let id = ProcId(format!("p{}", self.next.fetch_add(1, Ordering::SeqCst)));
+            let id = {
+                let n = self.next.fetch_add(1, Ordering::SeqCst);
+                ProcId(match &self.id_tag {
+                    Some(t) => format!("p{t}-{n}"),
+                    None => format!("p{n}"),
+                })
+            };
             let pid = p.pid;
             self.procs.lock().unwrap().insert(id.clone(), Arc::new(p));
             Ok(ProcHandle { id, pid: Some(pid) })

@@ -261,6 +261,14 @@ pub trait Runner: Send + Sync {
     /// gets [`ProcEvent::Exited`] (a subscriber after the exit gets it at once), then the channel closes.
     fn events<'a>(&'a self, id: &'a ProcId) -> RunnerFuture<'a, mpsc::UnboundedReceiver<ProcEvent>>;
 
+    /// RR-8: the process's events again from stream position `after` (a cursor a previous attach consumed up to), for an
+    /// orchestrator that restarted and re-attaches to a process it placed. A runner without a stream position replays
+    /// everything ([`Runner::events`]).
+    fn attach<'a>(&'a self, id: &'a ProcId, after: i64) -> RunnerFuture<'a, mpsc::UnboundedReceiver<ProcEvent>> {
+        let _ = after;
+        self.events(id)
+    }
+
     /// A pty process's screen now (also after it exited, until released).
     fn screen<'a>(&'a self, id: &'a ProcId) -> RunnerFuture<'a, ScreenSnapshot>;
 

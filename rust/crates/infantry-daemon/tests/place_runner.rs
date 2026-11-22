@@ -77,6 +77,7 @@ struct Rig {
     runner: Arc<LocalRunner>,
     serving: Option<LinkServing>,
     rdir: PathBuf,
+    odir: PathBuf,
     frames: Arc<std::sync::Mutex<String>>,
 }
 
@@ -110,7 +111,7 @@ fn rig() -> Rig {
             }
         });
     });
-    Rig { daemon, runner, serving: Some(serving), rdir, frames }
+    Rig { daemon, runner, serving: Some(serving), rdir, odir, frames }
 }
 
 fn wait<T>(what: &str, mut f: impl FnMut() -> Option<T>) -> T {
@@ -182,4 +183,34 @@ fn a_new_frame_carries_the_runner() {
     // E2E found it: `runner` was skipped when a `new` frame was read, so a pinned session silently ran locally.
     let o: NewOpts = serde_json::from_str(r#"{"provider":"fakecli","runner":"box"}"#).unwrap();
     assert_eq!(o.runner.as_deref(), Some("box"));
+}
+
+/// RR-8: an orchestrator restart. The session list still shows the session on its runner, and the daemon re-attaches to the
+/// process that kept running there: its end (here a kill on the runner) is seen from the saved cursor and ends the session.
+#[test]
+fn a_restarted_orchestrator_reattaches_to_the_session_on_its_runner() {
+    let r = rig();
+    let sid = r.daemon.launch(opts("box")).expect("the start");
+    let marker = r.rdir.file_name().unwrap().to_string_lossy().into_owned();
+    wait("the fake CLI's output as frames", || r.frames.lock().unwrap().contains(&marker).then_some(()));
+    let rec = wait("a placement", || r.daemon.record(&sid).filter(|x| x.runner_proc.is_some()));
+    let id = ProcId(rec.runner_proc.clone().unwrap());
+    // The orchestrator stops (the process stays on the runner) and starts again on the same state dir.
+    r.daemon.shutdown();
+    let mut cfg = Config::new(r.odir.clone(), r.odir.clone());
+    cfg.registry = HarnessRegistry::new(vec![Arc::new(FakeCli)]);
+    let d2 = Daemon::new(Arc::new(Driven::new(Arc::new(FakeCli))), cfg).unwrap();
+    let pool = RunnerPool::open(&r.odir);
+    pool.set_allow_plain(Arc::new(|| true));
+    pool.check("box");
+    d2.runner_registry().add_source(pool);
+    let again = d2.record(&sid).expect("the session is still listed");
+    assert_eq!((again.runner.as_str(), again.runner_proc.as_deref()), ("box", Some(id.0.as_str())));
+    d2.reattach_placed();
+    wait("the session to be busy again, re-attached", || d2.record(&sid).filter(|x| x.is_process_alive && x.runner_proc.is_some()));
+    // The process ends ON the runner: the new daemon sees it and ends the session; the placement is released.
+    block(r.runner.kill(&id, infantry_harness::runner::KillScope::Tree)).unwrap();
+    let done = wait("the re-attached session to end", || d2.record(&sid).filter(|x| x.runner_proc.is_none()));
+    assert_eq!(done.runner, "box");
+    assert!(!done.is_process_alive, "{done:?}");
 }

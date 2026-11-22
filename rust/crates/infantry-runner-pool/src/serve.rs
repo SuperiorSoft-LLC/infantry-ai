@@ -19,7 +19,7 @@ pub const DEFAULT_LINK_PORT: u16 = 8790;
 pub const LINK_BIND_KEY: &str = "runners.linkBindHost";
 pub const DEFAULT_LINK_BIND: &str = "127.0.0.1";
 pub const ADVERTISE_KEY: &str = "runners.advertiseHosts";
-const LINK_DIR: &str = "runner-link";
+pub const LINK_DIR: &str = "runner-link";
 
 /// What the root resolved before the link starts (CLI flag, then env, then setting, then default).
 #[derive(Debug, Clone)]

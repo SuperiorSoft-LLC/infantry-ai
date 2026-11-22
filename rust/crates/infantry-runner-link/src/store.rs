@@ -56,6 +56,25 @@ struct State {
     peers: BTreeMap<String, PairedRunner>,
 }
 
+/// RR-8: reads the JSON state file `file`. A missing file is `None`; an UNREADABLE one (not JSON of this shape) is moved to
+/// `<file>.unreadable` (a loud line on stderr names it) and is `None`: it is never silently reset in place, so what was in it
+/// can still be recovered.
+pub(crate) fn read_or_set_aside<T: serde::de::DeserializeOwned>(file: &Path) -> Option<T> {
+    let text = std::fs::read_to_string(file).ok()?;
+    match serde_json::from_str(&text) {
+        Ok(v) => Some(v),
+        Err(e) => {
+            let aside = PathBuf::from(format!("{}.unreadable", file.display()));
+            let _ = std::fs::remove_file(&aside);
+            match std::fs::rename(file, &aside) {
+                Ok(()) => eprintln!("[infantry] {} is unreadable ({e}); set aside as {}", file.display(), aside.display()),
+                Err(re) => eprintln!("[infantry] {} is unreadable ({e}) and could not be set aside ({re})", file.display()),
+            }
+            None
+        }
+    }
+}
+
 pub fn token(bytes: usize) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(random_bytes(bytes))
 }
@@ -69,7 +88,7 @@ impl LinkStore {
     /// The store in `dir` (made on first write).
     pub fn open(dir: &Path) -> Self {
         let file = dir.join("link.json");
-        let state = std::fs::read_to_string(&file).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        let state = read_or_set_aside(&file).unwrap_or_default();
         LinkStore { file: Some(file), state: Mutex::new(state) }
     }
 
@@ -183,6 +202,18 @@ mod tests {
         assert!(!s.accepts(Some("inf-o"), Some(&c)) && s.accepts(Some("inf-o"), Some(&c2)));
         assert!(s.self_id().starts_with("inf-") && s.self_id() == s.self_id());
         assert!(s.unpair() && !s.accepts(Some("inf-o"), Some(&c2)));
+    }
+
+    #[test]
+    fn an_unreadable_state_file_is_set_aside_not_reset() {
+        let dir = std::env::temp_dir().join(format!("link-store-bad-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("link.json"), "{ not json").unwrap();
+        let s = LinkStore::open(&dir);
+        assert!(s.runners().is_empty());
+        assert_eq!(std::fs::read_to_string(dir.join("link.json.unreadable")).unwrap(), "{ not json");
+        assert!(!dir.join("link.json").exists());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

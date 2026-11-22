@@ -10,6 +10,7 @@
 
 pub mod agent;
 pub mod client;
+pub mod marks;
 pub mod pairing;
 pub mod process;
 pub mod remote;
@@ -20,6 +21,7 @@ pub mod transport;
 pub mod wire;
 
 pub use client::{CallError, LinkClient, Ping};
+pub use marks::Cursors;
 pub use remote::RemoteRunner;
 pub use server::{Backend, InfoOnly, LinkServer, RunnerInfo};
 pub use store::{LinkStore, PairedRunner};
