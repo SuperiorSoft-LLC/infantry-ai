@@ -199,4 +199,8 @@ fn a_comment_notifies_under_its_wake_kind_and_key() {
     let notices = f.env.notices.lock().unwrap().clone();
     assert_eq!(notices[0], format!("sess-qa-1 comment.note {}", plain.id), "{notices:?}");
     assert_eq!(notices[1], "sess-qa-1 worker.failed s1:FAILED", "{notices:?}");
+    // WAKE-3: a done comment keys on the ticket id, so a worker's done mail (kind comment.done, key = ticket id) dedupes with it.
+    add("done", None);
+    let notices = f.env.notices.lock().unwrap().clone();
+    assert_eq!(notices[2], "sess-qa-1 comment.done ticket-00000001", "{notices:?}");
 }

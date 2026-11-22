@@ -349,7 +349,7 @@ impl Comments {
             for s in &sessions {
                 if sent.contains(s) {
                     delivered += 1; // already got this comment through another entry
-                } else if self.env.notify_notice(s, wake.map_or_else(|| format!("comment.{kind}"), |w| w.0.clone()).as_str(), wake.filter(|w| !w.1.is_empty()).map_or(comment_id, |w| w.1.as_str()), &subject, &line) {
+                } else if self.env.notify_notice(s, wake.map_or_else(|| format!("comment.{kind}"), |w| w.0.clone()).as_str(), wake.filter(|w| !w.1.is_empty()).map_or(if kind == "done" { ticket_id } else { comment_id }, |w| w.1.as_str()), &subject, &line) {
                     sent.push(s.clone());
                     delivered += 1;
                 }
