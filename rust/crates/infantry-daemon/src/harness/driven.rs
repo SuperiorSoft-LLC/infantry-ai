@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
-//! Any `infantry-harness` [`Harness`](NeutralHarness) behind the daemon's seam, on the local runner. Each daemon session
+//! Any `infantry-harness` [`Harness`](NeutralHarness) behind the daemon's seam, on the runner the session is placed on. Each daemon session
 //! gets one thread with its own small runtime that owns the session's [`HarnessDriver`]: the daemon's calls become
 //! commands to it, the driver's events become daemon [`HarnessEvent`]s. Names no vendor.
 
@@ -9,9 +9,8 @@ use infantry_harness::{
     ApprovalMode, Harness as NeutralHarness, HarnessAnswer, HarnessDriver, HarnessEvent as Ev, LaunchRequest, Runner, TurnDelivery,
     TurnEnd as End,
 };
-use infantry_runner_local::{LocalConfig, LocalRunner};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc as std_mpsc, Arc, OnceLock};
+use std::sync::{mpsc as std_mpsc, Arc};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
@@ -26,12 +25,11 @@ pub const CLOSE_GRACE: Duration = Duration::from_secs(5);
 
 pub struct Driven {
     harness: Arc<dyn NeutralHarness>,
-    runner: OnceLock<Arc<LocalRunner>>,
 }
 
 impl Driven {
     pub fn new(harness: Arc<dyn NeutralHarness>) -> Self {
-        Driven { harness, runner: OnceLock::new() }
+        Driven { harness }
     }
 }
 
@@ -64,12 +62,8 @@ impl Harness for Driven {
     }
 
     fn open(&self, req: OpenRequest, sink: EventSink) -> Result<Box<dyn HarnessSession>, String> {
-        let runner = self
-            .runner
-            .get_or_init(|| {
-                Arc::new(LocalRunner::new(LocalConfig { scratch_dir: Some(req.state_dir.join("runner")), ..Default::default() }))
-            })
-            .clone();
+        // The runner the session manager resolved for this session (local or remote): the driver runs on it and nothing else.
+        let runner = req.runner.clone();
         let (tx, rx) = mpsc::unbounded_channel();
         let state = Arc::new(State::default());
         let worker = Worker { harness: self.harness.clone(), runner, req, sink, state: state.clone(), discard_end: false, back: tx.downgrade() };
@@ -146,7 +140,7 @@ impl HarnessSession for DrivenSession {
 
 struct Worker {
     harness: Arc<dyn NeutralHarness>,
-    runner: Arc<LocalRunner>,
+    runner: Arc<dyn Runner>,
     req: OpenRequest,
     sink: EventSink,
     state: Arc<State>,
@@ -255,7 +249,7 @@ impl Worker {
         base.env_remove = ENV_REMOVE.map(String::from).to_vec();
         base.env = self.req.env.clone();
         base.mcp = self.req.mcp.clone();
-        let runner: Arc<dyn Runner> = self.runner.clone();
+        let runner = self.runner.clone();
         HarnessDriver::new(self.harness.clone(), runner, base)
     }
 
@@ -272,6 +266,9 @@ impl Worker {
         d.start_turn(prompt).await.map_err(|e| format!("could not start {}: {e}", self.harness.id()))?;
         self.state.turn.store(true, Ordering::SeqCst);
         self.state.alive.store(d.proc_id().is_some(), Ordering::SeqCst);
+        if let Some(p) = d.proc_id() {
+            self.sink.emit(HarnessEvent::Placed(p.to_string()));
+        }
         // One step now so a session id the CLI is started with is known before any output.
         let evs = d.poll(Duration::ZERO).await;
         let start = RunStart { pid: d.pid(), provider_session_id: d.resume_token().map(str::to_string) };

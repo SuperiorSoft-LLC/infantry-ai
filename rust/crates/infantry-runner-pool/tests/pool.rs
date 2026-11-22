@@ -26,7 +26,7 @@ fn runner(dir: &PathBuf) -> (LinkServing, String) {
     let v = bearer.ensure(Some("test-box"), false).unwrap();
     let token = BearerToken { name: v.name, fingerprint: None, secret: v.secret }.text();
     let server = LinkServer::new(LinkStore::in_memory(), None, Some(bearer), Box::new(InfoOnly), None).with_log(|_| {});
-    (serve(Arc::new(server), "127.0.0.1", 0).unwrap(), token)
+    (serve(Arc::new(server), "127.0.0.1", 0, None).unwrap(), token)
 }
 
 fn call(u: &AdminUnit, owner: bool, body: Value) -> Result<Value, String> {
@@ -41,10 +41,11 @@ fn add_check_list_offline_detach() {
     let (serving, bearer) = runner(&rdir);
     let url = format!("ws://127.0.0.1:{}", serving.port);
     let pool = RunnerPool::open(&state);
+    pool.set_allow_plain(Arc::new(|| true)); // this runner serves plain ws
     let unit = AdminUnit { pool: pool.clone() };
 
     assert_eq!(call(&unit, false, json!({"op": "list"})).unwrap_err(), "runner_admin refused: owner only");
-    assert!(call(&unit, true, json!({"op": "add", "endpoint": "wss://x:1", "bearer": bearer})).unwrap()["error"].as_str().unwrap().contains("not supported"));
+    assert!(call(&unit, true, json!({"op": "add", "endpoint": "wss://x:1", "bearer": bearer})).unwrap()["error"].as_str().unwrap().contains("cannot pair over wss"));
     let bad = call(&unit, true, json!({"op": "add", "endpoint": url, "bearer": "irb1.test-box.plain.wrongsecretwrongsecretwrongsecret"})).unwrap();
     assert_eq!(bad["ok"], false);
 
@@ -56,8 +57,9 @@ fn add_check_list_offline_detach() {
     assert_eq!(c["ok"], true);
     assert!(c["rows"][0]["detail"].as_str().unwrap().starts_with("pong from 'test-box' in "), "{c}");
     let l = call(&unit, true, json!({"op": "list"})).unwrap();
-    assert_eq!((l["runners"][0]["state"].as_str(), l["runners"][0]["name"].as_str()), (Some("online"), Some("test-box")));
-    assert!(l["runners"][0]["rttMs"].is_u64());
+    assert_eq!((l["runners"][0]["name"].as_str(), l["runners"][0]["kind"].as_str(), l["runners"][0]["state"].as_str()), (Some("local"), Some("embedded"), Some("online")), "local is the first row");
+    assert_eq!((l["runners"][1]["state"].as_str(), l["runners"][1]["name"].as_str()), (Some("online"), Some("test-box")));
+    assert!(l["runners"][1]["rttMs"].is_u64());
 
     // ONE store per state dir: a second pool on the same dir sees the same runners without a reload.
     assert!(Arc::ptr_eq(pool.store(), RunnerPool::open(&state).store()));
@@ -69,8 +71,8 @@ fn add_check_list_offline_detach() {
     let end = Instant::now() + Duration::from_secs(20);
     let reason = loop {
         let l = call(&unit, true, json!({"op": "list"})).unwrap();
-        if l["runners"][0]["state"] == "offline" {
-            break l["runners"][0]["reason"].as_str().unwrap().to_string();
+        if l["runners"][1]["state"] == "offline" {
+            break l["runners"][1]["reason"].as_str().unwrap().to_string();
         }
         assert!(Instant::now() < end, "never went offline: {l}");
         std::thread::sleep(Duration::from_millis(200));
@@ -81,6 +83,8 @@ fn add_check_list_offline_detach() {
 
     let d = call(&unit, true, json!({"op": "detach", "name": "test-box"})).unwrap();
     assert_eq!(d["ok"], true);
-    assert!(call(&unit, true, json!({"op": "list"})).unwrap()["runners"].as_array().unwrap().is_empty());
+    let after = call(&unit, true, json!({"op": "list"})).unwrap();
+    assert_eq!(after["runners"].as_array().unwrap().len(), 1, "only the embedded runner is left");
+    assert_eq!(after["runners"][0]["name"], "local");
     assert_eq!(call(&unit, true, json!({"op": "check", "name": "test-box"})).unwrap()["ok"], false);
 }

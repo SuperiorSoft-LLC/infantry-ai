@@ -248,6 +248,8 @@ session_record! {
     #[serde(default)] is_process_alive: bool,
     #[serde(default)] dormant: bool,
     #[serde(default = "local", skip_serializing_if = "is_local")] runner: String,
+    /// RR-4: the id of the harness process on `runner` (the placement is kept with the session across a daemon restart).
+    #[serde(default, skip_serializing_if = "Option::is_none")] runner_proc: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")] kept_process: Option<KeptProcess>,
     #[serde(default, skip_serializing_if = "Option::is_none")] background_work: Option<BackgroundWork>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")] bg_jobs: Vec<BgJob>,

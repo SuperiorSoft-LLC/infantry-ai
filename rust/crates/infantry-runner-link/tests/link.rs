@@ -16,7 +16,7 @@ use std::time::Duration;
 fn runner(backend: Box<dyn infantry_runner_link::Backend>) -> (LinkServing, String) {
     let server = LinkServer::new(LinkStore::in_memory(), Some(PairCodes::new(60_000, 10)), None, backend, None).with_log(|_| {});
     let code = server.issue_code("test-box").unwrap();
-    let serving = serve(Arc::new(server), "127.0.0.1", 0).unwrap();
+    let serving = serve(Arc::new(server), "127.0.0.1", 0, None).unwrap();
     (serving, code)
 }
 
@@ -24,7 +24,7 @@ fn runner(backend: Box<dyn infantry_runner_link::Backend>) -> (LinkServing, Stri
 fn pair_with_a_code_then_ping_pong() {
     let (serving, code) = runner(Box::new(infantry_runner_link::InfoOnly));
     let url = format!("ws://127.0.0.1:{}", serving.port);
-    let c = LinkClient::new(&url, "inf-orch", None);
+    let c = LinkClient::new(&url, "inf-orch", None).allow_plain(true).allow_plain(true);
     assert!(matches!(c.ping(), Err(infantry_runner_link::CallError::Refused(r)) if r.contains("needs a pair credential")));
     let paired = c.pair(&code, "test-orchestrator").unwrap();
     assert_eq!((paired.name.as_str(), paired.contract.as_str()), ("test-box", CONTRACT));
@@ -32,9 +32,9 @@ fn pair_with_a_code_then_ping_pong() {
     assert_eq!((p.hello.runner_name.as_str(), p.health.state.as_str()), ("test-box", "ok"));
     assert!(p.rtt > Duration::ZERO && p.rtt < Duration::from_secs(5));
     // The spent code pairs nobody else; a stranger's credential is refused.
-    let other = LinkClient::new(&url, "inf-other", Some("forged".into()));
+    let other = LinkClient::new(&url, "inf-other", Some("forged".into())).allow_plain(true).allow_plain(true);
     assert!(matches!(other.health(), Err(infantry_runner_link::CallError::Refused(r)) if r.contains(NOT_PAIRED)));
-    assert!(LinkClient::new(&url, "inf-other", None).pair(&code, "x").is_err());
+    assert!(LinkClient::new(&url, "inf-other", None).allow_plain(true).allow_plain(true).pair(&code, "x").is_err());
 }
 
 #[test]
@@ -57,7 +57,7 @@ fn sh(line: &str) -> ProcessSpec {
 async fn remote_runner_spawns_echoes_and_exits() {
     let (serving, code) = runner(Box::new(ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default()))));
     let url = format!("ws://127.0.0.1:{}", serving.port);
-    let client = LinkClient::new(&url, "inf-orch", None);
+    let client = LinkClient::new(&url, "inf-orch", None).allow_plain(true).allow_plain(true);
     let code2 = code.clone();
     let client = tokio::task::spawn_blocking(move || {
         client.pair(&code2, "t").unwrap();
@@ -132,7 +132,7 @@ fn kotlin_runner_answers_round_trip() {
 async fn remote_runner_stages_files_and_carries_loopback_http() {
     let (serving, code) = runner(Box::new(ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default()))));
     let url = format!("ws://127.0.0.1:{}", serving.port);
-    let client = LinkClient::new(&url, "inf-orch", None);
+    let client = LinkClient::new(&url, "inf-orch", None).allow_plain(true).allow_plain(true);
     let client = tokio::task::spawn_blocking(move || {
         client.pair(&code, "t").unwrap();
         client

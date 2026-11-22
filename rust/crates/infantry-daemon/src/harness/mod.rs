@@ -55,6 +55,11 @@ pub struct OpenRequest {
     pub approval: infantry_harness::ApprovalMode,
     /// Where its approvals and questions go; None = nobody can answer (an ask is denied).
     pub prompter: Option<std::sync::Arc<dyn Prompter>>,
+    /// RR-4: the runner the session is placed on, resolved from its record by the session manager (`cwd` is a path ON it).
+    /// The harness driver runs on this and on nothing else, so the same code runs `local` and a remote runner.
+    pub runner: std::sync::Arc<dyn infantry_harness::Runner>,
+    /// The name of that runner (`local`, or a paired runner's name).
+    pub runner_name: String,
 }
 
 impl std::fmt::Debug for OpenRequest {
@@ -95,6 +100,8 @@ pub enum HarnessEvent {
     Stderr(String),
     /// Assistant text (a `text_delta` frame).
     Text(String),
+    /// RR-4: the harness process now runs on the session's runner under this runner-wide id (kept as the placement).
+    Placed(String),
     /// The provider session id (what a later turn resumes).
     ProviderSession(String),
     /// The turn ended. `process_alive` = the harness keeps its process for the next turn.

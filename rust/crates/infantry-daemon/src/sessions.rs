@@ -143,7 +143,7 @@ pub struct NewOpts {
     pub agent_id: Option<String>,
     #[serde(skip)]
     pub context_limit: Option<i32>,
-    #[serde(skip)]
+    /// RR-4: where the session runs: a runner name, `local` or `any`. A start that names a runner never falls back to local.
     pub runner: Option<String>,
     #[serde(skip)]
     pub unattended: bool,
@@ -310,6 +310,8 @@ pub struct Daemon {
     /// PM-ENFORCE-1: (role, project) -> the role-policy env pair a session of that role starts with.
     role_policy: std::sync::OnceLock<Arc<dyn Fn(Option<&str>, Option<&str>) -> Option<(String, String)> + Send + Sync>>,
     workspace_spec: std::sync::OnceLock<Arc<dyn Fn() -> Option<WorkspaceSpec> + Send + Sync>>,
+    /// RR-4: the runners a session can be placed on, by name (`local` built in; the composition root adds the paired ones).
+    runners: std::sync::OnceLock<Arc<infantry_runner_source::RunnerRegistry>>,
 }
 
 fn encode(ty: &str, data: String, session: Option<&str>, seq: Option<i64>) -> String {
@@ -400,6 +402,7 @@ impl Daemon {
             assistant_lock: Mutex::new(()),
             role_policy: std::sync::OnceLock::new(),
             workspace_spec: std::sync::OnceLock::new(),
+            runners: std::sync::OnceLock::new(),
         });
         d.refresh_held();
         Ok(d)
@@ -851,11 +854,17 @@ impl Daemon {
     /// A new session's record (not yet listed).
     fn new_record(&self, opts: &NewOpts, state: &str, verb: &str) -> Result<SessionRecord, String> {
         let id = uuid::Uuid::new_v4().to_string();
-        let cwd = match self.own_folder(opts, &id)? {
-            Some(own) => own,
-            None => opts.cwd.as_deref().filter(|c| !c.trim().is_empty()).map(PathBuf::from).unwrap_or_else(|| self.cfg.default_cwd.clone()),
+        // RR-4: a start that names a runner is placed there or refused loudly; it never runs locally instead. A remote
+        // session's folder is a scratch folder ON the runner (the workspace is RR-7), never the orchestrator's working dir.
+        let placed = self.place(opts.runner.as_deref(), verb)?;
+        let cwd = match &placed {
+            Some((_, workdir)) => PathBuf::from(workdir),
+            None => match self.own_folder(opts, &id)? {
+                Some(own) => own,
+                None => opts.cwd.as_deref().filter(|c| !c.trim().is_empty()).map(PathBuf::from).unwrap_or_else(|| self.cfg.default_cwd.clone()),
+            },
         };
-        if !cwd.is_dir() {
+        if placed.is_none() && !cwd.is_dir() {
             return Err(format!("{verb} refused: {} is not a folder", cwd.display()));
         }
         let harness = self.harness_for(opts.provider.as_deref()).ok_or_else(|| {
@@ -877,10 +886,10 @@ impl Daemon {
         rec.context_limit = opts.context_limit;
         rec.unattended = opts.unattended;
         rec.spawner_session_id = some(&opts.spawner);
-        if let Some(r) = some(&opts.runner) {
-            rec.runner = r;
+        if let Some((name, _)) = &placed {
+            rec.runner = name.clone();
         }
-        if let Some((branch, base, root)) = &opts.worktree {
+        if let (Some((branch, base, root)), None) = (&opts.worktree, &placed) {
             rec.worktree_path = Some(cwd.to_string_lossy().into_owned());
             rec.worktree_branch = Some(branch.clone());
             rec.worktree_base_ref = Some(base.clone());
@@ -1209,6 +1218,39 @@ impl Daemon {
         *self.launch.lock().unwrap() = base;
     }
 
+    /// Wires the runner registry (the composition root adds the paired runners to it); set once.
+    pub fn set_runners(&self, r: Arc<infantry_runner_source::RunnerRegistry>) {
+        let _ = self.runners.set(r);
+    }
+
+    /// The runners a session can be placed on. Until the root sets one, `local` alone (the embedded runner).
+    pub fn runner_registry(&self) -> Arc<infantry_runner_source::RunnerRegistry> {
+        self.runners
+            .get_or_init(|| {
+                let runner = infantry_runner_local::LocalRunner::new(infantry_runner_local::LocalConfig { scratch_dir: Some(self.cfg.state_dir.join("runner")), ..Default::default() });
+                let local = infantry_runner_source::RunnerEntry {
+                    name: infantry_runner_source::LOCAL.into(),
+                    kind: "embedded".into(),
+                    runner: Arc::new(runner),
+                    scope: Arc::new(infantry_runner_source::NoScope(infantry_runner_source::LOCAL.into())),
+                };
+                infantry_runner_source::RunnerRegistry::new(local)
+            })
+            .clone()
+    }
+
+    /// The runner a start asks for: `None` = `local` (nothing to place), else (runner name, scratch folder on it) or the loud
+    /// refusal. `any` becomes the name of the runner it chose.
+    fn place(&self, runner: Option<&str>, verb: &str) -> Result<Option<(String, String)>, String> {
+        let spec = runner.map(str::trim).unwrap_or("");
+        if spec.is_empty() || spec.eq_ignore_ascii_case(infantry_runner_source::LOCAL) {
+            return Ok(None);
+        }
+        let entry = self.runner_registry().resolve(spec).map_err(|r| format!("{verb} refused: {r}"))?;
+        let workdir = infantry_runner_source::RunnerRegistry::scratch_dir(&entry).map_err(|e| format!("{verb} refused: {e}"))?;
+        Ok(Some((entry.name, workdir)))
+    }
+
     fn open(self: &Arc<Self>, e: &Entry) -> Result<Box<dyn HarnessSession>, String> {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let (mut env, mut mcp) = self.launch.lock().unwrap().session(&e.rec.id, e.rec.project_id.as_deref(), e.rec.role.as_deref());
@@ -1228,7 +1270,12 @@ impl Daemon {
         if let Some(m) = self.mcp.get() {
             m.select(&e.rec, &mut mcp);
         }
+        // RR-4: every session, local or remote, is opened on the runner its record names; an unknown, offline or outdated
+        // runner fails the start loudly (no local fallback).
+        let entry = self.runner_registry().resolve(&e.rec.runner).map_err(|r| r.to_string())?;
         let req = OpenRequest {
+            runner: entry.runner,
+            runner_name: entry.name,
             session_id: e.rec.id.clone(),
             cwd: PathBuf::from(&e.rec.working_dir),
             model: e.rec.model.clone(),
@@ -1273,6 +1320,10 @@ impl Daemon {
         }
         match ev {
             HarnessEvent::ProviderSession(p) => e.rec.provider_session_id = Some(p),
+            HarnessEvent::Placed(p) => {
+                e.rec.runner_proc = Some(p);
+                self.push(&mut e);
+            }
             HarnessEvent::Stdout(l) if e.turn_active => {
                 e.hung = false;
                 e.rec.last_output_at = Some(now_ms());

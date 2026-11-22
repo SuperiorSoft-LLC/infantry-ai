@@ -166,6 +166,12 @@ pub struct HelloAnswer {
     /// contract this runner offers, e.g. `process` (a [`StartRequest::process`] start). Omitted when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub offers: Vec<String>,
+    /// Rust runner extension (additive, RR-2): what this peer is (`runner` = the app started with `--mode runner`) and the
+    /// app version it runs. Omitted by a Kotlin runner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_version: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
