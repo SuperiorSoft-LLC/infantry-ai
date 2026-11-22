@@ -96,6 +96,7 @@ export function toAgent(
     projectId: r.projectId ?? undefined,
     projectName: r.projectId ? (projects.find((p) => p.id === r.projectId)?.name ?? r.projectId) : undefined,
     heldBy: r.heldBy ?? undefined,
+    backgroundTasks: r.backgroundTasks?.length ? r.backgroundTasks.map((t) => ({ id: t.id, label: t.label, startedAt: Number(t.startedAt) })) : undefined,
   };
 }
 

@@ -605,7 +605,7 @@ impl SessionObserver for WorkObserver {
     fn on_rest_exit(&self, rec: &SessionRecord, code: Option<i32>) {
         let Some(ticket) = rec.ticket_id.clone() else { return };
         let detail = format!("the worker's process died while it was idle (exit code {})", code.map(|c| c.to_string()).unwrap_or_else(|| "none".into()));
-        let report = DoneReport { ticket_id: ticket, session_id: rec.id.clone(), outcome: "FAILED".into(), detail: Some(detail) };
+        let report = DoneReport { ticket_id: ticket, session_id: rec.id.clone(), outcome: "FAILED".into(), detail: Some(detail), background_running: 0 };
         let d = self.dispatcher.clone();
         self.handle.spawn_blocking(move || {
             if let Err(e) = d.on_worker_died(&report) {
@@ -616,7 +616,7 @@ impl SessionObserver for WorkObserver {
     fn on_turn_end(&self, rec: &SessionRecord, outcome: &str, detail: &str) {
         let (id, ticket) = (rec.id.clone(), rec.ticket_id.clone());
         let (d, m) = (self.dispatcher.clone(), self.mail.clone());
-        let report = ticket.map(|t| DoneReport { ticket_id: t, session_id: id.clone(), outcome: outcome.to_string(), detail: Some(detail.to_string()).filter(|s| !s.is_empty()) });
+        let report = ticket.map(|t| DoneReport { ticket_id: t, session_id: id.clone(), outcome: outcome.to_string(), detail: Some(detail.to_string()).filter(|s| !s.is_empty()), background_running: rec.background_tasks.len() as u32 });
         self.handle.spawn_blocking(move || {
             if let Some(r) = report {
                 if let Err(e) = d.on_done(&r) {

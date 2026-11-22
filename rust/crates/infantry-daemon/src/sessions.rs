@@ -232,6 +232,8 @@ struct Entry {
     episode: Option<lifecycle::Episode>,
     /// The done-worker reaper waits for this turn's end.
     reap_pending: bool,
+    /// A turn ended cleanly while background tasks ran: its done report is held until they all end.
+    bg_done_held: bool,
     /// The watchdog saw this turn silent past `session.hungKillMinutes`: the child is hung (cleared by any output).
     hung: bool,
 }
@@ -252,6 +254,7 @@ impl Entry {
             stats: Stats::default(),
             episode: None,
             reap_pending: false,
+            bg_done_held: false,
             hung: false,
         }
     }
@@ -1274,6 +1277,7 @@ impl Daemon {
                 e.rec.last_output_at = Some(now_ms());
                 e.stats.usage(u);
             }
+            HarnessEvent::Background(change) => self.on_background(&mut e, change),
             HarnessEvent::McpState { state, servers } => {
                 e.rec.mcp = Some(state);
                 e.rec.mcp_changed_at = Some(now_ms());
@@ -1285,6 +1289,12 @@ impl Daemon {
             }
             HarnessEvent::Exited { code } => {
                 e.hs = None;
+                // Tasks of a CLI that is gone are gone with it.
+                if !e.rec.background_tasks.is_empty() {
+                    e.rec.background_tasks.clear();
+                    self.push(&mut e);
+                    self.release_held_done(&mut e);
+                }
                 self.notify(|o| o.on_exit(&e.rec));
                 if e.turn_active {
                     let end = if code == Some(0) { TurnEnd::Completed } else { TurnEnd::Failed };
@@ -1334,11 +1344,50 @@ impl Daemon {
         self.emit(e, wire::STATUS, wire::status_run(&st, "finished", now_ms(), e.turn_started));
         self.emit(e, wire::FINISHED, wire::finished(code, outcome, &detail));
         self.emit(e, wire::STATUS, wire::status_run(&st, "idle", now_ms(), e.turn_started));
+        if let Some(line) = infantry_harness::background::turn_end_summary(&Self::task_list(&e.rec)) {
+            self.emit(e, wire::STDERR, format!("[infantry] {line}"));
+            e.bg_done_held = end == TurnEnd::Completed;
+        }
         self.notify(|o| o.on_turn_end(&e.rec, outcome, &detail));
         if std::mem::take(&mut e.reap_pending) {
             self.reap_later(&e.rec.id.clone());
         } else if !e.rec.queued.is_empty() {
             self.drain_later(&e.rec.id.clone());
+        }
+    }
+
+    fn task_list(rec: &SessionRecord) -> Vec<infantry_harness::background::BackgroundTask> {
+        rec.background_tasks
+            .iter()
+            .map(|t| infantry_harness::background::BackgroundTask { id: t.id.clone(), label: t.label.clone(), started_at: t.started_at })
+            .collect()
+    }
+
+    /// A background task of the agent CLI started or ended: the record, one chat-log line, and (when the last one ends
+    /// after a turn that ended cleanly) the done report the turn end held back.
+    fn on_background(self: &Arc<Self>, e: &mut Entry, change: infantry_harness::background::BackgroundChange) {
+        use infantry_harness::background::{finished_line, started_line, BackgroundChange};
+        let line = match change {
+            BackgroundChange::Started(t) => {
+                let line = started_line(&t);
+                e.rec.background_tasks.push(infantry_protocol::session::BackgroundTaskView { id: t.id, label: t.label, started_at: t.started_at });
+                line
+            }
+            BackgroundChange::Finished { task, status, exit_code, ran_ms } => {
+                e.rec.background_tasks.retain(|t| t.id != task.id);
+                finished_line(&task, &status, exit_code, ran_ms)
+            }
+        };
+        e.rec.last_output_at = Some(now_ms());
+        self.emit(e, wire::STDERR, format!("[infantry] {line}"));
+        self.push(e);
+        self.release_held_done(e);
+    }
+
+    /// The last background task ended: the done report a clean turn end held back goes out now.
+    fn release_held_done(self: &Arc<Self>, e: &mut Entry) {
+        if e.rec.background_tasks.is_empty() && std::mem::take(&mut e.bg_done_held) && !e.turn_active {
+            self.notify(|o| o.on_turn_end(&e.rec, "SUCCEEDED", ""));
         }
     }
 

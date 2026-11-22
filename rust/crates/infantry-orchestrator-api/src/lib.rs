@@ -83,6 +83,9 @@ pub struct DoneReport {
     pub outcome: String,
     #[serde(default)]
     pub detail: Option<String>,
+    /// Background tasks the agent CLI still runs: a clean end with no done comment is no failure while this is above 0.
+    #[serde(default)]
+    pub background_running: u32,
 }
 
 /// The board, location-transparent. Every method is a plain request/answer over DTOs.

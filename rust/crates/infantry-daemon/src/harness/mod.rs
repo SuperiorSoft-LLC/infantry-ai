@@ -109,6 +109,8 @@ pub enum HarnessEvent {
     Usage(TokenUsage),
     /// The CLI's view of the session's own MCP server and of every server it reports (G12).
     McpState { state: String, servers: Vec<(String, String)> },
+    /// A background task of the CLI started or ended (the driver's tracker).
+    Background(infantry_harness::background::BackgroundChange),
 }
 
 /// Hands one message to the running turn; true = the CLI took it. Called with no session lock held (it waits briefly).

@@ -71,6 +71,14 @@ dto! {
         #[serde(default = "one")] pub count: i32,
     }
 }
+dto! {
+    /// A task the agent CLI itself runs in the background (a `run_in_background` command, a Monitor, a subagent).
+    pub struct BackgroundTaskView {
+        pub id: String,
+        pub label: String,
+        pub started_at: i64,
+    }
+}
 dto! { pub struct BgMember { pub pid: i64, #[serde(default)] pub started_at: Option<i64> } }
 dto! {
     pub struct BgNotify {
@@ -243,6 +251,7 @@ session_record! {
     #[serde(default, skip_serializing_if = "Option::is_none")] kept_process: Option<KeptProcess>,
     #[serde(default, skip_serializing_if = "Option::is_none")] background_work: Option<BackgroundWork>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")] bg_jobs: Vec<BgJob>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")] background_tasks: Vec<BackgroundTaskView>,
     #[serde(default, skip_serializing_if = "Option::is_none")] automation: Option<SessionAutomation>,
     #[serde(default, skip_serializing_if = "Option::is_none")] last_action: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")] last_output_at: Option<i64>,
@@ -292,7 +301,7 @@ impl Serialize for SessionRecord {
             turn_active: bool,
         }
         let mut rec = self.clone();
-        if (rec.background_work.is_some() || !rec.bg_jobs.is_empty()) && rec.state == SessionState::Idle {
+        if (rec.background_work.is_some() || !rec.bg_jobs.is_empty() || !rec.background_tasks.is_empty()) && rec.state == SessionState::Idle {
             rec.state = SessionState::Busy;
         }
         Out { base: &rec, live: self.live(), turn_active: self.is_busy() }.serialize(s)

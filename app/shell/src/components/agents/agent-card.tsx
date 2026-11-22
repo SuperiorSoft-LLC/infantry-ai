@@ -7,7 +7,34 @@ import type { Agent } from "@/mock/types";
 import { AgentAvatar } from "./agent-avatar";
 import { AgentMenu } from "./agent-menu";
 import { ActivityAgo } from "./activity-ago";
-import { ProgressLine, SelectedStripes } from "@infantry/ui";
+import { ProgressLine, SelectedStripes, Tooltip, TooltipContent, TooltipTrigger } from "@infantry/ui";
+
+const running = (since: number) => {
+  const s = Math.max(0, Math.round((Date.now() - since) / 1000));
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h`;
+};
+
+/** `⟳ 2 background` while the agent CLI runs tasks of its own (also at rest); hovering lists each with its running time. */
+function BackgroundTag({ tasks }: { tasks: NonNullable<Agent["backgroundTasks"]> }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="shrink-0 rounded-full border border-info/50 px-1.5 text-[10px] leading-4 text-info" data-testid="background-tag">
+          ⟳ {tasks.length} background
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        <ul className="space-y-0.5 text-xs">
+          {tasks.map((t) => (
+            <li key={t.id}>
+              {t.label} · {running(t.startedAt)}
+            </li>
+          ))}
+        </ul>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 const chipTone: Record<Agent["status"], string> = {
   working: "border-info/50 text-info",
@@ -65,6 +92,7 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 overflow-hidden text-xs">
             <span className={cn("shrink-0 font-medium", agent.roleId === "pm" ? "text-warn" : "text-info")}>{agent.roleId}</span>
             <span className={cn("shrink-0 rounded-full border px-1.5 text-[10px] leading-4", chipTone[agent.status])}>{agent.status}</span>
+            {agent.backgroundTasks && <BackgroundTag tasks={agent.backgroundTasks} />}
             <span className="min-w-0 max-w-full truncate font-mono text-[10px] text-muted-foreground">{agent.sessionId}</span>
             {agent.projectName && <span className="min-w-0 max-w-full truncate text-foreground/80">{agent.projectName}</span>}
             <span className="min-w-0 max-w-full truncate text-muted-foreground">{agent.lastLine}</span>

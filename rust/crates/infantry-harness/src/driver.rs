@@ -152,6 +152,7 @@ pub struct HarnessDriver {
     interrupting: bool,
     pending: VecDeque<HarnessEvent>,
     exit_grace: Duration,
+    tracker: crate::background::BackgroundTracker,
 }
 
 impl HarnessDriver {
@@ -169,6 +170,7 @@ impl HarnessDriver {
             hook_seq: 0,
             hook_events: None,
             turn_active: false,
+            tracker: Default::default(),
             interrupting: false,
             pending: VecDeque::new(),
             exit_grace: Duration::from_secs(5),
@@ -413,6 +415,9 @@ impl HarnessDriver {
 
     /// Bookkeeping over a batch: the resume token, the turn state, interrupts reported as such.
     fn account(&mut self, mut out: Vec<HarnessEvent>) -> Vec<HarnessEvent> {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
+        let changes: Vec<HarnessEvent> = out.iter().flat_map(|e| self.tracker.observe(e, now)).map(HarnessEvent::Background).collect();
+        out.extend(changes);
         for e in out.iter_mut() {
             match e {
                 HarnessEvent::ProviderSession(id) => self.resume = Some(id.clone()),

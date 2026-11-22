@@ -92,11 +92,13 @@ fn emit_line(sink: &EventSink, line: &str) {
 }
 
 impl HarnessSession for StubSession {
-    fn send_turn(&mut self, _turn: Turn) -> Result<RunStart, String> {
+    fn send_turn(&mut self, turn: Turn) -> Result<RunStart, String> {
         self.stop();
         let replay = Arc::new(Replay { stopped: Mutex::new(false) });
         self.run = Some(replay.clone());
         let (cfg, sink) = (self.cfg, self.sink.clone());
+        // A prompt with `[stub-bg]` leaves one background task running past the turn end; it ends 1.5 s later.
+        let bg = turn.prompt.contains("[stub-bg]");
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(cfg.start_ms)).await;
             for line in STDOUT {
@@ -107,6 +109,7 @@ impl HarnessSession for StubSession {
                 }
                 emit_line(&sink, line);
             }
+            let task = {
             let mut g = replay.stopped.lock().unwrap();
             if *g {
                 return;
@@ -115,7 +118,17 @@ impl HarnessSession for StubSession {
                 sink.emit(HarnessEvent::Stderr(l.to_string()));
             }
             *g = true;
+            let task = infantry_harness::background::BackgroundTask { id: "stub-bg-1".into(), label: "sleep 60".into(), started_at: 0 };
+            if bg {
+                sink.emit(HarnessEvent::Background(infantry_harness::background::BackgroundChange::Started(task.clone())));
+            }
             sink.emit(HarnessEvent::TurnEnded { end: TurnEnd::Completed, exit_code: Some(0), reason: None, process_alive: false });
+            task
+            };
+            if bg {
+                tokio::time::sleep(Duration::from_millis(1500)).await;
+                sink.emit(HarnessEvent::Background(infantry_harness::background::BackgroundChange::Finished { task, status: "completed".into(), exit_code: Some(0), ran_ms: 252_000 }));
+            }
         });
         Ok(RunStart { pid: None, provider_session_id: Some(PROVIDER_SESSION.into()) })
     }

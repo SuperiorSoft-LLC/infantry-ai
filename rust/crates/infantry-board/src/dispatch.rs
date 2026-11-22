@@ -1405,6 +1405,11 @@ impl Dispatcher {
     pub fn on_done(&self, report: &DoneReport) -> Result<(), OrchError> {
         let (rows, _, runs) = self.board.rows()?;
         let Some(row) = rows.get(&report.ticket_id).cloned() else { return Ok(()) };
+        // The agent's background tasks still run: it is working, not finished. The seat stays; the daemon reports the
+        // turn end again when the last task ends.
+        if report.outcome == SUCCEEDED && report.background_running > 0 && row.session_id.as_deref() == Some(report.session_id.as_str()) {
+            return Ok(());
+        }
         let detail = report.detail.clone().unwrap_or_default();
         let first = self.board.finish_run(&row.id, &report.session_id, &report.outcome, &detail)?;
         let p = row.project_id.as_deref();

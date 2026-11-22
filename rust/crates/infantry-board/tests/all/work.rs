@@ -194,12 +194,12 @@ fn the_starter_is_mailed_on_done_on_a_clean_end_and_on_an_end_without_a_report()
     // 2. a clean end after a done comment (the done protocol closes it)
     let author = CommentAuthor { kind: CommentAuthor::SESSION.into(), session_id: Some("s2".into()), agent_id: None };
     block_on(o.comment_add(CommentAdd { ticket_id: ids[1].clone(), body: "commit def: finished".into(), kind: Some("done".into()), state: None, author })).unwrap();
-    block_on(o.on_done(DoneReport { ticket_id: ids[1].clone(), session_id: "s2".into(), outcome: "SUCCEEDED".into(), detail: None })).unwrap();
+    block_on(o.on_done(DoneReport { ticket_id: ids[1].clone(), session_id: "s2".into(), outcome: "SUCCEEDED".into(), detail: None, background_running: 0 })).unwrap();
     assert_eq!(block_on(o.get(ids[1].clone())).unwrap().status, "done");
     assert!(notes(&f).iter().any(|n| n.contains(&ids[1]) && n.contains("commit def")), "{:?}", notes(&f));
     // 3. a clean end with no done comment
     let before = notes(&f).len();
-    block_on(o.on_done(DoneReport { ticket_id: ids[2].clone(), session_id: "s3".into(), outcome: "SUCCEEDED".into(), detail: None })).unwrap();
+    block_on(o.on_done(DoneReport { ticket_id: ids[2].clone(), session_id: "s3".into(), outcome: "SUCCEEDED".into(), detail: None, background_running: 0 })).unwrap();
     assert!(notes(&f)[before..].iter().any(|n| n.contains(&ids[2]) && n.contains("without a done comment")), "{:?}", notes(&f));
     // 4. the setting off: no mail
     f.board.db().write(|c| c.execute("INSERT INTO settings(key, value, updated_at) VALUES ('board.autoReport', 'false', 1)", [])).unwrap();
@@ -225,7 +225,7 @@ fn max_in_progress_holds_and_a_failed_run_keeps_its_slot() {
         assert_eq!(b.ticket.start.as_ref().map(|s| s.reason.as_str()), Some(reason::QUEUED), "{:?}", b.ticket.start);
     }
     // The worker's run fails (no done comment): the ticket stays in_progress and nothing else starts.
-    block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "FAILED".into(), detail: None })).unwrap();
+    block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "FAILED".into(), detail: None, background_running: 0 })).unwrap();
     assert_eq!(block_on(o.get(ids[0].clone())).unwrap().status, "in_progress");
     for id in &ids[1..] {
         assert_eq!(block_on(o.get(id.clone())).unwrap().status, "todo", "a failed run must not free its slot");
@@ -354,7 +354,7 @@ fn restart(id: &str, fresh: bool) -> TicketRestart {
 fn kill(launcher: &FakeLauncher, o: &infantry_board::LocalOrchestrator, ticket: &str, session: &str, detail: &str) {
     use infantry_orchestrator_api::DoneReport;
     launcher.live.lock().unwrap().insert(session.to_string(), WorkerState::Ended);
-    block_on(o.on_done(DoneReport { ticket_id: ticket.into(), session_id: session.into(), outcome: "FAILED".into(), detail: Some(detail.into()) })).unwrap();
+    block_on(o.on_done(DoneReport { ticket_id: ticket.into(), session_id: session.into(), outcome: "FAILED".into(), detail: Some(detail.into()), background_running: 0 })).unwrap();
 }
 
 fn ticket_notes(o: &infantry_board::LocalOrchestrator, id: &str) -> Vec<String> {
@@ -384,11 +384,11 @@ fn a_worker_that_dies_at_rest_is_told_to_the_lead_and_can_be_restarted() {
     let ids = tickets(&f, 1);
     start_by(&o, &ids[0], "lead-1");
     // The worker finished a turn (clean end, no done report), then its process is killed while it waits.
-    block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "SUCCEEDED".into(), detail: None })).unwrap();
+    block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "SUCCEEDED".into(), detail: None, background_running: 0 })).unwrap();
     let clean = f.env.failed.lock().unwrap().clone();
     assert!(clean[0].contains("SUCCEEDED"), "{clean:?}");
     l.live.lock().unwrap().insert("s1".into(), WorkerState::Ended);
-    let died = DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "FAILED".into(), detail: Some("the worker's process died while it was idle (exit code -1)".into()) };
+    let died = DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "FAILED".into(), detail: Some("the worker's process died while it was idle (exit code -1)".into()), background_running: 0 };
     d.on_worker_died(&died).unwrap();
     let failed = f.env.failed.lock().unwrap().clone();
     assert_eq!(failed.len(), 2, "{failed:?}");
@@ -410,7 +410,7 @@ fn a_worker_that_ended_clean_and_dies_in_a_later_turn_is_told_once() {
     let ids = tickets(&f, 1);
     start_by(&o, &ids[0], "lead-1");
     let end = |outcome: &str, detail: Option<&str>| {
-        block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: outcome.into(), detail: detail.map(String::from) })).unwrap()
+        block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: outcome.into(), detail: detail.map(String::from), background_running: 0 })).unwrap()
     };
     end("SUCCEEDED", None);
     assert_eq!(f.env.failed.lock().unwrap().len(), 1);
@@ -435,7 +435,7 @@ fn a_clean_end_without_a_done_report_does_not_say_the_worker_is_down() {
     let (f, _l, o) = restart_setup("restart-clean", StaticEnv { lead_mail: true, ..kotlin_daemon_env() });
     let ids = tickets(&f, 1);
     start_by(&o, &ids[0], "lead-1");
-    block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "SUCCEEDED".into(), detail: None })).unwrap();
+    block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "SUCCEEDED".into(), detail: None, background_running: 0 })).unwrap();
     let notes = ticket_notes(&o, &ids[0]);
     assert!(notes.iter().any(|b| b.contains("without a done comment") && b.contains("Message it to finish")), "{notes:?}");
     assert!(!notes.iter().any(|b| b.contains("ticket_restart")), "a live idle worker cannot be restarted, so the comment must not offer it: {notes:?}");
@@ -471,7 +471,7 @@ fn restart_resumes_the_dead_session_in_place() {
     use infantry_orchestrator_api::DoneReport;
     let author = CommentAuthor { kind: CommentAuthor::SESSION.into(), session_id: Some("s1".into()), agent_id: None };
     block_on(o.comment_add(CommentAdd { ticket_id: ids[0].clone(), body: "commit abc: finished".into(), kind: Some("done".into()), state: None, author })).unwrap();
-    block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "SUCCEEDED".into(), detail: None })).unwrap();
+    block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "SUCCEEDED".into(), detail: None, background_running: 0 })).unwrap();
     assert_eq!(block_on(o.get(ids[0].clone())).unwrap().status, "done", "the resumed run was open again, so its end was handled");
 }
 
@@ -599,4 +599,17 @@ fn a_ticket_with_no_role_starts_with_the_default_role() {
             assert_ne!(s, Some(reason::STARTED), "{:?}", a.ticket.start);
         }
     }
+}
+
+#[test]
+fn a_clean_end_while_background_tasks_run_is_no_failure_until_they_end() {
+    use infantry_orchestrator_api::DoneReport;
+    let (f, _l, o) = restart_setup("restart-bg", StaticEnv { lead_mail: true, ..kotlin_daemon_env() });
+    let ids = tickets(&f, 1);
+    start_by(&o, &ids[0], "lead-1");
+    let report = |n| DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "SUCCEEDED".into(), detail: None, background_running: n };
+    block_on(o.on_done(report(2))).unwrap();
+    assert!(!ticket_notes(&o, &ids[0]).iter().any(|b| b.contains("without a done comment")), "a worker with background tasks is still working");
+    block_on(o.on_done(report(0))).unwrap();
+    assert!(ticket_notes(&o, &ids[0]).iter().any(|b| b.contains("without a done comment")), "after they all end, the missing done comment fails it");
 }

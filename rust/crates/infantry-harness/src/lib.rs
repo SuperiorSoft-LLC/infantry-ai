@@ -21,6 +21,7 @@
 //!
 //! Nothing here knows orchestration (boards, tickets): an agent runs with no orchestrator.
 
+pub mod background;
 pub mod driver;
 pub mod shim;
 pub mod stats;
@@ -418,6 +419,10 @@ pub enum HarnessEvent {
     /// The state of the session's own MCP server in the CLI (`connected`, `failed`, `needs_auth`, `disabled`, ...) and
     /// of every server it reports, sent when it changes (Kotlin `SessionOutput.mcpState` / `mcpServers`).
     McpState { state: String, servers: Vec<(String, String)> },
+    /// The CLI's notice that background task(s) ended (`status`: completed, failed, killed, stopped).
+    TaskNotice { ids: Vec<String>, status: String, exit_code: Option<i32> },
+    /// A background task started or ended, from the driver's [`background::BackgroundTracker`] (never from a translator).
+    Background(background::BackgroundChange),
 }
 
 /// Reads one launched process.
