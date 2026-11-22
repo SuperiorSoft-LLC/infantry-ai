@@ -72,7 +72,7 @@ impl SettingsUnit {
         json!({"key": key, "value": value, "scope": scope, "layers": layers})
     }
 
-    fn set(&self, key: &str, value: Option<&Value>, d: &Value) -> Result<(), String> {
+    pub fn set(&self, key: &str, value: Option<&Value>, d: &Value) -> Result<(), String> {
         let scope = text(d, "scope").unwrap_or_else(|| "app".into()).to_lowercase();
         let row = if scope == "app" {
             if value.map(Value::is_null).unwrap_or(true) {

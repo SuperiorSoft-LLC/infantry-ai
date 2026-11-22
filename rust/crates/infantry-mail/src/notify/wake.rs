@@ -5,7 +5,7 @@
 //! `comment.done`, `build.failed`) and a dedupe key (the comment id, the build run id); the setting `notify.wake.kinds`
 //! (comma or newline separated; a trailing `*` matches a prefix) says which kinds wake. The same (kind, key) wakes
 //! a session at most once. Core names no kind: the sources pick their own strings.
-use std::collections::{HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::Mutex;
 
 /// The setting that holds the wake list (scopes app, project, role).
@@ -39,6 +39,25 @@ impl WakePolicy {
         WakePolicy { kinds }
     }
 
+    /// The setting text after turning [kind] on or off. Wildcards and `all` are expanded over [known] first, so that
+    /// switching one kind off leaves the others as they were; a kind nobody declared keeps its own entry.
+    pub fn with_kind(raw: Option<&str>, kind: &str, wake: bool, known: &[String]) -> String {
+        let p = WakePolicy::parse(raw);
+        let kind = kind.to_ascii_lowercase();
+        let mut out: Vec<String> = known.iter().filter(|k| **k != kind && p.wakes(k)).cloned().collect();
+        for k in &p.kinds {
+            let literal = !k.ends_with('*') && k != "all" && k != "none";
+            if literal && *k != kind && !out.contains(k) {
+                out.push(k.clone());
+            }
+        }
+        if wake {
+            out.push(kind);
+        }
+        out.sort();
+        if out.is_empty() { "none".into() } else { out.join(", ") }
+    }
+
     pub fn wakes(&self, kind: &str) -> bool {
         let kind = kind.to_ascii_lowercase();
         self.kinds.iter().any(|k| match k.as_str() {
@@ -52,19 +71,80 @@ impl WakePolicy {
     }
 }
 
+/// What a sender says about a notice kind it raises (the Notifications settings card lists these).
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct KindInfo {
+    pub kind: String,
+    pub description: String,
+    /// Who raises it (a plain label such as "board" or "builds"); empty for a kind seen only at run time.
+    pub source: String,
+}
+
+/// The kinds senders declare. Core names none: each sender calls [`KindRegistry::declare`] for the strings it raises.
+#[derive(Default)]
+pub struct KindRegistry {
+    kinds: Mutex<BTreeMap<String, KindInfo>>,
+}
+
+impl KindRegistry {
+    pub fn declare(&self, source: &str, kinds: &[(&str, &str)]) {
+        let mut g = self.kinds.lock().unwrap();
+        for (kind, description) in kinds {
+            g.insert(kind.to_ascii_lowercase(), KindInfo { kind: kind.to_ascii_lowercase(), description: description.to_string(), source: source.to_string() });
+        }
+    }
+
+    /// Declared kinds, then any kind in `seen` nobody declared (shown with no description), sorted by kind.
+    pub fn list(&self, seen: &[String]) -> Vec<KindInfo> {
+        let mut all = self.kinds.lock().unwrap().clone();
+        for k in seen {
+            all.entry(k.clone()).or_insert_with(|| KindInfo { kind: k.clone(), description: String::new(), source: String::new() });
+        }
+        all.into_values().collect()
+    }
+}
+
+/// How many decisions one kind got: `checks` = decisions asked, `wakes` = turns spent, `inbox` = held, `duplicates` = dropped.
+#[derive(Debug, Clone, Copy, Default, PartialEq, serde::Serialize)]
+pub struct KindStats {
+    pub checks: u64,
+    pub wakes: u64,
+    pub inbox: u64,
+    pub duplicates: u64,
+}
+
 /// Remembers which (session, kind, key) already woke, so one event wakes a session once.
 pub struct WakeGate {
     inner: Mutex<(HashSet<String>, VecDeque<String>)>,
+    stats: Mutex<HashMap<String, KindStats>>,
     cap: usize,
 }
 
 impl WakeGate {
     pub fn new(cap: usize) -> WakeGate {
-        WakeGate { inner: Mutex::new((HashSet::new(), VecDeque::new())), cap: cap.max(16) }
+        WakeGate { inner: Mutex::new((HashSet::new(), VecDeque::new())), stats: Mutex::new(HashMap::new()), cap: cap.max(16) }
+    }
+
+    /// Per-kind counters since the daemon started (checks run vs turns spent).
+    pub fn stats(&self) -> HashMap<String, KindStats> {
+        self.stats.lock().unwrap().clone()
     }
 
     /// The decision for one notice. An empty `key` is never deduped.
     pub fn decide(&self, policy: &WakePolicy, session: &str, kind: &str, key: &str) -> Wake {
+        let w = self.decide_inner(policy, session, kind, key);
+        let mut st = self.stats.lock().unwrap();
+        let e = st.entry(kind.to_ascii_lowercase()).or_default();
+        e.checks += 1;
+        match w {
+            Wake::Now => e.wakes += 1,
+            Wake::Inbox => e.inbox += 1,
+            Wake::Duplicate => e.duplicates += 1,
+        }
+        w
+    }
+
+    fn decide_inner(&self, policy: &WakePolicy, session: &str, kind: &str, key: &str) -> Wake {
         if !policy.wakes(kind) {
             return Wake::Inbox;
         }
@@ -109,6 +189,44 @@ mod tests {
         assert_eq!(g.decide(&p, "pm", "build.failed", "run9"), Wake::Now);
         assert_eq!(g.decide(&p, "pm", "build.failed", "run9"), Wake::Duplicate);
         assert_eq!(g.decide(&p, "other", "build.failed", "run9"), Wake::Now);
+    }
+
+    #[test]
+    fn with_kind_round_trips_through_parse() {
+        let known: Vec<String> = ["a.x", "b.y", "c.z"].map(String::from).to_vec();
+        let on = WakePolicy::with_kind(Some("a.*, c.z"), "b.y", true, &known);
+        let p = WakePolicy::parse(Some(&on));
+        assert!(p.wakes("a.x") && p.wakes("b.y") && p.wakes("c.z"));
+        let off = WakePolicy::with_kind(Some("all"), "b.y", false, &known);
+        let p = WakePolicy::parse(Some(&off));
+        assert!(p.wakes("a.x") && !p.wakes("b.y") && p.wakes("c.z"));
+        assert_eq!(WakePolicy::with_kind(Some("a.x"), "a.x", false, &known), "none");
+        assert!(WakePolicy::parse(Some("none")).wakes("a.x") == false);
+        // a kind nobody declared keeps its own entry when another one is toggled
+        assert!(WakePolicy::parse(Some(&WakePolicy::with_kind(Some("zz.custom"), "a.x", true, &known))).wakes("zz.custom"));
+    }
+
+    #[test]
+    fn stats_count_checks_against_turns() {
+        let p = WakePolicy::parse(None);
+        let g = WakeGate::new(100);
+        g.decide(&p, "pm", "build.success", "r1");
+        g.decide(&p, "pm", "build.success", "r2");
+        g.decide(&p, "pm", "build.failed", "r3");
+        g.decide(&p, "pm", "build.failed", "r3");
+        let st = g.stats();
+        assert_eq!(st["build.success"], KindStats { checks: 2, wakes: 0, inbox: 2, duplicates: 0 });
+        assert_eq!(st["build.failed"], KindStats { checks: 2, wakes: 1, inbox: 0, duplicates: 1 });
+    }
+
+    #[test]
+    fn registry_lists_declared_then_unknown_kinds() {
+        let r = KindRegistry::default();
+        r.declare("builds", &[("Build.Failed", "A build failed")]);
+        let l = r.list(&["zzz.custom".into(), "build.failed".into()]);
+        assert_eq!(l.iter().map(|k| k.kind.as_str()).collect::<Vec<_>>(), ["build.failed", "zzz.custom"]);
+        assert_eq!(l[0].description, "A build failed");
+        assert_eq!(l[1].description, "");
     }
 
     #[test]

@@ -237,3 +237,55 @@ export function scopedBody(key: string, target: ScopeTarget, write?: { scope: Ex
   const t = Object.fromEntries(Object.entries(target).filter(([, v]) => typeof v === "string" && v.trim()));
   return JSON.stringify(write ? { key, ...t, scope: write.scope, value: write.value } : { key, ...t });
 }
+
+// ---- notice kinds (the Notifications card) ----------------------------------------------------------------------------
+
+/** One notice kind a sender declared: whether it wakes a session at the target in view, and its counters since start. */
+export interface NoticeKind {
+  kind: string;
+  description: string;
+  source: string;
+  wake: boolean;
+  checks: number;
+  wakes: number;
+  inbox: number;
+  duplicates: number;
+}
+
+export interface NoticeKinds {
+  setting: string;
+  value: string | null;
+  effective: string;
+  from: SettingScope;
+  layers: ScopedLayer[];
+  kinds: NoticeKind[];
+}
+
+export const NO_NOTICE_KINDS: NoticeKinds = { setting: "notify.wake.kinds", value: null, effective: "", from: "default", layers: [], kinds: [] };
+
+export function parseNoticeKinds(raw: unknown): NoticeKinds | null {
+  if (!raw || typeof raw !== "object" || !Array.isArray((raw as NoticeKinds).kinds)) return null;
+  const r = raw as NoticeKinds;
+  return { ...r, layers: arr<ScopedLayer>(r.layers) ?? [] };
+}
+
+/** `notify_kinds` answers `notify_kinds_list` (the daemon's registry: the UI keeps no list of kinds). */
+export function createNoticeKindsStore(link: FrameLink): QueryStore<NoticeKinds> {
+  return createQueryStore<NoticeKinds>(link, {
+    prefix: "notice-kinds",
+    request: "notify_kinds",
+    answers: ["notify_kinds_list"],
+    empty: NO_NOTICE_KINDS,
+    parse: (raw) => parseNoticeKinds(raw),
+    own: ["notify_kinds", "notify_kind_set"],
+  });
+}
+
+/** The body of `notify_kinds` / `notify_kind_set` at [target]; with [write] it turns [kind] on (wake) or off (inbox) at [scope]. */
+export function noticeBody(target: ScopeTarget, write?: { kind: string; wake: boolean; scope: Exclude<SettingScope, "default"> }): string {
+  const t = Object.fromEntries(Object.entries(target).filter(([, v]) => typeof v === "string" && v.trim()));
+  return JSON.stringify(write ? { ...t, kind: write.kind, wake: write.wake, scope: write.scope } : t);
+}
+
+/** Turns saved: notices that cost no turn (held in the inbox, or dropped as a repeat). */
+export const turnsSaved = (k: Pick<NoticeKind, "inbox" | "duplicates">): number => k.inbox + k.duplicates;

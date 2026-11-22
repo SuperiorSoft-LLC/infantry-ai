@@ -7,6 +7,7 @@ import { useStore } from "zustand";
 import {
   createEpicsStore,
   createMcpStore,
+  createNoticeKindsStore,
   createPodsStore,
   createQueryStore,
   createRegistryStore,
@@ -28,6 +29,7 @@ export const epicsStore = () => once("epics", () => createEpicsStore(link()));
 export const registryStore = () => once("registry", () => createRegistryStore(link()));
 export const mcpStore = () => once("mcp", () => createMcpStore(link()));
 export const podsStore = () => once("pods", () => createPodsStore(link()));
+export const noticeKindsStore = () => once("notice-kinds", () => createNoticeKindsStore(link()));
 export const scopedStore = () => once("scoped", () => createScopedSettingsStore(link()));
 
 /**

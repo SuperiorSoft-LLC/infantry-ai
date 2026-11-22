@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 import { describe, expect, it } from "vitest";
-import { byContributor, createEpicsStore, createMcpStore, createScopedSettingsStore, isUnserved, reviewQueue, scopedBody, foldPod, type Envelope } from "../src";
+import { byContributor, createNoticeKindsStore, heldKind, heldNotices, noticeBody, turnsSaved, createEpicsStore, createMcpStore, createScopedSettingsStore, isUnserved, reviewQueue, scopedBody, foldPod, type Envelope } from "../src";
 
 function link() {
   const sent: Envelope[] = [];
@@ -65,5 +65,29 @@ describe("panel helpers", () => {
     expect(byContributor([a("z", "Plug"), a("pm", "roles")]).map((g) => g.contributor)).toEqual(["roles", "Plug"]);
     const pods = foldPod({}, { pod: { id: "p1", goal: "Ship" }, nodes: [{ id: "n1", name: "api", state: "IN_REVIEW" }, { id: "n2", state: "RUNNING" }] })!;
     expect(reviewQueue(pods)).toEqual([{ podId: "p1", podGoal: "Ship", nodeName: "api", branch: undefined, workingDir: undefined, sessionId: undefined }]);
+  });
+
+  it("reads the daemon's notice kinds and writes one toggle as a scoped body", () => {
+    const l = link();
+    const s = createNoticeKindsStore(l);
+    s.getState().refresh(noticeBody({ project: "p", role: "pm" }));
+    expect(l.sent[0]).toMatchObject({ type: "notify_kinds", data: '{"project":"p","role":"pm"}' });
+    const kinds = [{ kind: "build.success", description: "A green build", source: "builds", wake: false, checks: 4, wakes: 0, inbox: 3, duplicates: 1 }];
+    l.push({ type: "notify_kinds_list", data: JSON.stringify({ setting: "notify.wake.kinds", value: null, effective: "x", from: "default", layers: [], kinds }), requestId: l.sent[0].requestId });
+    expect(s.getState().data.kinds[0].kind).toBe("build.success");
+    expect(turnsSaved(s.getState().data.kinds[0])).toBe(4);
+    expect(JSON.parse(noticeBody({ project: "p" }, { kind: "build.failed", wake: true, scope: "project" }))).toEqual({ project: "p", kind: "build.failed", wake: true, scope: "project" });
+  });
+
+  it("filters held notices by kind and session and leaves the read ones out", () => {
+    const item = (id: string, kind: string, outcome: string, sessionId: string | null, ackedAt: number | null, at: number) => ({ id, at, kind, triggerId: null, ticketId: null, podId: null, sessionId, outcome, detail: "", ackedAt });
+    const items = Object.fromEntries(
+      [item("a", "notice", "inbox:build.success", "s1", null, 1), item("b", "notice", "inbox:comment.note", "s2", null, 3), item("c", "notice", "inbox:build.success", "s1", 9, 2), item("d", "stalled", "x", "s1", null, 4)].map((i) => [i.id, i]),
+    );
+    expect(heldNotices(items).map((i) => i.id)).toEqual(["b", "a"]);
+    expect(heldNotices(items, { kind: "build.success" }).map((i) => i.id)).toEqual(["a"]);
+    expect(heldNotices(items, { session: "s2" }).map((i) => i.id)).toEqual(["b"]);
+    expect(heldNotices(items, { read: true }).map((i) => i.id)).toEqual(["b", "c", "a"]);
+    expect(heldKind(items.a)).toBe("build.success");
   });
 });

@@ -13,6 +13,7 @@ import { PluginSlot, useSlotFills } from "@/plugins/web-plugins";
 import { useUi } from "@/state/ui-state";
 import { usePluginSettingsDialog } from "@/components/plugins/plugin-settings-dialog";
 import { ConfigCard } from "./config-card";
+import { NotificationsCard } from "./notifications-card";
 import { settingsStore, useSettings } from "./use-settings";
 
 /** RUST-UI-11: a plugin's settings live in its cog on the Plugins tab; this maps each such node to its plugin. */
@@ -27,6 +28,9 @@ function useOwners(): Map<string, { id: string; name: string }> {
 
 /** The Settings tab a web UI plugin's card sits in. */
 const cardTab = (f: SlotFill): string => (typeof f.contribution.tab === "string" && f.contribution.tab.trim() ? f.contribution.tab.trim() : "Plugins");
+
+/** The tab of the wake rules and held notices: drawn from the daemon's notice-kind registry, not from a declaration. */
+const NOTIFICATIONS_TAB = "Notifications";
 
 /** Whether a web UI plugin's card answers a search: its label, id or plugin. */
 const cardMatches = (f: SlotFill, q: string): boolean => [declLabel(f.contribution), f.contribution.id, f.plugin].some((s) => s.toLowerCase().includes(q));
@@ -44,6 +48,7 @@ export function useDeclaredTabs(): string[] {
     if (link === "open") settingsStore().getState().ensureLoaded();
   }, [link]);
   const tabs = byTab(groups).map((t) => t.tab);
+  if (!tabs.includes(NOTIFICATIONS_TAB)) tabs.push(NOTIFICATIONS_TAB);
   for (const c of cards) if (!tabs.includes(cardTab(c))) tabs.push(cardTab(c));
   return tabs;
 }
@@ -88,6 +93,7 @@ export function DeclaredSettings({ tab, query }: { tab: string | null; query: st
         </div>
       ))}
       {shown.length === 0 && (pointers.length > 0 || cards.length > 0) ? null : shown.length === 0 ? <EmptyState icon={<Search className="size-5" />} title={empty} /> : shown.map((g) => <ConfigCard key={`${g.node}/${g.group}`} group={g} />)}
+      {tab === NOTIFICATIONS_TAB && !query.trim() && <NotificationsCard />}
       <PluginSlot fills={cards} frame="card" />
     </div>
   );

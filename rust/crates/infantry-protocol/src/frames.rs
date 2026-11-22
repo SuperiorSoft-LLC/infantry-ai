@@ -188,6 +188,9 @@ pub const TICKET_START_NEXT: &str = "ticket_start_next";
 pub const SETTINGS_GET: &str = "settings_get";
 pub const SETTINGS_SET: &str = "settings_set";
 pub const SETTINGS: &str = "settings";
+pub const NOTIFY_KINDS: &str = "notify_kinds";
+pub const NOTIFY_KINDS_LIST: &str = "notify_kinds_list";
+pub const NOTIFY_KIND_SET: &str = "notify_kind_set";
 pub const CONFIG_GET: &str = "config_get";
 pub const CONFIG_SCHEMA: &str = "config_schema";
 pub const CONFIG_VALUES: &str = "config_values";
@@ -509,6 +512,9 @@ pub const ALL: &[&str] = &[
     SETTINGS_GET,
     SETTINGS_SET,
     SETTINGS,
+    NOTIFY_KINDS,
+    NOTIFY_KINDS_LIST,
+    NOTIFY_KIND_SET,
     CONFIG_GET,
     CONFIG_SCHEMA,
     CONFIG_VALUES,
