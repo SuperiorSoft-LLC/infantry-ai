@@ -401,6 +401,8 @@ pub fn call(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> Opti
                 kind: s(a, "kind"),
                 state: s(a, "state"),
                 author: who.author(),
+                wake_kind: s(a, "wakeKind"),
+                wake_key: s(a, "wakeKey"),
             };
             let c = board.comment_add(req).map_err(err)?;
             let mut out = format!("comment {} ({}/{}) on {}", short(&c.id), c.kind, c.state, short(&c.ticket_id));

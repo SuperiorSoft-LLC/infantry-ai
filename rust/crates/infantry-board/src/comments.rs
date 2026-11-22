@@ -251,6 +251,7 @@ impl Comments {
         kind: &str,
         state: &str,
         body: &str,
+        wake: Option<(String, String)>,
     ) -> Result<Comment, OrchError> {
         if !KINDS.contains(&kind) {
             return Err(refused(format!("kind is one of {}", KINDS.join("|"))));
@@ -286,7 +287,7 @@ impl Comments {
                 )
             })
             .map_err(failed)?;
-        let missed = self.notify_all(ticket_id, project_id, title, &id, author, kind, state, body)?;
+        let missed = self.notify_all(ticket_id, project_id, title, &id, author, kind, state, body, wake.as_ref())?;
         if !missed.is_empty() {
             self.db
                 .write(|c| c.execute("UPDATE infantry_board_comments SET undelivered = ?1 WHERE id = ?2", params![missed.join("\n"), id]))
@@ -306,6 +307,7 @@ impl Comments {
         kind: &str,
         state: &str,
         body: &str,
+        wake: Option<&(String, String)>,
     ) -> Result<Vec<String>, OrchError> {
         let agents = match self.meta(ticket_id)? {
             Some(m) => m.notify,
@@ -347,7 +349,7 @@ impl Comments {
             for s in &sessions {
                 if sent.contains(s) {
                     delivered += 1; // already got this comment through another entry
-                } else if self.env.notify_notice(s, &format!("comment.{kind}"), comment_id, &subject, &line) {
+                } else if self.env.notify_notice(s, wake.map_or_else(|| format!("comment.{kind}"), |w| w.0.clone()).as_str(), wake.filter(|w| !w.1.is_empty()).map_or(comment_id, |w| w.1.as_str()), &subject, &line) {
                     sent.push(s.clone());
                     delivered += 1;
                 }

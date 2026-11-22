@@ -109,6 +109,8 @@ pub struct Composed {
     pub late: Arc<installer::LateUnits>,
     /// The open owner prompts (a new client is shown them).
     pub prompts: Arc<PendingPrompts>,
+    /// WAKE-2: the one wake gate (board notices, tool mails) so one event wakes a session once.
+    pub wake_gate: Arc<infantry_mail::notify::wake::WakeGate>,
     next_conn: AtomicU64,
 }
 
@@ -449,6 +451,8 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             pods: pods.clone(),
             attention: attention.clone(),
             project_dir: Arc::new(move |id: &str| project_dir(&p, id)),
+            wake_gate: env.wake_gate(),
+            settings: settings::SettingsUnit { db: db.clone() },
         }));
     }
     tools.set_knowledge(knowledge.clone());
@@ -738,6 +742,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         ui_bundles: bundles,
         late,
         prompts: prompts.clone(),
+        wake_gate: env.wake_gate(),
         next_conn: AtomicU64::new(1),
     });
     if let Some(p) = &plugin_set {

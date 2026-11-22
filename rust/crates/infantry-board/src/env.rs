@@ -348,6 +348,8 @@ pub struct StaticEnv {
     pub live: Vec<(String, String)>,
     /// Every delivered notify line, as "<session> <line>".
     pub notified: Mutex<Vec<String>>,
+    /// WAKE-2: every notice routed through `notify_notice`, as "<session> <kind> <key>".
+    pub notices: Mutex<Vec<String>>,
     /// Live sessions as (role, session id).
     pub live_roles: Vec<(String, String)>,
     /// Lane cap per role (0 = the default 1).
@@ -446,6 +448,10 @@ impl BoardEnv for StaticEnv {
     fn notify_session(&self, session_id: &str, _subject: &str, line: &str) -> bool {
         self.notified.lock().unwrap_or_else(|p| p.into_inner()).push(format!("{session_id} {line}"));
         true
+    }
+    fn notify_notice(&self, session_id: &str, kind: &str, key: &str, subject: &str, line: &str) -> bool {
+        self.notices.lock().unwrap_or_else(|p| p.into_inner()).push(format!("{session_id} {kind} {key}"));
+        self.notify_session(session_id, subject, line)
     }
     fn worker_failed(&self, f: &WorkerFailed<'_>) -> bool {
         self.failed.lock().unwrap_or_else(|p| p.into_inner()).push(format!("{} {} {} {}: {}", f.lead.unwrap_or("-"), f.ticket_id, f.session_id, f.outcome, f.subject));

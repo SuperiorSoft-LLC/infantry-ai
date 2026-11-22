@@ -1075,12 +1075,19 @@ impl Dispatcher {
     // ---- the done protocol ------------------------------------------------------------------------------
 
     fn comment(&self, ticket_id: &str, body: &str, kind: &str, author: CommentAuthor) -> Result<infantry_orchestrator_api::Comment, OrchError> {
+        self.comment_waking(ticket_id, body, kind, author, None)
+    }
+
+    /// WAKE-2: a comment that notifies under `wake` = (kind, key) instead of `comment.<kind>` and its own id.
+    fn comment_waking(&self, ticket_id: &str, body: &str, kind: &str, author: CommentAuthor, wake: Option<(String, String)>) -> Result<infantry_orchestrator_api::Comment, OrchError> {
         let c = self.board.comment_add(CommentAdd {
             ticket_id: ticket_id.to_string(),
             body: body.to_string(),
             kind: Some(kind.to_string()),
             state: None,
             author,
+            wake_kind: wake.as_ref().map(|w| w.0.clone()),
+            wake_key: wake.map(|w| w.1),
         })?;
         crate::local::emit_commented(&self.bus, &c);
         Ok(c)
@@ -1534,7 +1541,7 @@ impl Dispatcher {
             "Restart it with ticket_restart (it resumes the session, or starts a fresh one on the same worktree), unassign it, or move it."
         };
         let body = format!("[AUTOMATIC FAILURE] {what}. Worker {}. {next}", report.session_id);
-        let _ = self.comment(&row.id, &body, "issue", CommentAuthor::daemon());
+        let _ = self.comment_waking(&row.id, &body, "issue", CommentAuthor::daemon(), Some(("worker.failed".into(), format!("{}:{}", report.session_id, report.outcome))));
         // PIPE-RESTART-1: the lead is MAILED and the owner gets an attention item (one path in the host, shared with the
         // stall watchdog). A host with no mail path, or a mail the lead cannot take, falls back to the urgent line.
         let lead = row.started_by.clone().or_else(|| self.starter_of(&row.id)).filter(|s| !s.trim().is_empty() && s != "owner").filter(|_| self.auto_report());
