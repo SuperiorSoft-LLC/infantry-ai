@@ -224,3 +224,5 @@ Default: `comment.done, comment.issue, worker.failed, worker.idle, build.failed,
 
 Scripts send with kind + key: `infantry_message` takes `kind` and `key`; `infantry_ticket_comment` takes `wakeKind` and
 `wakeKey`. Edit the setting with `infantry settings set notify.wake.kinds "<list>" --scope role:pm` (or the Settings UI).
+
+A ticket's `done` comment notifies under `comment.done` with the **ticket id** as its key (WAKE-3), so a worker's done mail sent with `kind=comment.done key=<ticket id>` wakes the lead once with the comment. The PM scripts gh-build-done (`build.success` / `build.failed`, key = run id) and pm-done-ping (`ticket.done.auto`, key = ticket id) are in `scripts/wake/`; install them with `infantry_script_save` once the daemon runs WAKE-2 (an older daemon refuses the `kind`/`key` arguments).
