@@ -882,7 +882,8 @@ impl Board {
         let kind = req.kind.as_deref().map(|k| k.trim().to_lowercase()).filter(|k| !k.is_empty()).unwrap_or_else(|| "note".into());
         let state =
             req.state.as_deref().map(|k| k.trim().to_lowercase()).filter(|k| !k.is_empty()).unwrap_or_else(|| crate::comments::OPEN.into());
-        store.add(&t.id, t.project_id.as_deref(), &t.title, &req.author, &kind, &state, &req.body)
+        let wake = req.wake_kind.clone().filter(|k| !k.trim().is_empty()).map(|k| (k, req.wake_key.clone().unwrap_or_default()));
+        store.add(&t.id, t.project_id.as_deref(), &t.title, &req.author, &kind, &state, &req.body, wake)
     }
 
     pub fn comment_resolve(&self, id: &str, by: &CommentAuthor) -> Result<Comment, OrchError> {

@@ -623,6 +623,12 @@ pub struct CommentAdd {
     #[serde(default)]
     pub state: Option<String>,
     pub author: CommentAuthor,
+    /// WAKE-2: the wake kind and dedupe key this comment notifies under (default `comment.<kind>` and the comment id), so a
+    /// comment and a mail about one event (a worker failure) wake a session once.
+    #[serde(default)]
+    pub wake_kind: Option<String>,
+    #[serde(default)]
+    pub wake_key: Option<String>,
 }
 
 /// Read a ticket's comments: `which` = latestOpen (default) | latest | first | all.

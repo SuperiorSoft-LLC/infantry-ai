@@ -368,6 +368,14 @@
      "type": "string",
      "description": "done | issue | note (default note)."
     },
+    "wakeKind": {
+     "type": "string",
+     "description": "Optional: the notice kind this comment wakes the notify list under (default comment.<kind>), e.g. worker.failed. The setting notify.wake.kinds decides whether that kind wakes a session or only lands in the inbox."
+    },
+    "wakeKey": {
+     "type": "string",
+     "description": "Optional dedupe key for wakeKind (a run id, a ticket id): the same kind+key wakes a session at most once, across comments and mails."
+    },
     "state": {
      "type": "string",
      "description": "open (default) or resolved: a comment that needs no answer can be posted resolved."

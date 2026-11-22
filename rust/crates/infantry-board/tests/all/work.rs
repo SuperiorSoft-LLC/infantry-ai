@@ -193,7 +193,7 @@ fn the_starter_is_mailed_on_done_on_a_clean_end_and_on_an_end_without_a_report()
     assert!(notes(&f).iter().any(|n| n.starts_with("starter-1 ") && n.contains(&ids[0]) && n.contains("Work 1") && n.contains("commit abc")), "{:?}", notes(&f));
     // 2. a clean end after a done comment (the done protocol closes it)
     let author = CommentAuthor { kind: CommentAuthor::SESSION.into(), session_id: Some("s2".into()), agent_id: None };
-    block_on(o.comment_add(CommentAdd { ticket_id: ids[1].clone(), body: "commit def: finished".into(), kind: Some("done".into()), state: None, author })).unwrap();
+    block_on(o.comment_add(CommentAdd { ticket_id: ids[1].clone(), body: "commit def: finished".into(), kind: Some("done".into()), state: None, author, wake_kind: None, wake_key: None })).unwrap();
     block_on(o.on_done(DoneReport { ticket_id: ids[1].clone(), session_id: "s2".into(), outcome: "SUCCEEDED".into(), detail: None, background_running: 0 })).unwrap();
     assert_eq!(block_on(o.get(ids[1].clone())).unwrap().status, "done");
     assert!(notes(&f).iter().any(|n| n.contains(&ids[1]) && n.contains("commit def")), "{:?}", notes(&f));
@@ -470,7 +470,7 @@ fn restart_resumes_the_dead_session_in_place() {
     use infantry_orchestrator_api::dto::{CommentAdd, CommentAuthor};
     use infantry_orchestrator_api::DoneReport;
     let author = CommentAuthor { kind: CommentAuthor::SESSION.into(), session_id: Some("s1".into()), agent_id: None };
-    block_on(o.comment_add(CommentAdd { ticket_id: ids[0].clone(), body: "commit abc: finished".into(), kind: Some("done".into()), state: None, author })).unwrap();
+    block_on(o.comment_add(CommentAdd { ticket_id: ids[0].clone(), body: "commit abc: finished".into(), kind: Some("done".into()), state: None, author, wake_kind: None, wake_key: None })).unwrap();
     block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "SUCCEEDED".into(), detail: None, background_running: 0 })).unwrap();
     assert_eq!(block_on(o.get(ids[0].clone())).unwrap().status, "done", "the resumed run was open again, so its end was handled");
 }

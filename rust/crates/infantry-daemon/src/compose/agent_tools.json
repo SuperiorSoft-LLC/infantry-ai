@@ -245,6 +245,14 @@
     "allowCrossProject": {
      "type": "boolean",
      "description": "Allow a recipient in another project."
+    },
+    "kind": {
+     "type": "string",
+     "description": "Optional notice kind (e.g. build.success, build.failed, ticket.done.ping). With a kind, the setting notify.wake.kinds decides: a kind that wakes is mailed, any other lands in the recipient's attention inbox with no mail and no turn."
+    },
+    "key": {
+     "type": "string",
+     "description": "Optional dedupe key for kind (a build run id, a ticket id): the same kind+key wakes a recipient at most once, across mails and ticket comments."
     }
    },
    "required": [

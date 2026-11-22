@@ -101,6 +101,8 @@ fn comments_notify_resolve_and_read() {
         kind: Some("done".into()),
         state: None,
         author: owner.clone(),
+        wake_kind: None,
+        wake_key: None,
     }))
     .unwrap();
     assert_eq!((c.kind.as_str(), c.state.as_str()), ("done", "open"));
@@ -116,7 +118,7 @@ fn comments_notify_resolve_and_read() {
     let open = block_on(f.orch.comments(CommentQuery { ticket_id: "ticket-00000001".into(), ..Default::default() })).unwrap();
     assert!(open.is_empty());
 
-    let bad = block_on(f.orch.comment_add(CommentAdd { ticket_id: "ticket-00000001".into(), body: "x".into(), kind: Some("saga".into()), state: None, author: owner }));
+    let bad = block_on(f.orch.comment_add(CommentAdd { ticket_id: "ticket-00000001".into(), body: "x".into(), kind: Some("saga".into()), state: None, author: owner, wake_kind: None, wake_key: None }));
     assert!(matches!(bad, Err(OrchError::Refused(_))));
     let n = block_on(f.orch.notify_edit(NotifyEdit { ticket_id: "ticket-00000001".into(), remove: vec!["pm".into()], ..Default::default() })).unwrap();
     assert_eq!(n, vec!["qa".to_string()]);
@@ -139,6 +141,8 @@ fn notify_list_takes_roles_and_sessions() {
         kind: None,
         state: None,
         author: owner,
+        wake_kind: None,
+        wake_key: None,
     }))
     .unwrap();
     // pm resolves to both holders, qa to its one holder, and the session listed too is mailed once, not twice.
@@ -161,8 +165,38 @@ fn notify_list_takes_roles_and_sessions() {
         kind: None,
         state: None,
         author: CommentAuthor::daemon(),
+        wake_kind: None,
+        wake_key: None,
     }))
     .unwrap();
     let got = f.env.notified.lock().unwrap().clone();
     assert!(got[before..].iter().any(|l| l.starts_with("owner ") && l.contains("for the user")), "{got:?}");
+}
+
+/// WAKE-2: a comment names the (kind, key) it notifies under; without one it is `comment.<kind>` and its own id.
+#[test]
+fn a_comment_notifies_under_its_wake_kind_and_key() {
+    let mut env = kotlin_daemon_env();
+    env.registry = vec!["qa".into()];
+    env.live = vec![("qa".into(), "sess-qa-1".into())];
+    let f = fixture("comments-wake", env);
+    three(&f);
+    block_on(f.orch.record_creator("ticket-00000001".into(), CommentAuthor::owner(), Some(vec!["qa".into()]))).unwrap();
+    let add = |kind: &str, wake: Option<(&str, &str)>| {
+        block_on(f.orch.comment_add(CommentAdd {
+            ticket_id: "00000001".into(),
+            body: "worker failed".into(),
+            kind: Some(kind.into()),
+            state: None,
+            author: CommentAuthor::daemon(),
+            wake_kind: wake.map(|w| w.0.to_string()),
+            wake_key: wake.map(|w| w.1.to_string()),
+        }))
+        .unwrap()
+    };
+    let plain = add("note", None);
+    add("issue", Some(("worker.failed", "s1:FAILED")));
+    let notices = f.env.notices.lock().unwrap().clone();
+    assert_eq!(notices[0], format!("sess-qa-1 comment.note {}", plain.id), "{notices:?}");
+    assert_eq!(notices[1], "sess-qa-1 worker.failed s1:FAILED", "{notices:?}");
 }

@@ -4,6 +4,15 @@
 //! [`WorkspaceProvider`], the mail router's directory and turn sink, the questions host, and the session observer that
 //! feeds usage, mail wakes and the done protocol.
 
+/// WAKE-2: the one wake decision (`notify.wake.kinds` for the receiver's role, then the shared dedupe gate) every wake source
+/// uses: board notices, tool mails and scripts.
+pub fn decide_wake(settings: &super::settings::SettingsUnit, gate: &infantry_mail::notify::wake::WakeGate, role: Option<&str>, session_id: &str, kind: &str, key: &str) -> infantry_mail::notify::wake::Wake {
+    use infantry_mail::notify::wake::{WakePolicy, WAKE_KINDS_SETTING};
+    let d = serde_json::json!({ "role": role });
+    let raw = settings.resolve(WAKE_KINDS_SETTING, &d)["value"].as_str().map(str::to_string);
+    gate.decide(&WakePolicy::parse(raw.as_deref()), session_id, kind, key)
+}
+
 use crate::board::Board as ProfileBoard;
 use crate::sessions::{Daemon, NewOpts, SessionObserver};
 use infantry_board::env::{BoardAgent, BoardEnv, ProviderFacts};
@@ -77,6 +86,8 @@ pub struct DaemonBoardEnv {
     hooks: std::sync::OnceLock<Arc<infantry_scripting::hooks::HookStore>>,
     /// The mail router and the attention list a worker's bad end is told through (PIPE-RESTART-1; set once they exist).
     lead_notice: std::sync::OnceLock<(Arc<infantry_mail::mail::router::MailRouter>, Arc<infantry_mail::notify::attention::AttentionStore>)>,
+    /// WAKE-1: remembers which (session, kind, key) already woke.
+    wake_gate: Arc<infantry_mail::notify::wake::WakeGate>,
 }
 
 /// `board.restartResumeSeconds`: how long a resumed session must live before a restart counts as working.
@@ -110,7 +121,13 @@ impl DaemonBoardEnv {
             settings: super::settings::SettingsUnit { db },
             hooks: std::sync::OnceLock::new(),
             lead_notice: std::sync::OnceLock::new(),
+            wake_gate: Arc::new(infantry_mail::notify::wake::WakeGate::new(2000)),
         }
+    }
+
+    /// The one gate every wake source shares (comments, mails, build notices), so one event wakes a session once.
+    pub fn wake_gate(&self) -> Arc<infantry_mail::notify::wake::WakeGate> {
+        self.wake_gate.clone()
     }
 
     pub fn set_lead_notice(&self, mail: Arc<infantry_mail::mail::router::MailRouter>, attention: Arc<infantry_mail::notify::attention::AttentionStore>) {
@@ -222,6 +239,27 @@ impl BoardEnv for DaemonBoardEnv {
     fn notify_session(&self, session_id: &str, subject: &str, line: &str) -> bool {
         self.daemon.deliver(session_id, &format!("{subject}\n{line}")).is_ok()
     }
+    fn notify_notice(&self, session_id: &str, kind: &str, key: &str, subject: &str, line: &str) -> bool {
+        use infantry_mail::notify::wake::Wake;
+        match decide_wake(&self.settings, &self.wake_gate, self.daemon.record(session_id).and_then(|r| r.role).as_deref(), session_id, kind, key) {
+            Wake::Now => self.notify_session(session_id, subject, line),
+            Wake::Duplicate => true,
+            Wake::Inbox => {
+                // Not a turn: the line waits in the attention list, read on the next real turn.
+                if let Some((_, attention)) = self.lead_notice.get() {
+                    let _ = attention.raise(&infantry_mail::notify::attention::AttentionRaise {
+                        kind: "notice".into(),
+                        session_id: Some(session_id.to_string()),
+                        outcome: format!("inbox:{kind}"),
+                        detail: format!("{subject}
+{line}"),
+                        ..Default::default()
+                    });
+                }
+                true
+            }
+        }
+    }
     fn alert_session(&self, session_id: &str, subject: &str, line: &str, ticket_id: &str) -> bool {
         let t0 = std::time::Instant::now();
         let r = self.daemon.deliver_urgent(session_id, &format!("{subject}\n{line}"));
@@ -234,8 +272,15 @@ impl BoardEnv for DaemonBoardEnv {
     }
     fn worker_failed(&self, f: &infantry_board::env::WorkerFailed<'_>) -> bool {
         let Some((mail, attention)) = self.lead_notice.get() else { return false };
-        let down = super::watch::WorkerDown { ticket_id: f.ticket_id, session_id: f.session_id, lead: f.lead, outcome: f.outcome, subject: f.subject, detail: f.detail };
-        super::watch::worker_down(attention, mail, &down)
+        // WAKE-2: the failure comment and this mail are one event: the lead is woken once (same kind + key as the comment).
+        let lead = f.lead.filter(|l| {
+            let key = format!("{}:{}", f.session_id, f.outcome);
+            let role = self.daemon.record(l).and_then(|r| r.role);
+            !matches!(decide_wake(&self.settings, &self.wake_gate, role.as_deref(), l, "worker.failed", &key), infantry_mail::notify::wake::Wake::Duplicate | infantry_mail::notify::wake::Wake::Inbox)
+        });
+        let told = lead.is_none() && f.lead.is_some();
+        let down = super::watch::WorkerDown { ticket_id: f.ticket_id, session_id: f.session_id, lead, outcome: f.outcome, subject: f.subject, detail: f.detail };
+        super::watch::worker_down(attention, mail, &down) || told
     }
     fn restart_resume_window_ms(&self) -> u64 {
         let s = self.settings.app(BOARD_RESTART_RESUME_SECONDS);

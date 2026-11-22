@@ -38,6 +38,9 @@ pub struct AgentTools {
     /// Written by `infantry_attention_raise`.
     pub attention: Arc<infantry_mail::notify::attention::AttentionStore>,
     pub project_dir: Arc<dyn Fn(&str) -> Option<std::path::PathBuf> + Send + Sync>,
+    /// WAKE-2: the shared wake gate and settings `infantry_message` with a `kind` is decided by.
+    pub wake_gate: Arc<infantry_mail::notify::wake::WakeGate>,
+    pub settings: super::settings::SettingsUnit,
 }
 
 fn infos(raw: &str) -> Vec<ToolInfo> {
@@ -326,6 +329,27 @@ impl AgentTools {
                         }
                     }
                 }
+                // WAKE-2: a mail with a kind goes through the wake policy: wake kinds are mailed, the rest wait in the inbox.
+                if let Some(kind) = s(a, "kind") {
+                    let key = s(a, "key").unwrap_or_default();
+                    let to = self.mail.resolve(&from, &req.to, true).unwrap_or_else(|_| req.to.clone());
+                    let role = self.daemon.record(&to).and_then(|r| r.role);
+                    match super::adapters::decide_wake(&self.settings, &self.wake_gate, role.as_deref(), &to, &kind, &key) {
+                        infantry_mail::notify::wake::Wake::Now => {}
+                        infantry_mail::notify::wake::Wake::Duplicate => return Ok(format!("not sent: {kind} {key} already woke {to}")),
+                        infantry_mail::notify::wake::Wake::Inbox => {
+                            let _ = self.attention.raise(&infantry_mail::notify::attention::AttentionRaise {
+                                kind: "notice".into(),
+                                session_id: Some(to.clone()),
+                                outcome: format!("inbox:{kind}"),
+                                detail: format!("{}
+{}", req.subject, req.body),
+                                ..Default::default()
+                            });
+                            return Ok(format!("inbox: {kind} does not wake {to}; kept in the attention list"));
+                        }
+                    }
+                }
                 match self.mail.send(&req, infantry_mail::mail::message::is_automation(&from)) {
                     MailResult::Sent(m) => Ok(format!("sent {} to {} (thread {})", m.short_id(), m.to, m.thread_id)),
                     MailResult::Refused(why) => Err(why),
@@ -561,5 +585,58 @@ mod catalog_guard_tests {
             let t = cat.iter().find(|t| t.name == name).unwrap_or_else(|| panic!("{name} must be declared"));
             assert_eq!(t.read_only, ro, "{name}");
         }
+    }
+}
+
+/// WAKE-2: the senders that reach a session by mail (build notices, DONE-PING, the failure mail) go through the wake policy.
+#[cfg(test)]
+mod wake_route_tests {
+    use super::*;
+    use crate::sessions::{Config, NewOpts};
+    use infantry_mail::notify::wake::Wake;
+    use infantry_scripting::host::ScriptHost;
+
+    fn setup() -> (std::path::PathBuf, Arc<Daemon>, Arc<crate::compose::Composed>, String) {
+        let dir = std::env::temp_dir().join(format!("infantry-wake2-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let daemon = Daemon::new(Arc::new(crate::harness::stub::Stub { start_ms: 5_000, line_ms: 25 }), Config::new(dir.clone(), dir.clone())).unwrap();
+        let c = crate::compose::build(&daemon, &dir).unwrap();
+        let pm = daemon.launch(NewOpts::default()).unwrap();
+        (dir, daemon, c, pm)
+    }
+
+    fn send(c: &crate::compose::Composed, pm: &str, kind: &str, key: &str) -> String {
+        let inv = ToolInvoker::automation(None, "script:test");
+        let a = json!({"to": pm, "body": format!("{kind} {key}"), "subject": kind, "kind": kind, "key": key});
+        c.tools.invoke("infantry_message", a.as_object().unwrap(), &inv).text
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_green_build_is_inbox_a_failed_build_wakes_once_and_done_ping_stays_inbox() {
+        let (dir, _daemon, c, pm) = setup();
+        // green build: no mail, one attention item
+        assert!(send(&c, &pm, "build.success", "run1").starts_with("inbox"));
+        assert!(c.mail.mailbox().inbox(&pm).is_empty());
+        // failed build: mailed once, the same run id again is a duplicate
+        assert!(send(&c, &pm, "build.failed", "run2").starts_with("sent"));
+        assert!(send(&c, &pm, "build.failed", "run2").starts_with("not sent"));
+        assert_eq!(c.mail.mailbox().inbox(&pm).len(), 1);
+        // DONE-PING shares the auto done notice's kind and ticket-id key: inbox by default
+        assert!(send(&c, &pm, "ticket.done.auto", "t1").starts_with("inbox"));
+        assert!(c.mail.mailbox().inbox(&pm).len() == 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_failure_comment_and_the_failure_mail_wake_once() {
+        let (dir, _daemon, c, pm) = setup();
+        // the ticket comment copy (board notice) took the (worker.failed, session:outcome) slot first ...
+        let gate = c.wake_gate.clone();
+        let policy = infantry_mail::notify::wake::WakePolicy::parse(None);
+        assert_eq!(gate.decide(&policy, &pm, "worker.failed", "s1:FAILED"), Wake::Now);
+        // ... so the COMMS mail copy of the same failure does not wake again
+        assert!(send(&c, &pm, "worker.failed", "s1:FAILED").starts_with("not sent"));
+        assert!(c.mail.mailbox().inbox(&pm).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

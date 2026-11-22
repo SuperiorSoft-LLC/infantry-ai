@@ -137,7 +137,7 @@ impl WorktreeSweep {
     }
 
     fn note(&self, ticket_id: &str, body: &str) {
-        let _ = self.board.comment_add(CommentAdd { ticket_id: ticket_id.into(), body: body.into(), kind: Some("note".into()), state: None, author: CommentAuthor::daemon() });
+        let _ = self.board.comment_add(CommentAdd { ticket_id: ticket_id.into(), body: body.into(), kind: Some("note".into()), state: None, author: CommentAuthor::daemon(), wake_kind: None, wake_key: None });
     }
 
     /// One pass: remove (at most a batch of) done tickets' merged worktrees. Returns how many were removed.

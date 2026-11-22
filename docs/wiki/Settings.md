@@ -204,3 +204,23 @@ override replaces the rule's number for a while. Read or set it three ways, all 
 
 Each set or clear is written to the daemon log with the caller's session, role and `reason`. This is separate from the board worker cap
 (`limits.workers.maxParallel`, above), which does not change the pacing allowance.
+
+## Which notices wake a session (`notify.wake.kinds`)
+
+A notice injected into a session costs a model turn, so each source names a **kind** and a dedupe **key**, and the setting
+`notify.wake.kinds` (scopes app, project, role; comma or newline separated; a trailing `*` matches a prefix; `all`, `none`)
+says which kinds wake. Every other kind lands in the attention inbox. The same (kind, key) wakes a session once, across
+ticket comments and mails.
+
+Default: `comment.done, comment.issue, worker.failed, worker.idle, build.failed, owner.message`.
+
+| Sender | Kind | Key |
+|---|---|---|
+| ticket comment | `comment.<kind>` (or the comment's `wakeKind`) | comment id (or `wakeKey`) |
+| worker failed / ended without a done comment: ticket comment AND the COMMS mail to the lead | `worker.failed` | `<session>:<outcome>` |
+| ticket done (the auto notice and a script's DONE-PING) | `ticket.done.auto` | ticket id |
+| build result (script mail) | `build.success`, `build.failed` | run id |
+| `lane-park` and `[AUTOMATIC] build output removed` | note comments, so `comment.note` | inbox |
+
+Scripts send with kind + key: `infantry_message` takes `kind` and `key`; `infantry_ticket_comment` takes `wakeKind` and
+`wakeKey`. Edit the setting with `infantry settings set notify.wake.kinds "<list>" --scope role:pm` (or the Settings UI).
