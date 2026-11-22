@@ -411,6 +411,16 @@ impl FrameStream {
     }
 
     pub fn request_within(&mut self, env: &Envelope, answer: &str, what: &str, idempotent: bool, timeout_ms: u64) -> Result<Envelope, ConnError> {
+        self.request_matching(env, Some(answer), what, idempotent, timeout_ms)
+    }
+
+    /// Like `request_within`, but a frame of ANY type that carries this request's id answers it (the answer type is the
+    /// runner's own unit's, e.g. `providers`). Needs a daemon that echoes request ids.
+    pub fn request_any_type(&mut self, env: &Envelope, what: &str, timeout_ms: u64) -> Result<Envelope, ConnError> {
+        self.request_matching(env, None, what, false, timeout_ms)
+    }
+
+    fn request_matching(&mut self, env: &Envelope, answer: Option<&str>, what: &str, idempotent: bool, timeout_ms: u64) -> Result<Envelope, ConnError> {
         let mut sent = self.correlate(env);
         self.send(&sent)?;
         let mut sent_at = self.generation;
@@ -438,7 +448,9 @@ impl FrameStream {
                 continue;
             };
             let id = sent.request_id.as_ref();
-            if frame.kind == answer {
+            let typed = answer.is_some_and(|a| frame.kind == a);
+            let by_id = answer.is_none() && id.is_some() && frame.request_id.as_ref() == id && frame.kind != "error";
+            if typed || by_id {
                 if id.is_none() || frame.request_id.as_ref() == id {
                     return Ok(frame);
                 }

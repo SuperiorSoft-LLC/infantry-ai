@@ -200,12 +200,18 @@ struct LinkScope {
 
 impl RunnerScope for LinkScope {
     fn request(&self, frame: &str, data: &str) -> Result<String, String> {
-        let a = self.client.call(frame, data).map_err(|e| format!("runner '{}': {e}", self.name))?;
-        if a.ok() {
-            Ok(a.data)
-        } else {
-            Err(format!("runner '{}' refused {frame}: {}", self.name, a.data))
+        self.request_typed(frame, data).map(|(_, d)| d)
+    }
+
+    /// One `runner_link_frame`: the runner answers through its own units, only for the frames its plugin offers.
+    fn request_typed(&self, frame: &str, data: &str) -> Result<(String, String), String> {
+        let body = serde_json::to_string(&wire::FrameRequest { frame: frame.into(), data: data.into() }).map_err(|e| e.to_string())?;
+        let a = self.client.call(wire::FRAME, &body).map_err(|e| format!("runner '{}': {e}", self.name))?;
+        if !a.ok() {
+            return Err(format!("runner '{}' refused {frame}: {}", self.name, a.data));
         }
+        let ans: wire::FrameAnswer = serde_json::from_str(&a.data).map_err(|_| format!("runner '{}' answered {frame} with something unreadable", self.name))?;
+        Ok((ans.r#type, ans.data))
     }
 }
 

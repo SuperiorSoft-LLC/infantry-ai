@@ -15,7 +15,7 @@ use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-pub const USAGE: &str = "usage: infantry runner bearer [--name <n>] [--host <h>] [--port <p>] [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] [--rotate] | add <endpoint> --bearer <token|-> | connect --name <n> --via \"<command>\" [--host <h>] [--port <p>] | up --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] [--grant-on-pair [--grant-harnesses-max <ids>]] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | add '<infantry://runner?...>' [--name <n>] [--grant [--project <id>]] | add --link <link|-> [--name <n>] [--grant [--project <id>]] | list | check <name> [--project <id>] [--harness <id>] | test <name> [--harness <id>] [--model <id>] | rotate <name> | detach [<name>] | audit [--limit N]";
+pub const USAGE: &str = "usage: infantry runner bearer [--name <n>] [--host <h>] [--port <p>] [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] [--rotate] | add <endpoint> --bearer <token|-> | connect --name <n> --via \"<command>\" [--host <h>] [--port <p>] | up --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] | pair --name <n> [--host <h>]... [--allow-projects <ids|*>] [--allow-harnesses <ids|*>] [--grant-on-pair [--grant-harnesses-max <ids>]] | add <name> <wss-url> --code <code> [--fingerprint <fp>] | add '<infantry://runner?...>' [--name <n>] [--grant [--project <id>]] | add --link <link|-> [--name <n>] [--grant [--project <id>]] | frame <name> <frame> [--data <json> | --data -] | list | check <name> [--project <id>] [--harness <id>] | test <name> [--harness <id>] [--model <id>] | rotate <name> | detach [<name>] | audit [--limit N]";
 const QUOTE_HINT: &str = "Quote the whole link, e.g. infantry runner add 'infantry://runner?v=1&...'. A shell without quotes cuts it at &.";
 const LINK_PREFIX: &str = "infantry://runner?";
 const ADMIN: &str = "runner_admin";
@@ -71,6 +71,7 @@ struct Args {
     via: Option<String>,
     bearer: Option<String>,
     rotate: bool,
+    data: Option<String>,
 }
 
 impl Args {
@@ -96,6 +97,7 @@ impl Args {
             via: v("via"),
             bearer: p.bearer.clone(),
             rotate: p.flag("rotate"),
+            data: v("data"),
         }
     }
 
@@ -134,6 +136,7 @@ impl Args {
         opt("grant-harnesses-max", &self.grant_harnesses_max);
         opt("via", &self.via);
         opt("bearer", &self.bearer);
+        opt("data", &self.data);
         if self.grant_on_pair {
             f.push("grant-on-pair");
         }
@@ -190,6 +193,7 @@ fn usage_error(a: &Args) -> Option<String> {
                 || add_usage_ok(a)
                 || (pos.len() == 2 && !blank(&a.code) && a.flags_within(&["code", "fingerprint"]))
         }
+        Some("frame") => pos.len() == 2 && !pos[0].trim().is_empty() && !pos[1].trim().is_empty() && a.flags_within(&["data"]),
         Some("list") => pos.is_empty() && a.flags().is_empty(),
         Some("rotate") => pos.len() == 1 && a.flags().is_empty(),
         Some("detach") => pos.len() <= 1 && a.flags().is_empty(),
@@ -814,6 +818,7 @@ fn run_open(ctx: &mut Ctx, stream: &mut FrameStream, a: &Args, state_dir: &Path,
             Ok(if bad > 0 { 1 } else { 0 })
         }
         Some("test") => test(ctx, &mut r, &pos[0], a.harness.clone(), a.model.clone()),
+        Some("frame") => frame(ctx, &mut r, &pos[0], &pos[1], a.data.as_deref()),
         Some("detach") => {
             if let Some(name) = pos.first() {
                 let ans = r.op(&[("op", s("detach")), ("name", Some(name.clone()))])?;
@@ -1072,6 +1077,38 @@ fn add(ctx: &mut Ctx, r: &mut Runner, a: &Args, getenv: Getenv) -> CmdResult {
         ctx.out("runners.enabled was off; turned on");
     }
     report_add(ctx, r, &ans)
+}
+
+/// `runner frame <name> <frame> [--data <json> | --data -]` (RR-13): one runner-scope frame answered by that runner's own unit
+/// (`local` = this machine). Prints the answer's data. A secret goes on stdin (`--data -`), never in argv.
+fn frame(ctx: &mut Ctx, r: &mut Runner, runner: &str, frame: &str, data: Option<&str>) -> CmdResult {
+    let text = match data {
+        Some("-") => ctx.io.stdin().trim().to_string(),
+        Some(d) => d.to_string(),
+        None => "{}".to_string(),
+    };
+    let data: Value = match serde_json::from_str(if text.is_empty() { "{}" } else { &text }) {
+        Ok(v @ Value::Object(_)) => v,
+        _ => {
+            ctx.err("error: --data must be a JSON object");
+            return Ok(1);
+        }
+    };
+    let body = serde_json::json!({"runner": runner, "frame": frame, "data": data});
+    let mut env = Envelope::new("runner_frame", body.to_string());
+    // Not a correlated request type: the answer type is the runner unit's own, so it is matched by this id.
+    env.request_id = Some(uuid::Uuid::new_v4().to_string());
+    let wait = r.stream.answer_timeout_ms().max((r.limit(&LINK_CALL_SECONDS) * ADMIN_CALLS + ADMIN_SLACK_SECONDS) * MS_PER_SECOND);
+    match r.stream.request_any_type(&env, "runner_frame", wait) {
+        Ok(a) => {
+            ctx.out(a.data);
+            Ok(0)
+        }
+        Err(e) => {
+            ctx.err(format!("error: {}", e.message()));
+            Ok(1)
+        }
+    }
 }
 
 fn add_by_bearer(ctx: &mut Ctx, r: &mut Runner, a: &Args, getenv: Getenv) -> CmdResult {

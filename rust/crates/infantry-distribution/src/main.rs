@@ -155,7 +155,11 @@ fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, stat
     composed.late.add("runner-pool", &frames, Arc::new(infantry_runner_pool::AdminUnit { pool: pool.clone() }));
     // RR-4: the paired runners join the registry a session is placed through (`local` is already there).
     composed.daemon.runner_registry().add_source(pool.clone());
-    println!("[infantry] runner pool registered (runner_admin, placement)");
+    // RR-13: `runner_frame {runner, frame, data}`; `local` answers in-process through this daemon's own frames.
+    let registry = composed.daemon.runner_registry();
+    registry.set_local_scope(Arc::new(infantry_runner_source::FnScope(Box::new(owner_ask(composed)))));
+    composed.late.add("runner-frame", &[infantry_runner_pool::RUNNER_FRAME.to_string()], Arc::new(infantry_runner_pool::RunnerFrameUnit { registry }));
+    println!("[infantry] runner pool registered (runner_admin, runner_frame, placement)");
     // The heartbeat interval is the setting `limits.runners.heartbeatSec`, read every round (unset or bad = the default).
     let c = composed.clone();
     let c2 = composed.clone();
@@ -170,6 +174,19 @@ fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, stat
             .filter(|n| *n > 0)
             .unwrap_or(infantry_runner_pool::DEFAULT_HEARTBEAT_SEC)
     }));
+}
+
+/// One frame of this daemon, asked as owner: the first answer's (type, data), or why not (RR-13).
+fn owner_ask(composed: &Arc<infantry_daemon::compose::Composed>) -> impl Fn(&str, &str) -> Result<(String, String), String> + Send + Sync + 'static {
+    let c = composed.clone();
+    move |frame: &str, data: &str| {
+        let mut ask = infantry_protocol::envelope::Envelope::new(frame, data.to_string());
+        // A unit that answers a change by push (the vault's `secret_set`) returns its reply only to a request that has an id.
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        ask.request_id = Some(format!("runner-frame-{}", SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+        let first = c.request(&ask, true).map_err(|e| e.to_string())?.into_iter().next();
+        first.map(|e| (e.r#type.clone(), e.data)).ok_or_else(|| format!("{frame} answered nothing"))
+    }
 }
 
 fn read_setting(composed: &Arc<infantry_daemon::compose::Composed>, key: &str) -> Option<serde_json::Value> {
@@ -221,6 +238,8 @@ fn serve_runner_link(composed: &Arc<infantry_daemon::compose::Composed>, state_d
         allow_plain: plain_allowed(&|k: &str| setting(k)),
     };
     let backend = infantry_runner_link::process::ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default()));
+    // RR-13: this runner answers its own harness/provider/key frames over the link, only the ones the plugin offers.
+    let backend = infantry_runner_pool::FrameBackend::new(Box::new(backend), Arc::new(owner_ask(composed)));
     match infantry_runner_pool::RunnerServe::start(state_dir, Box::new(backend), opts) {
         Ok(serve) => {
             let frames = [infantry_runner_pool::ADMIN_FRAME.to_string()];

@@ -21,6 +21,23 @@ pub const ANY: &str = "any";
 pub trait RunnerScope: Send + Sync {
     /// One frame `frame` with JSON `data`; the JSON answer, or why not.
     fn request(&self, frame: &str, data: &str) -> Result<String, String>;
+    /// Like [`request`](Self::request) but with the envelope type the runner's unit answered with (`(type, data)`). The default
+    /// assumes the unit answers with its own frame name.
+    fn request_typed(&self, frame: &str, data: &str) -> Result<(String, String), String> {
+        self.request(frame, data).map(|d| (frame.to_string(), d))
+    }
+}
+
+/// A scope backed by a function `(frame, data) -> (type, data)` (the daemon's own `composed.request` for `local`).
+pub struct FnScope(pub Box<dyn Fn(&str, &str) -> Result<(String, String), String> + Send + Sync>);
+
+impl RunnerScope for FnScope {
+    fn request(&self, frame: &str, data: &str) -> Result<String, String> {
+        (self.0)(frame, data).map(|(_, d)| d)
+    }
+    fn request_typed(&self, frame: &str, data: &str) -> Result<(String, String), String> {
+        (self.0)(frame, data)
+    }
 }
 
 /// A scope that answers nothing (a runner without runner-scope units).
@@ -96,6 +113,8 @@ pub trait RunnerSource: Send + Sync {
 
 pub struct RunnerRegistry {
     local: RunnerEntry,
+    /// The scope the composition root gives `local` (set once); until then `local` answers no runner-scope frame.
+    local_scope: std::sync::OnceLock<Arc<dyn RunnerScope>>,
     sources: Mutex<Vec<Arc<dyn RunnerSource>>>,
 }
 
@@ -104,7 +123,7 @@ impl RunnerRegistry {
     pub fn new(mut local: RunnerEntry) -> Arc<RunnerRegistry> {
         local.name = LOCAL.into();
         local.kind = "embedded".into();
-        Arc::new(RunnerRegistry { local, sources: Mutex::new(Vec::new()) })
+        Arc::new(RunnerRegistry { local, local_scope: std::sync::OnceLock::new(), sources: Mutex::new(Vec::new()) })
     }
 
     pub fn add_source(&self, s: Arc<dyn RunnerSource>) {
@@ -116,7 +135,26 @@ impl RunnerRegistry {
     }
 
     pub fn local(&self) -> RunnerEntry {
-        self.local.clone()
+        let mut e = self.local.clone();
+        if let Some(s) = self.local_scope.get() {
+            e.scope = s.clone();
+        }
+        e
+    }
+
+    /// Wires how `local` answers runner-scope frames (in-process); set once.
+    pub fn set_local_scope(&self, s: Arc<dyn RunnerScope>) {
+        let _ = self.local_scope.set(s);
+    }
+
+    /// The runner for a runner-scope frame: `local` (or empty) or a paired runner by name. Never `any`. A refusal names the
+    /// runner and the reason and nothing is answered by another runner.
+    pub fn resolve_scope(&self, spec: &str) -> Result<RunnerEntry, Refusal> {
+        let spec = spec.trim();
+        if spec.eq_ignore_ascii_case(ANY) {
+            return Err(Refusal("`any` is not a runner: name one (infantry runner list); nothing was answered locally".into()));
+        }
+        self.resolve_with(spec, "nothing was answered locally")
     }
 
     /// `local` first (always online), then every source's runners.
@@ -131,6 +169,10 @@ impl RunnerRegistry {
     /// `spec` is a runner name, `local`, or `any`; an empty one is `local`. Never answers with a different runner than the
     /// one asked for.
     pub fn resolve(&self, spec: &str) -> Result<RunnerEntry, Refusal> {
+        self.resolve_with(spec, "the session was not started and nothing ran locally")
+    }
+
+    fn resolve_with(&self, spec: &str, tail: &str) -> Result<RunnerEntry, Refusal> {
         let spec = spec.trim();
         if spec.is_empty() || spec.eq_ignore_ascii_case(LOCAL) {
             return Ok(self.local());
@@ -140,23 +182,23 @@ impl RunnerRegistry {
         }
         for s in self.sources() {
             if s.list().iter().any(|i| i.name == spec) {
-                return Self::usable(&*s, spec);
+                return Self::usable(&*s, spec, tail);
             }
         }
-        Err(Refusal(format!("runner '{spec}' is not paired with this daemon (known: {}); the session was not started and nothing ran locally", self.names())))
+        Err(Refusal(format!("runner '{spec}' is not paired with this daemon (known: {}); {tail}", self.names())))
     }
 
     /// Re-reads the runner's health once before refusing: a heartbeat may be stale.
-    fn usable(s: &dyn RunnerSource, name: &str) -> Result<RunnerEntry, Refusal> {
+    fn usable(s: &dyn RunnerSource, name: &str, tail: &str) -> Result<RunnerEntry, Refusal> {
         let known = s.list().into_iter().find(|i| i.name == name).map(|i| i.availability).unwrap_or(Availability::Unknown);
         // A start always re-reads the runner's health: the heartbeat may be stale, and a refusal must be true.
         let _ = known;
         let now = s.refresh(name);
         match now {
             Availability::Online => s.entry(name).ok_or_else(|| Refusal(format!("runner '{name}' was detached while the session started"))),
-            Availability::Offline(why) => Err(Refusal(format!("runner '{name}' is offline: {why}; the session was not started and nothing ran locally"))),
-            Availability::Outdated(why) => Err(Refusal(format!("runner '{name}' is outdated: {why}; the session was not started and nothing ran locally"))),
-            Availability::Unknown => Err(Refusal(format!("runner '{name}' did not answer; the session was not started and nothing ran locally"))),
+            Availability::Offline(why) => Err(Refusal(format!("runner '{name}' is offline: {why}; {tail}"))),
+            Availability::Outdated(why) => Err(Refusal(format!("runner '{name}' is outdated: {why}; {tail}"))),
+            Availability::Unknown => Err(Refusal(format!("runner '{name}' did not answer; {tail}"))),
         }
     }
 
@@ -164,7 +206,7 @@ impl RunnerRegistry {
         let mut why = Vec::new();
         for s in self.sources() {
             for i in s.list() {
-                match Self::usable(&*s, &i.name) {
+                match Self::usable(&*s, &i.name, "the session was not started and nothing ran locally") {
                     Ok(e) => {
                         // Re-read: the listing's slot count may be stale too.
                         let free = s.list().into_iter().find(|x| x.name == i.name).and_then(|x| x.free_slots);

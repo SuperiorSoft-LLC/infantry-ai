@@ -71,6 +71,7 @@ const FLAGS: &[(&str, Kind, &str)] = &[
     ("--grant", Kind::Bool, ""),
     ("--rotate", Kind::Bool, ""),
     ("--link", Kind::Any, "--link expects a runner pairing link (infantry://runner?v=1...), or - to read it from stdin"),
+    ("--data", Kind::Any, "--data expects a JSON object for the frame, or - to read it from stdin"),
     ("--harness", Kind::Value, "--harness expects a harness id, e.g. the one you mean to run there"),
     ("--report-to", Kind::Value, "--report-to expects a role id"),
     ("--report-fields", Kind::Any, "--report-fields expects a comma-separated list"),

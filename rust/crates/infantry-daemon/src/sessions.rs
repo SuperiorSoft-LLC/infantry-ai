@@ -856,7 +856,7 @@ impl Daemon {
         let id = uuid::Uuid::new_v4().to_string();
         // RR-4: a start that names a runner is placed there or refused loudly; it never runs locally instead. A remote
         // session's folder is a scratch folder ON the runner (the workspace is RR-7), never the orchestrator's working dir.
-        let placed = self.place(opts.runner.as_deref(), verb)?;
+        let placed = self.place(opts.runner.as_deref(), opts.provider.as_deref(), verb)?;
         let cwd = match &placed {
             Some((_, workdir)) => PathBuf::from(workdir),
             None => match self.own_folder(opts, &id)? {
@@ -1241,12 +1241,17 @@ impl Daemon {
 
     /// The runner a start asks for: `None` = `local` (nothing to place), else (runner name, scratch folder on it) or the loud
     /// refusal. `any` becomes the name of the runner it chose.
-    fn place(&self, runner: Option<&str>, verb: &str) -> Result<Option<(String, String)>, String> {
+    fn place(&self, runner: Option<&str>, provider: Option<&str>, verb: &str) -> Result<Option<(String, String)>, String> {
         let spec = runner.map(str::trim).unwrap_or("");
         if spec.is_empty() || spec.eq_ignore_ascii_case(infantry_runner_source::LOCAL) {
             return Ok(None);
         }
         let entry = self.runner_registry().resolve(spec).map_err(|r| format!("{verb} refused: {r}"))?;
+        // RR-13: the harness must be usable ON that runner: its own `providers` answer says (a runner that cannot answer is not
+        // blocked here; the harness start on it then fails with its own reason).
+        if let Some(why) = provider.map(str::trim).filter(|p| !p.is_empty()).and_then(|p| unusable_on(&entry, p)) {
+            return Err(format!("{verb} refused: {why}"));
+        }
         let workdir = infantry_runner_source::RunnerRegistry::scratch_dir(&entry).map_err(|e| format!("{verb} refused: {e}"))?;
         Ok(Some((entry.name, workdir)))
     }
@@ -1600,5 +1605,46 @@ fn state_word(s: SessionState) -> &'static str {
         SessionState::Exited => "exited",
         SessionState::Orphaned => "orphaned",
         SessionState::Failed => "failed",
+    }
+}
+
+/// RR-13: why `provider` cannot run on the runner `entry`, from that runner's own `providers` answer ("not installed on box",
+/// "not signed in on box"); None = usable, or the runner did not say.
+fn unusable_on(entry: &infantry_runner_source::RunnerEntry, provider: &str) -> Option<String> {
+    let answer = entry.scope.request("providers", "{}").ok()?;
+    unusable_in(&answer, provider, &entry.name)
+}
+
+fn unusable_in(providers: &str, provider: &str, runner: &str) -> Option<String> {
+    let rows: serde_json::Value = serde_json::from_str(providers).ok()?;
+    let row = rows.as_array()?.iter().find(|r| r["id"].as_str() == Some(provider))?;
+    if row["available"].as_bool() != Some(false) {
+        return None;
+    }
+    let reason = row["unavailableReason"].as_str().unwrap_or("").trim();
+    let what = if reason.contains("not installed") {
+        "is not installed"
+    } else if reason.contains("not signed in") {
+        "is not signed in"
+    } else {
+        "is unavailable"
+    };
+    Some(format!("{provider} {what} on {runner}{}; open the runner's setup (infantry runner frame {runner} harness_install_status), nothing ran locally", if reason.is_empty() { String::new() } else { format!(" ({reason})") }))
+}
+
+#[cfg(test)]
+mod rr13_tests {
+    use super::unusable_in;
+
+    #[test]
+    fn a_runner_without_the_harness_or_its_sign_in_is_refused_by_name() {
+        let rows = r#"[{"id":"pi","available":false,"unavailableReason":"pi is not installed (not on PATH)"},
+            {"id":"codex","available":false,"unavailableReason":"codex is not signed in: run `codex login`"},
+            {"id":"claude","available":true,"unavailableReason":null}]"#;
+        assert!(unusable_in(rows, "pi", "box").unwrap().starts_with("pi is not installed on box"));
+        assert!(unusable_in(rows, "codex", "box").unwrap().starts_with("codex is not signed in on box"));
+        assert_eq!(unusable_in(rows, "claude", "box"), None);
+        assert_eq!(unusable_in(rows, "unknown", "box"), None);
+        assert_eq!(unusable_in("not json", "pi", "box"), None);
     }
 }
