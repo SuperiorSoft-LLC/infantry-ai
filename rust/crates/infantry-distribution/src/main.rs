@@ -156,6 +156,8 @@ fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, stat
     println!("[infantry] runner pool registered (runner_admin)");
     // The heartbeat interval is the setting `limits.runners.heartbeatSec`, read every round (unset or bad = the default).
     let c = composed.clone();
+    let c2 = composed.clone();
+    pool.set_allow_plain(Arc::new(move || plain_allowed(&|k: &str| read_setting(&c2, k))));
     pool.start_heartbeat(Arc::new(move || {
         let ask = infantry_protocol::envelope::Envelope::new("settings", serde_json::json!({"key": infantry_runner_pool::HEARTBEAT_KEY}).to_string());
         c.request(&ask, true)
@@ -166,6 +168,17 @@ fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, stat
             .filter(|n| *n > 0)
             .unwrap_or(infantry_runner_pool::DEFAULT_HEARTBEAT_SEC)
     }));
+}
+
+fn read_setting(composed: &Arc<infantry_daemon::compose::Composed>, key: &str) -> Option<serde_json::Value> {
+    let ask = infantry_protocol::envelope::Envelope::new("settings", serde_json::json!({"key": key}).to_string());
+    let v = composed.request(&ask, true).ok()?.into_iter().next().and_then(|e| serde_json::from_str::<serde_json::Value>(&e.data).ok())?;
+    Some(v["value"].clone()).filter(|v| !v.is_null())
+}
+
+/// The setting `runners.allowPlainTailnet` (default false): a boolean or the text "true".
+fn plain_allowed(setting: &dyn Fn(&str) -> Option<serde_json::Value>) -> bool {
+    setting(infantry_runner_pool::ALLOW_PLAIN_KEY).is_some_and(|v| v.as_bool().unwrap_or_else(|| v.as_str().is_some_and(|s| s.trim().eq_ignore_ascii_case("true"))))
 }
 
 /// RUNNER SERVE SPOT (RR-2): a `--mode runner` daemon serves the runner link from start, over its own LocalRunner. The port
@@ -203,6 +216,7 @@ fn serve_runner_link(composed: &Arc<infantry_daemon::compose::Composed>, state_d
         allow_projects: env("INFANTRY_RUNNER_ALLOW_PROJECTS").unwrap_or_else(|| "*".into()),
         allow_harnesses: env("INFANTRY_RUNNER_ALLOW_HARNESSES").unwrap_or_else(|| "*".into()),
         app_version: env!("CARGO_PKG_VERSION").into(),
+        allow_plain: plain_allowed(&|k: &str| setting(k)),
     };
     let backend = infantry_runner_link::process::ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default()));
     match infantry_runner_pool::RunnerServe::start(state_dir, Box::new(backend), opts) {

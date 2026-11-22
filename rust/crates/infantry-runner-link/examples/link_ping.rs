@@ -42,6 +42,7 @@ fn scrub(text: &str) -> String {
 
 fn main() {
     let (mut to, mut code, mut state, mut count, mut record, mut name) = (None, None, None, 3usize, None::<PathBuf>, "rust-orchestrator".to_string());
+    let mut pin: Option<String> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         let mut val = || args.next().unwrap_or_else(|| usage());
@@ -54,7 +55,9 @@ fn main() {
                     t.clear();
                     std::io::stdin().read_to_string(&mut t).expect("stdin");
                 }
-                code = Some(BearerToken::parse(&t).unwrap_or_else(|e| { eprintln!("link_ping: {e}"); std::process::exit(2) }).secret);
+                let token = BearerToken::parse(&t).unwrap_or_else(|e| { eprintln!("link_ping: {e}"); std::process::exit(2) });
+                pin = token.fingerprint.clone();
+                code = Some(token.secret);
             }
             "--state" => state = Some(PathBuf::from(val())),
             "--count" => count = val().parse().unwrap_or_else(|_| usage()),
@@ -68,7 +71,7 @@ fn main() {
     let store = LinkStore::open(&state.join("runner-link"));
     let me = store.self_id();
     let known = store.runners().into_iter().find(|r| r.url == to);
-    let mut client = LinkClient::new(&to, &me, known.as_ref().map(|r| r.credential.clone()));
+    let mut client = LinkClient::new(&to, &me, known.as_ref().map(|r| r.credential.clone())).allow_plain(std::env::var("INFANTRY_ALLOW_PLAIN").is_ok());
     if record.is_some() {
         client = client.recording();
     }

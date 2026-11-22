@@ -15,6 +15,7 @@ pub mod process;
 pub mod remote;
 pub mod server;
 pub mod store;
+pub mod tls;
 pub mod transport;
 pub mod wire;
 
@@ -22,4 +23,5 @@ pub use client::{CallError, LinkClient, Ping};
 pub use remote::RemoteRunner;
 pub use server::{Backend, InfoOnly, LinkServer, RunnerInfo};
 pub use store::{LinkStore, PairedRunner};
-pub use transport::{serve, LinkFailure, LinkServing};
+pub use tls::RunnerCert;
+pub use transport::{serve, LinkFailure, LinkServing, Security};

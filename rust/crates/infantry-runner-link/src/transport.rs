@@ -4,11 +4,12 @@
 //! and credential in the upgrade headers). [`call`] is the orchestrator end, [`serve`] the runner end. Blocking I/O, one
 //! thread per connection: a link carries a handful of calls a second, and a held `frames_pull` just parks its thread.
 //!
-//! Plain `ws://` only for now (the Kotlin runner serves it under `runners.allowPlainTailnet`); `wss://` with a pinned
-//! certificate is refused with a clear reason until the TLS step lands.
+//! `wss://` is the link: TLS with the runner's pinned self-signed certificate ([`crate::tls`]). Plain `ws://` is served and
+//! called only when `runners.allowPlainTailnet` is on (the caller passes [`Security::allow_plain`]; it defaults to false).
 
 use crate::wire::{self, Answer, LinkEnvelope};
-use std::io::ErrorKind;
+use crate::tls;
+use std::io::{ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -34,8 +35,7 @@ pub fn endpoint(url: &str) -> Result<(String, u16, String), LinkFailure> {
     let url = url.trim();
     let (scheme, rest) = url.split_once("://").ok_or_else(|| LinkFailure(format!("the runner URL must start with ws:// or wss:// (got '{url}')")))?;
     match scheme.to_ascii_lowercase().as_str() {
-        "ws" => {}
-        "wss" => return Err(LinkFailure("wss:// (TLS with a pinned certificate) is not offered by this client yet; serve the runner link plain (runners.allowPlainTailnet) on a private network".into())),
+        "ws" | "wss" => {}
         _ => return Err(LinkFailure(format!("the runner URL must start with ws:// or wss:// (got '{url}')"))),
     }
     let (authority, path) = match rest.find('/') {
@@ -59,6 +59,23 @@ pub fn endpoint(url: &str) -> Result<(String, u16, String), LinkFailure> {
     Ok((host, port, path))
 }
 
+/// True for a `wss://` URL.
+pub fn is_tls(url: &str) -> bool {
+    url.trim().get(..6).is_some_and(|p| p.eq_ignore_ascii_case("wss://"))
+}
+
+/// The reason a plain `ws://` link is refused while `runners.allowPlainTailnet` is off.
+pub const PLAIN_REFUSED: &str = "plain ws:// is refused: runners.allowPlainTailnet is off. A plain link sends the runner's credential and every command and its output unencrypted, so anyone on the path can read them or take the runner over. Use wss:// (the default), or turn the setting on only for a private network you trust, on both the runner and the orchestrator";
+
+/// How a call is secured: the certificate pin for `wss://`, and whether plain `ws://` is allowed.
+#[derive(Debug, Clone, Default)]
+pub struct Security {
+    /// The runner certificate's SHA-256 (lower-case hex), from the bearer. Required for `wss://`.
+    pub pin: Option<String>,
+    /// `runners.allowPlainTailnet`: false (the default) refuses `ws://`.
+    pub allow_plain: bool,
+}
+
 /// What one call put on the wire and got back, verbatim (fixtures record these).
 #[derive(Debug, Clone)]
 pub struct Exchange {
@@ -68,8 +85,24 @@ pub struct Exchange {
 }
 
 /// One orchestrator -> runner call: connect, send `(type, data)` with the id and credential headers, read the answer, close.
-pub fn call(url: &str, orchestrator_id: Option<&str>, credential: Option<&str>, r#type: &str, data: &str, timeout: Duration) -> Result<Exchange, LinkFailure> {
+pub fn call(
+    url: &str,
+    orchestrator_id: Option<&str>,
+    credential: Option<&str>,
+    r#type: &str,
+    data: &str,
+    timeout: Duration,
+    security: &Security,
+) -> Result<Exchange, LinkFailure> {
     let (host, port, path) = endpoint(url)?;
+    let tls_link = is_tls(url);
+    if !tls_link && !security.allow_plain {
+        return Err(LinkFailure(PLAIN_REFUSED.into()));
+    }
+    let pin = security.pin.as_deref().map(str::trim).filter(|p| !p.is_empty());
+    if tls_link && pin.is_none() {
+        return Err(LinkFailure("wss:// needs the runner's certificate pin (the middle part of its bearer); this runner has none, so nothing was sent. Add it again with its bearer".into()));
+    }
     let bare = host.trim_start_matches('[').trim_end_matches(']');
     let addrs: Vec<SocketAddr> =
         (bare, port).to_socket_addrs().map_err(|e| LinkFailure(format!("cannot reach the runner link at {url}: {e}")))?.collect();
@@ -88,6 +121,27 @@ pub fn call(url: &str, orchestrator_id: Option<&str>, credential: Option<&str>, 
     stream.set_read_timeout(Some(timeout)).ok();
     stream.set_write_timeout(Some(timeout)).ok();
     stream.set_nodelay(true).ok();
+    if tls_link {
+        // The pin is checked inside the handshake: a wrong certificate fails here, before any request bytes exist.
+        let secured = tls::connect(stream, pin.unwrap_or_default()).map_err(LinkFailure)?;
+        return exchange(secured, url, &host, port, &path, orchestrator_id, credential, r#type, data, timeout);
+    }
+    exchange(stream, url, &host, port, &path, orchestrator_id, credential, r#type, data, timeout)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn exchange<S: Read + Write>(
+    stream: S,
+    url: &str,
+    host: &str,
+    port: u16,
+    path: &str,
+    orchestrator_id: Option<&str>,
+    credential: Option<&str>,
+    r#type: &str,
+    data: &str,
+    timeout: Duration,
+) -> Result<Exchange, LinkFailure> {
     let mut builder = Request::builder()
         .uri(format!("ws://{host}:{port}{path}"))
         .header("Host", format!("{host}:{port}"))
@@ -164,8 +218,9 @@ impl Drop for LinkServing {
     }
 }
 
-/// Serves the runner end on `host:port` (0 = any free port) until closed.
-pub fn serve(handler: Arc<dyn LinkHandler>, host: &str, port: u16) -> std::io::Result<LinkServing> {
+/// Serves the runner end on `host:port` (0 = any free port) until closed: `wss` with `tls`, plain `ws` with None (the
+/// caller serves plain only under `runners.allowPlainTailnet`).
+pub fn serve(handler: Arc<dyn LinkHandler>, host: &str, port: u16, tls: Option<Arc<rustls::ServerConfig>>) -> std::io::Result<LinkServing> {
     let listener = TcpListener::bind((host, port))?;
     let local = listener.local_addr()?;
     let wake = if local.ip().is_unspecified() { SocketAddr::new([127, 0, 0, 1].into(), local.port()) } else { local };
@@ -178,15 +233,25 @@ pub fn serve(handler: Arc<dyn LinkHandler>, host: &str, port: u16) -> std::io::R
             }
             let Ok(stream) = conn else { continue };
             let h = handler.clone();
-            let _ = std::thread::Builder::new().name("runner-link-conn".into()).spawn(move || connection(h, stream));
+            let tls = tls.clone();
+            let _ = std::thread::Builder::new().name("runner-link-conn".into()).spawn(move || {
+                let from = stream.peer_addr().ok().map(|a| a.ip().to_string());
+                stream.set_nodelay(true).ok();
+                match tls {
+                    Some(cfg) => {
+                        if let Ok(secured) = tls::accept(&cfg, stream) {
+                            connection(h, secured, from);
+                        }
+                    }
+                    None => connection(h, stream, from),
+                }
+            });
         }
     })?;
     Ok(LinkServing { port: local.port(), stop, addr: wake })
 }
 
-fn connection(handler: Arc<dyn LinkHandler>, stream: TcpStream) {
-    let from = stream.peer_addr().ok().map(|a| a.ip().to_string());
-    stream.set_nodelay(true).ok();
+fn connection<S: Read + Write>(handler: Arc<dyn LinkHandler>, stream: S, from: Option<String>) {
     let mut orchestrator: Option<String> = None;
     let mut credential: Option<String> = None;
     let callback = |req: &Request, resp: Response| -> Result<Response, ErrorResponse> {
@@ -204,7 +269,7 @@ fn connection(handler: Arc<dyn LinkHandler>, stream: TcpStream) {
     serve_frames(&*handler, &mut ws, orchestrator.as_deref(), credential.as_deref(), from.as_deref());
 }
 
-fn serve_frames(handler: &dyn LinkHandler, ws: &mut WebSocket<TcpStream>, orchestrator: Option<&str>, credential: Option<&str>, from: Option<&str>) {
+fn serve_frames<S: Read + Write>(handler: &dyn LinkHandler, ws: &mut WebSocket<S>, orchestrator: Option<&str>, credential: Option<&str>, from: Option<&str>) {
     loop {
         let text = match ws.read() {
             Ok(Message::Text(t)) => t.to_string(),
@@ -234,7 +299,8 @@ mod tests {
         assert_eq!(endpoint("ws://127.0.0.1:18982").unwrap(), ("127.0.0.1".into(), 18982, "/runner-link".into()));
         assert_eq!(endpoint("ws://h:1/x").unwrap(), ("h".into(), 1, "/x".into()));
         assert_eq!(endpoint("ws://[::1]:9").unwrap(), ("[::1]".into(), 9, "/runner-link".into()));
-        assert!(endpoint("wss://h:1").unwrap_err().0.contains("not offered"));
+        assert_eq!(endpoint("wss://h:1").unwrap(), ("h".into(), 1, "/runner-link".into()));
+        assert!(is_tls("WSS://h:1") && !is_tls("ws://h:1"));
         assert!(endpoint("http://h").is_err());
         assert!(endpoint("ws://:5").is_err());
     }

@@ -26,7 +26,7 @@ fn runner(dir: &PathBuf) -> (LinkServing, String) {
     let v = bearer.ensure(Some("test-box"), false).unwrap();
     let token = BearerToken { name: v.name, fingerprint: None, secret: v.secret }.text();
     let server = LinkServer::new(LinkStore::in_memory(), None, Some(bearer), Box::new(InfoOnly), None).with_log(|_| {});
-    (serve(Arc::new(server), "127.0.0.1", 0).unwrap(), token)
+    (serve(Arc::new(server), "127.0.0.1", 0, None).unwrap(), token)
 }
 
 fn call(u: &AdminUnit, owner: bool, body: Value) -> Result<Value, String> {
@@ -41,10 +41,11 @@ fn add_check_list_offline_detach() {
     let (serving, bearer) = runner(&rdir);
     let url = format!("ws://127.0.0.1:{}", serving.port);
     let pool = RunnerPool::open(&state);
+    pool.set_allow_plain(Arc::new(|| true)); // this runner serves plain ws
     let unit = AdminUnit { pool: pool.clone() };
 
     assert_eq!(call(&unit, false, json!({"op": "list"})).unwrap_err(), "runner_admin refused: owner only");
-    assert!(call(&unit, true, json!({"op": "add", "endpoint": "wss://x:1", "bearer": bearer})).unwrap()["error"].as_str().unwrap().contains("not supported"));
+    assert!(call(&unit, true, json!({"op": "add", "endpoint": "wss://x:1", "bearer": bearer})).unwrap()["error"].as_str().unwrap().contains("cannot pair over wss"));
     let bad = call(&unit, true, json!({"op": "add", "endpoint": url, "bearer": "irb1.test-box.plain.wrongsecretwrongsecretwrongsecret"})).unwrap();
     assert_eq!(bad["ok"], false);
 

@@ -32,12 +32,9 @@ fn text<'a>(d: &'a Map<String, Value>, k: &str) -> Option<&'a str> {
 
 impl AdminUnit {
     fn add(&self, d: &Map<String, Value>) -> Value {
-        let Some(endpoint) = text(d, "endpoint") else { return fail("add needs an endpoint (ws://host:port)") };
-        if endpoint.starts_with("wss://") {
-            return fail("wss:// is not supported yet; use a plain ws:// endpoint on a private network");
-        }
-        if !endpoint.starts_with("ws://") {
-            return fail("the endpoint must start with ws://");
+        let Some(endpoint) = text(d, "endpoint") else { return fail("add needs an endpoint (wss://host:port)") };
+        if !endpoint.starts_with("ws://") && !endpoint.starts_with("wss://") {
+            return fail("the endpoint must start with wss:// (or ws:// with runners.allowPlainTailnet on)");
         }
         let Some(bearer) = text(d, "bearer") else { return fail("add needs the runner's bearer") };
         let token = match BearerToken::parse(bearer) {
@@ -45,7 +42,7 @@ impl AdminUnit {
             Err(why) => return fail(why),
         };
         let from = text(d, "orchestratorName").unwrap_or("orchestrator");
-        match self.pool.add(endpoint, &token.secret, text(d, "name"), from) {
+        match self.pool.add(endpoint, &token.secret, token.fingerprint.as_deref(), text(d, "name"), from) {
             Ok(r) => json!({"ok": true, "name": r.name, "url": r.url, "runnerId": r.runner_id, "contract": r.contract, "grantedProjects": [], "grantedHarnesses": []}),
             Err(e) => fail(e),
         }
@@ -87,7 +84,10 @@ impl AdminUnit {
                 row("health", true, format!("{}, {} running, {} free slots", p.health.state, p.health.running, p.health.free_slots), None),
             ],
             (RunnerState::Outdated { contract, reason }, _) => vec![row("contract", false, format!("contract {contract}: {reason}"), Some("update the runner"))],
-            (RunnerState::Offline { reason }, _) => vec![row("link", false, reason.clone(), Some("start the runner, then check the endpoint"))],
+            (RunnerState::Offline { reason }, _) => {
+                let fix = if reason.contains("not the pinned one") { "add the runner again with its current bearer" } else { "start the runner, then check the endpoint" };
+                vec![row("link", false, reason.clone(), Some(fix))]
+            }
             _ => Vec::new(),
         };
         json!({"ok": true, "name": name, "state": state.word(), "rows": rows})

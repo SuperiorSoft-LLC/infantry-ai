@@ -26,6 +26,9 @@ tungstenite = { version = "0.24", default-features = false, features = ["handsha
 sha2 = "0.10"
 base64 = "0.22"
 getrandom = "0.2"
+# TLS for the runner link: rustls on the ring provider (no aws-lc, no cmake/nasm on Windows) and rcgen for the one self-signed cert.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rcgen = { version = "0.13", default-features = false, features = ["crypto", "ring"] }
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]

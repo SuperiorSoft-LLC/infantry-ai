@@ -10,6 +10,10 @@ use std::time::Duration;
 /// The setting that sets the heartbeat interval (seconds), and its default.
 pub const HEARTBEAT_KEY: &str = "limits.runners.heartbeatSec";
 pub const DEFAULT_HEARTBEAT_SEC: u64 = 30;
+/// `runners.allowPlainTailnet` (default false): serve and call the runner link as plain `ws://`. Plain traffic carries the
+/// runner credential, every command and its output unencrypted: anyone on the path can read it or take the runner over.
+/// Turn it on only for a private network you trust, on the runner and on the orchestrator.
+pub const ALLOW_PLAIN_KEY: &str = "runners.allowPlainTailnet";
 const LINK_DIR: &str = "runner-link";
 const SLEEP_STEP: Duration = Duration::from_millis(100);
 const CALL_TIMEOUT: Duration = Duration::from_secs(20);
@@ -49,12 +53,23 @@ pub struct RunnerPool {
     store: Arc<LinkStore>,
     states: Mutex<BTreeMap<String, RunnerState>>,
     pub call_timeout: Duration,
+    /// Reads `runners.allowPlainTailnet` live (the root sets it); unset = false.
+    allow_plain: OnceLock<Arc<dyn Fn() -> bool + Send + Sync>>,
 }
 
 impl RunnerPool {
     /// The pool of `<state_dir>/runner-link`.
     pub fn open(state_dir: &Path) -> Arc<RunnerPool> {
-        Arc::new(RunnerPool { store: store_for(state_dir), states: Mutex::new(BTreeMap::new()), call_timeout: CALL_TIMEOUT })
+        Arc::new(RunnerPool { store: store_for(state_dir), states: Mutex::new(BTreeMap::new()), call_timeout: CALL_TIMEOUT, allow_plain: OnceLock::new() })
+    }
+
+    /// Wires the live reader of `runners.allowPlainTailnet`.
+    pub fn set_allow_plain(&self, f: Arc<dyn Fn() -> bool + Send + Sync>) {
+        let _ = self.allow_plain.set(f);
+    }
+
+    pub fn allow_plain(&self) -> bool {
+        self.allow_plain.get().is_some_and(|f| f())
     }
 
     pub fn store(&self) -> &Arc<LinkStore> {
@@ -78,14 +93,24 @@ impl RunnerPool {
     }
 
     fn client(&self, r: &PairedRunner) -> LinkClient {
-        let mut c = LinkClient::of(r, &self.orchestrator_id());
+        let mut c = LinkClient::of(r, &self.orchestrator_id()).allow_plain(self.allow_plain());
         c.timeout = self.call_timeout;
         c
     }
 
-    /// Pairs with the runner at `url` by its bearer `secret`; keeps it under `name` (the runner's own name when None).
-    pub fn add(&self, url: &str, secret: &str, name: Option<&str>, orchestrator_name: &str) -> Result<PairedRunner, CallError> {
-        let mut c = LinkClient::new(url, self.orchestrator_id(), None);
+    /// Pairs with the runner at `url` by its bearer `secret`; `pin` is the certificate SHA-256 from the bearer (None = a plain
+    /// bearer). `wss://` needs the pin; `ws://` needs a plain bearer and `runners.allowPlainTailnet`. Keeps the runner under
+    /// `name` (its own name when None).
+    pub fn add(&self, url: &str, secret: &str, pin: Option<&str>, name: Option<&str>, orchestrator_name: &str) -> Result<PairedRunner, CallError> {
+        let tls = infantry_runner_link::transport::is_tls(url);
+        let pin = pin.map(str::trim).filter(|p| !p.is_empty());
+        if tls && pin.is_none() {
+            return Err(CallError::Refused("this bearer is plain (it names no certificate), so it cannot pair over wss://; copy the bearer of a runner that serves wss, or use ws:// with runners.allowPlainTailnet on".into()));
+        }
+        if !tls && pin.is_some() {
+            return Err(CallError::Refused("this bearer carries a certificate pin: the runner serves wss://. Use its wss:// endpoint".into()));
+        }
+        let mut c = LinkClient::new(url, self.orchestrator_id(), None).with_pin(pin.map(str::to_string)).allow_plain(self.allow_plain());
         c.timeout = self.call_timeout;
         let mut paired = c.pair(secret, orchestrator_name)?;
         if let Some(n) = name.map(str::trim).filter(|n| !n.is_empty()) {

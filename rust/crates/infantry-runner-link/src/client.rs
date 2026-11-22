@@ -4,7 +4,7 @@
 //! [`LinkClient::ping`] is the liveness check: hello (contract check) then health, timed.
 
 use crate::store::PairedRunner;
-use crate::transport::{self, Exchange, LinkFailure};
+use crate::transport::{self, Exchange, LinkFailure, Security};
 use crate::wire::{self, *};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -53,17 +53,33 @@ pub struct LinkClient {
     pub orchestrator_id: String,
     credential: Mutex<Option<String>>,
     pub timeout: Duration,
+    /// The pin (wss) and the plain-ws switch (`runners.allowPlainTailnet`, off unless set).
+    pub security: Security,
     /// Every exchange, verbatim, when recording (fixtures).
     pub trace: Option<Mutex<Vec<Exchange>>>,
 }
 
 impl LinkClient {
     pub fn new(url: impl Into<String>, orchestrator_id: impl Into<String>, credential: Option<String>) -> Self {
-        LinkClient { url: url.into(), orchestrator_id: orchestrator_id.into(), credential: Mutex::new(credential), timeout: Duration::from_secs(30), trace: None }
+        LinkClient { url: url.into(), orchestrator_id: orchestrator_id.into(), credential: Mutex::new(credential), timeout: Duration::from_secs(30), security: Security::default(), trace: None }
     }
 
     pub fn of(r: &PairedRunner, orchestrator_id: &str) -> Self {
-        Self::new(r.url.clone(), orchestrator_id, Some(r.credential.clone()))
+        let mut c = Self::new(r.url.clone(), orchestrator_id, Some(r.credential.clone()));
+        c.security.pin = Some(r.fingerprint.clone()).filter(|f| !f.is_empty());
+        c
+    }
+
+    /// Pins the runner certificate (lower-case hex SHA-256 from the bearer).
+    pub fn with_pin(mut self, pin: Option<String>) -> Self {
+        self.security.pin = pin.filter(|p| !p.is_empty());
+        self
+    }
+
+    /// Allows plain `ws://` (the setting `runners.allowPlainTailnet`).
+    pub fn allow_plain(mut self, allow: bool) -> Self {
+        self.security.allow_plain = allow;
+        self
     }
 
     pub fn recording(mut self) -> Self {
@@ -82,7 +98,7 @@ impl LinkClient {
 
     pub fn call_with(&self, t: &str, data: &str, timeout: Duration) -> Result<Answer, LinkFailure> {
         let cred = self.credential.lock().unwrap().clone();
-        let x = transport::call(&self.url, Some(&self.orchestrator_id), cred.as_deref(), t, data, timeout)?;
+        let x = transport::call(&self.url, Some(&self.orchestrator_id), cred.as_deref(), t, data, timeout, &self.security)?;
         let a = x.answer.clone();
         if let Some(tr) = &self.trace {
             tr.lock().unwrap().push(x);
@@ -119,7 +135,7 @@ impl LinkClient {
         Ok(PairedRunner {
             name: a.runner_name.clone(),
             url: self.url.clone(),
-            fingerprint: String::new(),
+            fingerprint: self.security.pin.clone().unwrap_or_default(),
             credential: a.credential,
             issued_at: crate::server::now_ms(),
             runner_id: a.runner_id,

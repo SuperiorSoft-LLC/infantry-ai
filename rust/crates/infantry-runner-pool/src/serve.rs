@@ -9,7 +9,7 @@ use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Refusal};
 use infantry_runner_link::pairing::{Bearer, BearerToken};
 use infantry_runner_link::transport::LinkHandler;
 use infantry_runner_link::wire::{self, Answer};
-use infantry_runner_link::{serve, Backend, LinkServer, LinkServing, LinkStore};
+use infantry_runner_link::{serve, Backend, LinkServer, LinkServing, LinkStore, RunnerCert};
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -35,6 +35,8 @@ pub struct ServeOptions {
     pub allow_projects: String,
     pub allow_harnesses: String,
     pub app_version: String,
+    /// `runners.allowPlainTailnet`: serve plain `ws://` (no certificate, a plain bearer). Off = wss with the pinned certificate.
+    pub allow_plain: bool,
 }
 
 pub struct RunnerServe {
@@ -42,6 +44,8 @@ pub struct RunnerServe {
     store_dir: PathBuf,
     server: Arc<LinkServer>,
     serving: LinkServing,
+    /// The pinned certificate; None only when the link is served as plain ws.
+    cert: Option<RunnerCert>,
     opts: ServeOptions,
     /// Serialises bearer changes with the banner print.
     lock: Mutex<()>,
@@ -85,8 +89,10 @@ impl RunnerServe {
                 .with_identity("runner", &opts.app_version),
         );
         let handler = Arc::new(Announcing { serve: Default::default(), server: server.clone() });
-        let serving = serve(handler.clone(), &opts.bind_host, opts.port).map_err(|e| format!("the runner link cannot bind {}:{} ({e})", opts.bind_host, opts.port))?;
-        let this = Arc::new(RunnerServe { bearer, store_dir: dir, server, serving, opts, lock: Mutex::new(()) });
+        let cert = if opts.allow_plain { None } else { Some(RunnerCert::load_or_create(&dir).map_err(|e| e.to_string())?) };
+        let tls = cert.as_ref().map(RunnerCert::server_config).transpose()?;
+        let serving = serve(handler.clone(), &opts.bind_host, opts.port, tls).map_err(|e| format!("the runner link cannot bind {}:{} ({e})", opts.bind_host, opts.port))?;
+        let this = Arc::new(RunnerServe { bearer, store_dir: dir, server, serving, cert, opts, lock: Mutex::new(()) });
         let _ = handler.serve.set(Arc::downgrade(&this));
         this.print_banner();
         Ok(this)
@@ -99,11 +105,16 @@ impl RunnerServe {
     /// The host the banner shows: flag/env, then the first `runners.advertiseHosts`, then `localhost`. Never a detected address.
     pub fn endpoint(&self) -> String {
         let host = self.opts.public_host.clone().or_else(|| self.opts.advertise_hosts.first().cloned()).unwrap_or_else(|| "localhost".into());
-        format!("ws://{host}:{}", self.opts.public_port.unwrap_or(self.serving.port))
+        format!("{}://{host}:{}", if self.cert.is_some() { "wss" } else { "ws" }, self.opts.public_port.unwrap_or(self.serving.port))
     }
 
     pub fn bearer_text(&self) -> Option<String> {
-        self.bearer.read().map(|v| BearerToken { name: v.name, fingerprint: None, secret: v.secret }.text())
+        self.bearer.read().map(|v| BearerToken { name: v.name, fingerprint: self.pin(), secret: v.secret }.text())
+    }
+
+    /// The certificate SHA-256 the bearer carries; None when the link is plain.
+    pub fn pin(&self) -> Option<String> {
+        self.cert.as_ref().map(|c| c.fingerprint.clone())
     }
 
     pub fn last_paired(&self) -> Option<String> {
@@ -114,10 +125,13 @@ impl RunnerServe {
     pub fn print_banner(&self) {
         let _g = self.lock.lock().unwrap_or_else(|e| e.into_inner());
         let Some(v) = self.bearer.read() else { return };
-        let token = BearerToken { name: v.name.clone(), fingerprint: None, secret: v.secret }.text();
+        let token = BearerToken { name: v.name.clone(), fingerprint: self.pin(), secret: v.secret }.text();
         println!("==== INFANTRY RUNNER {} ====", v.name);
         println!("endpoint: {}", self.endpoint());
         println!("bearer:   {token}");
+        if self.cert.is_none() {
+            println!("WARNING:  serving PLAIN ws (runners.allowPlainTailnet is on): the credential and every command travel unencrypted; private networks only");
+        }
         println!("allow:    projects {}, harnesses {}", self.opts.allow_projects, self.opts.allow_harnesses);
         if let Some(p) = self.last_paired() {
             println!("last paired with: {p}");
@@ -193,12 +207,18 @@ mod tests {
             allow_projects: "*".into(),
             allow_harnesses: "*".into(),
             app_version: "0.0.0-test".into(),
+            allow_plain: false,
         }
     }
 
     fn start(dir: &Path) -> Arc<RunnerServe> {
         let backend = ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default()));
         RunnerServe::start(dir, Box::new(backend), opts()).unwrap()
+    }
+
+    fn start_plain(dir: &Path) -> Arc<RunnerServe> {
+        let backend = ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default()));
+        RunnerServe::start(dir, Box::new(backend), ServeOptions { allow_plain: true, ..opts() }).unwrap()
     }
 
     fn token(rs: &RunnerServe) -> BearerToken {
@@ -209,13 +229,15 @@ mod tests {
     fn add_check_spawn_and_takeover() {
         let tmp = std::env::temp_dir().join(format!("rr2-{}", uuid::Uuid::new_v4()));
         let rs = start(&tmp.join("runner"));
-        let url = format!("ws://127.0.0.1:{}", rs.port());
-        assert_eq!(rs.endpoint(), format!("ws://localhost:{}", rs.port()));
+        let url = format!("wss://127.0.0.1:{}", rs.port());
+        assert_eq!(rs.endpoint(), format!("wss://localhost:{}", rs.port()));
+        let pin = token(&rs).fingerprint.expect("a wss runner's bearer carries the pin");
 
         let a = crate::RunnerPool::open(&tmp.join("a"));
         let b = crate::RunnerPool::open(&tmp.join("b"));
         let secret = token(&rs).secret;
-        let added = a.add(&url, &secret, None, "orch-a").unwrap();
+        let added = a.add(&url, &secret, Some(&pin), None, "orch-a").unwrap();
+        assert_eq!(added.fingerprint, pin);
         assert_eq!(added.name, "box");
         let (state, ping) = a.check("box").unwrap();
         assert_eq!(state.word(), "online", "{state:?}");
@@ -262,7 +284,7 @@ mod tests {
         assert!(killed.is_some(), "the killed process must report an exit");
 
         // A second orchestrator takes over with the bearer; the first gets NOT_PAIRED.
-        let moved = b.add(&url, &secret, None, "orch-b").unwrap();
+        let moved = b.add(&url, &secret, Some(&pin), None, "orch-b").unwrap();
         assert_eq!(moved.name, "box");
         assert_eq!(b.check("box").unwrap().0.word(), "online");
         let (stale, _) = a.check("box").unwrap();
@@ -274,8 +296,57 @@ mod tests {
         // Rotation: the old bearer no longer pairs.
         let r = rs.bearer_op(true, None);
         assert_eq!(r["ok"], true);
-        assert!(crate::RunnerPool::open(&tmp.join("c")).add(&url, &secret, None, "orch-c").is_err());
-        assert!(crate::RunnerPool::open(&tmp.join("d")).add(&url, &token(&rs).secret, None, "orch-d").is_ok());
+        assert!(crate::RunnerPool::open(&tmp.join("c")).add(&url, &secret, Some(&pin), None, "orch-c").is_err());
+        assert!(crate::RunnerPool::open(&tmp.join("d")).add(&url, &token(&rs).secret, Some(&pin), None, "orch-d").is_ok());
+        let _ = std::fs::remove_dir_all(tmp);
+    }
+
+    #[test]
+    fn plain_ws_is_refused_unless_the_setting_is_on_at_both_ends() {
+        let tmp = std::env::temp_dir().join(format!("rr3-plain-{}", uuid::Uuid::new_v4()));
+        let rs = start_plain(&tmp.join("runner"));
+        assert!(rs.endpoint().starts_with("ws://"));
+        let t = token(&rs);
+        assert!(t.fingerprint.is_none(), "a plain link's bearer says plain");
+        let url = format!("ws://127.0.0.1:{}", rs.port());
+        let off = crate::RunnerPool::open(&tmp.join("off"));
+        let refused = off.add(&url, &t.secret, None, None, "o").unwrap_err().to_string();
+        assert!(refused.contains("allowPlainTailnet"), "{refused}");
+        let on = crate::RunnerPool::open(&tmp.join("on"));
+        on.set_allow_plain(Arc::new(|| true));
+        assert_eq!(on.add(&url, &t.secret, None, None, "o").unwrap().name, "box");
+        assert_eq!(on.check("box").unwrap().0.word(), "online");
+        // A plain bearer cannot pair over wss, and a pinned bearer cannot pair over ws.
+        assert!(on.add(&url.replace("ws://", "wss://"), &t.secret, None, None, "o").is_err());
+        assert!(on.add(&url, &t.secret, Some(&"a".repeat(64)), None, "o").is_err());
+        let _ = std::fs::remove_dir_all(tmp);
+    }
+
+    #[test]
+    fn the_certificate_survives_a_runner_restart_and_a_wrong_pin_is_named() {
+        let tmp = std::env::temp_dir().join(format!("rr3-restart-{}", uuid::Uuid::new_v4()));
+        let dir = tmp.join("runner");
+        let first = start(&dir);
+        let pin = first.pin().unwrap();
+        let pool = crate::RunnerPool::open(&tmp.join("o"));
+        let url = format!("wss://127.0.0.1:{}", first.port());
+        pool.add(&url, &token(&first).secret, Some(&pin), None, "orch").unwrap();
+        drop(first);
+        // The same state dir restarts on a new port: same fingerprint, and the stored credential still pairs (no re-pair).
+        let second = start(&dir);
+        assert_eq!(second.pin().unwrap(), pin);
+        let mut moved = pool.store().runner("box").unwrap();
+        moved.url = format!("wss://127.0.0.1:{}", second.port());
+        pool.store().save_runner(moved);
+        assert_eq!(pool.check("box").unwrap().0.word(), "online");
+        // A runner recreated without its volume has a new certificate: refused, with the plain reason.
+        let fresh = start(&tmp.join("fresh-volume"));
+        assert_ne!(fresh.pin().unwrap(), pin);
+        let mut wrong = pool.store().runner("box").unwrap();
+        wrong.url = format!("wss://127.0.0.1:{}", fresh.port());
+        pool.store().save_runner(wrong);
+        let (state, _) = pool.check("box").unwrap();
+        assert!(matches!(&state, crate::RunnerState::Offline { reason } if reason.contains("recreated without its volume")), "{state:?}");
         let _ = std::fs::remove_dir_all(tmp);
     }
 }
