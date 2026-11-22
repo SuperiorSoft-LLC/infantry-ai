@@ -1,0 +1,27 @@
+{
+  "name": "Infantry_Runners",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "displayName": "Runners",
+  "description": "The Runners section of Settings (RR-9): every runner (the embedded `local` one first, then the paired ones) with its status and the reason, Check, Rotate and Detach, and Add runner with two fields (endpoint and bearer). It is the UI half of the one runner plugin; its daemon half is the crate infantry-runner-pool, linked at the composition root (this manifest has no field for a linked half, so none is declared). Everything goes through the owner-only `runner_admin` frame.",
+  "tier": "official",
+  "sequence": [],
+  "ui": {
+    "apiVersion": 1,
+    "entry": "ui/dist/index.js",
+    "styles": [
+      "ui/dist/index.css"
+    ],
+    "contributes": [
+      {
+        "slot": "settings.card",
+        "id": "infantry.runners",
+        "label": "Runners",
+        "tab": "Runners",
+        "order": 910
+      }
+    ]
+  }
+}
