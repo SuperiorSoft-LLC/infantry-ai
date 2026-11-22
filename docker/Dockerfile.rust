@@ -1,0 +1,76 @@
+# syntax=docker/dockerfile:1
+# The Rust runner image: the SAME app binary (infantry-daemon, crate infantry-distribution) as the desktop app, in runner mode
+# (headless). Build from the repo root, no cross toolchain on the host (the image compiles it):
+#   docker build -f docker/Dockerfile.rust -t infantry-runner-rust .
+# Run (step 1 of the 2-step setup; step 2 is Settings > Runners > Add runner in the app):
+#   docker run -d --restart unless-stopped --name infantry-runner -e INFANTRY_RUNNER_HOST=<this server's address> \
+#     -p 8790:8790 -v infantry-runner:/data infantry-runner-rust
+#   docker logs infantry-runner      # the INFANTRY RUNNER block: endpoint + bearer
+# Node.js and the harness CLIs are NOT baked in: install them from the app (harness_install on the runner, into /data/harness-tools,
+# which survives a recreate). --build-arg PREINSTALL_HARNESSES=pi,claude pre-installs them (CI, quick tests); they then live in
+# /opt/harness-tools, off the volume so the volume does not shadow them.
+
+FROM rust:1-bookworm AS build
+WORKDIR /src
+COPY rust ./rust
+# The daemon embeds the shared database schema (crates/infantry-daemon/build.rs reads it from the Kotlin tree).
+COPY superiorSoftLibrary/infantryCore/src/main/sqldelight ./superiorSoftLibrary/infantryCore/src/main/sqldelight
+WORKDIR /src/rust
+# The distribution profile is `release` (LTO) by default; CARGO_PROFILE picks `owner-test` for a quicker local build.
+ARG CARGO_PROFILE=release
+RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/src/rust/target \
+    cargo build --profile "$CARGO_PROFILE" -p infantry-distribution \
+    && install -D "target/$( [ "$CARGO_PROFILE" = dev ] && echo debug || echo "$CARGO_PROFILE" )/infantry-daemon" /out/infantry-daemon
+
+FROM debian:bookworm-slim
+LABEL org.opencontainers.image.title="Infantry AI runner" org.opencontainers.image.description="Infantry AI daemon in runner mode (headless remote runner)"
+# git: ticket workspaces. curl: health check. ripgrep: agent search tools use it when present. libatomic1: the Node.js the app installs into /data/harness-tools needs it.
+RUN apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates ripgrep libatomic1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --create-home --uid 10001 --home-dir /home/infantry infantry \
+    && mkdir -p /data /work && chown infantry:infantry /data /work
+
+# Optional: Node + the named harness CLIs, for CI or a quick test. Empty by default.
+ARG PREINSTALL_HARNESSES=""
+ARG NODE_VERSION=22
+COPY --from=node:22-bookworm-slim /usr/local/bin/node /tmp/node/bin/node
+COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules/npm /tmp/node/lib/node_modules/npm
+RUN set -eu; \
+    if [ -n "$PREINSTALL_HARNESSES" ]; then \
+      cp /tmp/node/bin/node /usr/local/bin/node && cp -a /tmp/node/lib/node_modules /usr/local/lib/node_modules \
+      && ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm; \
+      pkgs=""; \
+      for h in $(echo "$PREINSTALL_HARNESSES" | tr ',' ' '); do \
+        case "$h" in \
+          pi) pkgs="$pkgs @earendil-works/pi-coding-agent" ;; \
+          claude) pkgs="$pkgs @anthropic-ai/claude-code" ;; \
+          opencode) pkgs="$pkgs opencode-ai" ;; \
+          codex) pkgs="$pkgs @openai/codex" ;; \
+          *) echo "unknown harness $h" >&2; exit 1 ;; \
+        esac; \
+      done; \
+      npm install -g --prefix /opt/harness-tools --no-audit --no-fund $pkgs && npm cache clean --force; \
+      ln -s /opt/harness-tools/bin/* /usr/local/bin/ 2>/dev/null || true; \
+    fi; \
+    rm -rf /tmp/node
+
+COPY --from=build /out/infantry-daemon /usr/local/bin/infantry-daemon
+COPY docker/entrypoint-rust.sh /usr/local/bin/infantry-entrypoint
+RUN chmod 755 /usr/local/bin/infantry-entrypoint
+
+ENV INFANTRY_MODE=runner \
+    INFANTRY_STATE_DIR=/data \
+    CLAUDE_CONFIG_DIR=/data/claude \
+    PI_CODING_AGENT_DIR=/data/pi \
+    XDG_DATA_HOME=/data/xdg-data \
+    INFANTRY_HOST=127.0.0.1 \
+    INFANTRY_PORT=18990 \
+    INFANTRY_RUNNER_BIND=0.0.0.0 \
+    INFANTRY_RUNNER_LINK_PORT=8790
+USER infantry
+WORKDIR /work
+VOLUME ["/data"]
+EXPOSE 8790
+# The daemon's own /health (loopback inside the container); the link port is what the app dials.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD curl -fsS "http://127.0.0.1:${INFANTRY_PORT}/health" >/dev/null || exit 1
+ENTRYPOINT ["infantry-entrypoint"]
