@@ -51,6 +51,17 @@ export interface HarnessRow {
   loginAt: string | null;
 }
 
+/** One setup step: which runner, what ran, its output (trimmed), the exit code and the reason in plain words. */
+export interface LogStep {
+  at: number;
+  runner: string;
+  step: string;
+  command: string;
+  output: string;
+  exit: number | null;
+  reason: string;
+}
+
 /** Everything the Details dialog shows about one runner (the `runner_admin detail` answer, plus the harness join). */
 export interface RunnerDetail {
   runner?: { name: string; runnerId?: string; mode?: string; os?: string; appVersion?: string | null; contract?: string; needs?: string };
@@ -59,6 +70,8 @@ export interface RunnerDetail {
   lastCheck?: { at: number; rows: CheckRow[] } | null;
   update?: { state: string; steps: string[]; detail: string };
   harnesses?: HarnessRow[];
+  /** RR-VIS: the setup log of this runner: each check, install and update step. */
+  log?: LogStep[];
   /** Set when the harness answers could not be read (plain words). */
   harnessError?: string;
 }
@@ -168,6 +181,7 @@ interface Answer {
   helloHarnesses?: RunnerDetail["helloHarnesses"];
   lastCheck?: RunnerDetail["lastCheck"];
   update?: RunnerDetail["update"];
+  log?: RunnerDetail["log"];
 }
 
 /** The status the row shows: the dot, the word and the reason (an offline or outdated runner always carries one). */

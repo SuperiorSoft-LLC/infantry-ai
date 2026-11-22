@@ -18,6 +18,9 @@ pub const DEFAULT_HEARTBEAT_SEC: u64 = 30;
 /// runner credential, every command and its output unencrypted: anyone on the path can read it or take the runner over.
 /// Turn it on only for a private network you trust, on the runner and on the orchestrator.
 pub const ALLOW_PLAIN_KEY: &str = "runners.allowPlainTailnet";
+/// RR-VIS: the setup log keeps this many entries per runner, and this many characters of each step's output.
+pub const LOG_ENTRIES_MAX: usize = 200;
+pub const LOG_OUTPUT_MAX: usize = 2000;
 const LINK_DIR: &str = "runner-link";
 const SLEEP_STEP: Duration = Duration::from_millis(100);
 const CALL_TIMEOUT: Duration = Duration::from_secs(20);
@@ -77,6 +80,8 @@ pub struct RunnerPool {
     seen: Mutex<BTreeMap<String, Seen>>,
     /// RR-VIS: the rows of the last `check` of each runner, with the time.
     last_checks: Mutex<BTreeMap<String, (i64, Vec<serde_json::Value>)>>,
+    /// RR-VIS: the setup log of each runner: one entry per check, install or update step (runner, command, output, exit, reason).
+    steps: Mutex<BTreeMap<String, Vec<serde_json::Value>>>,
     dir: PathBuf,
 }
 
@@ -125,7 +130,7 @@ pub struct UpdateStatus {
 impl RunnerPool {
     /// The pool of `<state_dir>/runner-link`.
     pub fn open(state_dir: &Path) -> Arc<RunnerPool> {
-        Arc::new(RunnerPool { store: store_for(state_dir), states: Mutex::new(BTreeMap::new()), call_timeout: CALL_TIMEOUT, allow_plain: OnceLock::new(), slots: Mutex::new(BTreeMap::new()), cursors: Arc::new(infantry_runner_link::Cursors::open(&state_dir.join(LINK_DIR))), app_versions: Mutex::new(BTreeMap::new()), updates: Mutex::new(BTreeMap::new()), update_wait: OnceLock::new(), docker: Mutex::new(Arc::new(CliDocker)), app_version: env!("CARGO_PKG_VERSION").to_string(), seen: Mutex::new(BTreeMap::new()), last_checks: Mutex::new(BTreeMap::new()), dir: state_dir.join(LINK_DIR) })
+        Arc::new(RunnerPool { store: store_for(state_dir), states: Mutex::new(BTreeMap::new()), call_timeout: CALL_TIMEOUT, allow_plain: OnceLock::new(), slots: Mutex::new(BTreeMap::new()), cursors: Arc::new(infantry_runner_link::Cursors::open(&state_dir.join(LINK_DIR))), app_versions: Mutex::new(BTreeMap::new()), updates: Mutex::new(BTreeMap::new()), update_wait: OnceLock::new(), docker: Mutex::new(Arc::new(CliDocker)), app_version: env!("CARGO_PKG_VERSION").to_string(), seen: Mutex::new(BTreeMap::new()), last_checks: Mutex::new(BTreeMap::new()), steps: Mutex::new(BTreeMap::new()), dir: state_dir.join(LINK_DIR) })
     }
 
     /// Wires the live reader of `runners.allowPlainTailnet`.
@@ -241,6 +246,23 @@ impl RunnerPool {
         self.app_versions.lock().unwrap_or_else(|e| e.into_inner()).get(name).cloned()
     }
 
+    /// RR-VIS: appends one step to runner `name`'s setup log. `output` is trimmed to [`LOG_OUTPUT_MAX`] chars (a named bound).
+    pub fn log_step(&self, name: &str, step: &str, command: &str, output: &str, exit: Option<i32>, reason: &str) {
+        let out: String = output.chars().take(LOG_OUTPUT_MAX).collect();
+        let e = serde_json::json!({"at": infantry_runner_link::server::now_ms(), "runner": name, "step": step, "command": command, "output": out, "exit": exit, "reason": reason});
+        let mut all = self.steps.lock().unwrap_or_else(|e| e.into_inner());
+        let v = all.entry(name.to_string()).or_default();
+        v.push(e);
+        if v.len() > LOG_ENTRIES_MAX {
+            let cut = v.len() - LOG_ENTRIES_MAX;
+            v.drain(..cut);
+        }
+    }
+
+    pub fn step_log(&self, name: &str) -> Vec<serde_json::Value> {
+        self.steps.lock().unwrap_or_else(|e| e.into_inner()).get(name).cloned().unwrap_or_default()
+    }
+
     pub fn seen(&self, name: &str) -> Option<Seen> {
         self.seen.lock().unwrap_or_else(|e| e.into_inner()).get(name).cloned()
     }
@@ -273,6 +295,12 @@ impl RunnerPool {
         if let Some(s) = step {
             u.steps.push(s.to_string());
         }
+        drop(all);
+        if let Some(s) = step {
+            self.log_step(name, "update", "update runner", s, None, if state == "failed" { detail } else { "" });
+        }
+        let mut all = self.updates.lock().unwrap_or_else(|e| e.into_inner());
+        let u = all.entry(name.to_string()).or_insert(UpdateStatus { state: "running", steps: vec![], detail: String::new() });
         if !detail.is_empty() {
             u.detail = detail.to_string();
         }

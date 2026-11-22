@@ -162,6 +162,18 @@ export function DetailDialog({ name, detail, onClose }: { name: string; detail?:
               </div>
             ))}
           </Section>
+          <Section title="Setup log">
+            {(detail.log ?? []).length === 0 && <p className="text-muted-foreground">Nothing has run on this runner yet.</p>}
+            <ul aria-label="Setup log" className="max-h-48 space-y-1 overflow-auto font-mono">
+              {(detail.log ?? []).map((e, i) => (
+                <li key={`${e.at}:${i}`} className={e.exit ? "text-danger" : ""} data-testid="log-step">
+                  {new Date(e.at).toLocaleTimeString()} · {e.runner} · {e.step} · <span className="text-muted-foreground">{e.command}</span> · exit {e.exit ?? "—"}
+                  {e.output && <span className="block whitespace-pre-wrap text-muted-foreground">{plainText(e.output) ?? e.output}</span>}
+                  {e.reason && <span className="block text-warn">{e.reason}</span>}
+                </li>
+              ))}
+            </ul>
+          </Section>
           <Section title="Last check">
             {detail.lastCheck ? (
               <>
@@ -256,6 +268,12 @@ export function RunnersCard() {
   const details = useRunners((s) => s.details);
   const [dialog, setDialog] = useState<{ endpoint: string } | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  // The setup log is live: while the Details dialog is open the runner is re-read every 2 s.
+  useEffect(() => {
+    if (!open) return;
+    const t = setInterval(() => runnersStore().getState().detail(open), 2000);
+    return () => clearInterval(t);
+  }, [open]);
   useEffect(() => {
     if (link === "open") runnersStore().getState().refresh();
   }, [link]);

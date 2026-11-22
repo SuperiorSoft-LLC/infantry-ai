@@ -122,6 +122,11 @@ impl AdminUnit {
         if matches!(state, RunnerState::Online { .. }) {
             rows.extend(self.credential_rows(name, d, ping_harnesses));
         }
+        for r in &rows {
+            let ok = r["ok"] == true;
+            let (detail, fix) = (r["detail"].as_str().unwrap_or(""), r["fix"].as_str().unwrap_or(""));
+            self.pool.log_step(name, r["id"].as_str().unwrap_or("check"), "runner check", detail, Some(if ok { 0 } else { 1 }), if ok { "passed" } else { fix });
+        }
         self.pool.keep_check(name, rows.clone());
         json!({"ok": true, "name": name, "state": state.word(), "rows": rows})
     }
@@ -135,7 +140,7 @@ impl AdminUnit {
             return json!({"ok": true, "name": "local",
                 "runner": {"name": "local", "runnerId": "", "mode": "embedded (this app)", "os": std::env::consts::OS, "appVersion": self.pool.app_version, "contract": infantry_runner_link::wire::CONTRACT, "needs": infantry_runner_link::wire::MIN_RUNNER_CONTRACT},
                 "link": {"url": "", "state": "online", "reasonPlain": "the embedded runner is this app itself: there is no network link"},
-                "lastCheck": last});
+                "lastCheck": last, "log": self.pool.step_log("local")});
         }
         let Some(r) = self.pool.runners().into_iter().find(|r| r.name == name) else { return fail(format!("no runner named '{name}' (infantry runner list)")) };
         let s = self.pool.state(name);
@@ -163,7 +168,7 @@ impl AdminUnit {
         let harnesses: Vec<Value> = seen.as_ref().map(|x| x.harnesses.iter().map(|(id, li)| json!({"id": id, "loggedIn": li})).collect()).unwrap_or_default();
         let mut v = json!({"ok": true, "name": name,
             "runner": {"name": r.name, "runnerId": r.runner_id, "mode": mode, "os": seen.as_ref().map(|x| x.os.clone()).unwrap_or_default(), "appVersion": self.pool.runner_app_version(name), "contract": match &s { RunnerState::Online { contract, .. } | RunnerState::Outdated { contract, .. } => contract.clone(), _ => r.contract.clone() }, "needs": infantry_runner_link::wire::MIN_RUNNER_CONTRACT},
-            "link": link, "offers": seen.as_ref().map(|x| x.offers.clone()).unwrap_or_default(), "helloHarnesses": harnesses, "lastCheck": last});
+            "link": link, "offers": seen.as_ref().map(|x| x.offers.clone()).unwrap_or_default(), "helloHarnesses": harnesses, "lastCheck": last, "log": self.pool.step_log(name)});
         if let Some(u) = self.pool.update_status(name) {
             v["update"] = json!({"state": u.state, "steps": u.steps, "detail": u.detail});
         }
