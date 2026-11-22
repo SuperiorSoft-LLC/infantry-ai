@@ -243,10 +243,15 @@ impl RunnerPool {
 
     /// RR-VIS: the runner's own `providers` answer, as (id, signed in, where the login lives): what its harnesses really test.
     pub fn runner_logins(&self, name: &str) -> Option<Vec<(String, bool, Option<String>, Option<String>)>> {
+        Some(self.runner_provider_rows(name)?.iter().filter_map(|p| Some((p["id"].as_str()?.to_string(), p["available"].as_bool() != Some(false), p["loginAt"].as_str().map(str::to_string), p["unavailableReason"].as_str().map(str::to_string)))).collect())
+    }
+
+    /// The runner's own `providers` rows (what its harnesses report: sign-in, login place, auth kinds, key variable name).
+    pub fn runner_provider_rows(&self, name: &str) -> Option<Vec<serde_json::Value>> {
         let entry = RunnerSource::entry(self, name)?;
         let answer = entry.scope.request("providers", "{\"refresh\":true}").ok()?;
         let v: serde_json::Value = serde_json::from_str(&answer).ok()?;
-        Some(v.as_array()?.iter().filter_map(|p| Some((p["id"].as_str()?.to_string(), p["available"].as_bool() != Some(false), p["loginAt"].as_str().map(str::to_string), p["unavailableReason"].as_str().map(str::to_string)))).collect())
+        v.as_array().cloned()
     }
 
     /// RR-VIS: the runner daemon's own log tail (its `runner_log` frame); Err = why it could not be read, in plain words.

@@ -66,6 +66,16 @@ fn rows_of(id: &str, default: bool, h: &dyn infantry_harness::Harness, probe: &d
     if let Some(at) = h.login_location(probe) {
         row["loginAt"] = Value::String(at);
     }
+    let kinds = h.auth_kinds();
+    if !kinds.is_empty() {
+        row["authKinds"] = json!(kinds);
+        if kinds == [infantry_harness::AUTH_API_KEY] {
+            // A key-only CLI: which variable carries its key and whether one is set there. Names only, never a value.
+            let envs = h.key_env_vars(probe);
+            row["keySet"] = json!(envs.iter().any(|e| probe.env(e).is_some()));
+            row["keyEnv"] = json!(envs.iter().find(|e| probe.env(e).is_some()).or(envs.first()));
+        }
+    }
     if let Some(note) = h.usage_note() {
         row["usageNote"] = Value::String(note);
     }
@@ -228,6 +238,60 @@ mod tests {
         assert_eq!((groups.len(), groups[0]["group"].as_str(), groups[0]["unavailable"].as_bool()), (1, Some("lab"), Some(true)));
         let (ok, _) = rows_of("stub", false, &Stub { note: None, problem: None }, &infantry_harness::LocalProbe);
         assert_eq!((ok["available"].as_bool(), ok["unavailableReason"].is_null()), (Some(true), true));
+    }
+
+    /// A key-only harness whose key variable is `STUB_KEY`; the probe decides whether it is set.
+    struct KeyStub(Stub);
+    impl infantry_harness::Harness for KeyStub {
+        fn id(&self) -> &str {
+            self.0.id()
+        }
+        fn capabilities(&self) -> Capabilities {
+            self.0.capabilities()
+        }
+        fn models(&self, p: &dyn Probe) -> Vec<ModelInfo> {
+            self.0.models(p)
+        }
+        fn sign_in_problem(&self, p: &dyn Probe) -> Option<String> {
+            self.0.sign_in_problem(p)
+        }
+        fn launch(&self, r: &LaunchRequest) -> Result<LaunchPlan, LaunchError> {
+            self.0.launch(r)
+        }
+        fn auth_kinds(&self) -> Vec<&'static str> {
+            vec![infantry_harness::AUTH_API_KEY]
+        }
+        fn key_env_vars(&self, _: &dyn Probe) -> Vec<String> {
+            vec!["STUB_KEY".into()]
+        }
+    }
+
+    struct EnvProbe(bool);
+    impl Probe for EnvProbe {
+        fn env(&self, name: &str) -> Option<String> {
+            (self.0 && name == "STUB_KEY").then(|| "secret-value".to_string())
+        }
+        fn home(&self) -> Option<std::path::PathBuf> {
+            None
+        }
+        fn read_to_string(&self, _: &std::path::Path) -> Option<String> {
+            None
+        }
+        fn exists(&self, _: &std::path::Path) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn a_key_only_row_names_the_key_variable_and_whether_it_is_set_never_the_value() {
+        let h = KeyStub(Stub { note: None, problem: None });
+        let (set, _) = rows_of("stub", false, &h, &EnvProbe(true));
+        assert_eq!((set["authKinds"].clone(), set["keyEnv"].as_str(), set["keySet"].as_bool()), (json!(["api-key"]), Some("STUB_KEY"), Some(true)));
+        assert!(!set.to_string().contains("secret-value"), "a key value must never be on the row: {set}");
+        let (unset, _) = rows_of("stub", false, &h, &EnvProbe(false));
+        assert_eq!((unset["keyEnv"].as_str(), unset["keySet"].as_bool()), (Some("STUB_KEY"), Some(false)));
+        let (plain, _) = rows_of("stub", false, &Stub { note: None, problem: None }, &EnvProbe(true));
+        assert!(plain.get("authKinds").is_none() && plain.get("keyEnv").is_none(), "a harness that does not say keeps the old row: {plain}");
     }
 
     #[test]

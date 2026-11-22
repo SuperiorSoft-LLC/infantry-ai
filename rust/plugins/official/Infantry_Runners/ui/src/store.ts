@@ -51,6 +51,11 @@ export interface HarnessRow {
   why: string | null;
   /** Where the login lives, as the harness reported it. */
   loginAt: string | null;
+  /** The harness's auth kinds as it reported them; exactly `["api-key"]` = a key-only harness (no sign-in). */
+  authKinds: string[];
+  /** Key-only harness: the variable that carries its key (name only) and whether it is set on the runner. */
+  keyEnv: string | null;
+  keySet: boolean;
 }
 
 /** One setup step: which runner, what ran, its output (trimmed), the exit code and the reason in plain words. */
@@ -90,7 +95,7 @@ export function plainText(s: string | null | undefined): string | null {
 /** Joins `harness_install_status` and `providers` (and the hello's login flag as a fallback) into one row per harness. */
 export function joinHarnesses(install: unknown, providers: unknown, hello: { id: string; loggedIn: boolean }[] = []): HarnessRow[] {
   const inst = Array.isArray((install as { harnesses?: unknown } | null)?.harnesses) ? ((install as { harnesses: (InstallRow & { version?: string | null })[] }).harnesses) : [];
-  const prov = Array.isArray(providers) ? (providers as (ProviderRow & { unavailableReason?: string | null; loginAt?: string | null })[]) : null;
+  const prov = Array.isArray(providers) ? (providers as (ProviderRow & { unavailableReason?: string | null; loginAt?: string | null; authKinds?: string[]; keyEnv?: string | null; keySet?: boolean })[]) : null;
   const ids = [...new Set([...inst.map((h) => h.id), ...(prov ?? []).map((p) => p.id), ...hello.map((h) => h.id)])];
   return ids.map((id) => {
     const i = inst.find((h) => h.id === id);
@@ -98,7 +103,7 @@ export function joinHarnesses(install: unknown, providers: unknown, hello: { id:
     const h = hello.find((x) => x.id === id);
     const installed = !!i && !!i.path && i.state !== "missing";
     const signedIn = installed ? (p ? p.available !== false : h ? h.loggedIn : null) : false;
-    return { id, installed, version: i?.installedVersion ?? i?.version ?? null, path: i?.path ?? null, signedIn, why: signedIn === false && installed ? plainText(p?.unavailableReason) ?? "not signed in" : null, loginAt: p?.loginAt ?? null };
+    return { id, installed, version: i?.installedVersion ?? i?.version ?? null, path: i?.path ?? null, signedIn, why: signedIn === false && installed ? plainText(p?.unavailableReason) ?? "not signed in" : null, loginAt: p?.loginAt ?? null, authKinds: p?.authKinds ?? [], keyEnv: p?.keyEnv ?? null, keySet: p?.keySet === true };
   });
 }
 
@@ -125,6 +130,16 @@ export function summarizeProviders(providers: unknown, install: unknown): Runner
   if (!Array.isArray(providers) || !Array.isArray(rows)) return null;
   const tools = (rows as InstallRow[]).filter((h) => !!h.path && h.state !== "missing").map((h) => h.id);
   return { tools, signedIn: (providers as ProviderRow[]).some((h) => h.available !== false && tools.includes(h.id)) };
+}
+
+/** A key-only harness (opencode and the like) has no sign-in: only an API key. */
+export function keyOnly(h: Pick<HarnessRow, "authKinds">): boolean {
+  return h.authKinds.length === 1 && h.authKinds[0] === "api-key";
+}
+
+/** `API key: DEEPSEEK_API_KEY (found in the runner's environment)`; never a value. */
+export function keyLine(h: Pick<HarnessRow, "keyEnv" | "keySet">): string {
+  return `${h.keyEnv ?? "its API key variable"} (${h.keySet ? "found in the runner's environment" : "not set"})`;
 }
 
 /** `Tools: pi, claude · signed in: yes`. */

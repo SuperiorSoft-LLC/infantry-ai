@@ -472,6 +472,16 @@ pub trait Harness: Send + Sync {
     fn login_location(&self, _probe: &dyn Probe) -> Option<String> {
         None
     }
+    /// The ways this CLI takes its account: [`AUTH_SUBSCRIPTION`] (its own login) and/or [`AUTH_API_KEY`]. Empty = it does not say
+    /// (shown as before). `[AUTH_API_KEY]` alone = a key-only CLI: a client shows which key it uses, never a sign-in.
+    fn auth_kinds(&self) -> Vec<&'static str> {
+        Vec::new()
+    }
+    /// The environment variables that can carry this CLI's API key on the machine [probe] looks at, the ones set there first.
+    /// Names only, never a value. Default: the variable [`Harness::credential`] declares.
+    fn key_env_vars(&self, _probe: &dyn Probe) -> Vec<String> {
+        self.credential().map(|c| c.env).filter(|e| !e.is_empty()).into_iter().collect()
+    }
     /// The files this launch needs on the runner's host (staged by the driver before [`Harness::launch`]).
     fn assets(&self, _req: &LaunchRequest) -> Vec<Asset> {
         Vec::new()
