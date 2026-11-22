@@ -43,7 +43,11 @@ export function TicketDialog({ ticketId, creating, onClose }: { ticketId: string
   useEffect(() => {
     setConfirm(false);
     form.reset({ title: ticket?.title ?? "", description: ticket?.description ?? "", ticketType: ticket?.ticketType ?? INHERIT, epicId: ticket?.epicId ?? INHERIT });
-  }, [ticket?.id, creating]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ticket?.id, ticket?.partial, creating]); // eslint-disable-line react-hooks/exhaustive-deps
+  const loadFull = useBoard((s) => s.loadFull);
+  useEffect(() => {
+    if (ticket?.id) loadFull(ticket.id);
+  }, [ticket?.id, loadFull]);
   const open = creating || !!ticket;
   const submit = form.handleSubmit((v) => {
     const type = v.ticketType === INHERIT ? (ticket?.ticketType ? "" : undefined) : v.ticketType;

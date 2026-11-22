@@ -56,9 +56,20 @@ describe("board store", () => {
     s.getState().move("a", "in_progress");
     expect(s.getState().tickets.a.status).toBe("in_progress");
     l.push({ type: "error", requestId: l.sent[0].requestId, data: "ticket_move refused: to start a ticket use start" });
-    expect(s.getState().tickets.a).toEqual(t("a", "todo", 0));
+    expect(s.getState().tickets.a).toEqual({ ...t("a", "todo", 0), partial: true });
     expect(laneOf(s.getState().tickets, "todo").map((x) => x.id)).toEqual(["a", "b", "c"]);
     expect(s.getState().refusal).toContain("use start");
+  });
+
+  it("asks for the compact list and loads the full ticket once", () => {
+    const { l, s } = loaded();
+    s.getState().loadFull("a");
+    expect(l.sent.at(-1)).toMatchObject({ type: "ticket_get", data: "a" });
+    l.push({ type: "ticket", data: JSON.stringify({ ...t("a", "todo", 0), description: "full" }) });
+    expect(s.getState().tickets.a.partial).toBeUndefined();
+    const n = l.sent.length;
+    s.getState().loadFull("a");
+    expect(l.sent.length).toBe(n);
   });
 
   it("reorders a lane and rolls back on refusal", () => {

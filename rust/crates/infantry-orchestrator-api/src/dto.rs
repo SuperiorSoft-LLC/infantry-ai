@@ -442,6 +442,22 @@ pub struct TicketListQuery {
     pub project_id: Option<String>,
     #[serde(default)]
     pub epic_id: Option<String>,
+    /// Card fields only: the description and the run/context detail are left out (a client loads one ticket with `ticket_get`).
+    #[serde(default)]
+    pub compact: bool,
+}
+
+impl Ticket {
+    /// The card view: everything a board card shows, without the description or the heavy run/context blocks.
+    pub fn compacted(mut self) -> Ticket {
+        self.description = String::new();
+        self.effective_context = None;
+        self.effective_executor = None;
+        self.executor_overrides = None;
+        self.last_run = None;
+        self.start = None;
+        self
+    }
 }
 
 impl TicketListQuery {
@@ -451,10 +467,10 @@ impl TicketListQuery {
         let raw = if trimmed.starts_with('{') {
             decode_strict::<TicketListQuery>(trimmed, "ticket_list payload")?
         } else {
-            TicketListQuery { project_id: Some(trimmed.to_string()), epic_id: None }
+            TicketListQuery { project_id: Some(trimmed.to_string()), epic_id: None, compact: false }
         };
         let clean = |v: Option<String>| v.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-        Ok(TicketListQuery { project_id: clean(raw.project_id), epic_id: clean(raw.epic_id) })
+        Ok(TicketListQuery { project_id: clean(raw.project_id), epic_id: clean(raw.epic_id), compact: raw.compact })
     }
 }
 
@@ -701,5 +717,19 @@ mod tests {
         assert!(decode_strict::<TicketSave>(r#"{"title":"x","bogus":1}"#, "ticket_save payload").is_err());
         let s: TicketSave = decode_strict(r#"{"title":"x","weight":null}"#, "ticket_save payload").unwrap();
         assert_eq!(s.title.as_deref(), Some("x"));
+    }
+}
+
+#[cfg(test)]
+mod compact_list_tests {
+    use super::*;
+
+    #[test]
+    fn compact_query_decodes_and_blanks_the_description() {
+        assert!(TicketListQuery::decode(r#"{"compact":true}"#).unwrap().compact);
+        assert!(!TicketListQuery::decode("p1").unwrap().compact);
+        let t: Ticket = serde_json::from_str(r#"{"id":"t","title":"x","description":"long text","status":"todo","position":0,"createdAt":1,"updatedAt":1}"#).unwrap();
+        assert_eq!(t.clone().compacted().description, "");
+        assert_eq!(t.compacted().title, "x");
     }
 }

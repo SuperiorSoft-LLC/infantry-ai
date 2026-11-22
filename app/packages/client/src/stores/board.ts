@@ -29,6 +29,8 @@ export interface BoardTicket {
   branch?: string | null;
   sessionId?: string | null;
   updatedAt?: number;
+  /** Set by this client on a ticket that came from the compact list: the description is not loaded yet (`loadFull`). */
+  partial?: boolean;
 }
 
 /** The fields a save may carry (TicketSave). No `id` creates a ticket. */
@@ -67,6 +69,8 @@ export interface BoardState {
 export interface BoardActions {
   /** Ask for the board once per connection (no-op when loaded). */
   ensureLoaded(): void;
+  /** Fetch the full ticket (`ticket_get`) when the list sent only its card fields. */
+  loadFull(id: string): void;
   save(draft: TicketDraft): void;
   /** Put [id] in [status] at [position] (index in the lane; default the bottom). */
   move(id: string, status: string, position?: number): void;
@@ -157,7 +161,7 @@ export function createBoardStore(link: BoardLink): BoardStore {
           const list = json<BoardTicket[]>(env.data);
           if (!list) return;
           // `tickets` is the whole board, in board order: it replaces what we hold.
-          set({ tickets: Object.fromEntries(list.map((t) => [t.id, t])), loaded: true });
+          set({ tickets: Object.fromEntries(list.map((t) => [t.id, { ...t, partial: true }])), loaded: true });
           if (mine) settle(rid as string);
           return;
         }
@@ -184,7 +188,10 @@ export function createBoardStore(link: BoardLink): BoardStore {
       inflight: {},
 
       ensureLoaded() {
-        if (!get().loaded) link.sendFrame({ type: Frame.TICKET_LIST, data: "" });
+        if (!get().loaded) link.sendFrame({ type: Frame.TICKET_LIST, data: JSON.stringify({ compact: true }) });
+      },
+      loadFull(id) {
+        if (get().tickets[id]?.partial) link.sendFrame({ type: Frame.TICKET_GET, data: id });
       },
       save(draft) {
         const old = draft.id ? get().tickets[draft.id] : undefined;
