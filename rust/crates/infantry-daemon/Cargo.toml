@@ -19,6 +19,7 @@ infantry-harness = { path = "../infantry-harness" }
 infantry-runner = { path = "../infantry-runner" }
 infantry-runner-local = { path = "../infantry-runner-local" }
 infantry-runner-source = { path = "../infantry-runner-source" }
+infantry-runner-api = { path = "../infantry-runner-api" }
 infantry-core = { path = "../infantry-core" }
 infantry-board = { path = "../infantry-board" }
 infantry-orchestrator-api = { path = "../infantry-orchestrator-api" }

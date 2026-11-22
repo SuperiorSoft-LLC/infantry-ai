@@ -273,6 +273,14 @@ pub trait Runner: Send + Sync {
     /// Forgets an exited process (its screen and buffered state). A running one is killed (tree) first.
     fn release<'a>(&'a self, id: &'a ProcId) -> RunnerFuture<'a, ()>;
 
+    /// `loopback-forward`: opens a port on the RUNNER host's loopback whose connections reach [target_port] on the loopback
+    /// of the machine this runner is driven from (the orchestrator's own daemon), so a harness there can use it as if it
+    /// were local. Answers the runner-host port; asking again for the same target answers the same port. Default:
+    /// unsupported (the local runner already shares the machine).
+    fn forward_loopback(&self, _target_port: u16) -> RunnerFuture<'_, u16> {
+        Box::pin(async { Err(RunnerError::Unsupported("loopback-forward is not offered by this runner".into())) })
+    }
+
     /// `loopback-http`: one request to a server on the runner host's loopback (a process the harness started there), made
     /// by the runner on its host. The response streams as [`HttpEvent`]s (a server-sent events stream stays open until the
     /// server closes it or the receiver is dropped). Non-loopback URLs are refused. Default: unsupported.

@@ -35,7 +35,15 @@ struct Shared {
 /// Blocking hook calls waiting for the orchestrator's answer, by call id.
 type Pending = Arc<Mutex<HashMap<String, HookCall>>>;
 
+/// One open loopback forward: its tunnelled connections and the flag that stops its listener.
+struct Tunnel {
+    conns: Arc<Mutex<HashMap<u64, std::net::TcpStream>>>,
+    stop: Arc<std::sync::atomic::AtomicBool>,
+    addr: std::net::SocketAddr,
+}
+
 pub struct ProcessBackend {
+    tunnels: Mutex<HashMap<String, Tunnel>>,
     runner: Arc<dyn Runner>,
     /// Open hook streams (and tail streams): the task that owns the endpoint (or the tail) and the calls it waits on.
     streams: Mutex<HashMap<String, (tokio::task::JoinHandle<()>, Pending)>>,
@@ -49,15 +57,16 @@ const HTTP_STREAM_PREFIX: &str = "http-";
 /// The id prefixes of a hook stream and a tail stream (never a runner process id).
 const HOOK_STREAM_PREFIX: &str = "hook-";
 const TAIL_STREAM_PREFIX: &str = "tail-";
+const TUNNEL_STREAM_PREFIX: &str = "tun-";
 
 fn is_link_stream(id: &str) -> bool {
-    [HTTP_STREAM_PREFIX, HOOK_STREAM_PREFIX, TAIL_STREAM_PREFIX].iter().any(|p| id.starts_with(p))
+    [HTTP_STREAM_PREFIX, HOOK_STREAM_PREFIX, TAIL_STREAM_PREFIX, TUNNEL_STREAM_PREFIX].iter().any(|p| id.starts_with(p))
 }
 
 impl ProcessBackend {
     pub fn new(runner: Arc<dyn Runner>) -> Self {
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().thread_name("runner-link-proc").build().expect("runtime");
-        ProcessBackend { runner, streams: Mutex::new(HashMap::new()), rt, shared: Arc::new((Mutex::new(Shared::default()), Condvar::new())) }
+        ProcessBackend { tunnels: Mutex::new(HashMap::new()), runner, streams: Mutex::new(HashMap::new()), rt, shared: Arc::new((Mutex::new(Shared::default()), Condvar::new())) }
     }
 
     fn push(shared: &(Mutex<Shared>, Condvar), sid: &str, t: &str, data: String) {
@@ -76,7 +85,7 @@ impl Backend for ProcessBackend {
     fn info(&self) -> RunnerInfo {
         RunnerInfo {
             os: std::env::consts::OS.into(),
-            offers: vec![OFFER_PROCESS.into(), OFFER_STAGED_FILES.into(), OFFER_LOOPBACK_HTTP.into(), OFFER_HOOK_CHANNEL.into(), OFFER_PTY_RESIZE.into()],
+            offers: vec![OFFER_PROCESS.into(), OFFER_STAGED_FILES.into(), OFFER_LOOPBACK_HTTP.into(), OFFER_HOOK_CHANNEL.into(), OFFER_PTY_RESIZE.into(), OFFER_LOOPBACK_FORWARD.into()],
             ..Default::default()
         }
     }
@@ -143,6 +152,13 @@ impl Backend for ProcessBackend {
         let id = ProcId(session_id.to_string());
         // An http stream is the link's own, not a runner process: forgetting its frames is the whole release.
         let ok = is_link_stream(session_id) || self.rt.block_on(self.runner.release(&id)).is_ok();
+        if let Some(t) = self.tunnels.lock().unwrap().remove(session_id) {
+            t.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+            let _ = std::net::TcpStream::connect_timeout(&t.addr, Duration::from_millis(200));
+            for (_, c) in t.conns.lock().unwrap().drain() {
+                let _ = c.shutdown(std::net::Shutdown::Both);
+            }
+        }
         if let Some((task, _)) = self.streams.lock().unwrap().remove(session_id) {
             task.abort();
         }
@@ -239,6 +255,80 @@ impl Backend for ProcessBackend {
             }
         });
         HttpOpenAnswer { stream_id: Some(sid), ..Default::default() }
+    }
+
+    fn tunnel_open(&self) -> TunnelOpenAnswer {
+        use std::io::Read;
+        use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+        let refuse = |e: String| TunnelOpenAnswer { refusal: Some(e), error_type: "io".into(), ..Default::default() };
+        let listener = match std::net::TcpListener::bind("127.0.0.1:0") {
+            Ok(l) => l,
+            Err(e) => return refuse(e.to_string()),
+        };
+        let addr = match listener.local_addr() {
+            Ok(a) => a,
+            Err(e) => return refuse(e.to_string()),
+        };
+        let sid = format!("{TUNNEL_STREAM_PREFIX}{}", uuid::Uuid::new_v4());
+        self.shared.0.lock().unwrap().sessions.insert(sid.clone(), Session::default());
+        let conns: Arc<Mutex<HashMap<u64, std::net::TcpStream>>> = Arc::default();
+        let stop = Arc::new(AtomicBool::new(false));
+        self.tunnels.lock().unwrap().insert(sid.clone(), Tunnel { conns: conns.clone(), stop: stop.clone(), addr });
+        let (shared, id) = (self.shared.clone(), sid.clone());
+        let frame = |conn: u64, data: String| serde_json::to_string(&TunnelFrame { conn, data }).unwrap_or_default();
+        let spawned = std::thread::Builder::new().name("runner-link-tunnel".into()).spawn(move || {
+            let next = AtomicU64::new(1);
+            for stream in listener.incoming() {
+                if stop.load(Ordering::SeqCst) {
+                    break;
+                }
+                let Ok(stream) = stream else { continue };
+                let conn = next.fetch_add(1, Ordering::SeqCst);
+                let Ok(mut reader) = stream.try_clone() else { continue };
+                conns.lock().unwrap().insert(conn, stream);
+                Self::push(&shared, &id, wire::TUNNEL_CONN, frame(conn, String::new()));
+                let (shared, id, conns) = (shared.clone(), id.clone(), conns.clone());
+                let _ = std::thread::Builder::new().name("runner-link-tunnel-conn".into()).spawn(move || {
+                    let mut buf = vec![0u8; 16 * 1024];
+                    loop {
+                        match reader.read(&mut buf) {
+                            Ok(0) | Err(_) => break,
+                            Ok(n) => Self::push(&shared, &id, wire::TUNNEL_DATA, frame(conn, B64.encode(&buf[..n]))),
+                        }
+                    }
+                    conns.lock().unwrap().remove(&conn);
+                    Self::push(&shared, &id, wire::TUNNEL_CLOSE, frame(conn, String::new()));
+                });
+            }
+        });
+        if let Err(e) = spawned {
+            return refuse(e.to_string());
+        }
+        TunnelOpenAnswer { stream_id: Some(sid), port: addr.port(), ..Default::default() }
+    }
+
+    fn tunnel_send(&self, r: &TunnelSendRequest) -> bool {
+        use std::io::Write;
+        let conns = match self.tunnels.lock().unwrap().get(&r.stream_id) {
+            Some(t) => t.conns.clone(),
+            None => return false,
+        };
+        let mut g = conns.lock().unwrap();
+        let Some(c) = g.get_mut(&r.conn) else { return false };
+        if !r.data.is_empty() {
+            match B64.decode(r.data.as_bytes()) {
+                Ok(b) if c.write_all(&b).is_ok() => {}
+                _ => {
+                    let _ = c.shutdown(std::net::Shutdown::Both);
+                    return false;
+                }
+            }
+        }
+        if r.close {
+            let _ = c.shutdown(std::net::Shutdown::Both);
+            g.remove(&r.conn);
+        }
+        true
     }
 
     fn hook_open(&self) -> HookOpenAnswer {

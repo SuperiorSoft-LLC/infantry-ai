@@ -86,6 +86,14 @@ pub trait Backend: Send + Sync + 'static {
     fn tail_open(&self, _r: &TailOpenRequest) -> HttpOpenAnswer {
         HttpOpenAnswer { refusal: Some("this runner offers no tail".into()), error_type: "unsupported".into(), ..Default::default() }
     }
+    /// RR-5 `loopback-forward`: a listener on the runner host's loopback, its connections tunnelled to the caller.
+    fn tunnel_open(&self) -> TunnelOpenAnswer {
+        TunnelOpenAnswer { refusal: Some("this runner offers no loopback forward".into()), error_type: "unsupported".into(), ..Default::default() }
+    }
+    /// Bytes (or a close) for one tunnelled connection; whether the connection was known.
+    fn tunnel_send(&self, _r: &TunnelSendRequest) -> bool {
+        false
+    }
     /// `loopback-http` on the runner's host: the stream id whose frames carry the response.
     fn http_open(&self, _r: &HttpOpenRequest) -> HttpOpenAnswer {
         HttpOpenAnswer { refusal: Some("this runner makes no loopback http requests".into()), error_type: "unsupported".into(), ..Default::default() }
@@ -329,6 +337,17 @@ impl LinkServer {
             wire::HTTP_OPEN => match decode::<HttpOpenRequest>(data) {
                 Some(r) => {
                     let a = self.backend.http_open(&r);
+                    self.ok(&seat, t, from, &a)
+                }
+                None => malformed(),
+            },
+            wire::TUNNEL_OPEN => {
+                let a = self.backend.tunnel_open();
+                self.ok(&seat, t, from, &a)
+            }
+            wire::TUNNEL_SEND => match decode::<TunnelSendRequest>(data) {
+                Some(r) => {
+                    let a = TunnelSendAnswer { delivered: self.backend.tunnel_send(&r) };
                     self.ok(&seat, t, from, &a)
                 }
                 None => malformed(),

@@ -1240,6 +1240,7 @@ dependencies = [
  "infantry-projects",
  "infantry-protocol",
  "infantry-runner",
+ "infantry-runner-api",
  "infantry-runner-link",
  "infantry-runner-local",
  "infantry-runner-pool",

@@ -488,6 +488,58 @@ pub struct TailOpenRequest {
     pub from: String,
 }
 
+/// RR-5 `loopback-forward`: a TCP tunnel from a loopback port of the runner host to a loopback port of the orchestrator.
+/// [`TUNNEL_OPEN`] makes the listener (answer: its port and the stream id); frames on [`FRAMES_PULL`] under that stream id
+/// carry what happens on it: [`TUNNEL_CONN`] (a client connected), [`TUNNEL_DATA`] (bytes the client sent) and
+/// [`TUNNEL_CLOSE`]; the orchestrator sends the bytes back with [`TUNNEL_SEND`]. Data is [`TunnelFrame`] JSON.
+pub const TUNNEL_OPEN: &str = "runner_link_tunnel_open";
+pub const TUNNEL_SEND: &str = "runner_link_tunnel_send";
+pub const TUNNEL_CONN: &str = "runner_tunnel_conn";
+pub const TUNNEL_DATA: &str = "runner_tunnel_data";
+pub const TUNNEL_CLOSE: &str = "runner_tunnel_close";
+pub const OFFER_LOOPBACK_FORWARD: &str = "loopback-forward";
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TunnelOpenAnswer {
+    #[serde(default)]
+    pub stream_id: Option<String>,
+    /// The port on the runner host's loopback.
+    #[serde(default)]
+    pub port: u16,
+    #[serde(default)]
+    pub refusal: Option<String>,
+    #[serde(default)]
+    pub error_type: String,
+}
+
+/// One tunnel frame's data: the connection and its bytes (base64; empty for a connect or a close).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TunnelFrame {
+    pub conn: u64,
+    #[serde(default)]
+    pub data: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TunnelSendRequest {
+    pub stream_id: String,
+    pub conn: u64,
+    /// Base64 bytes for the client.
+    #[serde(default)]
+    pub data: String,
+    /// Close the connection (after any `data`).
+    #[serde(default)]
+    pub close: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TunnelSendAnswer {
+    #[serde(default)]
+    pub delivered: bool,
+}
+
 /// `staged-files` over the link: the runner writes a file in its own staging folder and answers its path.
 pub const STAGE_FILE: &str = "runner_link_stage_file";
 /// `loopback-http` over the link: the runner makes one request on its host's loopback; the response streams back as

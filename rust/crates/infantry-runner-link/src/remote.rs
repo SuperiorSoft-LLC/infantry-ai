@@ -103,6 +103,67 @@ impl Drop for RemoteGuard {
     }
 }
 
+/// Open loopback forwards, process-wide (a session's runner handle is made fresh each time): (runner@link url, orchestrator
+/// target port) -> the port on the runner host.
+fn forwards() -> &'static Mutex<HashMap<(String, u16), u16>> {
+    static F: std::sync::OnceLock<Mutex<HashMap<(String, u16), u16>>> = std::sync::OnceLock::new();
+    F.get_or_init(Mutex::default)
+}
+
+/// The orchestrator half of a loopback forward: each connection the runner host accepted is mirrored by one to
+/// `127.0.0.1:target`; bytes move both ways until either side closes. Ends when the link drops.
+fn tunnel_pump(client: Arc<LinkClient>, sid: String, target: u16, wait: Duration) {
+    use std::io::{Read, Write};
+    let conns: Arc<Mutex<HashMap<u64, std::net::TcpStream>>> = Arc::default();
+    let mut after = 0i64;
+    loop {
+        let req = FramesPullRequest { resume_from: BTreeMap::from([(sid.clone(), after)]), wait_ms: wait.as_millis() as i64, max: 0 };
+        let Ok(a) = client.typed_with::<_, FramesPullAnswer>(wire::FRAMES_PULL, &req, wait + Duration::from_secs(15)) else { return };
+        for f in a.frames {
+            after = after.max(f.sequence.unwrap_or(0));
+            let Ok(t) = serde_json::from_str::<TunnelFrame>(&f.data) else { continue };
+            match f.r#type.as_str() {
+                wire::TUNNEL_CONN => {
+                    let Ok(s) = std::net::TcpStream::connect(("127.0.0.1", target)) else {
+                        let req = TunnelSendRequest { stream_id: sid.clone(), conn: t.conn, data: String::new(), close: true };
+                        let _ = client.typed::<_, TunnelSendAnswer>(wire::TUNNEL_SEND, &req);
+                        continue;
+                    };
+                    let Ok(mut reader) = s.try_clone() else { continue };
+                    conns.lock().unwrap().insert(t.conn, s);
+                    let (client, sid, conns, conn) = (client.clone(), sid.clone(), conns.clone(), t.conn);
+                    let _ = std::thread::Builder::new().name("remote-runner-tunnel-conn".into()).spawn(move || {
+                        let mut buf = vec![0u8; 16 * 1024];
+                        loop {
+                            let (n, close) = match reader.read(&mut buf) {
+                                Ok(0) | Err(_) => (0, true),
+                                Ok(n) => (n, false),
+                            };
+                            let req = TunnelSendRequest { stream_id: sid.clone(), conn, data: B64.encode(&buf[..n]), close };
+                            let delivered = client.typed::<_, TunnelSendAnswer>(wire::TUNNEL_SEND, &req).map(|a| a.delivered).unwrap_or(false);
+                            if close || !delivered {
+                                break;
+                            }
+                        }
+                        conns.lock().unwrap().remove(&conn);
+                    });
+                }
+                wire::TUNNEL_DATA => {
+                    if let (Some(c), Ok(b)) = (conns.lock().unwrap().get_mut(&t.conn), B64.decode(t.data.as_bytes())) {
+                        let _ = c.write_all(&b);
+                    }
+                }
+                wire::TUNNEL_CLOSE => {
+                    if let Some(c) = conns.lock().unwrap().remove(&t.conn) {
+                        let _ = c.shutdown(std::net::Shutdown::Both);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 pub struct RemoteRunner {
     id: String,
     /// pty processes started here, by process id.
@@ -348,6 +409,39 @@ impl Runner for RemoteRunner {
 
     fn screen_text_since<'a>(&'a self, id: &'a ProcId, mark: u64, max: usize) -> RunnerFuture<'a, String> {
         Box::pin(async move { Ok(self.pty(id)?.screen.lock().unwrap().text_since(mark, max)) })
+    }
+
+    fn forward_loopback(&self, target_port: u16) -> RunnerFuture<'_, u16> {
+        Box::pin(async move {
+            let key = (format!("{}@{}", self.id, self.client.url()), target_port);
+            if let Some(p) = forwards().lock().unwrap().get(&key) {
+                return Ok(*p);
+            }
+            let h = self.hello().await?;
+            if !h.offers.iter().any(|o| o == OFFER_LOOPBACK_FORWARD) {
+                return Self::unsupported("loopback-forward");
+            }
+            let a: TunnelOpenAnswer = self.blocking(|c| c.typed(wire::TUNNEL_OPEN, &serde_json::json!({}))).await?;
+            let sid = match (a.stream_id, a.refusal) {
+                (Some(id), None) => id,
+                (_, why) => {
+                    let why = why.unwrap_or_else(|| "the runner opened no tunnel".into());
+                    return Err(if a.error_type == "unsupported" { RunnerError::Unsupported(why) } else { RunnerError::Io(why) });
+                }
+            };
+            let (client, wait) = (self.client.clone(), self.pull_wait);
+            let k = key.clone();
+            std::thread::Builder::new()
+                .name("remote-runner-tunnel".into())
+                .spawn(move || {
+                    tunnel_pump(client, sid, target_port, wait);
+                    // The link dropped: the next session opens a fresh tunnel.
+                    forwards().lock().unwrap().remove(&k);
+                })
+                .map_err(disconnected)?;
+            forwards().lock().unwrap().insert(key, a.port);
+            Ok(a.port)
+        })
     }
 
     fn tail(&self, spec: TailSpec) -> RunnerFuture<'_, mpsc::UnboundedReceiver<String>> {

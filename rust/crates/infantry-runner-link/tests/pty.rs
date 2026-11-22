@@ -152,3 +152,43 @@ async fn a_hook_post_and_an_mcp_call_from_the_runner_arrive_at_the_orchestrator(
     drop(mcp);
 }
 
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_loopback_forward_tunnels_a_runner_host_port_back_to_the_orchestrator() {
+    let (remote, _local, _serving) = paired().await;
+    // The orchestrator's "daemon": an echo server on its loopback.
+    let daemon = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let target = daemon.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for s in daemon.incoming().flatten() {
+            std::thread::spawn(move || {
+                let (mut r, mut w) = (s.try_clone().unwrap(), s);
+                let mut buf = [0u8; 1024];
+                while let Ok(n) = r.read(&mut buf) {
+                    if n == 0 || w.write_all(format!("echo:{}", String::from_utf8_lossy(&buf[..n])).as_bytes()).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+    });
+    let port = remote.forward_loopback(target).await.unwrap();
+    assert_ne!(port, target, "the runner host has its own port");
+    assert_eq!(remote.forward_loopback(target).await.unwrap(), port, "the same target answers the same port");
+    // A process on the runner host connects to its own loopback port and reaches the orchestrator's server, twice over.
+    let got = tokio::task::spawn_blocking(move || {
+        let mut out = Vec::new();
+        for word in ["one", "two"] {
+            let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            s.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
+            s.write_all(word.as_bytes()).unwrap();
+            let mut buf = [0u8; 64];
+            let n = s.read(&mut buf).unwrap();
+            out.push(String::from_utf8_lossy(&buf[..n]).into_owned());
+        }
+        out
+    })
+    .await
+    .unwrap();
+    assert_eq!(got, ["echo:one", "echo:two"]);
+}
