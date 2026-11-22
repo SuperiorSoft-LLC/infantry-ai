@@ -257,6 +257,8 @@ pub fn set_key_envs(probe: &dyn Probe, loc: &Locations) -> Vec<String> {
     for p in built_in.values() {
         out.extend(str_list(p.get("env")).unwrap_or_default().into_iter().filter(|e| probe.env(e).is_some()));
     }
+    // The catalogue may not be cached yet (a fresh machine): any set `*_API_KEY` variable is a key the CLI can be given.
+    out.extend(probe.env_names().into_iter().filter(|n| n.ends_with("_API_KEY") && probe.env(n).is_some()));
     out.into_iter().collect()
 }
 

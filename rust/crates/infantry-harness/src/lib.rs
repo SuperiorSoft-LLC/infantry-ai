@@ -91,6 +91,10 @@ pub struct ModelInfo {
 pub trait Probe {
     fn env(&self, name: &str) -> Option<String>;
     fn home(&self) -> Option<PathBuf>;
+    /// The names (never values) of the environment variables that are set; empty = this probe cannot list them.
+    fn env_names(&self) -> Vec<String> {
+        Vec::new()
+    }
     fn read_to_string(&self, path: &Path) -> Option<String>;
     fn exists(&self, path: &Path) -> bool;
     /// The entries of a directory; empty when it cannot be read (a probe without listing sees none).
@@ -110,6 +114,9 @@ pub struct LocalProbe;
 impl Probe for LocalProbe {
     fn env(&self, name: &str) -> Option<String> {
         std::env::var(name).ok().filter(|v| !v.is_empty())
+    }
+    fn env_names(&self) -> Vec<String> {
+        std::env::vars_os().filter(|(_, v)| !v.is_empty()).filter_map(|(k, _)| k.into_string().ok()).collect()
     }
     fn home(&self) -> Option<PathBuf> {
         self.env("USERPROFILE").or_else(|| self.env("HOME")).map(PathBuf::from)
