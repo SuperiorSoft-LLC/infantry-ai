@@ -33,18 +33,24 @@ export interface RunnerSummary {
 interface ProviderRow {
   id: string;
   available?: boolean;
-  unavailableReason?: string | null;
 }
 
-/** A tool counts as installed unless the runner says it is not (an unavailable one with another reason, such as not signed in, is installed). */
-const missingReason = /not installed|not on path|not found|missing/i;
+/** One harness of a `harness_install_status` answer: installed when it has a path and is not missing (the wizard's own test). */
+interface InstallRow {
+  id: string;
+  state?: string;
+  path?: string | null;
+}
 
-/** The summary of a `providers` answer; null when the answer is not a list. */
-export function summarizeProviders(raw: unknown): RunnerSummary | null {
-  if (!Array.isArray(raw)) return null;
-  const rows = raw as ProviderRow[];
-  const tools = rows.filter((h) => h.available !== false || !missingReason.test(h.unavailableReason ?? "")).map((h) => h.id);
-  return { tools, signedIn: rows.some((h) => h.available !== false) };
+/**
+ * The summary of a runner's two answers: the tools that are installed there (`harness_install_status`: a `providers` row alone cannot
+ * tell "not installed" from "not signed in") and whether any harness can answer (`providers`: `available`). Null when either is not a list.
+ */
+export function summarizeProviders(providers: unknown, install: unknown): RunnerSummary | null {
+  const rows = (install as { harnesses?: unknown } | null)?.harnesses;
+  if (!Array.isArray(providers) || !Array.isArray(rows)) return null;
+  const tools = (rows as InstallRow[]).filter((h) => !!h.path && h.state !== "missing").map((h) => h.id);
+  return { tools, signedIn: (providers as ProviderRow[]).some((h) => h.available !== false && tools.includes(h.id)) };
 }
 
 /** `Tools: pi, claude · signed in: yes`. */
@@ -64,7 +70,7 @@ export interface RunnersState {
   runners: RunnerView[];
   loaded: boolean;
   checks: Record<string, CheckRow[]>;
-  /** RR-14: the one-line summary of each runner's machine, from its own `providers` answer (absent until read; error set when it could not be read). */
+  /** RR-14: the one-line summary of each runner's machine, from its own `harness_install_status` and `providers` answers (absent until read; error set when it could not be read). */
   summaries: Record<string, RunnerSummary>;
   /** The runner a check is running for. */
   checking: string | null;
@@ -188,8 +194,8 @@ export function createRunnersStore(link: FrameLink): RunnersStore {
       refresh: () => void send("list", {}),
       summarize(name) {
         const keep = (v: RunnerSummary) => set({ summaries: { ...get().summaries, [name]: v } });
-        runnerRequest(link, name, "providers", JSON.stringify({ refresh: true })).then(
-          (a) => keep(summarizeProviders(json<unknown>(a.data)) ?? { tools: [], signedIn: false, error: "unreadable answer" }),
+        Promise.all([runnerRequest(link, name, "providers", JSON.stringify({ refresh: true })), runnerRequest(link, name, "harness_install_status", "{}")]).then(
+          ([p, i]) => keep(summarizeProviders(json<unknown>(p.data), json<unknown>(i.data)) ?? { tools: [], signedIn: false, error: "unreadable answer" }),
           (why: unknown) => keep({ tools: [], signedIn: false, error: String(why instanceof Error ? why.message : why).slice(0, 120) }),
         );
       },

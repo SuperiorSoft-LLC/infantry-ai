@@ -85,11 +85,12 @@ describe("RR-14 row summary", () => {
     s.getState().summarize("local");
     s.getState().summarize("box");
     const asks = l.sent.slice(1).map((e) => (e.type === "runner_frame" ? JSON.parse(e.data) : { plain: e.type }));
-    expect(asks).toEqual([{ plain: "providers" }, { runner: "box", frame: "providers", data: JSON.stringify({ refresh: true }) }]);
-    l.push({ type: "providers", requestId: l.sent[2].requestId, data: JSON.stringify([{ id: "pi", available: true }, { id: "codex", available: false, unavailableReason: "codex is not installed (not on PATH)" }]) });
+    expect(asks.slice(2)).toEqual([{ runner: "box", frame: "providers", data: JSON.stringify({ refresh: true }) }, { runner: "box", frame: "harness_install_status", data: "{}" }]);
+    l.push({ type: "providers", requestId: l.sent[3].requestId, data: JSON.stringify([{ id: "pi", available: true }, { id: "claude", available: false }]) });
+    l.push({ type: "harness_install_status", requestId: l.sent[4].requestId, data: JSON.stringify({ harnesses: [{ id: "pi", state: "installed", path: "/x/pi" }, { id: "claude", state: "missing", path: null }] }) });
     await new Promise((r) => setTimeout(r, 0));
     expect(summaryLine(s.getState().summaries.box)).toBe("Tools: pi · signed in: yes");
-    expect(summarizeProviders([{ id: "pi", available: false, unavailableReason: "pi is not signed in" }])).toEqual({ tools: ["pi"], signedIn: false });
+    expect(summarizeProviders([{ id: "pi", available: false }], { harnesses: [{ id: "pi", state: "installed", path: "/x" }] })).toEqual({ tools: ["pi"], signedIn: false });
     expect(summaryLine({ tools: [], signedIn: false })).toBe("Tools: none installed · signed in: no");
   });
 });
