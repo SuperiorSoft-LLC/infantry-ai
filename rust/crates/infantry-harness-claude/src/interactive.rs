@@ -300,6 +300,12 @@ impl Interactive {
 
     fn transcript(&mut self, line: &str, out: &mut Vec<HarnessEvent>) {
         self.sign_at = self.now;
+        // A background task's end is recorded as a `task-notification` prompt (even one the CLI only writes down).
+        if line.contains("<task-notification>") {
+            if let Some(ev) = serde_json::from_str::<Value>(line).ok().and_then(|v| stream::task_notice(&v)) {
+                out.push(ev);
+            }
+        }
         for s in self.mapper.map(line) {
             match s {
                 Signal::Line(text) => {

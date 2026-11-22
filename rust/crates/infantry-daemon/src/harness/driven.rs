@@ -354,7 +354,8 @@ impl Worker {
                     reasoning: u.reasoning_tokens,
                 })),
                 Ev::McpState { state, servers } => self.sink.emit(HarnessEvent::McpState { state, servers }),
-                Ev::TurnStarted | Ev::Reasoning(_) | Ev::ToolFinished { .. } => {}
+                Ev::Background(c) => self.sink.emit(HarnessEvent::Background(c)),
+                Ev::TurnStarted | Ev::Reasoning(_) | Ev::ToolFinished { .. } | Ev::TaskNotice { .. } => {}
             }
         }
     }

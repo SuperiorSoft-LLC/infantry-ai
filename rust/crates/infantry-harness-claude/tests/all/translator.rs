@@ -970,3 +970,12 @@ fn headless_fails_an_error_result_and_an_exit_without_one() {
     let HarnessEvent::TurnEnded { end: TurnEnd::Failed, reason: Some(r) } = &ev[0] else { panic!("{ev:?}") };
     assert!(r.contains("Invalid API key"), "{r}");
 }
+
+#[test]
+fn a_task_notification_becomes_a_task_notice_in_both_modes() {
+    let v: serde_json::Value = serde_json::from_str(common::WAKE_UP).unwrap();
+    let ev = infantry_harness_claude::stream::task_notice(&v);
+    assert!(matches!(ev, Some(HarnessEvent::TaskNotice { ref ids, ref status, .. }) if ids == &["b1".to_string()] && status == "completed"));
+    let h = infantry_harness_claude::stream::events(&v);
+    assert!(h.iter().any(|e| matches!(e, HarnessEvent::TaskNotice { .. })));
+}

@@ -55,6 +55,8 @@ export interface Agent {
   projectId?: string;
   /** The other app running this session now ("Infantry (Kotlin)"): shown, and a turn into it is blocked. */
   heldBy?: string;
+  /** Tasks the agent CLI runs in the background (also after the turn ended): the card's tag and its tooltip. */
+  backgroundTasks?: { id: string; label: string; startedAt: number }[];
 }
 
 export interface DiffLine {
