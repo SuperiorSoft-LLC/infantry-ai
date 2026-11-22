@@ -7,6 +7,7 @@
 //! Implementations: [`stub`] (scripted, no process; `INFANTRY_PROVIDER=stub`) and [`driven`], which runs any
 //! `infantry-harness` crate (one agent CLI each) on the local runner. The registry is [`HarnessRegistry`], built by `main.rs`.
 
+pub mod changes;
 pub mod credentials;
 pub mod driven;
 pub mod launch;
