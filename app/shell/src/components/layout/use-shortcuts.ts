@@ -74,7 +74,7 @@ export function useShortcuts(): void {
         }
         case "tab": {
           if (s.digit === "8") {
-            ui.set("sessionTab", "board");
+            ui.set("dialog", ui.dialog === "board" ? null : "board");
             return true;
           }
           const hint = `^${s.digit}`;

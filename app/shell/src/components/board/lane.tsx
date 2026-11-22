@@ -77,7 +77,7 @@ export function Lane({ status, title, tickets, total, over, onOpen }: { status: 
     setCollapsed(!collapsed);
   };
   return (
-    <section ref={drop.setNodeRef} aria-label={title} data-over={over || undefined} className="board-lane flex min-h-40 flex-col gap-2 rounded-lg border bg-panel/40 p-2">
+    <section ref={drop.setNodeRef} aria-label={title} data-over={over || undefined} className="board-lane flex min-h-0 flex-col gap-2 rounded-lg border bg-panel/40 p-2">
       <h3 className="flex items-center justify-between px-1 text-xs font-semibold">
         <button type="button" onClick={toggle} aria-expanded={!collapsed} className="flex items-center gap-1 hover:text-foreground">
           {collapsed ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
@@ -86,7 +86,7 @@ export function Lane({ status, title, tickets, total, over, onOpen }: { status: 
         <span className="font-normal text-muted-foreground">{filtered ? `${tickets.length} of ${total}` : total}</span>
       </h3>
       {!collapsed && (
-      <div ref={scrollRef} className="flex max-h-[calc(100vh-17rem)] min-h-16 flex-col gap-2 overflow-y-auto pr-0.5">
+      <div ref={scrollRef} className="flex min-h-16 flex-1 flex-col gap-2 overflow-y-auto pr-0.5">
         <SortableContext items={tickets.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           {tickets.length === 0 ? (
             <p className="px-1 py-3 text-center text-xs text-muted-foreground">{filtered ? "No match" : "Nothing here"}</p>

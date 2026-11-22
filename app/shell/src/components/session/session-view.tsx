@@ -17,9 +17,9 @@ export function SessionView() {
   const tabs = useTabs("center");
   const { sessionTab, set } = ui;
 
-  // A tab whose plugin was disabled goes away: fall back to the CLI view (the Board is not in the bar).
+  // A tab whose plugin was disabled goes away: fall back to the CLI view.
   useEffect(() => {
-    if (sessionTab !== "board" && !tabs.some((t) => t.id === sessionTab)) set("sessionTab", "cli");
+    if (!tabs.some((t) => t.id === sessionTab)) set("sessionTab", "cli");
   }, [sessionTab, tabs, set]);
 
   return (

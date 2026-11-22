@@ -11,6 +11,7 @@ import { EMPTY_DRAFT, NewAgentBody, addAgent, addBlockedReason, type NewAgentDra
 import { ResumeBody } from "./resume-body";
 import { PluginSettingsDialog } from "@/components/plugins/plugin-settings-dialog";
 import { SettingsBody } from "./settings-body";
+import { BoardDialog } from "@/components/board/board-dialog";
 import { StatsDialog } from "@/components/stats/stats-dialog";
 import { SetupWizardDialog } from "@/components/setup/setup-wizard";
 
@@ -36,6 +37,7 @@ export function DialogHost() {
   }, [dialog]);
   if (!dialog) return <PluginSettingsDialog />;
   if (dialog === "new-ticket") return <TicketDialog ticketId={null} creating onClose={() => ui.set("dialog", null)} />;
+  if (dialog === "board") return <BoardDialog onClose={() => ui.set("dialog", null)} />;
   if (dialog === "stats") return <StatsDialog onClose={() => ui.set("dialog", null)} />;
   if (dialog === "setup") return <SetupWizardDialog onClose={() => ui.set("dialog", null)} />;
   const c = config[dialog];
