@@ -315,6 +315,10 @@ impl Harness for ClaudeHarness {
         }
     }
 
+    fn auth_kinds(&self) -> Vec<&'static str> {
+        vec![infantry_harness::AUTH_SUBSCRIPTION, infantry_harness::AUTH_API_KEY]
+    }
+
     fn login_location(&self, probe: &dyn Probe) -> Option<String> {
         if probe.env(OAUTH_TOKEN_ENV).is_some() {
             return Some(format!("the {OAUTH_TOKEN_ENV} environment variable"));

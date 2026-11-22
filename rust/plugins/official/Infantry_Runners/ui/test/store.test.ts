@@ -3,7 +3,7 @@
 // RR-9: Add runner sends `runner_admin add` with the two values and the new row shows; an offline runner shows its reason.
 import { describe, expect, it } from "vitest";
 import type { Envelope } from "@infantry/ui-plugin-api";
-import { createRunnersStore, joinHarnesses, plainText, pingLine, statusOf, summarizeProviders, summaryLine } from "../src/store";
+import { createRunnersStore, joinHarnesses, keyLine, keyOnly, plainText, pingLine, statusOf, summarizeProviders, summaryLine } from "../src/store";
 
 function link(up = true) {
   const sent: Envelope[] = [];
@@ -125,5 +125,18 @@ describe("RR-VIS detail", () => {
   it("never prints a bare unknown for tools", () => {
     expect(summaryLine({ tools: ["pi"], signedIn: false, signedInUnknown: true })).toContain("Update runner");
     expect(summaryLine({ tools: [], signedIn: false, error: "no route to host" })).toBe("Tools: not readable: no route to host");
+  });
+});
+
+describe("key-only harnesses", () => {
+  it("a harness that reports only api-key shows its key variable, never a sign-in", () => {
+    const [oc, claude] = joinHarnesses(
+      { harnesses: [{ id: "opencode", state: "installed", path: "/o" }, { id: "claude", state: "installed", path: "/c" }] },
+      [{ id: "opencode", available: true, authKinds: ["api-key"], keyEnv: "DEEPSEEK_API_KEY", keySet: true }, { id: "claude", available: true, authKinds: ["subscription-login", "api-key"], loginAt: "~/.claude/.credentials.json" }],
+    );
+    expect(keyOnly(oc)).toBe(true);
+    expect(keyLine(oc)).toBe("DEEPSEEK_API_KEY (found in the runner's environment)");
+    expect(keyLine({ keyEnv: "OPENCODE_API_KEY", keySet: false })).toBe("OPENCODE_API_KEY (not set)");
+    expect(keyOnly(claude)).toBe(false);
   });
 });

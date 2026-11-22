@@ -20,6 +20,9 @@ pub trait CheckLend: Send + Sync {
     fn harnesses(&self) -> Vec<String>;
 }
 
+/// The `authKinds` a runner's `providers` row carries for a key-only harness (the wire value of `infantry_harness::AUTH_API_KEY`; this layer does not depend on harnesses).
+const KEY_ONLY_AUTH: &str = "api-key";
+
 /// Where a harness's credential comes from, for the check row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CredentialSource {
@@ -196,7 +199,8 @@ impl AdminUnit {
         };
         let stored = self.pool.runner_secret_names(name).unwrap_or_default();
         let harnesses = if harnesses.is_empty() { lend.harnesses() } else { harnesses };
-        let logins = self.pool.runner_logins(name).unwrap_or_default();
+        let prows = self.pool.runner_provider_rows(name).unwrap_or_default();
+        let logins: Vec<(String, bool, Option<String>, Option<String>)> = prows.iter().filter_map(|p| Some((p["id"].as_str()?.to_string(), p["available"].as_bool() != Some(false), p["loginAt"].as_str().map(str::to_string), p["unavailableReason"].as_str().map(str::to_string)))).collect();
         for h in harnesses {
             let has = stored.iter().any(|n| n == &format!("harness.{h}.key") || n == &format!("harness.{h}.token"));
             // The runner's own login (a subscription, not an API key) counts: the harness row above already says it is signed in.
@@ -208,6 +212,20 @@ impl AdminUnit {
                 Some(a) => format!("signed in by subscription: {a}"),
                 None => "signed in on the runner (its own login)".to_string(),
             };
+            // A key-only harness (its `providers` row says so) has no sign-in: the row names the key variable and where it is, never its value.
+            let prow = prows.iter().find(|p| p["id"].as_str() == Some(h.as_str()));
+            if prow.is_some_and(|p| p["authKinds"] == json!([KEY_ONLY_AUTH])) {
+                let var = prow.and_then(|p| p["keyEnv"].as_str()).unwrap_or("its API key variable");
+                let found = prow.is_some_and(|p| p["keySet"].as_bool() == Some(true));
+                let (ok, state) = match lend.source(name, &h, has) {
+                    CredentialSource::Lent => (true, "lent by the orchestrator with each start"),
+                    CredentialSource::StoredOnRunner => (true, "stored on the runner"),
+                    CredentialSource::None if found => (true, "found in the runner's environment"),
+                    CredentialSource::None => (signed_in, "not set"),
+                };
+                rows.push(row(&format!("credential:{h}"), ok, format!("API key: {var} ({state})"), if state == "not set" { Some("Set the key in the runner's provider section, or start the runner with it in its environment") } else { None }));
+                continue;
+            }
             let (ok, detail, fix) = match lend.source(name, &h, has) {
                 CredentialSource::Lent => (true, "the key is lent by the orchestrator with each start".to_string(), None),
                 CredentialSource::StoredOnRunner => (true, "the key is stored on the runner".to_string(), None),

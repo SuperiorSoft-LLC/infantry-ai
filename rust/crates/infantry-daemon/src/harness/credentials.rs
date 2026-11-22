@@ -492,6 +492,9 @@ impl Probe for TokenProbe {
     fn env(&self, name: &str) -> Option<String> {
         self.tokens.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone()).or_else(|| LocalProbe.env(name))
     }
+    fn env_names(&self) -> Vec<String> {
+        LocalProbe.env_names()
+    }
     fn home(&self) -> Option<std::path::PathBuf> {
         LocalProbe.home()
     }

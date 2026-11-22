@@ -91,6 +91,10 @@ pub struct ModelInfo {
 pub trait Probe {
     fn env(&self, name: &str) -> Option<String>;
     fn home(&self) -> Option<PathBuf>;
+    /// The names (never values) of the environment variables that are set; empty = this probe cannot list them.
+    fn env_names(&self) -> Vec<String> {
+        Vec::new()
+    }
     fn read_to_string(&self, path: &Path) -> Option<String>;
     fn exists(&self, path: &Path) -> bool;
     /// The entries of a directory; empty when it cannot be read (a probe without listing sees none).
@@ -110,6 +114,9 @@ pub struct LocalProbe;
 impl Probe for LocalProbe {
     fn env(&self, name: &str) -> Option<String> {
         std::env::var(name).ok().filter(|v| !v.is_empty())
+    }
+    fn env_names(&self) -> Vec<String> {
+        std::env::vars_os().filter(|(_, v)| !v.is_empty()).filter_map(|(k, _)| k.into_string().ok()).collect()
     }
     fn home(&self) -> Option<PathBuf> {
         self.env("USERPROFILE").or_else(|| self.env("HOME")).map(PathBuf::from)
@@ -471,6 +478,16 @@ pub trait Harness: Send + Sync {
     /// RR-VIS: where the login this harness checks lives on that machine (a file path or an env var name); None = it does not say.
     fn login_location(&self, _probe: &dyn Probe) -> Option<String> {
         None
+    }
+    /// The ways this CLI takes its account: [`AUTH_SUBSCRIPTION`] (its own login) and/or [`AUTH_API_KEY`]. Empty = it does not say
+    /// (shown as before). `[AUTH_API_KEY]` alone = a key-only CLI: a client shows which key it uses, never a sign-in.
+    fn auth_kinds(&self) -> Vec<&'static str> {
+        Vec::new()
+    }
+    /// The environment variables that can carry this CLI's API key on the machine [probe] looks at, the ones set there first.
+    /// Names only, never a value. Default: the variable [`Harness::credential`] declares.
+    fn key_env_vars(&self, _probe: &dyn Probe) -> Vec<String> {
+        self.credential().map(|c| c.env).filter(|e| !e.is_empty()).into_iter().collect()
     }
     /// The files this launch needs on the runner's host (staged by the driver before [`Harness::launch`]).
     fn assets(&self, _req: &LaunchRequest) -> Vec<Asset> {

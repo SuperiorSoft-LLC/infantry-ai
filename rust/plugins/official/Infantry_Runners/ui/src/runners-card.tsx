@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Info, Plug, Plus, RefreshCw, RotateCcw, ShieldCheck, Unplug, Wrench } from "lucide-react";
 import { AppDialog, Button, EmptyState, Field, Input, PanelCard, RefusalBanner, StatusDot } from "@infantry/ui";
 import { openRunnerSetup, useLinkState } from "@infantry/ui-plugin-api";
-import { plainText, pingLine, runnersStore, statusOf, summaryLine, useRunners, type CheckRow, type RunnerDetail, type RunnerSummary, type RunnerView } from "./store";
+import { keyLine, keyOnly, plainText, pingLine, runnersStore, statusOf, summaryLine, useRunners, type CheckRow, type RunnerDetail, type RunnerSummary, type RunnerView } from "./store";
 
 /** Add runner: exactly two fields, the endpoint and the pasted bearer. `endpoint` prefills a Rotate. */
 export function AddRunnerDialog({ open, endpoint, onClose }: { open: boolean; endpoint: string; onClose: () => void }) {
@@ -149,12 +149,12 @@ export function DetailDialog({ name, detail, onClose }: { name: string; detail?:
             {detail.harnesses?.map((h) => (
               <div key={h.id} className="border-t pt-1" data-testid={`harness-${h.id}`}>
                 <div className="font-medium">
-                  {h.id} — {!h.installed ? "not installed" : h.signedIn === null ? "installed, sign-in unknown" : h.signedIn ? "installed, signed in" : "installed, NOT signed in"}
+                  {h.id} — {!h.installed ? "not installed" : keyOnly(h) ? `installed, API key ${h.keySet ? "found" : "not set"}` : h.signedIn === null ? "installed, sign-in unknown" : h.signedIn ? "installed, signed in" : "installed, NOT signed in"}
                 </div>
                 {h.installed && <Line k="Version" v={h.version ?? "not reported"} />}
                 {h.installed && <Line k="Path" v={h.path} />}
-                {h.installed && <Line k="Login at" v={place(h.loginAt)} />}
-                {h.why && (
+                {h.installed && (keyOnly(h) ? <Line k="API key" v={keyLine(h)} /> : <Line k="Login at" v={place(h.loginAt)} />)}
+                {h.why && !keyOnly(h) && (
                   <p className="text-warn">
                     {h.why}. Sign in: Set up this runner → Sign in.
                   </p>

@@ -250,6 +250,18 @@ fn str_list(v: Option<&Value>) -> Option<Vec<String>> {
     v?.as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
 }
 
+/// The API-key variables (names only) that the models.dev catalogue lists for a provider and that are set on that machine, sorted.
+pub fn set_key_envs(probe: &dyn Probe, loc: &Locations) -> Vec<String> {
+    let built_in = probe.read_to_string(&loc.models_file).and_then(|t| parse_jsonc(&t)).and_then(|v| v.as_object().cloned()).unwrap_or_default();
+    let mut out: BTreeSet<String> = BTreeSet::new();
+    for p in built_in.values() {
+        out.extend(str_list(p.get("env")).unwrap_or_default().into_iter().filter(|e| probe.env(e).is_some()));
+    }
+    // The catalogue may not be cached yet (a fresh machine): any set `*_API_KEY` variable is a key the CLI can be given.
+    out.extend(probe.env_names().into_iter().filter(|n| n.ends_with("_API_KEY") && probe.env(n).is_some()));
+    out.into_iter().collect()
+}
+
 /// The models the user's opencode setup offers: a provider counts when it is not disabled and is signed in
 /// (`auth.json`), has its API-key variable set, or is defined in the config; its models are the models.dev cache entry
 /// (minus deprecated) plus the config's own, honouring whitelist / blacklist. Sorted by provider, then model.

@@ -162,6 +162,22 @@ impl Harness for OpenCodeHarness {
         })
     }
 
+    /// opencode has no sign-in: every provider it talks to is reached with an API key.
+    fn auth_kinds(&self) -> Vec<&'static str> {
+        vec![infantry_harness::AUTH_API_KEY]
+    }
+
+    /// The key variables of the providers in its catalogue that are set on that machine, then its own `OPENCODE_API_KEY`.
+    fn key_env_vars(&self, probe: &dyn Probe) -> Vec<String> {
+        let mut out = config::Locations::from_probe(probe).map(|l| config::set_key_envs(probe, &l)).unwrap_or_default();
+        if let Some(own) = self.credential().map(|c| c.env) {
+            if !out.contains(&own) {
+                out.push(own);
+            }
+        }
+        out
+    }
+
     fn sign_in_problem(&self, probe: &dyn Probe) -> Option<String> {
         (!shim::installed(probe, &self.program)).then(|| format!("{} is not installed (not on PATH)", self.program))
     }
