@@ -199,3 +199,22 @@ export function createAttentionStore(link: AttentionLink): AttentionStore {
     };
   });
 }
+
+// ---- held notices (WAKE-1: a notice that did not wake a session lands here as kind `notice`) ------------------------------
+
+/** The notice kind of a held item (`inbox:<kind>`). */
+export const heldKind = (i: Pick<AttentionItem, "outcome">): string => i.outcome.replace(/^inbox:/, "");
+
+export interface HeldFilter {
+  kind?: string | null;
+  session?: string | null;
+  /** Include the ones already marked read. */
+  read?: boolean;
+}
+
+/** The held notices (newest first), narrowed by kind and session; the read ones only when asked for. */
+export function heldNotices(items: Record<string, AttentionItem>, f: HeldFilter = {}): AttentionItem[] {
+  return Object.values(items)
+    .filter((i) => i.kind === "notice" && (f.read || i.ackedAt == null) && (!f.kind || heldKind(i) === f.kind) && (!f.session || i.sessionId === f.session))
+    .sort((a, b) => b.at - a.at);
+}

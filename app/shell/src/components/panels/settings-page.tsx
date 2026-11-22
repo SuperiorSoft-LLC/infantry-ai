@@ -15,7 +15,7 @@ import { Segmented } from "@/components/knowledge/parts";
 import { useRoles, useRolesLoaded } from "@/components/knowledge/use-knowledge";
 import { DeclaredSettings, SettingsSearch, useDeclaredTabs } from "@/components/settings/declared-settings";
 import { useSettings } from "@/components/settings/use-settings";
-import { Served } from "./parts";
+import { Picker, Served } from "./parts";
 import { scopedStore, useQuery } from "./use-panels";
 
 type Scope = "app" | "project" | "role" | "session";
@@ -25,23 +25,6 @@ const SCOPES: { id: Scope; label: string }[] = [
   { id: "role", label: "Role" },
   { id: "session", label: "Session" },
 ];
-
-function Picker({ label, value, options, onChange }: { label: string; value: string | null; options: { id: string; name: string }[]; onChange: (v: string) => void }) {
-  return (
-    <Select value={value ?? undefined} onValueChange={onChange}>
-      <SelectTrigger aria-label={label} className="h-8 w-48 text-xs">
-        <SelectValue placeholder={options.length ? label : `No ${label.toLowerCase()}`} />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((o) => (
-          <SelectItem key={o.id} value={o.id}>
-            {o.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
 
 const show = (v: unknown): string => (v === null || v === undefined ? "—" : typeof v === "string" ? v : JSON.stringify(v));
 

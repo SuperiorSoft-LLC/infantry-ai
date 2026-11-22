@@ -19,6 +19,24 @@ export function RefreshButton<T>({ store, body }: { store: QueryStore<T>; body?:
   );
 }
 
+/** A labelled dropdown over [options] (a project, a role, a session). */
+export function Picker({ label, value, options, onChange }: { label: string; value: string | null; options: { id: string; name: string }[]; onChange: (v: string) => void }) {
+  return (
+    <Select value={value ?? undefined} onValueChange={onChange}>
+      <SelectTrigger aria-label={label} className="h-8 w-48 text-xs">
+        <SelectValue placeholder={options.length ? label : `No ${label.toLowerCase()}`} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((o) => (
+          <SelectItem key={o.id} value={o.id}>
+            {o.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 /** The projects the daemon knows, as a picker; the first one is the default. */
 export function ProjectPicker({ value, onChange }: { value: string | null; onChange: (id: string) => void }) {
   const projects = useDaemon((s) => s.projects);

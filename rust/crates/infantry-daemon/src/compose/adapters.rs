@@ -88,6 +88,7 @@ pub struct DaemonBoardEnv {
     lead_notice: std::sync::OnceLock<(Arc<infantry_mail::mail::router::MailRouter>, Arc<infantry_mail::notify::attention::AttentionStore>)>,
     /// WAKE-1: remembers which (session, kind, key) already woke.
     wake_gate: Arc<infantry_mail::notify::wake::WakeGate>,
+    notice_kinds: Arc<infantry_mail::notify::wake::KindRegistry>,
 }
 
 /// `board.restartResumeSeconds`: how long a resumed session must live before a restart counts as working.
@@ -122,12 +123,22 @@ impl DaemonBoardEnv {
             hooks: std::sync::OnceLock::new(),
             lead_notice: std::sync::OnceLock::new(),
             wake_gate: Arc::new(infantry_mail::notify::wake::WakeGate::new(2000)),
+            notice_kinds: {
+                let r = Arc::new(infantry_mail::notify::wake::KindRegistry::default());
+                super::notify_kinds::declare_builtin(&r);
+                r
+            },
         }
     }
 
     /// The one gate every wake source shares (comments, mails, build notices), so one event wakes a session once.
     pub fn wake_gate(&self) -> Arc<infantry_mail::notify::wake::WakeGate> {
         self.wake_gate.clone()
+    }
+
+    /// The kinds the senders declared (the Notifications card lists them).
+    pub fn notice_kinds(&self) -> Arc<infantry_mail::notify::wake::KindRegistry> {
+        self.notice_kinds.clone()
     }
 
     pub fn set_lead_notice(&self, mail: Arc<infantry_mail::mail::router::MailRouter>, attention: Arc<infantry_mail::notify::attention::AttentionStore>) {
