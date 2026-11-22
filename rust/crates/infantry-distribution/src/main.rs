@@ -153,7 +153,9 @@ fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, stat
     let pool = infantry_runner_pool::RunnerPool::open(state_dir);
     let frames = [infantry_runner_pool::ADMIN_FRAME.to_string()];
     composed.late.add("runner-pool", &frames, Arc::new(infantry_runner_pool::AdminUnit { pool: pool.clone() }));
-    println!("[infantry] runner pool registered (runner_admin)");
+    // RR-4: the paired runners join the registry a session is placed through (`local` is already there).
+    composed.daemon.runner_registry().add_source(pool.clone());
+    println!("[infantry] runner pool registered (runner_admin, placement)");
     // The heartbeat interval is the setting `limits.runners.heartbeatSec`, read every round (unset or bad = the default).
     let c = composed.clone();
     let c2 = composed.clone();

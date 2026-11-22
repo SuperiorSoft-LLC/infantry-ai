@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
+use infantry_runner_api::Runner;
 use infantry_runner_link::wire::{self, HelloAnswer};
+use infantry_runner_link::RemoteRunner;
+use infantry_runner_source::{Availability, RunnerEntry, RunnerInfo, RunnerScope, RunnerSource};
 use infantry_runner_link::{CallError, LinkClient, LinkStore, PairedRunner, Ping};
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -55,12 +58,14 @@ pub struct RunnerPool {
     pub call_timeout: Duration,
     /// Reads `runners.allowPlainTailnet` live (the root sets it); unset = false.
     allow_plain: OnceLock<Arc<dyn Fn() -> bool + Send + Sync>>,
+    /// Free session slots each runner reported at its last health answer (unlimited is not stored).
+    slots: Mutex<BTreeMap<String, i32>>,
 }
 
 impl RunnerPool {
     /// The pool of `<state_dir>/runner-link`.
     pub fn open(state_dir: &Path) -> Arc<RunnerPool> {
-        Arc::new(RunnerPool { store: store_for(state_dir), states: Mutex::new(BTreeMap::new()), call_timeout: CALL_TIMEOUT, allow_plain: OnceLock::new() })
+        Arc::new(RunnerPool { store: store_for(state_dir), states: Mutex::new(BTreeMap::new()), call_timeout: CALL_TIMEOUT, allow_plain: OnceLock::new(), slots: Mutex::new(BTreeMap::new()) })
     }
 
     /// Wires the live reader of `runners.allowPlainTailnet`.
@@ -133,6 +138,13 @@ impl RunnerPool {
             }
             Err(e) => (RunnerState::Offline { reason: e.to_string() }, None),
         };
+        {
+            let mut slots = self.slots.lock().unwrap_or_else(|e| e.into_inner());
+            match ping.as_ref().map(|p| p.health.free_slots) {
+                Some(n) if n >= 0 => slots.insert(name.to_string(), n),
+                _ => slots.remove(name),
+            };
+        }
         self.set_state(name, state.clone());
         Some((state, ping))
     }
@@ -177,5 +189,58 @@ impl RunnerPool {
                 None => return,
             }
         });
+    }
+}
+
+/// A paired runner's frames over its link (runner-scope units on the runner: RR-13 serves them).
+struct LinkScope {
+    name: String,
+    client: Arc<LinkClient>,
+}
+
+impl RunnerScope for LinkScope {
+    fn request(&self, frame: &str, data: &str) -> Result<String, String> {
+        let a = self.client.call(frame, data).map_err(|e| format!("runner '{}': {e}", self.name))?;
+        if a.ok() {
+            Ok(a.data)
+        } else {
+            Err(format!("runner '{}' refused {frame}: {}", self.name, a.data))
+        }
+    }
+}
+
+/// The pool is the remote half of the runner registry: each paired runner is a [`RunnerEntry`] (a [`RemoteRunner`] plus its
+/// link scope), so the daemon above cannot tell it from `local`.
+impl RunnerSource for RunnerPool {
+    fn list(&self) -> Vec<RunnerInfo> {
+        let slots = self.slots.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        self.runners()
+            .into_iter()
+            .map(|r| {
+                let availability = match self.state(&r.name) {
+                    RunnerState::Unknown => Availability::Unknown,
+                    RunnerState::Online { .. } => Availability::Online,
+                    RunnerState::Offline { reason } => Availability::Offline(reason),
+                    RunnerState::Outdated { reason, .. } => Availability::Outdated(reason),
+                };
+                RunnerInfo { free_slots: slots.get(&r.name).copied(), name: r.name, kind: "remote".into(), availability }
+            })
+            .collect()
+    }
+
+    fn entry(&self, name: &str) -> Option<RunnerEntry> {
+        let r = self.store.runner(name)?;
+        let client = Arc::new(self.client(&r));
+        let runner: Arc<dyn Runner> = Arc::new(RemoteRunner::new(r.name.clone(), self.client(&r)));
+        Some(RunnerEntry { name: r.name.clone(), kind: "remote".into(), runner, scope: Arc::new(LinkScope { name: r.name, client }) })
+    }
+
+    fn refresh(&self, name: &str) -> Availability {
+        match self.check(name).map(|(s, _)| s) {
+            Some(RunnerState::Online { .. }) => Availability::Online,
+            Some(RunnerState::Offline { reason }) => Availability::Offline(reason),
+            Some(RunnerState::Outdated { reason, .. }) => Availability::Outdated(reason),
+            _ => Availability::Unknown,
+        }
     }
 }

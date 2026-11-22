@@ -22,7 +22,7 @@ pub const MPL: &str = "MPL-2.0";
 pub const APACHE: &str = "Apache-2.0";
 
 /// The Apache crates an MPL crate may depend on: the contracts that plugins, harnesses and orchestrators build against.
-pub const API_CRATES: &[&str] = &["infantry-plugin-wit", "infantry-plugin-sdk", "infantry-harness", "infantry-orchestrator-api", "infantry-runner-api"];
+pub const API_CRATES: &[&str] = &["infantry-plugin-wit", "infantry-plugin-sdk", "infantry-harness", "infantry-orchestrator-api", "infantry-runner-api", "infantry-runner-source"];
 
 /// Tolerated crossings, `(from, to, the move that removes it)`. The LIC-N moves are in DECOUPLE-PLAN.md section 7a.
 /// Shrinks to zero.

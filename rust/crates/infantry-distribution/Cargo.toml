@@ -19,6 +19,7 @@ infantry-harness-codex = { path = "../infantry-harness-codex" }
 infantry-harness-opencode = { path = "../infantry-harness-opencode" }
 infantry-harness-pi = { path = "../infantry-harness-pi" }
 infantry-runner-pool = { path = "../infantry-runner-pool" }
+infantry-runner-source = { path = "../infantry-runner-source" }
 infantry-runner-link = { path = "../infantry-runner-link" }
 infantry-runner-local = { path = "../infantry-runner-local" }
 infantry-protocol = { path = "../infantry-protocol" }

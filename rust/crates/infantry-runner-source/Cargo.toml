@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-runner-source"
+version.workspace = true
+edition = "2021"
+license = "Apache-2.0"
+description = "The generic runner seam (RR-4, L2 runner): a registry of named runners, each a Runner (processes) plus a runner-scope frame channel; local is built in, paired runners register through RunnerSource"
+publish = false
+
+[dependencies]
+infantry-runner-api = { path = "../infantry-runner-api" }
+tokio = { version = "1", features = ["rt"] }

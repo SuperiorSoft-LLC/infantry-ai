@@ -13,6 +13,7 @@ infantry-core = { path = "../infantry-core" }
 infantry-protocol = { path = "../infantry-protocol" }
 infantry-runner-link = { path = "../infantry-runner-link" }
 infantry-runner-api = { path = "../infantry-runner-api" }
+infantry-runner-source = { path = "../infantry-runner-source" }
 serde_json = { version = "1", features = ["preserve_order"] }
 
 [dev-dependencies]

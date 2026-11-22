@@ -18,6 +18,7 @@ infantry-protocol = { path = "../infantry-protocol" }
 infantry-harness = { path = "../infantry-harness" }
 infantry-runner = { path = "../infantry-runner" }
 infantry-runner-local = { path = "../infantry-runner-local" }
+infantry-runner-source = { path = "../infantry-runner-source" }
 infantry-core = { path = "../infantry-core" }
 infantry-board = { path = "../infantry-board" }
 infantry-orchestrator-api = { path = "../infantry-orchestrator-api" }
@@ -53,3 +54,5 @@ tungstenite = { version = "0.24", default-features = false, features = ["handsha
 infantry-harness-claude = { path = "../infantry-harness-claude" }
 infantry-harness-pi = { path = "../infantry-harness-pi" }
 infantry-harness-opencode = { path = "../infantry-harness-opencode" }
+infantry-runner-pool = { path = "../infantry-runner-pool" }
+infantry-runner-link = { path = "../infantry-runner-link" }

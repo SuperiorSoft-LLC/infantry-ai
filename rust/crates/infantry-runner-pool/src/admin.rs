@@ -49,7 +49,7 @@ impl AdminUnit {
     }
 
     fn list(&self) -> Value {
-        let runners: Vec<Value> = self
+        let mut runners: Vec<Value> = self
             .pool
             .runners()
             .into_iter()
@@ -71,6 +71,7 @@ impl AdminUnit {
                 v
             })
             .collect();
+        runners.insert(0, json!({"name": "local", "kind": "embedded", "state": "online", "url": "", "contract": infantry_runner_link::wire::CONTRACT}));
         json!({"ok": true, "runners": runners})
     }
 

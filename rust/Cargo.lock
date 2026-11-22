@@ -1240,7 +1240,10 @@ dependencies = [
  "infantry-projects",
  "infantry-protocol",
  "infantry-runner",
+ "infantry-runner-link",
  "infantry-runner-local",
+ "infantry-runner-pool",
+ "infantry-runner-source",
  "infantry-scripting",
  "infantry-usage",
  "infantry-vault",
@@ -1272,6 +1275,7 @@ dependencies = [
  "infantry-runner-link",
  "infantry-runner-local",
  "infantry-runner-pool",
+ "infantry-runner-source",
  "serde_json",
  "tokio",
 ]
@@ -1602,9 +1606,18 @@ dependencies = [
  "infantry-runner-api",
  "infantry-runner-link",
  "infantry-runner-local",
+ "infantry-runner-source",
  "serde_json",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "infantry-runner-source"
+version = "0.4.7"
+dependencies = [
+ "infantry-runner-api",
+ "tokio",
 ]
 
 [[package]]
