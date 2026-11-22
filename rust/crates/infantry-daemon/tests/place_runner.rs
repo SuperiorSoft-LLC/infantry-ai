@@ -176,3 +176,10 @@ fn an_offline_or_unknown_runner_is_refused_and_nothing_starts_locally() {
     assert!(e.contains("'box'") && e.contains("offline") && e.contains("nothing ran locally"), "{e}");
     assert_eq!(r.daemon.session_count(), 0, "no session was listed");
 }
+
+#[test]
+fn a_new_frame_carries_the_runner() {
+    // E2E found it: `runner` was skipped when a `new` frame was read, so a pinned session silently ran locally.
+    let o: NewOpts = serde_json::from_str(r#"{"provider":"fakecli","runner":"box"}"#).unwrap();
+    assert_eq!(o.runner.as_deref(), Some("box"));
+}

@@ -143,7 +143,7 @@ pub struct NewOpts {
     pub agent_id: Option<String>,
     #[serde(skip)]
     pub context_limit: Option<i32>,
-    #[serde(skip)]
+    /// RR-4: where the session runs: a runner name, `local` or `any`. A start that names a runner never falls back to local.
     pub runner: Option<String>,
     #[serde(skip)]
     pub unattended: bool,
