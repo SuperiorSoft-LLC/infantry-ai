@@ -421,7 +421,17 @@ impl WorkspaceProvider for DaemonWorkspaces {
     }
     fn release(&self, req: &WorkspaceRelease) -> Result<Option<String>, String> {
         match self.repo_of(req.project_id.as_deref()) {
-            Some(repo) => super::worktree_sweep::release_ticket_worktree(&self.projects, &repo, req),
+            Some(repo) => {
+                let removed = super::worktree_sweep::release_ticket_worktree(&self.projects, &repo, req);
+                // A test daemon the worker left running from this worktree stops with it: by pid, from its record.
+                if !req.dry_run {
+                    if let Ok(Some(path)) = &removed {
+                        let owners = crate::health::owner_ports(crate::auth::env);
+                        crate::health::stop_daemons_under(&crate::health::daemon_registry_dir(), std::path::Path::new(path), std::process::id(), &owners);
+                    }
+                }
+                removed
+            }
             None => Ok(None),
         }
     }

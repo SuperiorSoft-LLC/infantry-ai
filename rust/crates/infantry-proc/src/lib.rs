@@ -36,6 +36,30 @@ pub fn command<S: AsRef<OsStr>>(program: S) -> Command {
     c
 }
 
+/// A child that is killed (by its own handle, never by image name) and reaped when this guard drops: a test helper that
+/// starts a daemon holds one so the daemon cannot outlive its test, even when the test panics.
+pub struct KillOnDrop(pub std::process::Child);
+
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// Stops the process tree of `pid` by pid (Windows `taskkill /PID n /T /F`, else `kill -9`). Never by image name.
+pub fn kill_pid(pid: u32) -> bool {
+    #[cfg(windows)]
+    let mut c = command("taskkill");
+    #[cfg(windows)]
+    c.args(["/PID", &pid.to_string(), "/T", "/F"]);
+    #[cfg(not(windows))]
+    let mut c = command("kill");
+    #[cfg(not(windows))]
+    c.args(["-9", &pid.to_string()]);
+    c.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().map(|s| s.success()).unwrap_or(false)
+}
+
 /// Creation flags for a spawn that also needs extra flags (a priority class, a new process group): OR them with the no-window bit.
 pub const fn with_no_window(extra: u32) -> u32 {
     extra | CREATE_NO_WINDOW
@@ -44,6 +68,16 @@ pub const fn with_no_window(extra: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn kill_on_drop_ends_the_child() {
+        #[cfg(windows)]
+        let c = command("ping").args(["-n", "60", "127.0.0.1"]).stdout(std::process::Stdio::null()).spawn().unwrap();
+        #[cfg(not(windows))]
+        let c = command("sleep").arg("60").spawn().unwrap();
+        let g = KillOnDrop(c);
+        drop(g);
+    }
 
     #[test]
     fn flag_value_is_create_no_window() {

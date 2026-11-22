@@ -418,7 +418,7 @@ pub fn daemon_registry_dir() -> PathBuf {
 pub fn register_daemon(dir: &Path, state_dir: &Path, port: u16) {
     let _ = std::fs::create_dir_all(dir);
     let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
-    let v = serde_json::json!({"pid": std::process::id(), "port": port, "exe": exe, "stateDir": state_dir.to_string_lossy(), "startedAt": now_ms()});
+    let v = serde_json::json!({"pid": std::process::id(), "port": port, "exe": exe, "cwd": std::env::current_dir().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(), "stateDir": state_dir.to_string_lossy(), "startedAt": now_ms()});
     let _ = std::fs::write(dir.join(format!("{}.json", std::process::id())), v.to_string());
 }
 
@@ -440,6 +440,27 @@ pub fn other_daemons(dir: &Path, me: u32) -> Vec<Value> {
     }
     out.sort_by_key(|v| v["port"].as_i64().unwrap_or(0));
     out
+}
+
+/// Stops every other daemon recorded in `dir` whose state dir or working dir lies under `root` (a released ticket
+/// worktree), by pid from its record; never this process and never an owner port. Returns the pids stopped.
+pub fn stop_daemons_under(dir: &Path, root: &Path, me: u32, owner_ports: &[u16]) -> Vec<u32> {
+    let norm = |p: &str| p.replace('\\', "/").trim_end_matches('/').to_lowercase();
+    let r = norm(&root.to_string_lossy());
+    let under = |p: &str| !p.is_empty() && { let n = norm(p); n == r || n.starts_with(&format!("{r}/")) };
+    let mut stopped = Vec::new();
+    for v in other_daemons(dir, me) {
+        let port = v["port"].as_u64().unwrap_or(0) as u16;
+        let pid = v["pid"].as_u64().unwrap_or(0) as u32;
+        if pid == 0 || owner_ports.contains(&port) || !(under(v["stateDir"].as_str().unwrap_or("")) || under(v["cwd"].as_str().unwrap_or(""))) {
+            continue;
+        }
+        if infantry_proc::kill_pid(pid) {
+            let _ = std::fs::remove_file(dir.join(format!("{pid}.json")));
+            stopped.push(pid);
+        }
+    }
+    stopped
 }
 
 /// What the report needs from the composed daemon, as functions (core names no plugin).
@@ -770,6 +791,25 @@ impl FrameUnit for HealthUnit {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn stop_daemons_under_kills_only_a_daemon_of_that_worktree_by_pid() {
+        let dir = std::env::temp_dir().join(format!("infantry-reg2-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        #[cfg(windows)]
+        let child = infantry_proc::command("ping").args(["-n", "60", "127.0.0.1"]).stdout(std::process::Stdio::null()).spawn().unwrap();
+        #[cfg(not(windows))]
+        let child = infantry_proc::command("sleep").arg("60").spawn().unwrap();
+        let pid = child.id();
+        let mut guard = infantry_proc::KillOnDrop(child);
+        std::fs::write(dir.join("a.json"), format!(r#"{{"pid":{pid},"port":18950,"cwd":"","stateDir":"C:/wt/t1/state"}}"#)).unwrap();
+        // another worktree and an owner port are left alone
+        assert!(stop_daemons_under(&dir, Path::new(r"C:/wt/t2"), 1, &[8787]).is_empty());
+        assert!(stop_daemons_under(&dir, Path::new(r"C:/wt/t1"), 1, &[18950]).is_empty());
+        assert_eq!(stop_daemons_under(&dir, Path::new(r"C:/wt/t1"), 1, &[8787]), vec![pid]);
+        assert!(guard.0.wait().is_ok());
+    }
+
     #[test]
     fn other_daemons_lists_live_records_skips_me_and_prunes_dead_ones() {
         let dir = std::env::temp_dir().join(format!("infantry-reg-{}", std::process::id()));
