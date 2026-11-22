@@ -20,11 +20,13 @@
 
 pub mod hooks;
 pub mod http;
+pub mod lend;
 #[cfg(feature = "test-support")]
 pub mod suite;
 
 pub use hooks::{HookCall, HookEndpoint};
 pub use http::{HttpEvent, HttpRequest};
+pub use lend::{LendingRunner, LentCredentials, LentVar, Masker};
 
 use serde::{Deserialize, Serialize};
 use std::future::Future;
@@ -89,6 +91,10 @@ pub struct ProcessSpec {
     pub pty: Option<Size>,
     #[serde(default)]
     pub priority: Priority,
+    /// RR-6: credentials lent to this process (never printed by `Debug`, never in argv). A remote runner carries them on the
+    /// link's start; the runner puts them in the process env and masks them in its output.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lent: Option<LentCredentials>,
 }
 
 impl ProcessSpec {

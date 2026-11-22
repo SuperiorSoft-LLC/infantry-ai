@@ -152,7 +152,7 @@ fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, stat
     }
     let pool = infantry_runner_pool::RunnerPool::open(state_dir);
     let frames = [infantry_runner_pool::ADMIN_FRAME.to_string()];
-    composed.late.add("runner-pool", &frames, Arc::new(infantry_runner_pool::AdminUnit { pool: pool.clone() }));
+    composed.late.add("runner-pool", &frames, Arc::new(infantry_runner_pool::AdminUnit { pool: pool.clone(), lend: composed.daemon.lender().map(|l| Arc::new(CheckLendOver(l)) as Arc<dyn infantry_runner_pool::CheckLend>) }));
     // RR-4: the paired runners join the registry a session is placed through (`local` is already there).
     composed.daemon.runner_registry().add_source(pool.clone());
     // RR-13: `runner_frame {runner, frame, data}`; `local` answers in-process through this daemon's own frames.
@@ -237,7 +237,14 @@ fn serve_runner_link(composed: &Arc<infantry_daemon::compose::Composed>, state_d
         app_version: env!("CARGO_PKG_VERSION").into(),
         allow_plain: plain_allowed(&|k: &str| setting(k)),
     };
-    let backend = infantry_runner_link::process::ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default()));
+    // RR-6: this runner's owner decides what it takes of the credentials an orchestrator lends: `runner.acceptCredentials`
+    // (default true) and, per harness, keeping its own sign-in (`harness.<id>.authMode=subscription-login`). Read per start.
+    let (c_accept, c_login) = (composed.clone(), composed.clone());
+    let lend = infantry_runner_link::process::LendPolicy {
+        accept: Arc::new(move || read_setting(&c_accept, "runner.acceptCredentials").map_or(true, |v| v.as_bool().unwrap_or_else(|| !v.as_str().is_some_and(|s| s.trim().eq_ignore_ascii_case("false"))))),
+        keeps_own_login: Arc::new(move |harness| read_setting(&c_login, &format!("harness.{harness}.authMode")).and_then(|v| v.as_str().map(str::to_string)).is_some_and(|m| m == infantry_harness::AUTH_SUBSCRIPTION)),
+    };
+    let backend = infantry_runner_link::process::ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default())).with_lend_policy(lend);
     // RR-13: this runner answers its own harness/provider/key frames over the link, only the ones the plugin offers.
     let backend = infantry_runner_pool::FrameBackend::new(Box::new(backend), Arc::new(owner_ask(composed)));
     match infantry_runner_pool::RunnerServe::start(state_dir, Box::new(backend), opts) {
@@ -246,5 +253,25 @@ fn serve_runner_link(composed: &Arc<infantry_daemon::compose::Composed>, state_d
             composed.late.add("runner-pool", &frames, Arc::new(infantry_runner_pool::RunnerSideAdmin { serve }));
         }
         Err(e) => fail(e),
+    }
+}
+
+/// RR-6: the daemon's lending policy as the runner check sees it.
+struct CheckLendOver(Arc<infantry_daemon::lender::Lender>);
+
+impl infantry_runner_pool::CheckLend for CheckLendOver {
+    fn git_credentials(&self, runner: &str, project: Option<&str>) -> Option<serde_json::Value> {
+        self.0.git_credentials(runner, project).and_then(|l| serde_json::to_value(l).ok())
+    }
+
+    fn source(&self, runner: &str, harness: &str, runner_has_key: bool) -> infantry_runner_pool::CredentialSource {
+        use infantry_runner_pool::CredentialSource::*;
+        if self.0.lends_key(runner, harness) {
+            Lent
+        } else if runner_has_key {
+            StoredOnRunner
+        } else {
+            None
+        }
     }
 }

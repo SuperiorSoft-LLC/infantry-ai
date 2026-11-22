@@ -14,7 +14,7 @@ use crate::server::{Backend, RunnerInfo};
 use crate::wire::{self, *};
 use base64::Engine;
 use infantry_protocol::Envelope;
-use infantry_runner_api::{HookCall, HttpEvent, HttpRequest, KillScope, ProcEvent, ProcId, Runner, Size, TailFrom, TailSpec};
+use infantry_runner_api::{HookCall, HttpEvent, HttpRequest, KillScope, LentCredentials, Masker, ProcEvent, ProcId, Runner, Size, TailFrom, TailSpec};
 use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -42,7 +42,25 @@ struct Tunnel {
     addr: std::net::SocketAddr,
 }
 
+/// RR-6 the runner owner's policy for credentials an orchestrator lends with a start. Both are read per start, so a
+/// setting change takes effect live.
+#[derive(Clone)]
+pub struct LendPolicy {
+    /// `runner.acceptCredentials` (default true): false drops every lent credential.
+    pub accept: Arc<dyn Fn() -> bool + Send + Sync>,
+    /// True when this runner's owner set `harness.<id>.authMode=subscription-login`: the runner keeps its own sign-in over
+    /// a lent key of that harness.
+    pub keeps_own_login: Arc<dyn Fn(&str) -> bool + Send + Sync>,
+}
+
+impl Default for LendPolicy {
+    fn default() -> Self {
+        LendPolicy { accept: Arc::new(|| true), keeps_own_login: Arc::new(|_| false) }
+    }
+}
+
 pub struct ProcessBackend {
+    lend: LendPolicy,
     tunnels: Mutex<HashMap<String, Tunnel>>,
     runner: Arc<dyn Runner>,
     /// Open hook streams (and tail streams): the task that owns the endpoint (or the tail) and the calls it waits on.
@@ -66,7 +84,13 @@ fn is_link_stream(id: &str) -> bool {
 impl ProcessBackend {
     pub fn new(runner: Arc<dyn Runner>) -> Self {
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().thread_name("runner-link-proc").build().expect("runtime");
-        ProcessBackend { tunnels: Mutex::new(HashMap::new()), runner, streams: Mutex::new(HashMap::new()), rt, shared: Arc::new((Mutex::new(Shared::default()), Condvar::new())) }
+        ProcessBackend { lend: LendPolicy::default(), tunnels: Mutex::new(HashMap::new()), runner, streams: Mutex::new(HashMap::new()), rt, shared: Arc::new((Mutex::new(Shared::default()), Condvar::new())) }
+    }
+
+    /// Sets the runner owner's policy for lent credentials.
+    pub fn with_lend_policy(mut self, p: LendPolicy) -> Self {
+        self.lend = p;
+        self
     }
 
     fn push(shared: &(Mutex<Shared>, Condvar), sid: &str, t: &str, data: String) {
@@ -97,9 +121,19 @@ impl Backend for ProcessBackend {
     }
 
     fn start(&self, r: &StartRequest) -> StartAnswer {
-        let Some(spec) = r.process.clone() else {
+        let Some(mut spec) = r.process.clone() else {
             return StartAnswer { refusal: Some("this runner runs processes only (a start with `process`); harness sessions are not offered here yet".into()), ..Default::default() };
         };
+        // RR-6: lent credentials go into this process's env, in memory only, when the runner's owner accepts them. They are
+        // never logged: the request's Debug names none, and the output below is masked.
+        let mut secrets: Vec<String> = Vec::new();
+        spec.lent = None;
+        if let Some(lent) = r.credentials.clone().and_then(|v| serde_json::from_value::<LentCredentials>(v).ok()).filter(|l| !l.is_empty()) {
+            if (self.lend.accept)() {
+                lent.apply(&mut spec, &*self.lend.keeps_own_login);
+                secrets = lent.secrets();
+            }
+        }
         let runner = self.runner.clone();
         let handle = match self.rt.block_on(runner.spawn(spec)) {
             Ok(h) => h,
@@ -115,11 +149,17 @@ impl Backend for ProcessBackend {
         let shared = self.shared.clone();
         let id = sid.clone();
         self.rt.spawn(async move {
+            let (mut out_mask, mut err_mask) = (Masker::new(secrets.clone()), Masker::new(secrets));
             while let Some(ev) = rx.recv().await {
                 match ev {
-                    ProcEvent::Output(b) => Self::push(&shared, &id, wire::PROC_OUTPUT, B64.encode(b)),
-                    ProcEvent::Stderr(b) => Self::push(&shared, &id, wire::PROC_STDERR, B64.encode(b)),
+                    ProcEvent::Output(b) => Self::push(&shared, &id, wire::PROC_OUTPUT, B64.encode(out_mask.feed(&b))),
+                    ProcEvent::Stderr(b) => Self::push(&shared, &id, wire::PROC_STDERR, B64.encode(err_mask.feed(&b))),
                     ProcEvent::Exited(code) => {
+                        for (held, err) in [(out_mask.finish(), false), (err_mask.finish(), true)] {
+                            if !held.is_empty() {
+                                Self::push(&shared, &id, if err { wire::PROC_STDERR } else { wire::PROC_OUTPUT }, B64.encode(held));
+                            }
+                        }
                         Self::push(&shared, &id, wire::PROC_EXIT, code.to_string());
                         let mut s = shared.0.lock().unwrap();
                         if let Some(x) = s.sessions.get_mut(&id) {
@@ -386,6 +426,64 @@ impl Backend for ProcessBackend {
         });
         self.streams.lock().unwrap().insert(sid.clone(), (task, Arc::new(Mutex::new(HashMap::new()))));
         HttpOpenAnswer { stream_id: Some(sid), ..Default::default() }
+    }
+
+    /// RR-6: the `credentials` row (does this runner take what an orchestrator lends) and the `git` row: `git ls-remote` of
+    /// the project's remote ON this runner, with the git credential a start would lend, so a pass proves a worker's access.
+    fn check(&self, r: &CheckRequest) -> Vec<CheckRow> {
+        let lent = r.credentials.clone().and_then(|v| serde_json::from_value::<LentCredentials>(v).ok()).filter(|l| !l.is_empty());
+        let accepted = (self.lend.accept)();
+        let mut rows = Vec::new();
+        if lent.is_some() {
+            rows.push(if accepted {
+                CheckRow { id: "credentials".into(), ok: true, detail: "this runner takes the credentials an orchestrator lends".into(), fix: None }
+            } else {
+                CheckRow { id: "credentials".into(), ok: false, detail: "this runner drops lent credentials (runner.acceptCredentials is false)".into(), fix: Some("set runner.acceptCredentials to true on the runner, or store the keys on the runner and set runners.credentials to runner".into()) }
+            });
+        }
+        if let Some(remote) = r.git_remote.as_deref().map(str::trim).filter(|g| !g.is_empty()) {
+            let mut spec = infantry_runner_api::ProcessSpec::new("git", ["ls-remote", "--exit-code", remote, "HEAD"]);
+            spec.env.push(("GIT_TERMINAL_PROMPT".into(), "0".into()));
+            let mut secrets = Vec::new();
+            if let (Some(l), true) = (&lent, accepted) {
+                l.apply(&mut spec, &*self.lend.keeps_own_login);
+                secrets = l.secrets();
+            }
+            let credential = if secrets.is_empty() { "no credential" } else { "the lent git credential" };
+            let res = self.rt.block_on(async {
+                let h = self.runner.spawn(spec).await.map_err(|e| e.to_string())?;
+                let mut rx = self.runner.events(&h.id).await.map_err(|e| e.to_string())?;
+                let (mut out, mut code) = (Vec::new(), None);
+                let _ = tokio::time::timeout(Duration::from_secs(30), async {
+                    while let Some(ev) = rx.recv().await {
+                        match ev {
+                            ProcEvent::Output(b) | ProcEvent::Stderr(b) => out.extend(b),
+                            ProcEvent::Exited(c) => {
+                                code = Some(c);
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                })
+                .await;
+                let _ = self.runner.release(&h.id).await;
+                Ok::<_, String>((code, out))
+            });
+            let mut m = Masker::new(secrets);
+            let mut shown = |b: &[u8]| {
+                let mut v = m.feed(b);
+                v.extend(m.finish());
+                String::from_utf8_lossy(&v).lines().next().unwrap_or("").chars().take(200).collect::<String>()
+            };
+            rows.push(match res {
+                Ok((Some(0), _)) => CheckRow { id: "git".into(), ok: true, detail: format!("git ls-remote on the runner reached the remote with {credential}"), fix: None },
+                Ok((Some(c), out)) => CheckRow { id: "git".into(), ok: false, detail: format!("git ls-remote on the runner failed ({c}) with {credential}: {}", shown(&out)), fix: Some("set runners.gitSecret to a vault secret holding a token that can read the repository".into()) },
+                Ok((None, _)) => CheckRow { id: "git".into(), ok: false, detail: "git ls-remote on the runner did not finish in time".into(), fix: None },
+                Err(e) => CheckRow { id: "git".into(), ok: false, detail: format!("git could not run on the runner: {e}"), fix: Some("install git on the runner".into()) },
+            });
+        }
+        rows
     }
 
     fn frames_pull(&self, r: &FramesPullRequest, wait: Duration, max: usize) -> Option<FramesPullAnswer> {

@@ -12,6 +12,6 @@ mod serve;
 
 pub use scoped::{is_offered, Ask, FrameBackend, RunnerFrameUnit, RUNNER_FRAME, RUNNER_FRAMES};
 
-pub use admin::{AdminUnit, ADMIN_FRAME};
+pub use admin::{AdminUnit, CheckLend, CredentialSource, ADMIN_FRAME};
 pub use serve::{advertise_hosts, RunnerServe, RunnerSideAdmin, ServeOptions, ADVERTISE_KEY, DEFAULT_LINK_BIND, DEFAULT_LINK_PORT, LINK_BIND_KEY, LINK_PORT_KEY};
 pub use pool::{RunnerPool, RunnerState, ALLOW_PLAIN_KEY, DEFAULT_HEARTBEAT_SEC, HEARTBEAT_KEY};

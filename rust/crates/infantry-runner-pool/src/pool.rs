@@ -149,6 +149,21 @@ impl RunnerPool {
         Some((state, ping))
     }
 
+    /// RR-6: the runner-side rows of a check (`credentials`, `git`): one `runner_link_check` with `req`. The request may
+    /// carry the git credential a start would lend; it is never logged.
+    pub fn check_rows(&self, name: &str, req: &wire::CheckRequest) -> Result<Vec<wire::CheckRow>, String> {
+        let r = self.store.runner(name).ok_or_else(|| format!("no runner named '{name}'"))?;
+        self.client(&r).typed::<_, wire::CheckAnswer>(wire::CHECK, req).map(|a| a.rows).map_err(|e| e.to_string())
+    }
+
+    /// RR-6: the secret names set on runner `name` (its own vault, over the runner-scope frame `secret_status`). Names only.
+    pub fn runner_secret_names(&self, name: &str) -> Option<Vec<String>> {
+        let entry = RunnerSource::entry(self, name)?;
+        let answer = entry.scope.request("secret_status", "{}").ok()?;
+        let v: serde_json::Value = serde_json::from_str(&answer).ok()?;
+        Some(v["secrets"].as_array()?.iter().filter(|s| s["set"].as_bool() == Some(true)).filter_map(|s| s["name"].as_str().map(str::to_string)).collect())
+    }
+
     /// Forgets runner `name`; tells the runner too when it answers. Returns what happened at the runner.
     pub fn detach(&self, name: &str) -> Option<String> {
         let r = self.store.runner(name)?;

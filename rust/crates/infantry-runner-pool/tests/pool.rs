@@ -42,7 +42,7 @@ fn add_check_list_offline_detach() {
     let url = format!("ws://127.0.0.1:{}", serving.port);
     let pool = RunnerPool::open(&state);
     pool.set_allow_plain(Arc::new(|| true)); // this runner serves plain ws
-    let unit = AdminUnit { pool: pool.clone() };
+    let unit = AdminUnit { pool: pool.clone(), lend: None };
 
     assert_eq!(call(&unit, false, json!({"op": "list"})).unwrap_err(), "runner_admin refused: owner only");
     assert!(call(&unit, true, json!({"op": "add", "endpoint": "wss://x:1", "bearer": bearer})).unwrap()["error"].as_str().unwrap().contains("cannot pair over wss"));

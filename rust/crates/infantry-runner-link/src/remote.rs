@@ -168,6 +168,8 @@ pub struct RemoteRunner {
     id: String,
     /// pty processes started here, by process id.
     ptys: Mutex<HashMap<String, Arc<PtyState>>>,
+    /// RR-6: the lent values of each process started here, to hide in its output (a value never reaches a reader).
+    masks: Mutex<HashMap<String, Vec<String>>>,
     client: Arc<LinkClient>,
     hello: Mutex<Option<HelloAnswer>>,
     /// How long one frames_pull is held on the runner.
@@ -203,7 +205,7 @@ fn from_command(a: CommandAnswer, id: &ProcId) -> Result<(), RunnerError> {
 impl RemoteRunner {
     /// `id` is the runner's name; `client` holds its url and credential.
     pub fn new(id: impl Into<String>, client: LinkClient) -> Self {
-        RemoteRunner { id: id.into(), ptys: Mutex::new(HashMap::new()), client: Arc::new(client), hello: Mutex::new(None), pull_wait: Duration::from_secs(10) }
+        RemoteRunner { id: id.into(), ptys: Mutex::new(HashMap::new()), masks: Mutex::new(HashMap::new()), client: Arc::new(client), hello: Mutex::new(None), pull_wait: Duration::from_secs(10) }
     }
 
     async fn blocking<T: Send + 'static>(&self, f: impl FnOnce(&LinkClient) -> Result<T, CallError> + Send + 'static) -> Result<T, RunnerError> {
@@ -241,6 +243,8 @@ impl RemoteRunner {
         });
         self.ptys.lock().unwrap().insert(sid.to_string(), st.clone());
         let (client, sid, wait) = (self.client.clone(), sid.to_string(), self.pull_wait);
+        let secrets = self.masks.lock().unwrap().get(&sid).cloned().unwrap_or_default();
+        let (mut out_mask, mut err_mask) = (Masker::new(secrets.clone()), Masker::new(secrets));
         std::thread::Builder::new()
             .name("remote-runner-pty".into())
             .spawn(move || {
@@ -253,16 +257,22 @@ impl RemoteRunner {
                         match f.r#type.as_str() {
                             wire::PROC_OUTPUT => {
                                 if let Ok(b) = B64.decode(f.data.as_bytes()) {
+                                    let b = out_mask.feed(&b);
                                     st.screen.lock().unwrap().feed(&b, st.epoch.elapsed().as_millis() as u64);
                                     st.publish(ProcEvent::Output(b));
                                 }
                             }
                             wire::PROC_STDERR => {
                                 if let Ok(b) = B64.decode(f.data.as_bytes()) {
-                                    st.publish(ProcEvent::Stderr(b));
+                                    st.publish(ProcEvent::Stderr(err_mask.feed(&b)));
                                 }
                             }
                             wire::PROC_EXIT => {
+                                for (held, err) in [(out_mask.finish(), false), (err_mask.finish(), true)] {
+                                    if !held.is_empty() {
+                                        st.publish(if err { ProcEvent::Stderr(held) } else { ProcEvent::Output(held) });
+                                    }
+                                }
                                 st.publish(ProcEvent::Exited(f.data.trim().parse().unwrap_or(-1)));
                                 return;
                             }
@@ -300,10 +310,18 @@ impl Runner for RemoteRunner {
                 return Err(RunnerError::Unsupported(format!("runner '{}' runs harness sessions, not processes", h.runner_name)));
             }
             let pty = spec.pty;
-            let req = StartRequest { start_id: uuid::Uuid::new_v4().to_string(), process: Some(spec), ..Default::default() };
+            let mut spec = spec;
+            // RR-6: lent credentials travel as the start's `credentials`, never inside the process spec.
+            let lent = spec.lent.take().filter(|l| !l.is_empty());
+            let secrets = lent.as_ref().map(|l| l.secrets()).unwrap_or_default();
+            let credentials = lent.and_then(|l| serde_json::to_value(l).ok());
+            let req = StartRequest { start_id: uuid::Uuid::new_v4().to_string(), process: Some(spec), credentials, ..Default::default() };
             let a: StartAnswer = self.blocking(move |c| c.typed(wire::START, &req)).await?;
             match (a.session_id, a.refusal) {
                 (Some(id), None) => {
+                    if !secrets.is_empty() {
+                        self.masks.lock().unwrap().insert(id.clone(), secrets);
+                    }
                     if let Some(size) = pty {
                         self.pump(&id, size)?;
                     }
@@ -359,6 +377,8 @@ impl Runner for RemoteRunner {
             let (tx, rx) = mpsc::unbounded_channel();
             let client = self.client.clone();
             let wait = self.pull_wait;
+            let secrets = self.masks.lock().unwrap().get(&sid).cloned().unwrap_or_default();
+            let (mut out_mask, mut err_mask) = (Masker::new(secrets.clone()), Masker::new(secrets));
             std::thread::Builder::new()
                 .name("remote-runner-events".into())
                 .spawn(move || {
@@ -368,9 +388,16 @@ impl Runner for RemoteRunner {
                         for f in batch.drain(..) {
                             after = after.max(f.sequence.unwrap_or(0));
                             let ev = match f.r#type.as_str() {
-                                wire::PROC_OUTPUT => B64.decode(f.data.as_bytes()).ok().map(ProcEvent::Output),
-                                wire::PROC_STDERR => B64.decode(f.data.as_bytes()).ok().map(ProcEvent::Stderr),
-                                wire::PROC_EXIT => Some(ProcEvent::Exited(f.data.trim().parse().unwrap_or(-1))),
+                                wire::PROC_OUTPUT => B64.decode(f.data.as_bytes()).ok().map(|b| ProcEvent::Output(out_mask.feed(&b))),
+                                wire::PROC_STDERR => B64.decode(f.data.as_bytes()).ok().map(|b| ProcEvent::Stderr(err_mask.feed(&b))),
+                                wire::PROC_EXIT => {
+                                    for held in [ProcEvent::Output(out_mask.finish()), ProcEvent::Stderr(err_mask.finish())] {
+                                        if !matches!(&held, ProcEvent::Output(b) | ProcEvent::Stderr(b) if b.is_empty()) {
+                                            let _ = tx.send(held);
+                                        }
+                                    }
+                                    Some(ProcEvent::Exited(f.data.trim().parse().unwrap_or(-1)))
+                                }
                                 _ => None,
                             };
                             let last = matches!(ev, Some(ProcEvent::Exited(_)));
@@ -621,6 +648,7 @@ impl Runner for RemoteRunner {
             if let Some(st) = self.ptys.lock().unwrap().remove(&id.0) {
                 st.stopped.store(true, Ordering::SeqCst);
             }
+            self.masks.lock().unwrap().remove(&id.0);
             let req = RemoveRequest { session_id: id.0.clone() };
             let _: RemoveAnswer = self.blocking(move |c| c.typed(wire::REMOVE, &req)).await?;
             Ok(())
