@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useUi } from "@/state/ui-state";
 import { Button } from "@infantry/ui";
 import { AppDialog } from "@infantry/ui";
-import { daemonStore, localMode } from "@/daemon/daemon";
+import { daemonStore, hopsOpenBoard, localMode } from "@/daemon/daemon";
 import { TicketDialog } from "@/components/board/ticket-dialog";
 import { EMPTY_DRAFT, NewAgentBody, addAgent, addBlockedReason, type NewAgentDraft } from "./new-agent-dialog";
 import { ResumeBody } from "./resume-body";
@@ -28,6 +28,11 @@ export function DialogHost() {
   const [picked, setPicked] = useState<string | null>(null);
   // UI-RESUME-WEB-1: Resume runs only in the embedded runner; anywhere else no dialog offers it.
   const dialog = ui.dialog === "resume" && !localMode ? null : ui.dialog;
+  // Hop timings run (INFANTRY_UI_HOPS=board): open the board once, as the board button does.
+  useEffect(() => {
+    if (hopsOpenBoard) ui.set("dialog", "board");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     // The new-agent draft is cleared when its dialog closes, not when it opens: the body seeds the default harness as it
     // mounts (its effect runs before this one), so a reset on open wiped that whenever the harness list was already loaded

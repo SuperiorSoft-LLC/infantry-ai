@@ -60,6 +60,9 @@ pub fn owns(ty: &str) -> bool {
 pub const BROADCAST_CAPACITY: usize = 4096;
 /// After a kill the run activity settles to `idle` on the next watch tick (Kotlin's `AgentWatchdog`), not at once.
 pub const KILL_SETTLE_MS: u64 = 1_500;
+/// `limits.ws.frameDetachMs` default: a unit frame still running after this long stops holding up the frames behind it on
+/// its connection (the board's `ticket_list` waited 5 s behind a `harness_install_status` probe); its reply goes out when it ends.
+pub const FRAME_DETACH_MS: u64 = 150;
 /// `limits.chat.queueMax` default (CHAT-QUEUE-1): messages a session holds while a turn runs.
 pub const QUEUE_MAX: usize = 20;
 /// `limits.chat.sentIdsKept` default (CHAT-SENDING-1): client message ids remembered daemon-wide.
@@ -98,6 +101,8 @@ pub struct Config {
     /// Where a session runs when its `new` names no folder (Kotlin: the daemon's working directory).
     pub default_cwd: PathBuf,
     pub kill_settle_ms: u64,
+    /// `limits.ws.frameDetachMs`: how long a unit frame may hold its connection's frame loop before later frames pass it.
+    pub frame_detach_ms: u64,
     /// `limits.chat.queueMax`.
     pub queue_max: usize,
     /// `limits.chat.sentIdsKept`.
@@ -111,7 +116,7 @@ pub struct Config {
 impl Config {
     /// The defaults Kotlin ships with.
     pub fn new(state_dir: PathBuf, default_cwd: PathBuf) -> Config {
-        Config { state_dir, default_cwd, kill_settle_ms: KILL_SETTLE_MS, queue_max: QUEUE_MAX, sent_ids_kept: SENT_IDS_KEPT, replay_kept: REPLAY_KEPT, registry: Default::default() }
+        Config { state_dir, default_cwd, kill_settle_ms: KILL_SETTLE_MS, frame_detach_ms: FRAME_DETACH_MS, queue_max: QUEUE_MAX, sent_ids_kept: SENT_IDS_KEPT, replay_kept: REPLAY_KEPT, registry: Default::default() }
     }
 }
 

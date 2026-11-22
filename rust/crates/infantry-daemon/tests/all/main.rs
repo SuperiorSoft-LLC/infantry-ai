@@ -11,6 +11,7 @@ mod hung_child;
 mod migrated_state;
 mod queue_ack;
 mod session_remove;
+mod slow_frame;
 mod sessions_suite;
 mod spawn_load;
 mod stats_consistency;

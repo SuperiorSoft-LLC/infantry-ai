@@ -5,6 +5,7 @@
 // (the daemon store's sendFrame / onFrame), so the store is tested with recorded frames and no socket.
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { Frame, json, type Envelope } from "../wire";
+import { hop, timedHop } from "../hops";
 
 /** The lanes, left to right (TicketStatus in the Kotlin protocol). */
 export const LANES = ["backlog", "todo", "in_progress", "pending", "done"] as const;
@@ -158,10 +159,10 @@ export function createBoardStore(link: BoardLink): BoardStore {
       const mine = rid !== undefined && rid in get().inflight;
       switch (env.type) {
         case Frame.TICKETS: {
-          const list = json<BoardTicket[]>(env.data);
+          const list = timedHop("board.parse", () => json<BoardTicket[]>(env.data), { bytes: env.data.length });
           if (!list) return;
           // `tickets` is the whole board, in board order: it replaces what we hold.
-          set({ tickets: Object.fromEntries(list.map((t) => [t.id, { ...t, partial: true }])), loaded: true });
+          timedHop("board.set", () => set({ tickets: Object.fromEntries(list.map((t) => [t.id, { ...t, partial: true }])), loaded: true }), { tickets: list.length });
           if (mine) settle(rid as string);
           return;
         }
@@ -188,7 +189,10 @@ export function createBoardStore(link: BoardLink): BoardStore {
       inflight: {},
 
       ensureLoaded() {
-        if (!get().loaded) link.sendFrame({ type: Frame.TICKET_LIST, data: JSON.stringify({ compact: true }) });
+        if (!get().loaded) {
+          hop("board.request");
+          link.sendFrame({ type: Frame.TICKET_LIST, data: JSON.stringify({ compact: true }) });
+        }
       },
       loadFull(id) {
         if (get().tickets[id]?.partial) link.sendFrame({ type: Frame.TICKET_GET, data: id });

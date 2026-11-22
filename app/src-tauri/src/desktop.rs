@@ -32,6 +32,8 @@ struct Endpoint {
     note: Option<String>,
     /// INFANTRY_PERF_SCENARIO: the perf harness's scenario (`agents=5;stream=1;...`), run in-page (perf-scenario.ts).
     perf: Option<String>,
+    /// Hop timings are on (`debugHopTimings` in ui.json, or INFANTRY_UI_HOPS=1): the page stamps each hop (hops.ts).
+    hops: Option<String>,
 }
 
 /// INFANTRY_URL, else INFANTRY_PORT on loopback; None when unset or when it names a foreign daemon.
@@ -98,6 +100,9 @@ pub(crate) struct UiSettings {
     /// RUST-UPD-1: keep the app folder on the user PATH (`infantry install-cli`). Opt-in, off by default.
     #[serde(default, rename = "paths.addCli", skip_serializing_if = "Option::is_none")]
     pub(crate) add_cli: Option<bool>,
+    /// Debug: the page stamps every hop a frame takes (hops.ts) into `<state>/hop-timings.log`. Off by default.
+    #[serde(default, rename = "debugHopTimings", skip_serializing_if = "Option::is_none")]
+    debug_hop_timings: Option<bool>,
     /// RUST-BUG 2617b342: the app restarts a daemon that died (supervisor.rs); backoff, polling and log generations.
     #[serde(default, rename = "daemonSupervisor", skip_serializing_if = "Option::is_none")]
     pub(crate) supervisor: Option<crate::supervisor::SupervisorSettings>,
@@ -229,7 +234,13 @@ async fn endpoint(state: State<'_, AppState>) -> Result<Endpoint, String> {
             }
         }
     };
-    Ok(Endpoint { url, token, stress, local: mode == "embedded", mode, error, note, perf })
+    // INFANTRY_UI_HOPS: `0` off, `board` (stamp and open the board), anything else on; else the ui.json setting.
+    let hops = match env("UI_HOPS") {
+        Some(v) if !truthy(&v) => None,
+        Some(v) => Some(v),
+        None => state.settings.lock().unwrap().debug_hop_timings.unwrap_or(false).then(|| "1".to_string()),
+    };
+    Ok(Endpoint { url, token, stress, local: mode == "embedded", mode, error, note, perf, hops })
 }
 
 /// The `runner` setting (`embedded` | `daemon`); applies on the next start.
@@ -282,6 +293,13 @@ fn local_resumable(local: State<'_, Local>, folder: String) -> Vec<Resumable> {
 fn perf_report(line: String) -> Result<(), String> {
     let Some(path) = env("PERF_OUT") else { return Ok(()) };
     let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path).map_err(|e| e.to_string())?;
+    writeln!(f, "{}", line.replace('\n', " ")).map_err(|e| e.to_string())
+}
+
+/// Hop timings: one JSON line per hop appended to `<state>/hop-timings.log` (only sent when the option is on).
+#[tauri::command]
+fn hops_report(state: State<'_, AppState>, line: String) -> Result<(), String> {
+    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(state.dir.join("hop-timings.log")).map_err(|e| e.to_string())?;
     writeln!(f, "{}", line.replace('\n', " ")).map_err(|e| e.to_string())
 }
 
@@ -358,7 +376,7 @@ pub fn run() {
             app.manage(Local::new(dir));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![endpoint, ui_runner_get, ui_runner_set, local_connect, local_send, local_set_project, local_resumable, perf_report,
+        .invoke_handler(tauri::generate_handler![endpoint, ui_runner_get, ui_runner_set, local_connect, local_send, local_set_project, local_resumable, perf_report, hops_report,
             crate::update::update_settings_get, crate::update::update_settings_set, crate::update::update_check, crate::update::update_install, crate::update::update_download,
             crate::update::cli_path_get, crate::update::cli_path_set, crate::pairing::pairing_get, crate::pairing::pairing_set,
             crate::daemon_http::daemon_get, crate::login_window::login_window_open, crate::login_window::login_window_close])

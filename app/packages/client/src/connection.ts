@@ -3,6 +3,7 @@
 // One daemon link: a transport (browser WebSocket, or the Tauri plugin's Rust-side socket), reconnect with backoff,
 // and the envelope codec. It knows nothing of sessions; the store does.
 import { decodeEnvelope, encodeEnvelope, type Envelope } from "./wire";
+import { hop, hopsOn, timedHop } from "./hops";
 
 /** The reconnect delays, in ms, the Kotlin client uses (the last repeats). Overridable per client. */
 export const DEFAULT_BACKOFF_MS: readonly number[] = [250, 500, 1000, 2000, 4000, 8000];
@@ -125,8 +126,10 @@ export class DaemonConnection {
         },
         onText: (text) => {
           if (this.transport !== t) return;
-          const env = decodeEnvelope(text);
-          if (env) this.opts.onEnvelope(env);
+          const env = timedHop("conn.decode", () => decodeEnvelope(text), { bytes: text.length });
+          if (!env) return;
+          if (hopsOn()) hop("conn.frame", { type: env.type, bytes: text.length });
+          this.opts.onEnvelope(env);
         },
         onClose: (reason) => {
           if (closed || this.transport !== t) return;

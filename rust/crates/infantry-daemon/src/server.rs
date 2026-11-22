@@ -12,6 +12,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
 use infantry_protocol::Envelope;
+use futures_util::StreamExt;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast::error::RecvError;
@@ -128,19 +129,61 @@ async fn hello(daemon: &Arc<Daemon>) -> Vec<String> {
 }
 
 /// One frame this daemon answers: the session manager's own, else the unit that owns it (on the blocking pool).
-async fn answer(daemon: &Arc<Daemon>, env: Envelope, conn: &mut Conn, owner: bool) -> Vec<String> {
+/// Hop timings (debug, off by default): `INFANTRY_HOP_TIMINGS=1` makes the daemon log one line per client frame to stderr:
+/// the frame type, what it took to answer, and the bytes written back. A slow line is a handler holding up the frames
+/// behind it on that connection (the loop answers one frame at a time).
+fn hop_timings() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("INFANTRY_HOP_TIMINGS").is_ok_and(|v| !v.is_empty() && v != "0"))
+}
+
+/// Unit frames that outlived `Config::frame_detach_ms`: their replies are sent when they finish, not before the next frame.
+type Detached = futures_util::stream::FuturesUnordered<tokio::task::JoinHandle<Vec<String>>>;
+
+/// One frame. Session frames and the plugin-bridge note run in order on the connection (they are quick and own `conn`).
+/// A unit frame runs on the blocking pool; one that is still running after `frame_detach_ms` is detached, so a slow
+/// handler (a CLI probe, a git status) no longer holds up every frame behind it, the board's included.
+async fn answer(daemon: &Arc<Daemon>, env: Envelope, conn: &mut Conn, owner: bool, detached: &mut Detached) -> Vec<String> {
     // A tool call carrying a session id is that session's MCP bridge alive on this connection.
     if env.r#type == crate::compose::PLUGIN_TOOL_CALL {
         if let Some(sid) = serde_json::from_str::<serde_json::Value>(&env.data).ok().and_then(|v| v["client"]["sessionId"].as_str().map(String::from)) {
             daemon.health.bridges.seen(&sid, &mut conn.bridges, &daemon.health.journal);
         }
     }
+    let timings = hop_timings();
     if !crate::sessions::owns(&env.r#type) {
         if let Some(u) = daemon.units().filter(|u| u.owns(&env.r#type)) {
-            return tokio::task::spawn_blocking(move || u.handle(env, owner)).await.unwrap_or_default();
+            let (ty, bytes_in) = (env.r#type.clone(), env.data.len());
+            let mut job = tokio::task::spawn_blocking(move || {
+                let t = std::time::Instant::now();
+                let replies = u.handle(env, owner);
+                if timings {
+                    let out: usize = replies.iter().map(String::len).sum();
+                    eprintln!("[hop] frame {ty} in={bytes_in}B answered in {:.1}ms out={out}B replies={}", t.elapsed().as_secs_f64() * 1000.0, replies.len());
+                }
+                replies
+            });
+            return match tokio::time::timeout(Duration::from_millis(daemon.cfg.frame_detach_ms), &mut job).await {
+                Ok(done) => done.unwrap_or_default(),
+                Err(_) => {
+                    detached.push(job);
+                    Vec::new()
+                }
+            };
         }
     }
-    daemon.handle(env, conn)
+    let (ty, bytes_in, t) = (env.r#type.clone(), env.data.len(), std::time::Instant::now());
+    let replies = daemon.handle(env, conn);
+    if timings {
+        let out: usize = replies.iter().map(String::len).sum();
+        eprintln!("[hop] frame {ty} in={bytes_in}B answered in {:.1}ms out={out}B replies={}", t.elapsed().as_secs_f64() * 1000.0, replies.len());
+    }
+    replies
+}
+
+/// The replies of a detached frame that has just finished (empty when it panicked).
+fn finished(done: Option<Result<Vec<String>, tokio::task::JoinError>>) -> Vec<String> {
+    done.and_then(|r| r.ok()).unwrap_or_default()
 }
 
 async fn connection(daemon: Arc<Daemon>, mut socket: WebSocket) {
@@ -152,6 +195,7 @@ async fn connection(daemon: Arc<Daemon>, mut socket: WebSocket) {
         }
     }
     let mut conn = Conn::default();
+    let mut detached = Detached::new();
     let mut cause = "connection lost";
     loop {
         tokio::select! {
@@ -164,11 +208,21 @@ async fn connection(daemon: Arc<Daemon>, mut socket: WebSocket) {
                 };
                 // A client that passed the access policy without the gateway is the owner (local, or the token holder).
                 let replies = match serde_json::from_str::<Envelope>(&text) {
-                    Ok(env) => answer(&daemon, env, &mut conn, true).await,
+                    Ok(env) => answer(&daemon, env, &mut conn, true, &mut detached).await,
                     Err(e) => vec![serde_json::to_string(&Envelope::new(crate::wire::ERROR, format!("frame refused: not an envelope ({e})"))).unwrap_or_default()],
                 };
                 let mut gone = false;
                 for r in replies {
+                    if socket.send(Message::Text(r.into())).await.is_err() {
+                        gone = true;
+                        break;
+                    }
+                }
+                if gone { break }
+            }
+            done = detached.next(), if !detached.is_empty() => {
+                let mut gone = false;
+                for r in finished(done) {
                     if socket.send(Message::Text(r.into())).await.is_err() {
                         gone = true;
                         break;
@@ -198,6 +252,7 @@ async fn gateway_connection(daemon: Arc<Daemon>, gw: Arc<Gateway>, owner: bool, 
         }
     }
     let mut conn = Conn::default();
+    let mut detached = Detached::new();
     let mut cause = "connection lost";
     loop {
         tokio::select! {
@@ -209,12 +264,22 @@ async fn gateway_connection(daemon: Arc<Daemon>, gw: Arc<Gateway>, owner: bool, 
                     Some(Ok(_)) => continue,
                 };
                 let replies = match serde_json::from_str::<Envelope>(&text) {
-                    Ok(env) if gw.routes.is_rust(&env.r#type) => answer(&daemon, env, &mut conn, owner).await,
+                    Ok(env) if gw.routes.is_rust(&env.r#type) => answer(&daemon, env, &mut conn, owner, &mut detached).await,
                     Ok(_) => gw.forward(&text, id, owner).into_iter().collect(),
                     Err(e) => vec![serde_json::to_string(&Envelope::new(crate::wire::ERROR, format!("frame refused: not an envelope ({e})"))).unwrap_or_default()],
                 };
                 let mut gone = false;
                 for r in replies {
+                    if socket.send(Message::Text(r.into())).await.is_err() {
+                        gone = true;
+                        break;
+                    }
+                }
+                if gone { break }
+            }
+            done = detached.next(), if !detached.is_empty() => {
+                let mut gone = false;
+                for r in finished(done) {
                     if socket.send(Message::Text(r.into())).await.is_err() {
                         gone = true;
                         break;
