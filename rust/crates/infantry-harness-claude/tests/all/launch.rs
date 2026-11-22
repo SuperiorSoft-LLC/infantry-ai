@@ -181,7 +181,6 @@ fn a_token_launch_marks_the_first_run_setup_done_and_keeps_the_rest_of_the_confi
     }
     let probe = P(dir.clone());
     let token = vec![(OAUTH_TOKEN_ENV.to_string(), "sk-ant-oat01-x".to_string())];
-    assert!(!prepare_onboarding(&[], &probe), "no token: nothing touched");
     std::fs::write(dir.join(".claude.json"), r#"{"theme":"dark"}"#).unwrap();
     assert!(prepare_onboarding(&token, &probe));
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(".claude.json")).unwrap()).unwrap();
@@ -189,9 +188,11 @@ fn a_token_launch_marks_the_first_run_setup_done_and_keeps_the_rest_of_the_confi
     assert!(!prepare_onboarding(&token, &probe), "already done: not rewritten");
     // A login by the CLI's own credentials file (no token), an empty config: the flag and a theme are seeded.
     std::fs::write(dir.join(".claude.json"), "{}").unwrap();
-    assert!(!prepare_onboarding(&[], &probe), "no login at all: nothing touched");
     std::fs::write(dir.join(".credentials.json"), r#"{"claudeAiOauth":{"accessToken":"x"}}"#).unwrap();
     assert!(prepare_onboarding(&[], &probe));
+    std::fs::write(dir.join(".claude.json"), "{}").unwrap();
+    std::fs::remove_file(dir.join(".credentials.json")).unwrap();
+    assert!(prepare_onboarding(&[], &probe), "fresh runner, no login: still seeded so the login step is reachable");
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(".claude.json")).unwrap()).unwrap();
     assert_eq!((v["hasCompletedOnboarding"].as_bool(), v["theme"].as_str()), (Some(true), Some("dark")));
     std::fs::write(dir.join(".claude.json"), r#"{"hasCompletedOnboarding":true}"#).unwrap();
