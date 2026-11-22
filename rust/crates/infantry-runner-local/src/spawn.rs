@@ -69,6 +69,14 @@ fn find_program(program: &str, env: &[(String, String)]) -> String {
 }
 
 fn command(spec: &ProcessSpec) -> Command {
+    // The user's real PATH (registry), refreshed before every spawn: an updater-relaunched daemon inherits the installer's PATH.
+    infantry_proc::user_path::refresh();
+    let mut spec = spec.clone();
+    for (k, v) in spec.env.iter_mut().filter(|(k, _)| k.eq_ignore_ascii_case("PATH")) {
+        let _ = k;
+        *v = infantry_proc::user_path::extend(v);
+    }
+    let spec = &spec;
     Command {
         program: resolve_program(&spec.program, &spec.env),
         args: spec.args.clone(),
