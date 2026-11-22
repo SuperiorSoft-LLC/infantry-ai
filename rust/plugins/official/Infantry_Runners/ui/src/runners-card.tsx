@@ -143,7 +143,7 @@ export function DetailDialog({ name, detail, onClose }: { name: string; detail?:
             {l?.fix && <Line k="Next" v={l.fix} />}
           </Section>
           <Section title="Harnesses on this runner">
-            {detail.harnessError && <p className="text-danger" data-testid="runner-harness-error">Not readable: {detail.harnessError}. {l?.state === "offline" ? "The runner is offline." : "Update runner, then check again."}</p>}
+            {detail.harnessError && <p className="text-danger" data-testid="runner-harness-error">Not readable: {l?.state === "offline" ? `the runner is offline${l.reasonPlain ? ` (${l.reasonPlain})` : ""}` : detail.harnessError}. {l?.state === "offline" ? (l.fix ?? "") : "Update runner, then check again."}</p>}
             {!detail.harnesses && !detail.harnessError && <p className="text-muted-foreground">Reading…</p>}
             {detail.harnesses?.length === 0 && !detail.harnessError && <p className="text-muted-foreground">No harness reported.</p>}
             {detail.harnesses?.map((h) => (
@@ -221,7 +221,7 @@ export function RunnerRow({ runner, rows, checking, summary, onCheck, onSetup, o
             </p>
           )}
           {note && !runner.update && <p className="text-[11px] text-muted-foreground">{note}</p>}
-          {summary && (
+          {summary && st.word !== "offline" && (
             <p className="text-[11px] text-muted-foreground" data-testid="runner-summary">
               {summaryLine(summary)}
             </p>

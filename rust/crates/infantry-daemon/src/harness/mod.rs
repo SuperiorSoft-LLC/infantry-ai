@@ -108,8 +108,8 @@ pub enum HarnessEvent {
     TurnEnded { end: TurnEnd, exit_code: Option<i32>, reason: Option<String>, process_alive: bool },
     /// The process went away outside a turn end (a crash, the CLI's own exit).
     Exited { code: Option<i32> },
-    /// A tool call began (its name): counted in the session's stats.
-    Tool(String),
+    /// A tool call began: counted in the session's stats, and drawn as a tool line (`input` is the tool's input as text).
+    Tool { name: String, input: String },
     /// A tool call changed a file: the wire `FileWrite` JSON (path, content / edits / patch), drawn as a change box.
     Write(String),
     /// Token usage of one model request, as the CLI reported it: the session's stats.

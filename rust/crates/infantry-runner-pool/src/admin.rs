@@ -87,10 +87,14 @@ impl AdminUnit {
                         v["rttMs"] = json!(rtt_ms);
                         v["contract"] = json!(contract);
                     }
-                    RunnerState::Offline { reason } => v["reason"] = json!(reason),
+                    RunnerState::Offline { reason } => {
+                        v["reason"] = json!(reason);
+                        v["reasonPlain"] = json!(crate::pool::plain_reason(&reason).0);
+                    }
                     RunnerState::Outdated { contract, reason } => {
                         v["contract"] = json!(contract);
                         v["reason"] = json!(reason);
+                        v["reasonPlain"] = json!("the runner is older than this app");
                     }
                     RunnerState::Unknown => {}
                 }

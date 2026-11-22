@@ -115,6 +115,13 @@ describe("RR-VIS detail", () => {
     expect(joinHarnesses({ harnesses: [{ id: "claude", state: "installed", path: "/c" }] }, null, [{ id: "claude", loggedIn: true }])[0].signedIn).toBe(true);
     expect(plainText("a. Screen: junk")).toBe("a.");
   });
+  it("the list row shows the plain reason when the daemon sends one", () => {
+    expect(statusOf({ name: "box", url: "wss://x", state: "offline", reason: "os error 10061", reasonPlain: "nothing is listening at that address: the runner is stopped" }).reason).toBe("nothing is listening at that address: the runner is stopped");
+  });
+  it("reads the version the daemon sends (installedVersion)", () => {
+    const rows = joinHarnesses({ harnesses: [{ id: "opencode", state: "installed", path: "/data/harness-tools/bin/opencode", installedVersion: "1.19.6" }] }, null);
+    expect(rows[0].version).toBe("1.19.6");
+  });
   it("never prints a bare unknown for tools", () => {
     expect(summaryLine({ tools: ["pi"], signedIn: false, signedInUnknown: true })).toContain("Update runner");
     expect(summaryLine({ tools: [], signedIn: false, error: "no route to host" })).toBe("Tools: not readable: no route to host");
