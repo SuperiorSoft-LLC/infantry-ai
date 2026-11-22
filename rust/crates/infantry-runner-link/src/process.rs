@@ -14,7 +14,7 @@ use crate::server::{Backend, RunnerInfo};
 use crate::wire::{self, *};
 use base64::Engine;
 use infantry_protocol::Envelope;
-use infantry_runner_api::{HttpEvent, HttpRequest, KillScope, ProcEvent, ProcId, Runner};
+use infantry_runner_api::{HookCall, HttpEvent, HttpRequest, KillScope, ProcEvent, ProcId, Runner, Size, TailFrom, TailSpec};
 use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -32,8 +32,15 @@ struct Shared {
     event_seq: HashMap<String, i64>,
 }
 
+/// Blocking hook calls waiting for the orchestrator's answer, by call id.
+type Pending = Arc<Mutex<HashMap<String, HookCall>>>;
+
 pub struct ProcessBackend {
     runner: Arc<dyn Runner>,
+    /// Open hook streams (and tail streams): the task that owns the endpoint (or the tail) and the calls it waits on.
+    streams: Mutex<HashMap<String, (tokio::task::JoinHandle<()>, Pending)>>,
+    /// The events files of open hook channels: the only files a tail may follow.
+    event_files: Mutex<HashMap<String, String>>,
     rt: tokio::runtime::Runtime,
     shared: Arc<(Mutex<Shared>, Condvar)>,
 }
@@ -41,11 +48,18 @@ pub struct ProcessBackend {
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 /// The id prefix of a link http stream (never a runner process id).
 const HTTP_STREAM_PREFIX: &str = "http-";
+/// The id prefixes of a hook stream and a tail stream (never a runner process id).
+const HOOK_STREAM_PREFIX: &str = "hook-";
+const TAIL_STREAM_PREFIX: &str = "tail-";
+
+fn is_link_stream(id: &str) -> bool {
+    [HTTP_STREAM_PREFIX, HOOK_STREAM_PREFIX, TAIL_STREAM_PREFIX].iter().any(|p| id.starts_with(p))
+}
 
 impl ProcessBackend {
     pub fn new(runner: Arc<dyn Runner>) -> Self {
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().thread_name("runner-link-proc").build().expect("runtime");
-        ProcessBackend { runner, rt, shared: Arc::new((Mutex::new(Shared::default()), Condvar::new())) }
+        ProcessBackend { runner, streams: Mutex::new(HashMap::new()), event_files: Mutex::new(HashMap::new()), rt, shared: Arc::new((Mutex::new(Shared::default()), Condvar::new())) }
     }
 
     fn push(shared: &(Mutex<Shared>, Condvar), sid: &str, t: &str, data: String) {
@@ -64,7 +78,7 @@ impl Backend for ProcessBackend {
     fn info(&self) -> RunnerInfo {
         RunnerInfo {
             os: std::env::consts::OS.into(),
-            offers: vec![OFFER_PROCESS.into(), OFFER_STAGED_FILES.into(), OFFER_LOOPBACK_HTTP.into()],
+            offers: vec![OFFER_PROCESS.into(), OFFER_STAGED_FILES.into(), OFFER_LOOPBACK_HTTP.into(), OFFER_HOOK_CHANNEL.into(), OFFER_PTY_RESIZE.into()],
             ..Default::default()
         }
     }
@@ -130,7 +144,11 @@ impl Backend for ProcessBackend {
     fn remove(&self, session_id: &str) -> bool {
         let id = ProcId(session_id.to_string());
         // An http stream is the link's own, not a runner process: forgetting its frames is the whole release.
-        let ok = session_id.starts_with(HTTP_STREAM_PREFIX) || self.rt.block_on(self.runner.release(&id)).is_ok();
+        let ok = is_link_stream(session_id) || self.rt.block_on(self.runner.release(&id)).is_ok();
+        if let Some((task, _)) = self.streams.lock().unwrap().remove(session_id) {
+            task.abort();
+        }
+        self.event_files.lock().unwrap().remove(session_id);
         let mut s = self.shared.0.lock().unwrap();
         s.sessions.remove(session_id);
         s.events.retain(|e| e.session_id != session_id);
@@ -150,6 +168,10 @@ impl Backend for ProcessBackend {
             },
             wire::CMD_CLOSE_INPUT => done(self.rt.block_on(self.runner.close_input(&id))),
             wire::CMD_STATUS => done(Ok(())),
+            wire::CMD_RESIZE => match r.text.split_once(',').and_then(|(a, b)| Some((a.trim().parse::<u16>().ok()?, b.trim().parse::<u16>().ok()?))) {
+                Some((rows, cols)) if rows > 0 && cols > 0 => done(self.rt.block_on(self.runner.resize(&id, Size { rows, cols }))),
+                _ => CommandAnswer { kind: "refused".into(), reason: Some("text is not `rows,cols`".into()), ..Default::default() },
+            },
             // `unknown` means "not a session of yours" on the link; a known session's unknown kind is a refusal.
             other => CommandAnswer { kind: "refused".into(), reason: Some(format!("command kind '{other}' is not offered for a process")), error_type: "unsupported".into(), started: false },
         }
@@ -219,6 +241,68 @@ impl Backend for ProcessBackend {
                 x.exited = Some(0);
             }
         });
+        HttpOpenAnswer { stream_id: Some(sid), ..Default::default() }
+    }
+
+    fn hook_open(&self) -> HookOpenAnswer {
+        let mut ep = match self.rt.block_on(self.runner.hook_channel()) {
+            Ok(ep) => ep,
+            Err(e) => return HookOpenAnswer { refusal: Some(e.to_string()), error_type: error_type(&e).into(), ..Default::default() },
+        };
+        let sid = format!("{HOOK_STREAM_PREFIX}{}", uuid::Uuid::new_v4());
+        self.shared.0.lock().unwrap().sessions.insert(sid.clone(), Session::default());
+        let (url, events_file) = (ep.url.clone(), ep.events_file.clone());
+        let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
+        let (shared, id, held) = (self.shared.clone(), sid.clone(), pending.clone());
+        // The task owns the endpoint: aborting it (remove) drops the endpoint and unregisters the url.
+        let task = self.rt.spawn(async move {
+            // Move the whole endpoint in (a closure would capture only `calls` and drop the guard, closing the url).
+            let mut ep = ep;
+            while let Some(call) = ep.calls.recv().await {
+                let call_id = uuid::Uuid::new_v4().simple().to_string();
+                let data = serde_json::to_string(&HookCallWire { call_id: call_id.clone(), body: call.body.clone() }).unwrap_or_default();
+                held.lock().unwrap().insert(call_id, call);
+                Self::push(&shared, &id, wire::HOOK_CALL, data);
+            }
+        });
+        self.streams.lock().unwrap().insert(sid.clone(), (task, pending));
+        self.event_files.lock().unwrap().insert(sid.clone(), events_file.clone());
+        HookOpenAnswer { stream_id: Some(sid), url, events_file, ..Default::default() }
+    }
+
+    fn forward_answer(&self, r: &ForwardAnswerRequest) -> bool {
+        let call = self.streams.lock().unwrap().get(&r.stream_id).and_then(|(_, p)| p.lock().unwrap().remove(&r.call_id));
+        match call {
+            Some(c) => {
+                c.reply(r.body.clone());
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn tail_open(&self, r: &TailOpenRequest) -> HttpOpenAnswer {
+        let allowed = self.event_files.lock().unwrap().values().any(|f| *f == r.path);
+        if !allowed {
+            return HttpOpenAnswer { refusal: Some("only the events file of an open hook channel can be followed".into()), error_type: "unsupported".into(), ..Default::default() };
+        }
+        let from = match r.from.as_str() {
+            "end" => TailFrom::End,
+            n => n.parse::<u64>().map(TailFrom::Offset).unwrap_or(TailFrom::Start),
+        };
+        let mut rx = match self.rt.block_on(self.runner.tail(TailSpec { path: r.path.clone(), from })) {
+            Ok(rx) => rx,
+            Err(e) => return HttpOpenAnswer { refusal: Some(e.to_string()), error_type: error_type(&e).into(), stream_id: None },
+        };
+        let sid = format!("{TAIL_STREAM_PREFIX}{}", uuid::Uuid::new_v4());
+        self.shared.0.lock().unwrap().sessions.insert(sid.clone(), Session::default());
+        let (shared, id) = (self.shared.clone(), sid.clone());
+        let task = self.rt.spawn(async move {
+            while let Some(line) = rx.recv().await {
+                Self::push(&shared, &id, wire::TAIL_LINE, line);
+            }
+        });
+        self.streams.lock().unwrap().insert(sid.clone(), (task, Arc::new(Mutex::new(HashMap::new()))));
         HttpOpenAnswer { stream_id: Some(sid), ..Default::default() }
     }
 

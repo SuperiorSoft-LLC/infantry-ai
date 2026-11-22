@@ -56,6 +56,16 @@ impl Screen {
         }
     }
 
+    /// Resizes the grid (the pty's size changed); the scrollback is unchanged.
+    pub fn resize(&mut self, rows: u16, cols: u16) {
+        self.parser.screen_mut().set_size(rows, cols);
+    }
+
+    /// The grid's size (rows, cols).
+    pub fn size(&self) -> (u16, u16) {
+        self.parser.screen().size()
+    }
+
     /// The visible rows as text (trailing blanks trimmed).
     pub fn rows(&self) -> Vec<String> {
         let screen = self.parser.screen();
