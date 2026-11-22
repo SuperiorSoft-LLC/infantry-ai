@@ -91,6 +91,21 @@ impl Backend for FrameBackend {
     fn http_open(&self, r: &HttpOpenRequest) -> HttpOpenAnswer {
         self.inner.http_open(r)
     }
+    fn tunnel_open(&self) -> TunnelOpenAnswer {
+        self.inner.tunnel_open()
+    }
+    fn tunnel_send(&self, r: &TunnelSendRequest) -> bool {
+        self.inner.tunnel_send(r)
+    }
+    fn hook_open(&self) -> HookOpenAnswer {
+        self.inner.hook_open()
+    }
+    fn forward_answer(&self, r: &ForwardAnswerRequest) -> bool {
+        self.inner.forward_answer(r)
+    }
+    fn tail_open(&self, r: &TailOpenRequest) -> HttpOpenAnswer {
+        self.inner.tail_open(r)
+    }
     fn frame(&self, frame: &str, data: &str) -> Result<FrameAnswer, String> {
         if !is_offered(frame) {
             let shown: String = frame.chars().filter(|c| (' '..='~').contains(c)).take(48).collect();

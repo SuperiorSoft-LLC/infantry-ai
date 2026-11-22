@@ -14,7 +14,7 @@ use crate::server::{Backend, RunnerInfo};
 use crate::wire::{self, *};
 use base64::Engine;
 use infantry_protocol::Envelope;
-use infantry_runner_api::{HttpEvent, HttpRequest, KillScope, ProcEvent, ProcId, Runner};
+use infantry_runner_api::{HookCall, HttpEvent, HttpRequest, KillScope, ProcEvent, ProcId, Runner, Size, TailFrom, TailSpec};
 use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -32,8 +32,21 @@ struct Shared {
     event_seq: HashMap<String, i64>,
 }
 
+/// Blocking hook calls waiting for the orchestrator's answer, by call id.
+type Pending = Arc<Mutex<HashMap<String, HookCall>>>;
+
+/// One open loopback forward: its tunnelled connections and the flag that stops its listener.
+struct Tunnel {
+    conns: Arc<Mutex<HashMap<u64, std::net::TcpStream>>>,
+    stop: Arc<std::sync::atomic::AtomicBool>,
+    addr: std::net::SocketAddr,
+}
+
 pub struct ProcessBackend {
+    tunnels: Mutex<HashMap<String, Tunnel>>,
     runner: Arc<dyn Runner>,
+    /// Open hook streams (and tail streams): the task that owns the endpoint (or the tail) and the calls it waits on.
+    streams: Mutex<HashMap<String, (tokio::task::JoinHandle<()>, Pending)>>,
     rt: tokio::runtime::Runtime,
     shared: Arc<(Mutex<Shared>, Condvar)>,
 }
@@ -41,11 +54,19 @@ pub struct ProcessBackend {
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 /// The id prefix of a link http stream (never a runner process id).
 const HTTP_STREAM_PREFIX: &str = "http-";
+/// The id prefixes of a hook stream and a tail stream (never a runner process id).
+const HOOK_STREAM_PREFIX: &str = "hook-";
+const TAIL_STREAM_PREFIX: &str = "tail-";
+const TUNNEL_STREAM_PREFIX: &str = "tun-";
+
+fn is_link_stream(id: &str) -> bool {
+    [HTTP_STREAM_PREFIX, HOOK_STREAM_PREFIX, TAIL_STREAM_PREFIX, TUNNEL_STREAM_PREFIX].iter().any(|p| id.starts_with(p))
+}
 
 impl ProcessBackend {
     pub fn new(runner: Arc<dyn Runner>) -> Self {
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().thread_name("runner-link-proc").build().expect("runtime");
-        ProcessBackend { runner, rt, shared: Arc::new((Mutex::new(Shared::default()), Condvar::new())) }
+        ProcessBackend { tunnels: Mutex::new(HashMap::new()), runner, streams: Mutex::new(HashMap::new()), rt, shared: Arc::new((Mutex::new(Shared::default()), Condvar::new())) }
     }
 
     fn push(shared: &(Mutex<Shared>, Condvar), sid: &str, t: &str, data: String) {
@@ -64,7 +85,7 @@ impl Backend for ProcessBackend {
     fn info(&self) -> RunnerInfo {
         RunnerInfo {
             os: std::env::consts::OS.into(),
-            offers: vec![OFFER_PROCESS.into(), OFFER_STAGED_FILES.into(), OFFER_LOOPBACK_HTTP.into()],
+            offers: vec![OFFER_PROCESS.into(), OFFER_STAGED_FILES.into(), OFFER_LOOPBACK_HTTP.into(), OFFER_HOOK_CHANNEL.into(), OFFER_PTY_RESIZE.into(), OFFER_LOOPBACK_FORWARD.into()],
             ..Default::default()
         }
     }
@@ -130,7 +151,17 @@ impl Backend for ProcessBackend {
     fn remove(&self, session_id: &str) -> bool {
         let id = ProcId(session_id.to_string());
         // An http stream is the link's own, not a runner process: forgetting its frames is the whole release.
-        let ok = session_id.starts_with(HTTP_STREAM_PREFIX) || self.rt.block_on(self.runner.release(&id)).is_ok();
+        let ok = is_link_stream(session_id) || self.rt.block_on(self.runner.release(&id)).is_ok();
+        if let Some(t) = self.tunnels.lock().unwrap().remove(session_id) {
+            t.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+            let _ = std::net::TcpStream::connect_timeout(&t.addr, Duration::from_millis(200));
+            for (_, c) in t.conns.lock().unwrap().drain() {
+                let _ = c.shutdown(std::net::Shutdown::Both);
+            }
+        }
+        if let Some((task, _)) = self.streams.lock().unwrap().remove(session_id) {
+            task.abort();
+        }
         let mut s = self.shared.0.lock().unwrap();
         s.sessions.remove(session_id);
         s.events.retain(|e| e.session_id != session_id);
@@ -150,6 +181,10 @@ impl Backend for ProcessBackend {
             },
             wire::CMD_CLOSE_INPUT => done(self.rt.block_on(self.runner.close_input(&id))),
             wire::CMD_STATUS => done(Ok(())),
+            wire::CMD_RESIZE => match r.text.split_once(',').and_then(|(a, b)| Some((a.trim().parse::<u16>().ok()?, b.trim().parse::<u16>().ok()?))) {
+                Some((rows, cols)) if rows > 0 && cols > 0 => done(self.rt.block_on(self.runner.resize(&id, Size { rows, cols }))),
+                _ => CommandAnswer { kind: "refused".into(), reason: Some("text is not `rows,cols`".into()), ..Default::default() },
+            },
             // `unknown` means "not a session of yours" on the link; a known session's unknown kind is a refusal.
             other => CommandAnswer { kind: "refused".into(), reason: Some(format!("command kind '{other}' is not offered for a process")), error_type: "unsupported".into(), started: false },
         }
@@ -219,6 +254,137 @@ impl Backend for ProcessBackend {
                 x.exited = Some(0);
             }
         });
+        HttpOpenAnswer { stream_id: Some(sid), ..Default::default() }
+    }
+
+    fn tunnel_open(&self) -> TunnelOpenAnswer {
+        use std::io::Read;
+        use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+        let refuse = |e: String| TunnelOpenAnswer { refusal: Some(e), error_type: "io".into(), ..Default::default() };
+        let listener = match std::net::TcpListener::bind("127.0.0.1:0") {
+            Ok(l) => l,
+            Err(e) => return refuse(e.to_string()),
+        };
+        let addr = match listener.local_addr() {
+            Ok(a) => a,
+            Err(e) => return refuse(e.to_string()),
+        };
+        let sid = format!("{TUNNEL_STREAM_PREFIX}{}", uuid::Uuid::new_v4());
+        self.shared.0.lock().unwrap().sessions.insert(sid.clone(), Session::default());
+        let conns: Arc<Mutex<HashMap<u64, std::net::TcpStream>>> = Arc::default();
+        let stop = Arc::new(AtomicBool::new(false));
+        self.tunnels.lock().unwrap().insert(sid.clone(), Tunnel { conns: conns.clone(), stop: stop.clone(), addr });
+        let (shared, id) = (self.shared.clone(), sid.clone());
+        let frame = |conn: u64, data: String| serde_json::to_string(&TunnelFrame { conn, data }).unwrap_or_default();
+        let spawned = std::thread::Builder::new().name("runner-link-tunnel".into()).spawn(move || {
+            let next = AtomicU64::new(1);
+            for stream in listener.incoming() {
+                if stop.load(Ordering::SeqCst) {
+                    break;
+                }
+                let Ok(stream) = stream else { continue };
+                let conn = next.fetch_add(1, Ordering::SeqCst);
+                let Ok(mut reader) = stream.try_clone() else { continue };
+                conns.lock().unwrap().insert(conn, stream);
+                Self::push(&shared, &id, wire::TUNNEL_CONN, frame(conn, String::new()));
+                let (shared, id, conns) = (shared.clone(), id.clone(), conns.clone());
+                let _ = std::thread::Builder::new().name("runner-link-tunnel-conn".into()).spawn(move || {
+                    let mut buf = vec![0u8; 16 * 1024];
+                    loop {
+                        match reader.read(&mut buf) {
+                            Ok(0) | Err(_) => break,
+                            Ok(n) => Self::push(&shared, &id, wire::TUNNEL_DATA, frame(conn, B64.encode(&buf[..n]))),
+                        }
+                    }
+                    conns.lock().unwrap().remove(&conn);
+                    Self::push(&shared, &id, wire::TUNNEL_CLOSE, frame(conn, String::new()));
+                });
+            }
+        });
+        if let Err(e) = spawned {
+            return refuse(e.to_string());
+        }
+        TunnelOpenAnswer { stream_id: Some(sid), port: addr.port(), ..Default::default() }
+    }
+
+    fn tunnel_send(&self, r: &TunnelSendRequest) -> bool {
+        use std::io::Write;
+        let conns = match self.tunnels.lock().unwrap().get(&r.stream_id) {
+            Some(t) => t.conns.clone(),
+            None => return false,
+        };
+        let mut g = conns.lock().unwrap();
+        let Some(c) = g.get_mut(&r.conn) else { return false };
+        if !r.data.is_empty() {
+            match B64.decode(r.data.as_bytes()) {
+                Ok(b) if c.write_all(&b).is_ok() => {}
+                _ => {
+                    let _ = c.shutdown(std::net::Shutdown::Both);
+                    return false;
+                }
+            }
+        }
+        if r.close {
+            let _ = c.shutdown(std::net::Shutdown::Both);
+            g.remove(&r.conn);
+        }
+        true
+    }
+
+    fn hook_open(&self) -> HookOpenAnswer {
+        let mut ep = match self.rt.block_on(self.runner.hook_channel()) {
+            Ok(ep) => ep,
+            Err(e) => return HookOpenAnswer { refusal: Some(e.to_string()), error_type: error_type(&e).into(), ..Default::default() },
+        };
+        let sid = format!("{HOOK_STREAM_PREFIX}{}", uuid::Uuid::new_v4());
+        self.shared.0.lock().unwrap().sessions.insert(sid.clone(), Session::default());
+        let (url, events_file) = (ep.url.clone(), ep.events_file.clone());
+        let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
+        let (shared, id, held) = (self.shared.clone(), sid.clone(), pending.clone());
+        // The task owns the endpoint: aborting it (remove) drops the endpoint and unregisters the url.
+        let task = self.rt.spawn(async move {
+            // Move the whole endpoint in (a closure would capture only `calls` and drop the guard, closing the url).
+            let mut ep = ep;
+            while let Some(call) = ep.calls.recv().await {
+                let call_id = uuid::Uuid::new_v4().simple().to_string();
+                let data = serde_json::to_string(&HookCallWire { call_id: call_id.clone(), body: call.body.clone() }).unwrap_or_default();
+                held.lock().unwrap().insert(call_id, call);
+                Self::push(&shared, &id, wire::HOOK_CALL, data);
+            }
+        });
+        self.streams.lock().unwrap().insert(sid.clone(), (task, pending));
+        HookOpenAnswer { stream_id: Some(sid), url, events_file, ..Default::default() }
+    }
+
+    fn forward_answer(&self, r: &ForwardAnswerRequest) -> bool {
+        let call = self.streams.lock().unwrap().get(&r.stream_id).and_then(|(_, p)| p.lock().unwrap().remove(&r.call_id));
+        match call {
+            Some(c) => {
+                c.reply(r.body.clone());
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn tail_open(&self, r: &TailOpenRequest) -> HttpOpenAnswer {
+        let from = match r.from.as_str() {
+            "end" => TailFrom::End,
+            n => n.parse::<u64>().map(TailFrom::Offset).unwrap_or(TailFrom::Start),
+        };
+        let mut rx = match self.rt.block_on(self.runner.tail(TailSpec { path: r.path.clone(), from })) {
+            Ok(rx) => rx,
+            Err(e) => return HttpOpenAnswer { refusal: Some(e.to_string()), error_type: error_type(&e).into(), stream_id: None },
+        };
+        let sid = format!("{TAIL_STREAM_PREFIX}{}", uuid::Uuid::new_v4());
+        self.shared.0.lock().unwrap().sessions.insert(sid.clone(), Session::default());
+        let (shared, id) = (self.shared.clone(), sid.clone());
+        let task = self.rt.spawn(async move {
+            while let Some(line) = rx.recv().await {
+                Self::push(&shared, &id, wire::TAIL_LINE, line);
+            }
+        });
+        self.streams.lock().unwrap().insert(sid.clone(), (task, Arc::new(Mutex::new(HashMap::new()))));
         HttpOpenAnswer { stream_id: Some(sid), ..Default::default() }
     }
 

@@ -19,6 +19,8 @@ path = "src/bin/infantry-runner-agent.rs"
 [dependencies]
 infantry-protocol = { path = "../infantry-protocol" }
 infantry-runner-api = { path = "../infantry-runner-api" }
+# The vt100 screen the orchestrator keeps for a remote pty process, fed by its pushed output (no screen frames on the wire).
+infantry-runner = { path = "../infantry-runner" }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }

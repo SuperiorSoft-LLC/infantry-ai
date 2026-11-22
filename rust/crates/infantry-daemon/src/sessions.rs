@@ -1278,6 +1278,14 @@ impl Daemon {
         // RR-4: every session, local or remote, is opened on the runner its record names; an unknown, offline or outdated
         // runner fails the start loudly (no local fallback).
         let entry = self.runner_registry().resolve(&e.rec.runner).map_err(|r| r.to_string())?;
+        // RR-5: a runner on another machine cannot dial this daemon's loopback: its session (and the infantry MCP it runs)
+        // is pointed at a loopback port on the runner host that the link tunnels back here. A runner that shares this machine
+        // answers `Unsupported` and the env stays as it is.
+        if let Some(port) = env.iter().find(|(k, _)| k == "INFANTRY_PORT").and_then(|(_, v)| v.parse::<u16>().ok()) {
+            if let Some(remote) = forward_to_runner(&entry, port)? {
+                reroute_daemon_env(&mut env, &mut mcp, port, remote);
+            }
+        }
         let req = OpenRequest {
             runner: entry.runner,
             runner_name: entry.name,
@@ -1646,5 +1654,44 @@ mod rr13_tests {
         assert_eq!(unusable_in(rows, "claude", "box"), None);
         assert_eq!(unusable_in(rows, "unknown", "box"), None);
         assert_eq!(unusable_in("not json", "pi", "box"), None);
+    }
+}
+
+/// The port on the runner's host that tunnels to this daemon's [port]; `None` = the runner shares this machine.
+fn forward_to_runner(entry: &infantry_runner_source::RunnerEntry, port: u16) -> Result<Option<u16>, String> {
+    use infantry_runner_api::RunnerError;
+    // On its own thread, so it is safe to call from inside an async runtime too.
+    let answer = std::thread::scope(|s| {
+        s.spawn(|| {
+            let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e| e.to_string())?;
+            Ok::<_, String>(rt.block_on(entry.runner.forward_loopback(port)))
+        })
+        .join()
+        .unwrap_or_else(|_| Err("the loopback forward panicked".to_string()))
+    })?;
+    match answer {
+        Ok(p) => Ok(Some(p)),
+        Err(RunnerError::Unsupported(_)) => Ok(None),
+        Err(e) => Err(format!("runner '{}' cannot reach this daemon: {e}", entry.name)),
+    }
+}
+
+/// Points the daemon address in a session's env (and in its MCP servers' env) at [remote] on the runner host.
+fn reroute_daemon_env(env: &mut [(String, String)], mcp: &mut infantry_harness::McpPlan, port: u16, remote: u16) {
+    let fix = |kv: &mut [(String, String)]| {
+        for (k, v) in kv.iter_mut() {
+            match k.as_str() {
+                "INFANTRY_PORT" => *v = remote.to_string(),
+                "INFANTRY_URL" => *v = format!("ws://127.0.0.1:{remote}/ws"),
+                _ => {}
+            }
+        }
+    };
+    let _ = port;
+    fix(env);
+    for spec in mcp.add.iter_mut() {
+        if let infantry_harness::McpTransport::Stdio { env, .. } = &mut spec.transport {
+            fix(env);
+        }
     }
 }

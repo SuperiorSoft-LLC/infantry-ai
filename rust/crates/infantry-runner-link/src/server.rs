@@ -74,6 +74,26 @@ pub trait Backend: Send + Sync + 'static {
     fn frame(&self, frame: &str, _data: &str) -> Result<crate::wire::FrameAnswer, String> {
         Err(format!("frame '{frame}' is {NOT_OFFERED} this runner offers"))
     }
+    /// RR-5 `hook-channel` on the runner's host: a stream whose frames are the blocking hook calls.
+    fn hook_open(&self) -> HookOpenAnswer {
+        HookOpenAnswer { refusal: Some("this runner offers no hook channel".into()), error_type: "unsupported".into(), ..Default::default() }
+    }
+    /// The answer to one call of a hook stream.
+    fn forward_answer(&self, _r: &ForwardAnswerRequest) -> bool {
+        false
+    }
+    /// RR-5: follows a hook channel's events file; a stream whose frames are its lines.
+    fn tail_open(&self, _r: &TailOpenRequest) -> HttpOpenAnswer {
+        HttpOpenAnswer { refusal: Some("this runner offers no tail".into()), error_type: "unsupported".into(), ..Default::default() }
+    }
+    /// RR-5 `loopback-forward`: a listener on the runner host's loopback, its connections tunnelled to the caller.
+    fn tunnel_open(&self) -> TunnelOpenAnswer {
+        TunnelOpenAnswer { refusal: Some("this runner offers no loopback forward".into()), error_type: "unsupported".into(), ..Default::default() }
+    }
+    /// Bytes (or a close) for one tunnelled connection; whether the connection was known.
+    fn tunnel_send(&self, _r: &TunnelSendRequest) -> bool {
+        false
+    }
     /// `loopback-http` on the runner's host: the stream id whose frames carry the response.
     fn http_open(&self, _r: &HttpOpenRequest) -> HttpOpenAnswer {
         HttpOpenAnswer { refusal: Some("this runner makes no loopback http requests".into()), error_type: "unsupported".into(), ..Default::default() }
@@ -317,6 +337,35 @@ impl LinkServer {
             wire::HTTP_OPEN => match decode::<HttpOpenRequest>(data) {
                 Some(r) => {
                     let a = self.backend.http_open(&r);
+                    self.ok(&seat, t, from, &a)
+                }
+                None => malformed(),
+            },
+            wire::TUNNEL_OPEN => {
+                let a = self.backend.tunnel_open();
+                self.ok(&seat, t, from, &a)
+            }
+            wire::TUNNEL_SEND => match decode::<TunnelSendRequest>(data) {
+                Some(r) => {
+                    let a = TunnelSendAnswer { delivered: self.backend.tunnel_send(&r) };
+                    self.ok(&seat, t, from, &a)
+                }
+                None => malformed(),
+            },
+            wire::HOOK_OPEN => {
+                let a = self.backend.hook_open();
+                self.ok(&seat, t, from, &a)
+            }
+            wire::FORWARD_ANSWER => match decode::<ForwardAnswerRequest>(data) {
+                Some(r) => {
+                    let a = ForwardAnswerAnswer { delivered: self.backend.forward_answer(&r) };
+                    self.ok(&seat, t, from, &a)
+                }
+                None => malformed(),
+            },
+            wire::TAIL_OPEN => match decode::<TailOpenRequest>(data) {
+                Some(r) => {
+                    let a = self.backend.tail_open(&r);
                     self.ok(&seat, t, from, &a)
                 }
                 None => malformed(),

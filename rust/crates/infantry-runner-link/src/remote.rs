@@ -12,22 +12,162 @@
 //! | `events` | `runner_link_frames_pull` (held), the `runner_proc_*` frames of that process |
 //! | `release` | `runner_link_remove` |
 //!
-//! `screen`, `screen_text_since`, `resize`, `tail` and `hook_channel` are not carried yet: [`RunnerError::Unsupported`].
+//! RR-5, a pty process (`ProcessSpec::pty`): the orchestrator keeps its own vt100 [`Screen`] fed by the pushed output
+//! bytes, so `screen` and `screen_text_since` answer from it and no screen frame crosses the link; `resize` is a
+//! `proc_resize` command; `hook_channel` opens a hook endpoint on the runner host (`runner_link_hook_open`) whose blocking
+//! calls arrive as `runner_hook_call` frames and are answered with `runner_link_forward_answer`; `tail` follows a file on the runner host
+//! (that endpoint's events file, a harness transcript). A runner that does not offer `hook-channel` answers [`RunnerError::Unsupported`].
 //! A Kotlin runner runs harness sessions, not processes, so `spawn` on it is `Unsupported` too (its hello offers nothing).
 
 use crate::client::{CallError, LinkClient};
 use crate::wire::{self, *};
 use base64::Engine;
 use infantry_runner_api::*;
-use std::collections::BTreeMap;
+use infantry_runner::screen::Screen;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 
+/// What a pty process's snapshot keeps of the plain-text tail.
+const SCREEN_TAIL_CHARS: usize = 4096;
+
+/// The orchestrator's view of one remote pty process: its screen and the events not yet read.
+struct PtyState {
+    screen: Mutex<Screen>,
+    epoch: std::time::Instant,
+    hub: Mutex<PtyHub>,
+    stopped: AtomicBool,
+}
+
+#[derive(Default)]
+struct PtyHub {
+    subs: Vec<mpsc::UnboundedSender<ProcEvent>>,
+    /// Events before the first subscriber (the first subscriber gets everything since spawn).
+    backlog: Vec<ProcEvent>,
+    subscribed: bool,
+    exit: Option<i32>,
+}
+
+impl PtyState {
+    fn publish(&self, ev: ProcEvent) {
+        let mut h = self.hub.lock().unwrap();
+        if let ProcEvent::Exited(c) = &ev {
+            h.exit = Some(*c);
+        }
+        if h.subscribed {
+            h.subs.retain(|s| s.send(ev.clone()).is_ok());
+        } else {
+            h.backlog.push(ev);
+        }
+        if h.exit.is_some() {
+            h.subs.clear();
+        }
+    }
+
+    fn subscribe(&self) -> mpsc::UnboundedReceiver<ProcEvent> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let mut h = self.hub.lock().unwrap();
+        if !h.subscribed {
+            h.subscribed = true;
+            for ev in std::mem::take(&mut h.backlog) {
+                let _ = tx.send(ev);
+            }
+        } else if let Some(c) = h.exit {
+            let _ = tx.send(ProcEvent::Exited(c));
+        }
+        if h.exit.is_none() {
+            h.subs.push(tx);
+        }
+        rx
+    }
+}
+
+/// Closes a remote hook endpoint when the orchestrator drops its [`HookEndpoint`].
+struct RemoteGuard {
+    client: Arc<LinkClient>,
+    stream: String,
+    stop: Arc<AtomicBool>,
+}
+
+impl Drop for RemoteGuard {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        let (c, sid) = (self.client.clone(), self.stream.clone());
+        let _ = std::thread::Builder::new().name("remote-runner-unhook".into()).spawn(move || {
+            let _ = c.typed::<_, RemoveAnswer>(wire::REMOVE, &RemoveRequest { session_id: sid });
+        });
+    }
+}
+
+/// Open loopback forwards, process-wide (a session's runner handle is made fresh each time): (runner@link url, orchestrator
+/// target port) -> the port on the runner host.
+fn forwards() -> &'static Mutex<HashMap<(String, u16), u16>> {
+    static F: std::sync::OnceLock<Mutex<HashMap<(String, u16), u16>>> = std::sync::OnceLock::new();
+    F.get_or_init(Mutex::default)
+}
+
+/// The orchestrator half of a loopback forward: each connection the runner host accepted is mirrored by one to
+/// `127.0.0.1:target`; bytes move both ways until either side closes. Ends when the link drops.
+fn tunnel_pump(client: Arc<LinkClient>, sid: String, target: u16, wait: Duration) {
+    use std::io::{Read, Write};
+    let conns: Arc<Mutex<HashMap<u64, std::net::TcpStream>>> = Arc::default();
+    let mut after = 0i64;
+    loop {
+        let req = FramesPullRequest { resume_from: BTreeMap::from([(sid.clone(), after)]), wait_ms: wait.as_millis() as i64, max: 0 };
+        let Ok(a) = client.typed_with::<_, FramesPullAnswer>(wire::FRAMES_PULL, &req, wait + Duration::from_secs(15)) else { return };
+        for f in a.frames {
+            after = after.max(f.sequence.unwrap_or(0));
+            let Ok(t) = serde_json::from_str::<TunnelFrame>(&f.data) else { continue };
+            match f.r#type.as_str() {
+                wire::TUNNEL_CONN => {
+                    let Ok(s) = std::net::TcpStream::connect(("127.0.0.1", target)) else {
+                        let req = TunnelSendRequest { stream_id: sid.clone(), conn: t.conn, data: String::new(), close: true };
+                        let _ = client.typed::<_, TunnelSendAnswer>(wire::TUNNEL_SEND, &req);
+                        continue;
+                    };
+                    let Ok(mut reader) = s.try_clone() else { continue };
+                    conns.lock().unwrap().insert(t.conn, s);
+                    let (client, sid, conns, conn) = (client.clone(), sid.clone(), conns.clone(), t.conn);
+                    let _ = std::thread::Builder::new().name("remote-runner-tunnel-conn".into()).spawn(move || {
+                        let mut buf = vec![0u8; 16 * 1024];
+                        loop {
+                            let (n, close) = match reader.read(&mut buf) {
+                                Ok(0) | Err(_) => (0, true),
+                                Ok(n) => (n, false),
+                            };
+                            let req = TunnelSendRequest { stream_id: sid.clone(), conn, data: B64.encode(&buf[..n]), close };
+                            let delivered = client.typed::<_, TunnelSendAnswer>(wire::TUNNEL_SEND, &req).map(|a| a.delivered).unwrap_or(false);
+                            if close || !delivered {
+                                break;
+                            }
+                        }
+                        conns.lock().unwrap().remove(&conn);
+                    });
+                }
+                wire::TUNNEL_DATA => {
+                    if let (Some(c), Ok(b)) = (conns.lock().unwrap().get_mut(&t.conn), B64.decode(t.data.as_bytes())) {
+                        let _ = c.write_all(&b);
+                    }
+                }
+                wire::TUNNEL_CLOSE => {
+                    if let Some(c) = conns.lock().unwrap().remove(&t.conn) {
+                        let _ = c.shutdown(std::net::Shutdown::Both);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 pub struct RemoteRunner {
     id: String,
+    /// pty processes started here, by process id.
+    ptys: Mutex<HashMap<String, Arc<PtyState>>>,
     client: Arc<LinkClient>,
     hello: Mutex<Option<HelloAnswer>>,
     /// How long one frames_pull is held on the runner.
@@ -63,7 +203,7 @@ fn from_command(a: CommandAnswer, id: &ProcId) -> Result<(), RunnerError> {
 impl RemoteRunner {
     /// `id` is the runner's name; `client` holds its url and credential.
     pub fn new(id: impl Into<String>, client: LinkClient) -> Self {
-        RemoteRunner { id: id.into(), client: Arc::new(client), hello: Mutex::new(None), pull_wait: Duration::from_secs(10) }
+        RemoteRunner { id: id.into(), ptys: Mutex::new(HashMap::new()), client: Arc::new(client), hello: Mutex::new(None), pull_wait: Duration::from_secs(10) }
     }
 
     async fn blocking<T: Send + 'static>(&self, f: impl FnOnce(&LinkClient) -> Result<T, CallError> + Send + 'static) -> Result<T, RunnerError> {
@@ -84,6 +224,55 @@ impl RemoteRunner {
         let req = CommandRequest { session_id: id.0.clone(), kind: kind.into(), text, ..Default::default() };
         let a: CommandAnswer = self.blocking(move |c| c.typed(wire::COMMAND, &req)).await?;
         from_command(a, id)
+    }
+
+    /// The state of a pty process started here; any other process (piped, released, unknown) has no screen: `Unsupported`.
+    fn pty(&self, id: &ProcId) -> Result<Arc<PtyState>, RunnerError> {
+        self.ptys.lock().unwrap().get(&id.0).cloned().ok_or_else(|| RunnerError::Unsupported(format!("{}: not a pty process of this runner, so it has no screen or terminal size", id.0)))
+    }
+
+    /// Reads a pty process's pushed frames for good: feeds the screen, then hands each event to the subscribers.
+    fn pump(&self, sid: &str, size: Size) -> Result<(), RunnerError> {
+        let st = Arc::new(PtyState {
+            screen: Mutex::new(Screen::new(size.rows, size.cols)),
+            epoch: std::time::Instant::now(),
+            hub: Mutex::new(PtyHub::default()),
+            stopped: AtomicBool::new(false),
+        });
+        self.ptys.lock().unwrap().insert(sid.to_string(), st.clone());
+        let (client, sid, wait) = (self.client.clone(), sid.to_string(), self.pull_wait);
+        std::thread::Builder::new()
+            .name("remote-runner-pty".into())
+            .spawn(move || {
+                let mut after = 0i64;
+                while !st.stopped.load(Ordering::SeqCst) {
+                    let req = FramesPullRequest { resume_from: BTreeMap::from([(sid.clone(), after)]), wait_ms: wait.as_millis() as i64, max: 0 };
+                    let Ok(a) = client.typed_with::<_, FramesPullAnswer>(wire::FRAMES_PULL, &req, wait + Duration::from_secs(15)) else { return };
+                    for f in a.frames {
+                        after = after.max(f.sequence.unwrap_or(0));
+                        match f.r#type.as_str() {
+                            wire::PROC_OUTPUT => {
+                                if let Ok(b) = B64.decode(f.data.as_bytes()) {
+                                    st.screen.lock().unwrap().feed(&b, st.epoch.elapsed().as_millis() as u64);
+                                    st.publish(ProcEvent::Output(b));
+                                }
+                            }
+                            wire::PROC_STDERR => {
+                                if let Ok(b) = B64.decode(f.data.as_bytes()) {
+                                    st.publish(ProcEvent::Stderr(b));
+                                }
+                            }
+                            wire::PROC_EXIT => {
+                                st.publish(ProcEvent::Exited(f.data.trim().parse().unwrap_or(-1)));
+                                return;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            })
+            .map_err(disconnected)?;
+        Ok(())
     }
 
     fn unsupported<T>(what: &str) -> Result<T, RunnerError> {
@@ -110,10 +299,16 @@ impl Runner for RemoteRunner {
             if !h.offers.iter().any(|o| o == OFFER_PROCESS) {
                 return Err(RunnerError::Unsupported(format!("runner '{}' runs harness sessions, not processes", h.runner_name)));
             }
+            let pty = spec.pty;
             let req = StartRequest { start_id: uuid::Uuid::new_v4().to_string(), process: Some(spec), ..Default::default() };
             let a: StartAnswer = self.blocking(move |c| c.typed(wire::START, &req)).await?;
             match (a.session_id, a.refusal) {
-                (Some(id), None) => Ok(ProcHandle { id: ProcId(id), pid: None }),
+                (Some(id), None) => {
+                    if let Some(size) = pty {
+                        self.pump(&id, size)?;
+                    }
+                    Ok(ProcHandle { id: ProcId(id), pid: None })
+                }
                 (_, Some(r)) => Err(RunnerError::Io(r)),
                 (None, None) => Err(RunnerError::Io("the runner started nothing".into())),
             }
@@ -128,8 +323,13 @@ impl Runner for RemoteRunner {
         Box::pin(self.command(id, wire::CMD_CLOSE_INPUT, String::new()))
     }
 
-    fn resize<'a>(&'a self, _id: &'a ProcId, _size: Size) -> RunnerFuture<'a, ()> {
-        Box::pin(async { Self::unsupported("resize") })
+    fn resize<'a>(&'a self, id: &'a ProcId, size: Size) -> RunnerFuture<'a, ()> {
+        Box::pin(async move {
+            let st = self.pty(id)?;
+            self.command(id, wire::CMD_RESIZE, format!("{},{}", size.rows, size.cols)).await?;
+            st.screen.lock().unwrap().resize(size.rows, size.cols);
+            Ok(())
+        })
     }
 
     fn kill<'a>(&'a self, id: &'a ProcId, scope: KillScope) -> RunnerFuture<'a, ()> {
@@ -142,6 +342,9 @@ impl Runner for RemoteRunner {
 
     fn events<'a>(&'a self, id: &'a ProcId) -> RunnerFuture<'a, mpsc::UnboundedReceiver<ProcEvent>> {
         Box::pin(async move {
+            if let Some(st) = self.ptys.lock().unwrap().get(&id.0).cloned() {
+                return Ok(st.subscribe());
+            }
             // One pull now: an unknown process is NotFound here, not a silent empty stream.
             let sid = id.0.clone();
             let first = {
@@ -195,20 +398,142 @@ impl Runner for RemoteRunner {
         })
     }
 
-    fn screen<'a>(&'a self, _id: &'a ProcId) -> RunnerFuture<'a, ScreenSnapshot> {
-        Box::pin(async { Self::unsupported("screen") })
+    fn screen<'a>(&'a self, id: &'a ProcId) -> RunnerFuture<'a, ScreenSnapshot> {
+        Box::pin(async move {
+            let st = self.pty(id)?;
+            let s = st.screen.lock().unwrap();
+            let (rows, cols) = s.size();
+            Ok(ScreenSnapshot { size: Size { rows, cols }, rows: s.rows(), cursor: s.cursor(), total: s.total(), tail: s.tail_chars(SCREEN_TAIL_CHARS) })
+        })
     }
 
-    fn screen_text_since<'a>(&'a self, _id: &'a ProcId, _mark: u64, _max: usize) -> RunnerFuture<'a, String> {
-        Box::pin(async { Self::unsupported("screen_text_since") })
+    fn screen_text_since<'a>(&'a self, id: &'a ProcId, mark: u64, max: usize) -> RunnerFuture<'a, String> {
+        Box::pin(async move { Ok(self.pty(id)?.screen.lock().unwrap().text_since(mark, max)) })
     }
 
-    fn tail(&self, _spec: TailSpec) -> RunnerFuture<'_, mpsc::UnboundedReceiver<String>> {
-        Box::pin(async { Self::unsupported("tail") })
+    fn forward_loopback(&self, target_port: u16) -> RunnerFuture<'_, u16> {
+        Box::pin(async move {
+            let key = (format!("{}@{}", self.id, self.client.url()), target_port);
+            if let Some(p) = forwards().lock().unwrap().get(&key) {
+                return Ok(*p);
+            }
+            let h = self.hello().await?;
+            if !h.offers.iter().any(|o| o == OFFER_LOOPBACK_FORWARD) {
+                return Self::unsupported("loopback-forward");
+            }
+            let a: TunnelOpenAnswer = self.blocking(|c| c.typed(wire::TUNNEL_OPEN, &serde_json::json!({}))).await?;
+            let sid = match (a.stream_id, a.refusal) {
+                (Some(id), None) => id,
+                (_, why) => {
+                    let why = why.unwrap_or_else(|| "the runner opened no tunnel".into());
+                    return Err(if a.error_type == "unsupported" { RunnerError::Unsupported(why) } else { RunnerError::Io(why) });
+                }
+            };
+            let (client, wait) = (self.client.clone(), self.pull_wait);
+            let k = key.clone();
+            std::thread::Builder::new()
+                .name("remote-runner-tunnel".into())
+                .spawn(move || {
+                    tunnel_pump(client, sid, target_port, wait);
+                    // The link dropped: the next session opens a fresh tunnel.
+                    forwards().lock().unwrap().remove(&k);
+                })
+                .map_err(disconnected)?;
+            forwards().lock().unwrap().insert(key, a.port);
+            Ok(a.port)
+        })
+    }
+
+    fn tail(&self, spec: TailSpec) -> RunnerFuture<'_, mpsc::UnboundedReceiver<String>> {
+        Box::pin(async move {
+            let h = self.hello().await?;
+            if !h.offers.iter().any(|o| o == OFFER_HOOK_CHANNEL) {
+                return Self::unsupported("tail");
+            }
+            let from = match spec.from {
+                TailFrom::Start => "start".to_string(),
+                TailFrom::End => "end".to_string(),
+                TailFrom::Offset(o) => o.to_string(),
+                _ => "start".to_string(),
+            };
+            let open = TailOpenRequest { path: spec.path, from };
+            let a: HttpOpenAnswer = self.blocking(move |c| c.typed(wire::TAIL_OPEN, &open)).await?;
+            let sid = match (a.stream_id, a.refusal) {
+                (Some(id), None) => id,
+                (_, why) => {
+                    let why = why.unwrap_or_else(|| "the runner opened no tail".into());
+                    return Err(if a.error_type == "unsupported" { RunnerError::Unsupported(why) } else { RunnerError::Io(why) });
+                }
+            };
+            let (tx, rx) = mpsc::unbounded_channel();
+            let (client, wait) = (self.client.clone(), self.pull_wait);
+            std::thread::Builder::new()
+                .name("remote-runner-tail".into())
+                .spawn(move || {
+                    let mut after = 0i64;
+                    'pull: while !tx.is_closed() {
+                        let req = FramesPullRequest { resume_from: BTreeMap::from([(sid.clone(), after)]), wait_ms: wait.as_millis() as i64, max: 0 };
+                        let Ok(a) = client.typed_with::<_, FramesPullAnswer>(wire::FRAMES_PULL, &req, wait + Duration::from_secs(15)) else { break };
+                        for f in a.frames {
+                            after = after.max(f.sequence.unwrap_or(0));
+                            if f.r#type == wire::TAIL_LINE && tx.send(f.data).is_err() {
+                                break 'pull;
+                            }
+                        }
+                    }
+                    let _ = client.typed::<_, RemoveAnswer>(wire::REMOVE, &RemoveRequest { session_id: sid });
+                })
+                .map_err(disconnected)?;
+            Ok(rx)
+        })
     }
 
     fn hook_channel(&self) -> RunnerFuture<'_, HookEndpoint> {
-        Box::pin(async { Self::unsupported("hook_channel") })
+        Box::pin(async move {
+            let h = self.hello().await?;
+            if !h.offers.iter().any(|o| o == OFFER_HOOK_CHANNEL) {
+                return Self::unsupported("hook_channel");
+            }
+            let a: HookOpenAnswer = self.blocking(|c| c.typed(wire::HOOK_OPEN, &serde_json::json!({}))).await?;
+            let sid = match (a.stream_id, a.refusal) {
+                (Some(id), None) => id,
+                (_, why) => {
+                    let why = why.unwrap_or_else(|| "the runner opened no hook channel".into());
+                    return Err(if a.error_type == "unsupported" { RunnerError::Unsupported(why) } else { RunnerError::Io(why) });
+                }
+            };
+            let (calls_tx, calls_rx) = mpsc::unbounded_channel::<HookCall>();
+            let stop = Arc::new(AtomicBool::new(false));
+            let (client, wait, stop2, sid2) = (self.client.clone(), self.pull_wait, stop.clone(), sid.clone());
+            std::thread::Builder::new()
+                .name("remote-runner-hooks".into())
+                .spawn(move || {
+                    let mut after = 0i64;
+                    while !stop2.load(Ordering::SeqCst) && !calls_tx.is_closed() {
+                        let req = FramesPullRequest { resume_from: BTreeMap::from([(sid2.clone(), after)]), wait_ms: wait.as_millis() as i64, max: 0 };
+                        let Ok(a) = client.typed_with::<_, FramesPullAnswer>(wire::FRAMES_PULL, &req, wait + Duration::from_secs(15)) else { return };
+                        for f in a.frames {
+                            after = after.max(f.sequence.unwrap_or(0));
+                            let Some(w) = (f.r#type == wire::HOOK_CALL).then(|| serde_json::from_str::<HookCallWire>(&f.data).ok()).flatten() else { continue };
+                            let (otx, orx) = tokio::sync::oneshot::channel();
+                            if calls_tx.send(HookCall::new(w.body, otx)).is_err() {
+                                return;
+                            }
+                            // The hook waits on the runner: answer it when the orchestrator has (an unanswered call answers `{}`).
+                            let (c, sid, call_id) = (client.clone(), sid2.clone(), w.call_id);
+                            let _ = std::thread::Builder::new().name("remote-runner-hook-answer".into()).spawn(move || {
+                                let body = orx.blocking_recv().unwrap_or_else(|_| "{}".to_string());
+                                let req = ForwardAnswerRequest { stream_id: sid, call_id, body };
+                                let _ = c.typed::<_, ForwardAnswerAnswer>(wire::FORWARD_ANSWER, &req);
+                            });
+                        }
+                    }
+                })
+                .map_err(disconnected)?;
+            let token = a.url.rsplit('/').next().unwrap_or_default().to_string();
+            let guard = RemoteGuard { client: self.client.clone(), stream: sid, stop };
+            Ok(HookEndpoint::new(token, a.url, a.events_file, calls_rx, Box::new(guard)))
+        })
     }
 
     fn http(&self, req: HttpRequest) -> RunnerFuture<'_, mpsc::UnboundedReceiver<HttpEvent>> {
@@ -293,6 +618,9 @@ impl Runner for RemoteRunner {
 
     fn release<'a>(&'a self, id: &'a ProcId) -> RunnerFuture<'a, ()> {
         Box::pin(async move {
+            if let Some(st) = self.ptys.lock().unwrap().remove(&id.0) {
+                st.stopped.store(true, Ordering::SeqCst);
+            }
             let req = RemoveRequest { session_id: id.0.clone() };
             let _: RemoveAnswer = self.blocking(move |c| c.typed(wire::REMOVE, &req)).await?;
             Ok(())

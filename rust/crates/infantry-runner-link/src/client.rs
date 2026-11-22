@@ -87,6 +87,11 @@ impl LinkClient {
         self
     }
 
+    /// The runner link url this client dials.
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
     pub fn has_credential(&self) -> bool {
         self.credential.lock().unwrap().is_some()
     }
