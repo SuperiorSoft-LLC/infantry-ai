@@ -254,7 +254,8 @@ if want S5; then
   if [ -n "$LONG_SID" ]; then
     M infantry_kill "{\"sessionId\":\"$LONG_SID\"}" >/dev/null
     sleep 8
-    LEFT="$(docker exec "$RUNNER_CT" sh -c "ps -eo args 2>/dev/null | grep -E 'opencode|pi-coding-agent|/harness-tools/' | grep -v grep | wc -l" 2>/dev/null || echo '?')"
+    # The image has no `ps` (a missing ps made this count 0 whatever ran): scan /proc, the one thing every Linux has.
+    LEFT="$(docker exec "$RUNNER_CT" sh -c 'n=0; for d in /proc/[0-9]*; do [ "$d" = "/proc/$$" ] && continue; c=$(tr "\0" " " < $d/cmdline 2>/dev/null); case "$c" in "opencode serve"*|*pi-coding-agent*|*/harness-tools/*) n=$((n+1));; esac; done; echo $n' 2>/dev/null || echo '?')"
     [ "$LEFT" = 0 ] && row S5 PASS "kill reached the runner; 0 harness processes left" || row S5 FAIL "$LEFT harness process(es) left in $RUNNER_CT"
   else row S5 FAIL "needs S2 (no long-running session)"; fi
 fi
