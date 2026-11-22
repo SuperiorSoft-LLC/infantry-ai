@@ -17,6 +17,8 @@ use crate::wire::*;
 use infantry_protocol::projects::Project;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 /// A request refused before git saw it; the text is the reason (without the `<frame> refused:` prefix).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -167,19 +169,96 @@ fn patch_from(result: &GitResult, cap: usize, mut base: ProjectGitPatch) -> Proj
 pub struct ProjectGitService {
     git: SharedGit,
     cfg: GitViewConfig,
+    /// Top level of a project directory, found once (a `git rev-parse` per call cost 0.1-0.3 s on a busy machine).
+    roots: Mutex<HashMap<String, PathBuf>>,
+    /// Read answers (as JSON) with the repository fingerprint they were made at: served while no ref, HEAD or index moved.
+    views: Mutex<HashMap<String, (u64, Instant, String)>>,
+}
+
+/// Everything that moves when a commit, a branch, a checkout or a staged change happens: the mtimes of HEAD, the index,
+/// packed-refs and every file under refs/ (and the worktree list), folded to one number.
+fn fingerprint(root: &Path) -> u64 {
+    let mut dirs = vec![root.join(".git")];
+    if let Ok(text) = std::fs::read_to_string(root.join(".git")) {
+        if let Some(d) = text.trim().strip_prefix("gitdir:") {
+            let d = PathBuf::from(d.trim());
+            if let Ok(c) = std::fs::read_to_string(d.join("commondir")) {
+                dirs.push(d.join(c.trim()));
+            }
+            dirs.insert(0, d);
+        }
+    }
+    let mut acc: u64 = 0;
+    let mut fold = |p: &Path| {
+        if let Ok(m) = std::fs::metadata(p) {
+            let t = m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos() as u64);
+            acc = acc.wrapping_mul(1_000_003).wrapping_add(t ^ m.len());
+        }
+    };
+    for d in &dirs {
+        for f in ["HEAD", "index", "packed-refs", "worktrees"] {
+            fold(&d.join(f));
+        }
+        let mut stack = vec![d.join("refs")];
+        while let Some(dir) = stack.pop() {
+            fold(&dir);
+            if let Ok(rd) = std::fs::read_dir(&dir) {
+                for e in rd.flatten() {
+                    match e.file_type() {
+                        Ok(t) if t.is_dir() => stack.push(e.path()),
+                        _ => fold(&e.path()),
+                    }
+                }
+            }
+        }
+    }
+    acc
 }
 
 impl ProjectGitService {
     pub fn new(git: SharedGit, cfg: GitViewConfig) -> Self {
-        ProjectGitService { git, cfg }
+        ProjectGitService { git, cfg, roots: Mutex::default(), views: Mutex::default() }
     }
 
     fn run(&self, cwd: &Path, args: &[&str]) -> GitResult {
         git::run(&*self.git, cwd, args)
     }
 
+    /// A read served from the cache while the repository fingerprint holds (and, with a [ttl], while the answer is young).
+    fn cached<T: serde::Serialize + serde::de::DeserializeOwned>(&self, project: &Project, key: &str, ttl: Option<Duration>, compute: impl FnOnce() -> T) -> T {
+        let Root::Found(root) = self.resolve_root(project) else { return compute() };
+        let fp = fingerprint(&root);
+        let key = format!("{}|{}|{key}", project.id, project.directory);
+        if let Some((f, at, json)) = self.views.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
+            if *f == fp && ttl.is_none_or(|t| at.elapsed() < t) {
+                if let Ok(v) = serde_json::from_str(json) {
+                    return v;
+                }
+            }
+        }
+        let v = compute();
+        if let Ok(json) = serde_json::to_string(&v) {
+            self.views.lock().unwrap_or_else(|e| e.into_inner()).insert(key, (fp, Instant::now(), json));
+        }
+        v
+    }
+
     /// The repository top level of the project's directory, or why there is none.
     fn resolve_root(&self, project: &Project) -> Root {
+        let key = project.directory.trim().to_string();
+        if let Some(r) = self.roots.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
+            if r.join(".git").exists() {
+                return Root::Found(r.clone());
+            }
+        }
+        let found = self.resolve_root_uncached(project);
+        if let Root::Found(r) = &found {
+            self.roots.lock().unwrap_or_else(|e| e.into_inner()).insert(key, r.clone());
+        }
+        found
+    }
+
+    fn resolve_root_uncached(&self, project: &Project) -> Root {
         let configured = project.directory.trim();
         if configured.is_empty() {
             return Root::Unavailable("this project has no directory configured".into());
@@ -200,7 +279,12 @@ impl ProjectGitService {
         Root::Found(paths::native(Path::new(top.out())))
     }
 
+    /// Not cached by result: an edit in the working tree moves no ref, so no fingerprint could tell it changed. The repo root is cached.
     pub fn status(&self, project: &Project) -> ProjectGitStatus {
+        self.status_uncached(project)
+    }
+
+    fn status_uncached(&self, project: &Project) -> ProjectGitStatus {
         let mut s = ProjectGitStatus { project_id: project.id.clone(), directory: project.directory.clone(), ..Default::default() };
         let root = match self.resolve_root(project) {
             Root::Unavailable(r) => {
@@ -302,6 +386,10 @@ impl ProjectGitService {
     }
 
     pub fn log(&self, project: &Project, limit: i64) -> ProjectGitHistory {
+        self.cached(project, &format!("log{limit}"), None, || self.log_uncached(project, limit))
+    }
+
+    fn log_uncached(&self, project: &Project, limit: i64) -> ProjectGitHistory {
         let mut h = ProjectGitHistory { project_id: project.id.clone(), ..Default::default() };
         let root = match self.resolve_root(project) {
             Root::Unavailable(r) => {
@@ -330,6 +418,10 @@ impl ProjectGitService {
     // ---- branches ------------------------------------------------------------------------------
 
     pub fn branches(&self, project: &Project) -> ProjectGitBranchList {
+        self.cached(project, "branches", None, || self.branches_uncached(project))
+    }
+
+    fn branches_uncached(&self, project: &Project) -> ProjectGitBranchList {
         let mut l = ProjectGitBranchList { project_id: project.id.clone(), ..Default::default() };
         let root = match self.resolve_root(project) {
             Root::Unavailable(r) => {
@@ -550,6 +642,10 @@ impl ProjectGitService {
     /// Every worktree of the project's repository; the one holding `session_dir` (else the project dir) is selected.
     /// "Holding" is the DEEPEST containing worktree, because linked worktrees often sit inside the main one.
     pub fn worktrees(&self, project: &Project, session_dir: Option<&str>) -> ProjectGitWorktreeList {
+        self.cached(project, &format!("worktrees{session_dir:?}"), None, || self.worktrees_uncached(project, session_dir))
+    }
+
+    fn worktrees_uncached(&self, project: &Project, session_dir: Option<&str>) -> ProjectGitWorktreeList {
         let mut l = ProjectGitWorktreeList { project_id: project.id.clone(), ..Default::default() };
         let root = match self.resolve_root(project) {
             Root::Unavailable(r) => {

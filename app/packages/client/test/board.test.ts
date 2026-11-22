@@ -38,6 +38,20 @@ describe("board store", () => {
     expect(l.sent.map((e) => e.type)).toEqual(["ticket_list"]);
   });
 
+  it("asks once however many dialogs open before the answer, and not at all after READY asked", () => {
+    const l = link();
+    const s = createBoardStore(l);
+    s.getState().ensureLoaded();
+    s.getState().ensureLoaded();
+    s.getState().ensureLoaded();
+    expect(l.sent.filter((e) => e.type === "ticket_list")).toHaveLength(1);
+    const l2 = link();
+    const s2 = createBoardStore(l2);
+    l2.push({ type: "ready", data: "{}" });
+    s2.getState().ensureLoaded();
+    expect(l2.sent).toHaveLength(0);
+  });
+
   it("moves a ticket at once, renumbers both lanes, and keeps it when the daemon answers", () => {
     const { l, s } = loaded();
     s.getState().move("a", "done", 0);
