@@ -302,6 +302,84 @@ async fn gateway_connection(daemon: Arc<Daemon>, gw: Arc<Gateway>, owner: bool, 
     gw.unregister(id);
 }
 
+/// RR-6b: the tunnel listener's router: `/ws` only, and every request needs a session token (a loopback Host or no token is
+/// never enough). A request with an Origin header, or any other path, is refused.
+pub fn tunnel_router(app: App) -> Router {
+    Router::new().route("/ws", get(tunnel_ws)).with_state(app)
+}
+
+async fn tunnel_ws(
+    State(app): State<App>,
+    headers: HeaderMap,
+    upgrade: Result<WebSocketUpgrade, axum::extract::ws::rejection::WebSocketUpgradeRejection>,
+) -> Response {
+    if h(&headers, header::ORIGIN).is_some() {
+        return refuse(auth::Refusal { status: 403, reason: "requests carrying an Origin header are refused on the tunnel", challenge_bearer: false });
+    }
+    let Some(sid) = crate::tunnel::bearer(h(&headers, header::AUTHORIZATION)).and_then(|t| app.daemon.tunnel.resolve(t)) else {
+        return refuse(auth::Refusal { status: 401, reason: "a session token is required", challenge_bearer: true });
+    };
+    match upgrade {
+        Ok(u) => u.on_upgrade(move |socket| tunnel_connection(app.daemon, sid, socket)),
+        Err(e) => e.into_response(),
+    }
+}
+
+/// One tunnel connection, bound to [sid]: only that session's MCP frames are answered, no broadcast is forwarded, and the
+/// hello carries no session list.
+async fn tunnel_connection(daemon: Arc<Daemon>, sid: String, mut socket: WebSocket) {
+    let hello = [
+        crate::sessions::encode_frame(crate::wire::READY, crate::wire::ready(daemon.harness.name(), &daemon.instance, BUILD)),
+        crate::sessions::encode_frame(crate::wire::POLICY, crate::wire::policy()),
+    ];
+    for f in hello {
+        if socket.send(Message::Text(f.into())).await.is_err() {
+            return;
+        }
+    }
+    let mut conn = Conn::default();
+    let mut detached = Detached::new();
+    loop {
+        tokio::select! {
+            m = socket.recv() => {
+                let text = match m {
+                    Some(Ok(Message::Text(t))) => t.to_string(),
+                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+                    Some(Ok(_)) => continue,
+                };
+                // The token may have ended with its session while the connection stayed open.
+                if daemon.tunnel.resolve_session(&sid).is_none() {
+                    break;
+                }
+                let replies = match serde_json::from_str::<Envelope>(&text) {
+                    Ok(env) => match crate::tunnel::scope_refusal(&sid, &env.r#type, env.session_id.as_deref(), &env.data) {
+                        Some(why) => {
+                            let mut e = Envelope::new(crate::wire::ERROR, format!("403 forbidden: {why}"));
+                            e.request_id = env.request_id.clone();
+                            vec![serde_json::to_string(&e).unwrap_or_default()]
+                        }
+                        None => answer(&daemon, env, &mut conn, true, &mut detached).await,
+                    },
+                    Err(e) => vec![serde_json::to_string(&Envelope::new(crate::wire::ERROR, format!("frame refused: not an envelope ({e})"))).unwrap_or_default()],
+                };
+                for r in replies {
+                    if socket.send(Message::Text(r.into())).await.is_err() {
+                        return;
+                    }
+                }
+            }
+            done = detached.next(), if !detached.is_empty() => {
+                for r in finished(done) {
+                    if socket.send(Message::Text(r.into())).await.is_err() {
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    daemon.health.bridges.closed(&conn.bridges, Some("tunnel connection closed"), &daemon.health.journal);
+}
+
 pub fn router(app: App) -> Router {
     router_with(app, None)
 }
@@ -386,11 +464,21 @@ pub async fn serve_with(
         }
     });
     let daemon = app.daemon.clone();
+    // RR-6b: the listener a remote runner's loopback forward targets (token-only; the main port trusts loopback).
+    let tunnel = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.ok();
+    if let Some(t) = &tunnel {
+        daemon.tunnel.set_port(t.local_addr().map(|a| a.port()).unwrap_or(0));
+    }
+    let tunnel_app = app.clone();
+    let tunnel_task = tunnel.map(|t| tokio::spawn(async move { let _ = axum::serve(t, tunnel_router(tunnel_app)).await; }));
     let r = axum::serve(listener, router_with(app, gateway.clone())).with_graceful_shutdown(shutdown).await;
     if let Some(g) = &gateway {
         g.stop();
     }
     flusher.abort();
+    if let Some(t) = tunnel_task {
+        t.abort();
+    }
     daemon.health.journal.end(if r.is_ok() { "clean stop" } else { "server error" });
     tokio::task::spawn_blocking(move || daemon.shutdown()).await.ok();
     r

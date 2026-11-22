@@ -12,6 +12,7 @@ pub mod fresh_schema;
 pub mod frame_log;
 pub mod harness;
 pub mod lender;
+pub mod tunnel;
 pub mod boot;
 pub mod health;
 pub mod mcp;
