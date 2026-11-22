@@ -91,6 +91,18 @@ export function toastOfFrame(env: Envelope): { tone: ToastTone; text: string; de
     const text = env.data.trim().split("\n")[0] || "The daemon refused the request";
     return { tone: "error", text };
   }
+  if (env.type === "ticket") {
+    // A refused start is an ok `ticket` frame whose `start` says why (not an `error` frame): toast it, naming the cause.
+    if (!TOAST_OWNED.some((p) => (env.requestId ?? "").startsWith(p))) return null;
+    try {
+      const st = (JSON.parse(env.data) as { start?: { ok?: boolean; reason?: string; detail?: string } }).start;
+      if (!st || st.ok !== false) return null;
+      const text = (st.detail ?? "").trim().split("\n")[0] || `The ticket was not started (${st.reason ?? "refused"})`;
+      return { tone: st.reason === "start_refused" ? "error" : "warn", text };
+    } catch {
+      return null;
+    }
+  }
   if (env.type === "notification_push") {
     try {
       const n = JSON.parse(env.data) as { title?: string; body?: string; level?: string };
