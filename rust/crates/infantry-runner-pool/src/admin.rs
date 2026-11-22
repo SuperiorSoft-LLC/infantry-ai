@@ -169,6 +169,10 @@ impl AdminUnit {
         let mut v = json!({"ok": true, "name": name,
             "runner": {"name": r.name, "runnerId": r.runner_id, "mode": mode, "os": seen.as_ref().map(|x| x.os.clone()).unwrap_or_default(), "appVersion": self.pool.runner_app_version(name), "contract": match &s { RunnerState::Online { contract, .. } | RunnerState::Outdated { contract, .. } => contract.clone(), _ => r.contract.clone() }, "needs": infantry_runner_link::wire::MIN_RUNNER_CONTRACT},
             "link": link, "offers": seen.as_ref().map(|x| x.offers.clone()).unwrap_or_default(), "helloHarnesses": harnesses, "lastCheck": last, "log": self.pool.step_log(name)});
+        match self.pool.runner_log(name) {
+            Ok(lines) => v["runnerLog"] = json!(lines),
+            Err(why) => v["runnerLogError"] = json!(why),
+        }
         if let Some(u) = self.pool.update_status(name) {
             v["update"] = json!({"state": u.state, "steps": u.steps, "detail": u.detail});
         }
@@ -195,11 +199,15 @@ impl AdminUnit {
             // What the runner's own harness tests (OAuth credentials file, CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY), asked of the runner itself.
             let login = logins.iter().find(|(id, _, _)| id == &h);
             let signed_in = login.is_some_and(|(_, ok, _)| *ok);
-            let via = login.and_then(|(_, _, at)| at.clone()).map(|a| format!(" ({a})")).unwrap_or_default();
+            let how = match login.and_then(|(_, _, at)| at.as_deref()) {
+                Some(a) if a.contains("API_KEY") => format!("signed in by API key: {a}"),
+                Some(a) => format!("signed in by subscription: {a}"),
+                None => "signed in on the runner (its own login)".to_string(),
+            };
             let (ok, detail, fix) = match lend.source(name, &h, has) {
                 CredentialSource::Lent => (true, "the key is lent by the orchestrator with each start".to_string(), None),
                 CredentialSource::StoredOnRunner => (true, "the key is stored on the runner".to_string(), None),
-                CredentialSource::None if signed_in => (true, format!("signed in on the runner{via}: its own login or key, nothing to lend"), None),
+                CredentialSource::None if signed_in => (true, format!("{how}; nothing to lend"), None),
                 CredentialSource::None => (false, "not signed in on the runner, and no key is lent or stored".to_string(), Some("Set up this runner → Sign in, or set the key in the runner's provider section")),
             };
             rows.push(row(&format!("credential:{h}"), ok, detail, fix));

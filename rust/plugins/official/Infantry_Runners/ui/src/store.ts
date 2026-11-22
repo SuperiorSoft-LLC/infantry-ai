@@ -72,6 +72,9 @@ export interface RunnerDetail {
   harnesses?: HarnessRow[];
   /** RR-VIS: the setup log of this runner: each check, install and update step. */
   log?: LogStep[];
+  /** RR-VIS: the runner daemon's own log tail, or why it could not be read. */
+  runnerLog?: string[];
+  runnerLogError?: string;
   /** Set when the harness answers could not be read (plain words). */
   harnessError?: string;
 }
@@ -182,6 +185,8 @@ interface Answer {
   lastCheck?: RunnerDetail["lastCheck"];
   update?: RunnerDetail["update"];
   log?: RunnerDetail["log"];
+  runnerLog?: string[];
+  runnerLogError?: string;
 }
 
 /** The status the row shows: the dot, the word and the reason (an offline or outdated runner always carries one). */

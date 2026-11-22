@@ -249,6 +249,14 @@ impl RunnerPool {
         Some(v.as_array()?.iter().filter_map(|p| Some((p["id"].as_str()?.to_string(), p["available"].as_bool() != Some(false), p["loginAt"].as_str().map(str::to_string)))).collect())
     }
 
+    /// RR-VIS: the runner daemon's own log tail (its `runner_log` frame); Err = why it could not be read, in plain words.
+    pub fn runner_log(&self, name: &str) -> Result<Vec<String>, String> {
+        let entry = RunnerSource::entry(self, name).ok_or_else(|| "the runner is not reachable".to_string())?;
+        let answer = entry.scope.request("runner_log", "{}").map_err(|e| if e.contains("not offered") { "this runner is too old to serve its log: Update runner".to_string() } else { e.to_string() })?;
+        let v: serde_json::Value = serde_json::from_str(&answer).map_err(|_| "the runner's log answer could not be read".to_string())?;
+        Ok(v["lines"].as_array().map(|a| a.iter().filter_map(|l| l.as_str().map(str::to_string)).collect()).unwrap_or_default())
+    }
+
     /// The app version runner `name` reported at its last answer.
     pub fn runner_app_version(&self, name: &str) -> Option<String> {
         self.app_versions.lock().unwrap_or_else(|e| e.into_inner()).get(name).cloned()

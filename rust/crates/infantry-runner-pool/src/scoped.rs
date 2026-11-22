@@ -33,7 +33,28 @@ pub const RUNNER_FRAMES: &[&str] = &[
     "secret_delete",
     "secret_verify_check",
     "secret_login",
+    "runner_log",
 ];
+
+/// RR-VIS: the runner's own log tail: one line per runner-scope frame it answered (what, ok or refused, how long, a trimmed
+/// answer), kept in memory (this many lines, each at most [`LOG_LINE_MAX`] chars). Served by the `runner_log` frame.
+pub const LOG_LINES_MAX: usize = 400;
+pub const LOG_LINE_MAX: usize = 400;
+
+fn ring() -> &'static std::sync::Mutex<std::collections::VecDeque<String>> {
+    static RING: std::sync::OnceLock<std::sync::Mutex<std::collections::VecDeque<String>>> = std::sync::OnceLock::new();
+    RING.get_or_init(Default::default)
+}
+
+/// Appends one line to this runner's log tail.
+pub fn runner_log_push(line: &str) {
+    let mut r = ring().lock().unwrap_or_else(|e| e.into_inner());
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+    r.push_back(format!("{stamp} {}", line.chars().take(LOG_LINE_MAX).collect::<String>().replace(['\n', '\r'], " ")));
+    while r.len() > LOG_LINES_MAX {
+        r.pop_front();
+    }
+}
 
 pub fn is_offered(frame: &str) -> bool {
     RUNNER_FRAMES.contains(&frame)
@@ -111,8 +132,23 @@ impl Backend for FrameBackend {
             let shown: String = frame.chars().filter(|c| (' '..='~').contains(c)).take(48).collect();
             return Err(format!("frame '{shown}' is not offered over the runner link (offered: {})", RUNNER_FRAMES.join(", ")));
         }
-        let (t, d) = (self.ask)(frame, data)?;
-        Ok(FrameAnswer { r#type: t, data: d })
+        if frame == "runner_log" {
+            let lines: Vec<String> = ring().lock().unwrap_or_else(|e| e.into_inner()).iter().cloned().collect();
+            return Ok(FrameAnswer { r#type: "runner_log".into(), data: serde_json::json!({ "lines": lines }).to_string() });
+        }
+        let started = std::time::Instant::now();
+        match (self.ask)(frame, data) {
+            Ok((t, d)) => {
+                // The answer of an install or login is the step's output; a read frame logs only that it was answered.
+                let shown = if frame.contains("install") || frame.contains("login") { d.as_str() } else { "" };
+                runner_log_push(&format!("{frame} ok {} ms {shown}", started.elapsed().as_millis()));
+                Ok(FrameAnswer { r#type: t, data: d })
+            }
+            Err(e) => {
+                runner_log_push(&format!("{frame} REFUSED {} ms: {e}", started.elapsed().as_millis()));
+                Err(e)
+            }
+        }
     }
 }
 

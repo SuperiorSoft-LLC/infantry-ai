@@ -14,6 +14,8 @@ import {
   withDefaults,
   withRole,
   isLocalRunner,
+  runnerRequest,
+  type HarnessInfo,
   type LauncherStore,
   type NewAgentDraft,
 } from "@infantry/client";
@@ -60,8 +62,17 @@ export function useExecutorLists(runner: string | null | undefined) {
   const loaded = useStore(st.providers, (s) => s.loaded);
   const refusal = useStore(st.providers, (s) => s.refusal);
   const catalog = useStore(st.catalog, (s) => s.data);
+  // RR-VIS: an old runner refuses `providers`: fall back to the harnesses its hello named, so the list is never stuck.
+  const [hello, setHello] = useState<HarnessInfo[]>([]);
+  useEffect(() => {
+    if (!remote || !refusal || !open) return;
+    runnerRequest(daemonStore().getState(), null, "runner_admin", JSON.stringify({ op: "detail", name: runner }), 8000).then(
+      (e) => setHello(((JSON.parse(e.data).helloHarnesses ?? []) as { id: string; loggedIn: boolean }[]).map((h) => ({ id: h.id, available: h.loggedIn, models: [] }) as unknown as HarnessInfo)),
+      () => setHello([]),
+    );
+  }, [remote, refusal, open, runner]);
   if (!remote) return { harnesses: here.harnesses, catalog: here.catalog, runners: here.runners, remote, loaded: here.loaded, refusal: null as string | null };
-  return { harnesses: providers, catalog, runners: here.runners, remote, loaded, refusal };
+  return { harnesses: providers.length === 0 && refusal ? hello : providers, catalog, runners: here.runners, remote, loaded, refusal };
 }
 
 function Step({ n, title, missing, children }: { n: number; title: string; missing?: boolean; children: React.ReactNode }) {

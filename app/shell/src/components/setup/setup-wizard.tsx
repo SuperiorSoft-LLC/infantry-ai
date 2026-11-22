@@ -43,6 +43,7 @@ import {
   type SetupStep,
 } from "@infantry/client";
 import { AppDialog, Button, cn, Input, ProgressLine } from "@infantry/ui";
+import { runnerRequest } from "@infantry/client";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { runnerStores, type RunnerStores } from "@/daemon/runner-stores";
 import { useUi } from "@/state/ui-state";
@@ -325,6 +326,39 @@ export function SetupWizardDialog({ onClose, runner = LOCAL_RUNNER }: { onClose:
   return <Wizard report={report} secrets={secrets ?? []} providers={providers ?? []} catalog={catalog} recheck={recheck} onClose={onClose} st={st} title={title} />;
 }
 
+/** RR-VIS: the live setup log of [runner]: each step (runner, command, exit, reason) and the runner's own log tail, re-read every 2 s. */
+function SetupLog({ runner }: { runner: string }) {
+  const [log, setLog] = useState<{ log?: { at: number; runner: string; step: string; command: string; exit: number | null; reason: string }[]; runnerLog?: string[]; runnerLogError?: string } | null>(null);
+  useEffect(() => {
+    let live = true;
+    const read = () =>
+      runnerRequest(daemonStore().getState(), null, "runner_admin", JSON.stringify({ op: "detail", name: runner }), 8000).then(
+        (e) => live && setLog(JSON.parse(e.data)),
+        () => undefined,
+      );
+    void read();
+    const t = setInterval(read, 2000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [runner]);
+  return (
+    <details className="mt-3 rounded-lg border p-2 text-xs" data-testid="setup-log">
+      <summary className="cursor-pointer font-medium">Live log: {runner}</summary>
+      <ul className="mt-1 space-y-0.5 font-mono">
+        {(log?.log ?? []).slice(-20).map((e, i) => (
+          <li key={`${e.at}:${i}`} className={e.exit ? "text-danger" : ""}>
+            {new Date(e.at).toLocaleTimeString()} · {e.runner} · {e.step} · {e.command} · exit {e.exit ?? "-"} {e.reason}
+          </li>
+        ))}
+      </ul>
+      {log?.runnerLogError && <p className="text-warn">{log.runnerLogError}</p>}
+      <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-muted-foreground">{(log?.runnerLog ?? []).slice(-30).join(String.fromCharCode(10))}</pre>
+    </details>
+  );
+}
+
 function Wizard({ report, secrets, providers, catalog, recheck, onClose, st, title }: { report: HarnessInstallReport; secrets: SecretRow[]; providers: HarnessInfo[]; catalog: CatalogGroup[]; recheck: () => void; onClose: () => void; st: RunnerStores; title: string }) {
   const [step, setStep] = useState<SetupStep>(() => firstStep(report));
   const [pick, setPick] = useState<string | null>(() => defaultPick(report));
@@ -391,6 +425,7 @@ function Wizard({ report, secrets, providers, catalog, recheck, onClose, st, tit
       {step === "harness" && <HarnessStep report={report} pick={pick} onPick={setPick} st={st} />}
       {step === "sign-in" && pick && <SignInStep id={pick} label={picked?.label || pick} rows={secrets} recheck={recheck} st={st} />}
       {step === "first-agent" && pick && <FirstAgentStep id={pick} secrets={secrets} providers={providers} catalog={catalog} runner={st.runner} />}
+      <SetupLog runner={st.runner} />
     </AppDialog>
   );
 }
