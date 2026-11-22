@@ -76,6 +76,8 @@ pub const LAYERS: &[(&str, Layer, u8)] = &[
     ("infantry-runner", Layer::Runner, 1),
     ("infantry-runner-local", Layer::Runner, 2),
     ("infantry-runner-link", Layer::Runner, 2),
+    // the daemon half of the remote-runner plugin: paired runners, runner_admin, heartbeat (RR-1); above runner-link.
+    ("infantry-runner-pool", Layer::Runner, 3),
     ("infantry-harness", Layer::Harness, 0),
     ("infantry-harness-codex", Layer::Harness, 1),
     ("infantry-harness-opencode", Layer::Harness, 1),

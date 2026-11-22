@@ -90,8 +90,9 @@ fn main() {
     let daemon = Daemon::new(harness, cfg).unwrap_or_else(|e| fail(e));
     let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap_or_else(|e| fail(e.to_string()));
     // Every unit, registered over the session manager (inside the runtime: units start background tasks).
-    if let Err(e) = rt.block_on(async { infantry_daemon::compose::build_with_mode(&daemon, &state_dir, mode).map(|_| ()) }) {
-        eprintln!("[infantry] units not composed, serving the sessions frames only: {e}");
+    match rt.block_on(async { infantry_daemon::compose::build_with_mode(&daemon, &state_dir, mode) }) {
+        Ok(composed) => register_runner_pool(&composed, &state_dir, mode),
+        Err(e) => eprintln!("[infantry] units not composed, serving the sessions frames only: {e}"),
     }
     let gateway = arg("--legacy-backend").or_else(|| auth::env("INFANTRY_LEGACY_BACKEND")).map(|cmdline| {
         let legacy_port: u16 = match arg("--legacy-port").or_else(|| auth::env("INFANTRY_LEGACY_PORT")) {
@@ -140,4 +141,28 @@ fn main() {
         }
         let _ = std::fs::remove_file(state_dir.join("daemon.port"));
     });
+}
+
+/// RUNNER POOL REGISTRATION SPOT (RR-1): the paired remote runners and the owner-only `runner_admin` frame. The daemon core
+/// never names the pool; this root adds it as a late unit. A runner-only daemon has no runners to drive.
+fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, state_dir: &std::path::Path, mode: infantry_daemon::mode::Mode) {
+    if mode == infantry_daemon::mode::Mode::Runner {
+        return;
+    }
+    let pool = infantry_runner_pool::RunnerPool::open(state_dir);
+    let frames = [infantry_runner_pool::ADMIN_FRAME.to_string()];
+    composed.late.add("runner-pool", &frames, Arc::new(infantry_runner_pool::AdminUnit { pool: pool.clone() }));
+    println!("[infantry] runner pool registered (runner_admin)");
+    // The heartbeat interval is the setting `limits.runners.heartbeatSec`, read every round (unset or bad = the default).
+    let c = composed.clone();
+    pool.start_heartbeat(Arc::new(move || {
+        let ask = infantry_protocol::envelope::Envelope::new("settings", serde_json::json!({"key": infantry_runner_pool::HEARTBEAT_KEY}).to_string());
+        c.request(&ask, true)
+            .ok()
+            .and_then(|r| r.into_iter().next())
+            .and_then(|e| serde_json::from_str::<serde_json::Value>(&e.data).ok())
+            .and_then(|v| v["value"].as_u64().or_else(|| v["value"].as_str().and_then(|s| s.trim().parse().ok())))
+            .filter(|n| *n > 0)
+            .unwrap_or(infantry_runner_pool::DEFAULT_HEARTBEAT_SEC)
+    }));
 }

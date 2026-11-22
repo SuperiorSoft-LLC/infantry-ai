@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) SuperiorSoft LLC
+[package]
+name = "infantry-runner-pool"
+version.workspace = true
+edition = "2021"
+license = "Apache-2.0"
+description = "The daemon half of the Rust remote-runner plugin (L2 runner): the paired runners, the owner-only runner_admin frame (add, list, check, detach) and the heartbeat that keeps each runner's online/offline/outdated state (RR-1)"
+publish = false
+
+[dependencies]
+infantry-core = { path = "../infantry-core" }
+infantry-protocol = { path = "../infantry-protocol" }
+infantry-runner-link = { path = "../infantry-runner-link" }
+serde_json = { version = "1", features = ["preserve_order"] }
