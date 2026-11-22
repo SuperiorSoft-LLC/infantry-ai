@@ -60,12 +60,14 @@ pub struct RunnerPool {
     allow_plain: OnceLock<Arc<dyn Fn() -> bool + Send + Sync>>,
     /// Free session slots each runner reported at its last health answer (unlimited is not stored).
     slots: Mutex<BTreeMap<String, i32>>,
+    /// RR-8: each remote process's consumed stream position, kept across a restart of this orchestrator.
+    cursors: Arc<infantry_runner_link::Cursors>,
 }
 
 impl RunnerPool {
     /// The pool of `<state_dir>/runner-link`.
     pub fn open(state_dir: &Path) -> Arc<RunnerPool> {
-        Arc::new(RunnerPool { store: store_for(state_dir), states: Mutex::new(BTreeMap::new()), call_timeout: CALL_TIMEOUT, allow_plain: OnceLock::new(), slots: Mutex::new(BTreeMap::new()) })
+        Arc::new(RunnerPool { store: store_for(state_dir), states: Mutex::new(BTreeMap::new()), call_timeout: CALL_TIMEOUT, allow_plain: OnceLock::new(), slots: Mutex::new(BTreeMap::new()), cursors: Arc::new(infantry_runner_link::Cursors::open(&state_dir.join(LINK_DIR))) })
     }
 
     /// Wires the live reader of `runners.allowPlainTailnet`.
@@ -252,7 +254,7 @@ impl RunnerSource for RunnerPool {
     fn entry(&self, name: &str) -> Option<RunnerEntry> {
         let r = self.store.runner(name)?;
         let client = Arc::new(self.client(&r));
-        let runner: Arc<dyn Runner> = Arc::new(RemoteRunner::new(r.name.clone(), self.client(&r)));
+        let runner: Arc<dyn Runner> = Arc::new(RemoteRunner::new(r.name.clone(), self.client(&r)).with_cursors(self.cursors.clone()));
         Some(RunnerEntry { name: r.name.clone(), kind: "remote".into(), runner, scope: Arc::new(LinkScope { name: r.name, client }) })
     }
 

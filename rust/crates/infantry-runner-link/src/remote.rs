@@ -164,6 +164,23 @@ fn tunnel_pump(client: Arc<LinkClient>, sid: String, target: u16, wait: Duration
     }
 }
 
+/// RR-8: a dropped link is retried this many times, this far apart, before the process is reported lost.
+const RELINK_TRIES: u32 = 90;
+const RELINK_WAIT: Duration = Duration::from_secs(2);
+
+/// RR-8: one frames_pull. A dropped link (the runner restarting, a network blip) is retried from the same request; only a
+/// refusal, or a link that stays down for [`RELINK_TRIES`] tries, is an error. `stop` says the reader is gone.
+fn pull_retrying(client: &LinkClient, req: &FramesPullRequest, wait: Duration, stop: impl Fn() -> bool) -> Result<FramesPullAnswer, CallError> {
+    let mut answer = client.typed_with::<_, FramesPullAnswer>(wire::FRAMES_PULL, req, wait + Duration::from_secs(15));
+    let mut tried = 0;
+    while matches!(&answer, Err(CallError::Link(_))) && tried < RELINK_TRIES && !stop() {
+        tried += 1;
+        std::thread::sleep(RELINK_WAIT);
+        answer = client.typed_with::<_, FramesPullAnswer>(wire::FRAMES_PULL, req, wait + Duration::from_secs(15));
+    }
+    answer
+}
+
 pub struct RemoteRunner {
     id: String,
     /// pty processes started here, by process id.
@@ -174,6 +191,8 @@ pub struct RemoteRunner {
     hello: Mutex<Option<HelloAnswer>>,
     /// How long one frames_pull is held on the runner.
     pub pull_wait: Duration,
+    /// RR-8: where the consumed stream position of each process is kept, so a restarted orchestrator can re-attach.
+    cursors: Option<Arc<crate::marks::Cursors>>,
 }
 
 fn disconnected(e: impl std::fmt::Display) -> RunnerError {
@@ -205,8 +224,107 @@ fn from_command(a: CommandAnswer, id: &ProcId) -> Result<(), RunnerError> {
 impl RemoteRunner {
     /// `id` is the runner's name; `client` holds its url and credential.
     pub fn new(id: impl Into<String>, client: LinkClient) -> Self {
-        RemoteRunner { id: id.into(), ptys: Mutex::new(HashMap::new()), masks: Mutex::new(HashMap::new()), client: Arc::new(client), hello: Mutex::new(None), pull_wait: Duration::from_secs(10) }
+        RemoteRunner { id: id.into(), ptys: Mutex::new(HashMap::new()), masks: Mutex::new(HashMap::new()), client: Arc::new(client), hello: Mutex::new(None), pull_wait: Duration::from_secs(10), cursors: None }
     }
+
+    /// RR-8: keeps every process's consumed position in `cursors` (read back by [`Runner::attach`]'s callers).
+    pub fn with_cursors(mut self, cursors: Arc<crate::marks::Cursors>) -> Self {
+        self.cursors = Some(cursors);
+        self
+    }
+
+    /// The events of `id` from stream position `start`; one pull now so an unknown process is `NotFound`.
+    async fn stream_from(&self, id: &ProcId, start: i64) -> Result<mpsc::UnboundedReceiver<ProcEvent>, RunnerError> {
+        // A negative position means "from my own saved cursor" (a restarted orchestrator re-attaching). A process whose exit
+        // was already taken ends at once; the frames before the cursor are never asked for again.
+        let mut start = start;
+        if start < 0 {
+            let saved = self.cursors.as_ref().and_then(|c| c.get(&self.id, &id.0));
+            if let Some(code) = saved.and_then(|m| m.exited) {
+                let (tx, rx) = mpsc::unbounded_channel();
+                let _ = tx.send(ProcEvent::Exited(code));
+                return Ok(rx);
+            }
+            start = saved.map_or(0, |m| m.seq);
+        }
+
+            if let Some(st) = self.ptys.lock().unwrap().get(&id.0).cloned() {
+                return Ok(st.subscribe());
+            }
+            // One pull now: an unknown process is NotFound here, not a silent empty stream.
+            let sid = id.0.clone();
+            let first = {
+                let req = FramesPullRequest { resume_from: BTreeMap::from([(sid.clone(), start)]), wait_ms: 0, max: 0 };
+                let a: FramesPullAnswer = self.blocking(move |c| c.typed(wire::FRAMES_PULL, &req)).await?;
+                a
+            };
+            if first.frames.is_empty() {
+                // Nothing yet: ask whether the runner knows the process at all (an unknown one answers kind `unknown`).
+                self.command(id, wire::CMD_STATUS, String::new()).await?;
+            }
+            let (tx, rx) = mpsc::unbounded_channel();
+            let client = self.client.clone();
+            let wait = self.pull_wait;
+            let (cursors, runner_id) = (self.cursors.clone(), self.id.clone());
+            let secrets = self.masks.lock().unwrap().get(&sid).cloned().unwrap_or_default();
+            let (mut out_mask, mut err_mask) = (Masker::new(secrets.clone()), Masker::new(secrets));
+            std::thread::Builder::new()
+                .name("remote-runner-events".into())
+                .spawn(move || {
+                    let mut after = start;
+                    let mut batch = first.frames;
+                    loop {
+                        for f in batch.drain(..) {
+                            after = after.max(f.sequence.unwrap_or(0));
+                            let ev = match f.r#type.as_str() {
+                                wire::PROC_OUTPUT => B64.decode(f.data.as_bytes()).ok().map(|b| ProcEvent::Output(out_mask.feed(&b))),
+                                wire::PROC_STDERR => B64.decode(f.data.as_bytes()).ok().map(|b| ProcEvent::Stderr(err_mask.feed(&b))),
+                                wire::PROC_EXIT => {
+                                    for held in [ProcEvent::Output(out_mask.finish()), ProcEvent::Stderr(err_mask.finish())] {
+                                        if !matches!(&held, ProcEvent::Output(b) | ProcEvent::Stderr(b) if b.is_empty()) {
+                                            let _ = tx.send(held);
+                                        }
+                                    }
+                                    Some(ProcEvent::Exited(f.data.trim().parse().unwrap_or(-1)))
+                                }
+                                _ => None,
+                            };
+                            let last = matches!(ev, Some(ProcEvent::Exited(_)));
+                            if let Some(ev) = ev {
+                                if tx.send(ev).is_err() {
+                                    return;
+                                }
+                            }
+                            if last {
+                                if let Some(c) = &cursors {
+                                    c.advance(&runner_id, &sid, after, Some(f.data.trim().parse().unwrap_or(-1)));
+                                }
+                                return;
+                            }
+                        }
+                        if let Some(c) = &cursors {
+                            c.advance(&runner_id, &sid, after, None);
+                        }
+                        if tx.is_closed() {
+                            return;
+                        }
+                        let req = FramesPullRequest { resume_from: BTreeMap::from([(sid.clone(), after)]), wait_ms: wait.as_millis() as i64, max: 0 };
+                        let answer = pull_retrying(&client, &req, wait, || tx.is_closed());
+                        match answer {
+                            Ok(a) => batch = a.frames,
+                            Err(e) => {
+                                let _ = tx.send(ProcEvent::Stderr(format!("[runner] lost the runner link: {e}
+").into_bytes()));
+                                let _ = tx.send(ProcEvent::Exited(-1));
+                                return;
+                            }
+                        }
+                    }
+                })
+                .map_err(disconnected)?;
+            Ok(rx)
+    }
+
 
     async fn blocking<T: Send + 'static>(&self, f: impl FnOnce(&LinkClient) -> Result<T, CallError> + Send + 'static) -> Result<T, RunnerError> {
         let c = self.client.clone();
@@ -243,6 +361,7 @@ impl RemoteRunner {
         });
         self.ptys.lock().unwrap().insert(sid.to_string(), st.clone());
         let (client, sid, wait) = (self.client.clone(), sid.to_string(), self.pull_wait);
+        let (cursors, runner_id) = (self.cursors.clone(), self.id.clone());
         let secrets = self.masks.lock().unwrap().get(&sid).cloned().unwrap_or_default();
         let (mut out_mask, mut err_mask) = (Masker::new(secrets.clone()), Masker::new(secrets));
         std::thread::Builder::new()
@@ -251,7 +370,17 @@ impl RemoteRunner {
                 let mut after = 0i64;
                 while !st.stopped.load(Ordering::SeqCst) {
                     let req = FramesPullRequest { resume_from: BTreeMap::from([(sid.clone(), after)]), wait_ms: wait.as_millis() as i64, max: 0 };
-                    let Ok(a) = client.typed_with::<_, FramesPullAnswer>(wire::FRAMES_PULL, &req, wait + Duration::from_secs(15)) else { return };
+                    let a = match pull_retrying(&client, &req, wait, || st.stopped.load(Ordering::SeqCst)) {
+                        Ok(a) => a,
+                        Err(e) => {
+                            if !st.stopped.load(Ordering::SeqCst) {
+                                st.publish(ProcEvent::Stderr(format!("[runner] lost the runner link: {e}
+").into_bytes()));
+                                st.publish(ProcEvent::Exited(-1));
+                            }
+                            return;
+                        }
+                    };
                     for f in a.frames {
                         after = after.max(f.sequence.unwrap_or(0));
                         match f.r#type.as_str() {
@@ -273,11 +402,18 @@ impl RemoteRunner {
                                         st.publish(if err { ProcEvent::Stderr(held) } else { ProcEvent::Output(held) });
                                     }
                                 }
-                                st.publish(ProcEvent::Exited(f.data.trim().parse().unwrap_or(-1)));
+                                let code = f.data.trim().parse().unwrap_or(-1);
+                                if let Some(c) = &cursors {
+                                    c.advance(&runner_id, &sid, after, Some(code));
+                                }
+                                st.publish(ProcEvent::Exited(code));
                                 return;
                             }
                             _ => {}
                         }
+                    }
+                    if let Some(c) = &cursors {
+                        c.advance(&runner_id, &sid, after, None);
                     }
                 }
             })
@@ -359,70 +495,11 @@ impl Runner for RemoteRunner {
     }
 
     fn events<'a>(&'a self, id: &'a ProcId) -> RunnerFuture<'a, mpsc::UnboundedReceiver<ProcEvent>> {
-        Box::pin(async move {
-            if let Some(st) = self.ptys.lock().unwrap().get(&id.0).cloned() {
-                return Ok(st.subscribe());
-            }
-            // One pull now: an unknown process is NotFound here, not a silent empty stream.
-            let sid = id.0.clone();
-            let first = {
-                let req = FramesPullRequest { resume_from: BTreeMap::from([(sid.clone(), 0)]), wait_ms: 0, max: 0 };
-                let a: FramesPullAnswer = self.blocking(move |c| c.typed(wire::FRAMES_PULL, &req)).await?;
-                a
-            };
-            if first.frames.is_empty() {
-                // Nothing yet: ask whether the runner knows the process at all (an unknown one answers kind `unknown`).
-                self.command(id, wire::CMD_STATUS, String::new()).await?;
-            }
-            let (tx, rx) = mpsc::unbounded_channel();
-            let client = self.client.clone();
-            let wait = self.pull_wait;
-            let secrets = self.masks.lock().unwrap().get(&sid).cloned().unwrap_or_default();
-            let (mut out_mask, mut err_mask) = (Masker::new(secrets.clone()), Masker::new(secrets));
-            std::thread::Builder::new()
-                .name("remote-runner-events".into())
-                .spawn(move || {
-                    let mut after = 0i64;
-                    let mut batch = first.frames;
-                    loop {
-                        for f in batch.drain(..) {
-                            after = after.max(f.sequence.unwrap_or(0));
-                            let ev = match f.r#type.as_str() {
-                                wire::PROC_OUTPUT => B64.decode(f.data.as_bytes()).ok().map(|b| ProcEvent::Output(out_mask.feed(&b))),
-                                wire::PROC_STDERR => B64.decode(f.data.as_bytes()).ok().map(|b| ProcEvent::Stderr(err_mask.feed(&b))),
-                                wire::PROC_EXIT => {
-                                    for held in [ProcEvent::Output(out_mask.finish()), ProcEvent::Stderr(err_mask.finish())] {
-                                        if !matches!(&held, ProcEvent::Output(b) | ProcEvent::Stderr(b) if b.is_empty()) {
-                                            let _ = tx.send(held);
-                                        }
-                                    }
-                                    Some(ProcEvent::Exited(f.data.trim().parse().unwrap_or(-1)))
-                                }
-                                _ => None,
-                            };
-                            let last = matches!(ev, Some(ProcEvent::Exited(_)));
-                            if let Some(ev) = ev {
-                                if tx.send(ev).is_err() {
-                                    return;
-                                }
-                            }
-                            if last {
-                                return;
-                            }
-                        }
-                        if tx.is_closed() {
-                            return;
-                        }
-                        let req = FramesPullRequest { resume_from: BTreeMap::from([(sid.clone(), after)]), wait_ms: wait.as_millis() as i64, max: 0 };
-                        match client.typed_with::<_, FramesPullAnswer>(wire::FRAMES_PULL, &req, wait + Duration::from_secs(15)) {
-                            Ok(a) => batch = a.frames,
-                            Err(_) => return, // the link dropped or the process was released: the stream ends
-                        }
-                    }
-                })
-                .map_err(disconnected)?;
-            Ok(rx)
-        })
+        Box::pin(self.stream_from(id, 0))
+    }
+
+    fn attach<'a>(&'a self, id: &'a ProcId, after: i64) -> RunnerFuture<'a, mpsc::UnboundedReceiver<ProcEvent>> {
+        Box::pin(self.stream_from(id, after))
     }
 
     fn screen<'a>(&'a self, id: &'a ProcId) -> RunnerFuture<'a, ScreenSnapshot> {
@@ -649,6 +726,9 @@ impl Runner for RemoteRunner {
                 st.stopped.store(true, Ordering::SeqCst);
             }
             self.masks.lock().unwrap().remove(&id.0);
+            if let Some(c) = &self.cursors {
+                c.forget(&self.id, &id.0);
+            }
             let req = RemoveRequest { session_id: id.0.clone() };
             let _: RemoveAnswer = self.blocking(move |c| c.typed(wire::REMOVE, &req)).await?;
             Ok(())

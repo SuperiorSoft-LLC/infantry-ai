@@ -277,6 +277,8 @@ pub struct Daemon {
     list: Mutex<Vec<(String, Arc<Mutex<Entry>>)>>,
     cache: Mutex<Vec<SessionRecord>>,
     dirty: AtomicBool,
+    /// RR-8: sessions that were on a remote runner mid-turn when the daemon stopped (see `reattach_placed`).
+    reattach: Mutex<Vec<String>>,
     store: Mutex<JsonSessionStore>,
     /// CHAT-SENDING-1: `<session>\n<send:id>` of the prompts taken, oldest first.
     sent: Mutex<std::collections::VecDeque<String>>,
@@ -357,6 +359,12 @@ impl From<&str> for Refusal {
     }
 }
 
+/// RR-8: how often and how long a restarted daemon tries to reach a remote runner to re-attach to a session of it.
+const REATTACH_TRIES: u32 = 40;
+const REATTACH_WAIT: Duration = Duration::from_secs(3);
+/// RR-8: a re-attached process silent this long has finished its turn.
+const REATTACH_QUIET: Duration = Duration::from_secs(45);
+
 impl Daemon {
     /// Opens the store in the state dir; sessions that were running when the daemon stopped come back at rest.
     pub fn new(harness: Arc<dyn Harness>, cfg: Config) -> Result<Arc<Daemon>, String> {
@@ -371,7 +379,12 @@ impl Daemon {
         let (out, _) = broadcast::channel(BROADCAST_CAPACITY);
         let mut list = Vec::new();
         let mut cache = Vec::new();
+        let mut reattach = Vec::new();
         for mut rec in loaded {
+            // RR-8: a remote runner's process outlives this daemon's stop, so its session is re-attached, not reset.
+            if rec.runner != infantry_runner_source::LOCAL && rec.runner_proc.is_some() && (rec.is_busy() || rec.is_process_alive) {
+                reattach.push(rec.id.clone());
+            }
             if rec.is_busy() {
                 rec.state = if rec.provider_session_id.is_some() { SessionState::Idle } else { SessionState::Exited };
                 rec.last_action = Some(format!("state {}", state_word(rec.state)));
@@ -395,6 +408,7 @@ impl Daemon {
             list: Mutex::new(list),
             cache: Mutex::new(cache),
             dirty: AtomicBool::new(false),
+            reattach: Mutex::new(reattach),
             store: Mutex::new(store),
             sent: Mutex::new(Default::default()),
             board: Board::new(&cfg_dir),
@@ -1368,6 +1382,125 @@ impl Daemon {
         Ok(hs)
     }
 
+    /// RR-8: after the runners are registered, re-attaches to every session that was running on a remote runner when this
+    /// daemon stopped: its output continues from the saved cursor; a process that is gone ends the session as failed with the
+    /// runner's reason (it keeps its harness resume id, so it can be resumed like a local one).
+    pub fn reattach_placed(self: &Arc<Self>) {
+        let ids = std::mem::take(&mut *self.reattach.lock().unwrap());
+        for id in ids {
+            let d = self.clone();
+            crate::sessions::spawn_bg(async move { d.reattach_one(&id).await });
+        }
+    }
+
+    async fn reattach_one(self: Arc<Self>, id: &str) {
+        use infantry_runner_api::{ProcEvent, ProcId, RunnerError};
+        let Some((runner, proc)) = self.find(id).and_then(|en| {
+            let e = en.lock().unwrap();
+            e.rec.runner_proc.clone().map(|p| (e.rec.runner.clone(), p))
+        }) else {
+            return;
+        };
+        let pid = ProcId(proc);
+        let mut tries = 0u32;
+        let mut announced = false;
+        let mut reason = String::new();
+        loop {
+            let why = match self.runner_registry().resolve(&runner) {
+                Ok(entry) => match entry.runner.attach(&pid, -1).await {
+                    Ok(mut rx) => {
+                        if !announced {
+                            announced = true;
+                            self.mark_reattached(id, &runner, &pid.0);
+                        }
+                        loop {
+                            // A process that stays alive between turns (an interactive CLI) never "ends": its turn is over
+                            // when it goes quiet. The turn is ended, and the process is released so the next prompt starts a
+                            // fresh one that resumes the conversation by its harness resume id.
+                            let ev = match tokio::time::timeout(REATTACH_QUIET, rx.recv()).await {
+                                Ok(Some(ev)) => ev,
+                                Ok(None) => break,
+                                Err(_) => {
+                                    self.reattach_ended(id, Some(0), "");
+                                    let _ = entry.runner.kill(&pid, infantry_runner_api::KillScope::Tree).await;
+                                    let _ = entry.runner.release(&pid).await;
+                                    return;
+                                }
+                            };
+                            match ev {
+                                ProcEvent::Stderr(b) => {
+                                    for line in String::from_utf8_lossy(&b).lines().filter(|l| !l.trim().is_empty()) {
+                                        reason = line.trim().to_string();
+                                        self.stderr_line(id, line.to_string());
+                                    }
+                                }
+                                ProcEvent::Exited(code) => {
+                                    self.reattach_ended(id, Some(code), &reason);
+                                    let _ = entry.runner.release(&pid).await;
+                                    return;
+                                }
+                                _ => {}
+                            }
+                        }
+                        "the link to the runner dropped".to_string()
+                    }
+                    Err(RunnerError::NotFound(_)) => {
+                        self.reattach_ended(id, None, &format!("runner '{runner}' no longer has the process"));
+                        return;
+                    }
+                    Err(e) => e.to_string(),
+                },
+                Err(r) => r.to_string(),
+            };
+            tries += 1;
+            if tries >= REATTACH_TRIES {
+                self.reattach_ended(id, None, &format!("runner '{runner}' is unreachable: {why}"));
+                return;
+            }
+            tokio::time::sleep(REATTACH_WAIT).await;
+        }
+    }
+
+    fn stderr_line(&self, id: &str, line: String) {
+        if let Some(en) = self.find(id) {
+            let mut e = en.lock().unwrap();
+            if !e.removed {
+                self.emit(&mut e, wire::STDERR, line);
+            }
+        }
+    }
+
+    fn mark_reattached(&self, id: &str, runner: &str, proc: &str) {
+        let Some(en) = self.find(id) else { return };
+        let mut e = en.lock().unwrap();
+        if e.removed || e.turn_active {
+            return;
+        }
+        e.turn_active = true;
+        e.turn_started = now_ms();
+        e.rec.is_process_alive = true;
+        Self::set_state(&mut e, SessionState::Busy);
+        self.push(&mut e);
+        self.emit(&mut e, wire::STATUS, wire::status("BUSY"));
+        self.emit(&mut e, wire::STDERR, format!("[infantry] re-attached to {proc} on runner '{runner}' after a restart"));
+    }
+
+    fn reattach_ended(self: &Arc<Self>, id: &str, code: Option<i32>, reason: &str) {
+        let Some(en) = self.find(id) else { return };
+        let mut e = en.lock().unwrap();
+        if e.removed {
+            return;
+        }
+        e.rec.runner_proc = None;
+        e.turn_active = true;
+        let (end, why) = match code {
+            Some(0) => (TurnEnd::Completed, None),
+            Some(c) => (TurnEnd::Failed, Some(if reason.is_empty() { format!("the process exited with code {c}") } else { reason.to_string() })),
+            None => (TurnEnd::Failed, Some(reason.to_string())),
+        };
+        self.end_turn(&mut e, end, code, why, false);
+    }
+
     fn fail_start(&self, e: &mut Entry, err: String) {
         e.turn_active = false;
         e.rec.last_error = Some(err.clone());
@@ -1653,7 +1786,13 @@ impl Daemon {
         for entry in list {
             let mut e = entry.lock().unwrap();
             if let Some(mut hs) = e.hs.take() {
-                hs.close(true);
+                // RR-8: a session placed on a remote runner keeps its process there (the next start of this daemon
+                // re-attaches to it); only the local ones end with the daemon.
+                if e.rec.runner != infantry_runner_source::LOCAL && e.rec.runner_proc.is_some() {
+                    std::mem::forget(hs);
+                } else {
+                    hs.close(true);
+                }
             }
         }
         self.dirty.store(true, Ordering::SeqCst);

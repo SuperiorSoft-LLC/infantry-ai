@@ -10,6 +10,7 @@
 //! - `runner_link_command` kinds [`wire::CMD_WRITE`] (text = base64 bytes) and [`wire::CMD_CLOSE_INPUT`];
 //! - `runner_link_stop` kills the tree, `runner_link_remove` releases it.
 
+use crate::marks::{Mark, MarkFile, CHECKPOINT_EVERY, RESTART_GAP};
 use crate::server::{Backend, RunnerInfo};
 use crate::wire::{self, *};
 use base64::Engine;
@@ -23,6 +24,9 @@ use std::time::{Duration, Instant};
 struct Session {
     frames: Vec<Envelope>,
     exited: Option<i32>,
+    /// The highest sequence handed out (frames are numbered from here, not from `frames.len()`, so a session restored after
+    /// a runner restart continues above the orchestrator's cursor).
+    last_seq: i64,
 }
 
 #[derive(Default)]
@@ -30,6 +34,8 @@ struct Shared {
     sessions: HashMap<String, Session>,
     events: Vec<EventWire>,
     event_seq: HashMap<String, i64>,
+    /// RR-8: the persisted high-water marks of the process sessions (None = in memory only).
+    log: Option<MarkFile>,
 }
 
 /// Blocking hook calls waiting for the orchestrator's answer, by call id.
@@ -87,20 +93,69 @@ impl ProcessBackend {
         ProcessBackend { lend: LendPolicy::default(), tunnels: Mutex::new(HashMap::new()), runner, streams: Mutex::new(HashMap::new()), rt, shared: Arc::new((Mutex::new(Shared::default()), Condvar::new())) }
     }
 
+    /// RR-8: keeps each process session's stream high-water mark (and exit) in `<dir>/runner-sessions.json`. A session the
+    /// previous run left is restored: a process that did not survive the restart ends with its reason (one stderr frame and
+    /// an exit frame), numbered ABOVE any cursor the orchestrator can hold, so it takes them as new frames and nothing is
+    /// dropped as "already taken" or repeated; the session stays known to this runner.
+    pub fn with_state_dir(self, dir: &std::path::Path) -> Self {
+        let mut log = MarkFile::open(dir, "runner-sessions.json");
+        {
+            let mut s = self.shared.0.lock().unwrap();
+            for (sid, mark) in log.all() {
+                let mut sess = Session { last_seq: mark.seq, ..Default::default() };
+                let code = match mark.exited {
+                    // The exit frame was the last one, at `mark.seq`: it is rebuilt at the SAME sequence, so an orchestrator
+                    // that took it is not given it twice, and one that did not still gets it.
+                    Some(code) => {
+                        sess.last_seq -= 1;
+                        code
+                    }
+                    None => {
+                        sess.last_seq += RESTART_GAP;
+                        Self::append(&mut sess, &sid, wire::PROC_STDERR, B64.encode("[runner] the runner restarted and the process did not survive it
+"));
+                        -1
+                    }
+                };
+                let seq = Self::append(&mut sess, &sid, wire::PROC_EXIT, code.to_string());
+                sess.exited = Some(code);
+                // The restored exit is the new mark, so a second restart does not stack another gap on it.
+                log.set(&sid, Mark { seq, exited: Some(code) });
+                s.event_seq.insert(sid.clone(), seq);
+                s.events.push(EventWire { session_id: sid.clone(), seq, kind: "finished".into(), payload: code.to_string() });
+                s.sessions.insert(sid, sess);
+            }
+            s.log = Some(log);
+        }
+        self
+    }
+
     /// Sets the runner owner's policy for lent credentials.
     pub fn with_lend_policy(mut self, p: LendPolicy) -> Self {
         self.lend = p;
         self
     }
 
+    fn append(sess: &mut Session, sid: &str, t: &str, data: String) -> i64 {
+        sess.last_seq += 1;
+        let mut e = Envelope::new(t, data);
+        e.session_id = Some(sid.to_string());
+        e.sequence = Some(sess.last_seq);
+        sess.frames.push(e);
+        sess.last_seq
+    }
+
     fn push(shared: &(Mutex<Shared>, Condvar), sid: &str, t: &str, data: String) {
         let (m, cv) = shared;
         let mut s = m.lock().unwrap();
         let sess = s.sessions.entry(sid.to_string()).or_default();
-        let mut e = Envelope::new(t, data);
-        e.session_id = Some(sid.to_string());
-        e.sequence = Some(sess.frames.len() as i64 + 1);
-        sess.frames.push(e);
+        let seq = Self::append(sess, sid, t, data);
+        // RR-8: a process session's mark is written every CHECKPOINT_EVERY frames (and at its exit, below).
+        if seq % CHECKPOINT_EVERY == 0 && !is_link_stream(sid) {
+            if let Some(log) = s.log.as_mut() {
+                log.set(sid, Mark { seq, exited: None });
+            }
+        }
         cv.notify_all();
     }
 }
@@ -140,7 +195,16 @@ impl Backend for ProcessBackend {
             Err(e) => return StartAnswer { refusal: Some(e.to_string()), ..Default::default() },
         };
         let sid = handle.id.0.clone();
-        self.shared.0.lock().unwrap().sessions.insert(sid.clone(), Session::default());
+        {
+            let mut s = self.shared.0.lock().unwrap();
+            // A process id this runner already restored keeps its sequence going (ids are unique per boot, so this is a
+            // guard, not the usual case).
+            let last_seq = s.sessions.get(&sid).map_or(0, |x| x.last_seq);
+            s.sessions.insert(sid.clone(), Session { last_seq, ..Default::default() });
+            if let Some(log) = s.log.as_mut() {
+                log.set(&sid, Mark { seq: last_seq, exited: None });
+            }
+        }
         let rx = self.rt.block_on(self.runner.events(&handle.id));
         let mut rx = match rx {
             Ok(rx) => rx,
@@ -162,8 +226,12 @@ impl Backend for ProcessBackend {
                         }
                         Self::push(&shared, &id, wire::PROC_EXIT, code.to_string());
                         let mut s = shared.0.lock().unwrap();
-                        if let Some(x) = s.sessions.get_mut(&id) {
+                        let mark = s.sessions.get_mut(&id).map(|x| {
                             x.exited = Some(code);
+                            x.last_seq
+                        });
+                        if let (Some(seq), Some(log)) = (mark, s.log.as_mut()) {
+                            log.set(&id, Mark { seq, exited: Some(code) });
                         }
                         let seq = s.event_seq.entry(id.clone()).or_insert(0);
                         *seq += 1;
@@ -191,7 +259,9 @@ impl Backend for ProcessBackend {
     fn remove(&self, session_id: &str) -> bool {
         let id = ProcId(session_id.to_string());
         // An http stream is the link's own, not a runner process: forgetting its frames is the whole release.
-        let ok = is_link_stream(session_id) || self.rt.block_on(self.runner.release(&id)).is_ok();
+        // RR-8: a session restored after a restart has no process in the runner any more: releasing it is only forgetting it.
+        let restored_gone = self.shared.0.lock().unwrap().sessions.get(session_id).is_some_and(|x| x.exited.is_some());
+        let ok = is_link_stream(session_id) || self.rt.block_on(self.runner.release(&id)).is_ok() || restored_gone;
         if let Some(t) = self.tunnels.lock().unwrap().remove(session_id) {
             t.stop.store(true, std::sync::atomic::Ordering::SeqCst);
             let _ = std::net::TcpStream::connect_timeout(&t.addr, Duration::from_millis(200));
@@ -204,6 +274,9 @@ impl Backend for ProcessBackend {
         }
         let mut s = self.shared.0.lock().unwrap();
         s.sessions.remove(session_id);
+        if let Some(log) = s.log.as_mut() {
+            log.remove(session_id);
+        }
         s.events.retain(|e| e.session_id != session_id);
         ok
     }

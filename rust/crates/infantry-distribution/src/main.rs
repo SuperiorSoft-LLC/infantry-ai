@@ -162,6 +162,8 @@ fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, stat
     registry.set_local_scope(Arc::new(infantry_runner_source::FnScope(Box::new(owner_ask(composed)))));
     composed.late.add("runner-frame", &[infantry_runner_pool::RUNNER_FRAME.to_string()], Arc::new(infantry_runner_pool::RunnerFrameUnit { registry }));
     println!("[infantry] runner pool registered (runner_admin, runner_frame, placement)");
+    // RR-8: sessions that were running on a paired runner when this daemon stopped are re-attached from their saved cursors.
+    composed.daemon.reattach_placed();
     // The heartbeat interval is the setting `limits.runners.heartbeatSec`, read every round (unset or bad = the default).
     let c = composed.clone();
     let c2 = composed.clone();
@@ -246,7 +248,11 @@ fn serve_runner_link(composed: &Arc<infantry_daemon::compose::Composed>, state_d
         accept: Arc::new(move || read_setting(&c_accept, "runner.acceptCredentials").map_or(true, |v| v.as_bool().unwrap_or_else(|| !v.as_str().is_some_and(|s| s.trim().eq_ignore_ascii_case("false"))))),
         keeps_own_login: Arc::new(move |harness| read_setting(&c_login, &format!("harness.{harness}.authMode")).and_then(|v| v.as_str().map(str::to_string)).is_some_and(|m| m == infantry_harness::AUTH_SUBSCRIPTION)),
     };
-    let backend = infantry_runner_link::process::ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default())).with_lend_policy(lend);
+    // RR-8: the link sessions' stream marks live in the runner-link folder; ids carry a per-boot tag so a restart never reuses one.
+    let boot_tag = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| format!("{:x}", d.as_millis())).unwrap_or_default();
+    let backend = infantry_runner_link::process::ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default().with_id_tag(boot_tag)))
+        .with_state_dir(&state_dir.join(infantry_runner_pool::LINK_DIR))
+        .with_lend_policy(lend);
     // RR-13: this runner answers its own harness/provider/key frames over the link, only the ones the plugin offers.
     let backend = infantry_runner_pool::FrameBackend::new(Box::new(backend), Arc::new(owner_ask(composed)));
     match infantry_runner_pool::RunnerServe::start(state_dir, Box::new(backend), opts) {
