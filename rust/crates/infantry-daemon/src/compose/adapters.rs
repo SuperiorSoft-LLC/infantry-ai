@@ -413,6 +413,8 @@ pub struct DaemonWorkspaces {
     pub projects: Arc<Projects>,
     /// Where ticket starts cut when the project's own folder is not a repository.
     pub repo: Option<PathBuf>,
+    /// RR-7: the daemon whose runners plugin makes the workspace of a ticket pinned to a remote runner, ON that runner.
+    pub daemon: Arc<Daemon>,
 }
 
 impl DaemonWorkspaces {
@@ -438,6 +440,19 @@ impl WorkspaceProvider for DaemonWorkspaces {
             .filter(|b| !b.trim().is_empty())
             .or_else(|| req.project_id.as_deref().and_then(|p| self.projects.store.base_branch_of(p)))
             .unwrap_or_else(|| "HEAD".into());
+        if infantry_runner_source::remote::is_remote(req.runner.as_deref()) {
+            let ws = self.daemon.remote_workspace().ok_or("a remote runner needs the runners plugin (no remote workspace is registered)")?;
+            let spec = infantry_runner_source::remote::TicketSpec {
+                ticket_id: req.ticket_id.clone(),
+                title: req.title.clone(),
+                project_id: req.project_id.clone(),
+                base_branch: Some(base.clone()).filter(|b| b != "HEAD"),
+                recorded_branch: req.recorded_branch.clone(),
+                recorded_base: req.recorded_base.clone(),
+            };
+            let w = ws.ensure(req.runner.as_deref().unwrap_or(""), &spec)?;
+            return Ok(Workspace { branch: w.branch, base: w.base, path: w.path, note: w.note });
+        }
         let out = self.projects.branches.ensure(&TicketBranchRequest {
             ticket_id: req.ticket_id.clone(),
             title: req.title.clone(),
@@ -486,6 +501,8 @@ pub struct DaemonLauncher {
     pub handle: tokio::runtime::Handle,
     /// The worktree registry a ticket worker's checkout is registered in (the hello `worktrees` frame lists it).
     pub worktrees: Arc<infantry_projects::worktree::WorktreeManager>,
+    pub projects: Arc<Projects>,
+    pub repo: Option<PathBuf>,
 }
 
 /// A session's worktree as the registry knows it (Kotlin `SessionRecord.toWorktreeRef`); None without all four parts.
@@ -498,6 +515,17 @@ pub fn worktree_ref(r: &SessionRecord) -> Option<infantry_projects::wire::Worktr
         branch: some(&r.worktree_branch)?,
         base_ref: r.worktree_base_ref.clone()?,
     })
+}
+
+impl DaemonLauncher {
+    /// The project's clone on a remote runner (a session with no ticket branch runs there); None when the project has no
+    /// repository here to clone from (the session then runs in the runner's scratch folder).
+    fn clone_folder(&self, runner: &str, project: Option<&str>) -> Result<Option<String>, String> {
+        match self.daemon.remote_workspace() {
+            Some(ws) => ws.clone_folder(runner, project),
+            None => Ok(None),
+        }
+    }
 }
 
 impl SessionLauncher for DaemonLauncher {
@@ -520,10 +548,24 @@ impl SessionLauncher for DaemonLauncher {
             unattended: r.origin.unattended(),
             spawner: None,
             worktree: r.workspace.as_ref().map(|w| (w.branch.clone(), w.base.clone(), r.folder.clone().unwrap_or_default())),
+            runner_cwd: None,
         };
+        let mut opts = opts;
+        let remote = infantry_runner_source::remote::is_remote(Some(&r.runner));
+        if remote {
+            // RR-7: the folder is ON the runner: the ticket's worktree there, or (no ticket branch) the project's clone.
+            // This machine's folder means nothing on another host and never reaches the runner.
+            opts.cwd = None;
+            opts.runner_cwd = match &r.workspace {
+                Some(w) => Some(w.path.clone()),
+                None => self.clone_folder(&r.runner, r.project_id.as_deref())?,
+            };
+        }
         let id = self.daemon.launch(opts)?;
-        if let Some(w) = self.daemon.record(&id).as_ref().and_then(worktree_ref) {
-            self.worktrees.reconcile(&[w]);
+        if !remote {
+            if let Some(w) = self.daemon.record(&id).as_ref().and_then(worktree_ref) {
+                self.worktrees.reconcile(&[w]);
+            }
         }
         Ok(LaunchedSession { session_id: id, note: None, workspace: r.workspace.clone() })
     }

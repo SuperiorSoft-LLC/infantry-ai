@@ -105,7 +105,7 @@ impl TicketBranches {
             ));
         }
         let path = self.path_for(&root, &branch);
-        if path.exists() {
+        if self.git.path_exists(&path) {
             return TicketBranchOutcome::Refused(format!("worktree path already exists: {}", path.display()));
         }
         let p = path.to_string_lossy().into_owned();
@@ -126,7 +126,7 @@ impl TicketBranches {
         };
         let p = path.to_string_lossy().into_owned();
         let wt = TicketWorktree { branch: branch.to_string(), base: base.clone(), path: p.clone(), repo_root: root.to_string_lossy().into_owned() };
-        if path.join(".git").exists() {
+        if self.git.path_exists(&path.join(".git")) {
             return TicketBranchOutcome::Ready { worktree: wt, note: None, warning: None };
         }
         let args: Vec<&str> = if self.branch_exists(root, branch) {

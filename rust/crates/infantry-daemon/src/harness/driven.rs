@@ -51,6 +51,14 @@ impl Harness for Driven {
         self.harness.context_window(&infantry_harness::LocalProbe, model)
     }
 
+    fn store_stats_via(&self, probe: &dyn infantry_harness::Probe, provider_session_id: &str) -> Option<Vec<infantry_harness::stats::StatEvent>> {
+        self.harness.store_stats(probe, provider_session_id)
+    }
+
+    fn context_window_via(&self, probe: &dyn infantry_harness::Probe, model: &str) -> Option<u64> {
+        self.harness.context_window(probe, model)
+    }
+
     fn capabilities(&self) -> Capabilities {
         let c = self.harness.capabilities();
         Capabilities {

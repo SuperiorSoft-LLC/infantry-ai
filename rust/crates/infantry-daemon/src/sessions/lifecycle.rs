@@ -478,15 +478,26 @@ impl Daemon {
     /// counts the daemon captured from the live stream are served.
     pub fn stats_json(&self, sid: &str) -> Result<String, String> {
         let entry = self.find(sid).ok_or_else(|| format!("unknown session '{sid}'"))?;
-        let (provider, psid, live_model) = {
+        let (provider, psid, live_model, runner) = {
             let e = entry.lock().unwrap();
-            (e.rec.provider.clone(), e.rec.provider_session_id.clone(), e.stats.models.last().cloned())
+            (e.rec.provider.clone(), e.rec.provider_session_id.clone(), e.stats.models.last().cloned(), e.rec.runner.clone())
         };
         let harness = self.harness_for(Some(&provider));
+        // RR-7: a session on a remote runner has its CLI's record on that runner's host: read it there.
+        let probe = self.runner_probe(&runner);
         // Read outside the session lock: a real transcript runs to tens of MB.
-        let store = psid.as_deref().filter(|p| !p.is_empty()).and_then(|p| harness.as_ref()?.store_stats(p)).map(|ev| infantry_harness::stats::fold(&ev));
+        let store = psid
+            .as_deref()
+            .filter(|p| !p.is_empty())
+            .and_then(|p| match &probe {
+                Some(pr) => harness.as_ref()?.store_stats_via(pr, p),
+                None => harness.as_ref()?.store_stats(p),
+            })
+            .map(|ev| infantry_harness::stats::fold(&ev));
         let limit_model = store.as_ref().and_then(|s| s.last_model.clone().or_else(|| s.models.last().cloned())).or(live_model);
-        let limit = limit_model.as_deref().and_then(|m| self.context_window_of(harness.as_ref(), m));
+        let limit = limit_model.as_deref().and_then(|m| {
+            probe.as_ref().and_then(|pr| harness.as_ref()?.context_window_via(pr, m)).filter(|n| *n > 0).or_else(|| self.context_window_of(harness.as_ref(), m))
+        });
         if let Some(st) = store {
             let r = entry.lock().unwrap().rec.clone();
             let mut v = st.to_json(limit);
@@ -520,6 +531,16 @@ impl Daemon {
             "source": "live",
         });
         Ok(v.to_string())
+    }
+
+    /// The probe of the runner a remote session ran on; None for `local` (the daemon's own files) or when it cannot be built.
+    fn runner_probe(&self, runner: &str) -> Option<crate::compose::remote_ws::RunnerProbe> {
+        if !infantry_runner_source::remote::is_remote(Some(runner)) {
+            return None;
+        }
+        let entry = self.runner_registry().resolve(runner).ok()?;
+        let handle = tokio::runtime::Handle::try_current().ok()?;
+        Some(crate::compose::remote_ws::RunnerProbe::new(entry.runner, handle))
     }
 
     /// The context window of `model` from a LOCAL catalog: the session's own harness first, then any other harness's
