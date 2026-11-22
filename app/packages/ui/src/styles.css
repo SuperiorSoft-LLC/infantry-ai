@@ -193,15 +193,13 @@
       background-position: 17px 0;
     }
   }
-  /* RUST-UI-2 SelectedStripes: "/" stripes, horizontal period 28px (19.8px perpendicular), 3s per period. */
+  /* Selected agent card: a low-contrast plaid (crossing horizontal and vertical bands, 28px period) that drifts, 3s per period. */
   .selected-stripes {
     position: absolute;
-    inset: 0 0 0 -28px;
-    background-image: repeating-linear-gradient(
-      45deg,
-      color-mix(in oklab, var(--primary) 14%, transparent) 0 10px,
-      transparent 10px 19.799px
-    );
+    inset: -28px 0 0 -28px;
+    background-image:
+      repeating-linear-gradient(0deg, color-mix(in oklab, var(--primary) 10%, transparent) 0 8px, transparent 8px 28px),
+      repeating-linear-gradient(90deg, color-mix(in oklab, var(--primary) 10%, transparent) 0 8px, transparent 8px 28px);
     will-change: transform;
     animation: selected-stripes-move 3s linear infinite;
   }
@@ -213,7 +211,7 @@
   }
   @keyframes selected-stripes-move {
     to {
-      transform: translateX(28px);
+      transform: translate(28px, 28px);
     }
   }
   /* RUST-UI-2: busy = soft breathing dot, waiting = slower amber blink (RunPills.kt). */

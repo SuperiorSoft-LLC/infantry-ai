@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// One agent in the sidebar. Selected = amber border + static stripes; working = moving stripes, selected or not (SelectedStripes.kt).
+// One agent in the sidebar. Selected = amber border + plaid background, drifting while it works; unselected cards have no background pattern.
 import { memo, useState } from "react";
 import { cn } from "@infantry/ui";
 import type { Agent } from "@/mock/types";
@@ -36,8 +36,8 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
         compact && "border",
       )}
     >
-      {/* Kotlin parity: working = moving stripes (selected or not); selected and idle = a static stripe. */}
-      <SelectedStripes active={selected || working} animate={working} />
+      {/* Only the selected card gets the plaid; it animates only while the agent is working. */}
+      <SelectedStripes active={selected} animate={working} />
       <div className="relative flex min-w-0 items-start gap-3">
         <AgentAvatar agent={agent} size="lg" live={!compact} className="mt-3 shrink-0" />
         <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
