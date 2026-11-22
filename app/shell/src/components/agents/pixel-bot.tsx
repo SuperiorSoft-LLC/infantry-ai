@@ -24,6 +24,7 @@ const dark = (c: string, pct: number) => `color-mix(in oklab, ${c} ${pct}%, #0b0
 /** Which motion a state gets (live avatars only). */
 export function motionOf(status: AgentStatus): "bob" | "shake" | "blink" | "float" | "none" {
   if (status === "working") return "bob";
+  if (status === "waiting") return "blink";
   if (status === "needs-input") return "float";
   if (status === "error") return "shake";
   if (status === "done") return "none";

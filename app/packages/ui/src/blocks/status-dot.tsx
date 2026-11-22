@@ -6,6 +6,7 @@ import type { StatusKind as AgentStatus } from "../types";
 const colour: Record<AgentStatus, string> = {
   idle: "bg-info",
   working: "bg-ok",
+  waiting: "bg-muted-foreground",
   "needs-input": "bg-warn",
   review: "bg-info",
   done: "bg-ok",

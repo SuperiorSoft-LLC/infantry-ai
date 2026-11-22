@@ -205,6 +205,18 @@ override replaces the rule's number for a while. Read or set it three ways, all 
 Each set or clear is written to the daemon log with the caller's session, role and `reason`. This is separate from the board worker cap
 (`limits.workers.maxParallel`, above), which does not change the pacing allowance.
 
+## Who answers an agent's question (`questions.route`)
+
+NEEDS-INPUT-1. A question card (AskUserQuestion, `infantry ask`) or an `ask`-mode approval is shown to the owner by default.
+`questions.route` (scopes app, project, role) sends it to the project's PM first: `owner` (default), `pm`, `pm-then-owner`.
+With `pm` the owner's client draws no card; the PM session gets ONE wake (kind `session.needs_input`, key = the prompt id,
+through `notify.wake.kinds`) and answers with `infantry prompt answer <promptId> --answer "<option>" [--text "<own words>"]`,
+which returns the answer to the blocked tool call. With `pm-then-owner` the PM may instead run
+`infantry prompt answer <promptId> --escalate`: the card then goes to the owner. `questions.pmRole` (default `pm`) names the
+PM role. No live PM in the project, or the asker is the PM: the owner's card, as before. The card's status on the agent
+list is `needs input` (attention); a worker flagged with `infantry waiting on` shows `waiting: <reason>` (calm). Example
+hook script: `scripts/wake/needs-input-forward.lua` (not installed by default).
+
 ## Which notices wake a session (`notify.wake.kinds`)
 
 A notice injected into a session costs a model turn, so each source names a **kind** and a dedupe **key**, and the setting
@@ -212,7 +224,7 @@ A notice injected into a session costs a model turn, so each source names a **ki
 says which kinds wake. Every other kind lands in the attention inbox. The same (kind, key) wakes a session once, across
 ticket comments and mails.
 
-Default: `comment.done, comment.issue, worker.failed, worker.idle, build.failed, owner.message`.
+Default: `comment.done, comment.issue, worker.failed, worker.idle, build.failed, owner.message, session.needs_input`.
 
 | Sender | Kind | Key |
 |---|---|---|

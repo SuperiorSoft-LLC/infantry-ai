@@ -27,6 +27,7 @@ pub static COMMANDS: &[&Command] = &[
     &super::cmd_sessions::AGENTS,
     &super::cmd_sessions::SESSION,
     &super::cmd_sessions::KILL,
+    &super::cmd_prompt::PROMPT,
     // -- health / usage / settings / scripts / secrets / run / install --
     &super::tools_cmds::SCRIPT,
     &super::tools_cmds::SECRET,

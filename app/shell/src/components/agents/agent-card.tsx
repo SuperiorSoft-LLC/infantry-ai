@@ -38,6 +38,7 @@ function BackgroundTag({ tasks }: { tasks: NonNullable<Agent["backgroundTasks"]>
 
 const chipTone: Record<Agent["status"], string> = {
   working: "border-info/50 text-info",
+  waiting: "border-border text-muted-foreground",
   "needs-input": "border-warn/60 text-warn",
   error: "border-danger/60 text-danger",
   done: "border-ok/50 text-ok",

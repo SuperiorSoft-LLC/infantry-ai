@@ -81,6 +81,9 @@ dto! {
         #[serde(default)] pub expires_at: Option<i64>,
         #[serde(default)] pub on_timeout: Option<String>,
         #[serde(default)] pub recommended: Option<String>,
+        /// NEEDS-INPUT-1: who must answer first. `pm` = the project's PM session (the owner's client does not draw the card);
+        /// absent = the owner. The PM escalates with `decision: "escalate"`, which clears it and re-sends the card.
+        #[serde(default, skip_serializing_if = "Option::is_none")] pub route: Option<String>,
     }
 }
 dto! {

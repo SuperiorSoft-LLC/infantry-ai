@@ -255,7 +255,8 @@ impl Daemon {
         match req.op.as_str() {
             "get" => Ok(e.rec.waiting.clone()),
             "off" => {
-                if e.rec.waiting.take().is_some() {
+                if let Some(w) = e.rec.waiting.take() {
+                    self.named_event("session.waiting_off", serde_json::json!({"sessionId": e.rec.id, "projectId": e.rec.project_id, "reason": w.reason, "why": "off"}));
                     self.push(&mut e);
                 }
                 Ok(None)
@@ -273,6 +274,7 @@ impl Daemon {
                 let until = now + minutes * 60_000;
                 let w = SessionWaiting { reason, since: now, until_at: until, expires_at: until + WAITING_GRACE_MINUTES * 60_000, clear_on_output: false, output_grace_ms: 0 };
                 e.rec.waiting = Some(w.clone());
+                self.named_event("session.waiting_on", serde_json::json!({"sessionId": e.rec.id, "projectId": e.rec.project_id, "reason": w.reason, "untilAt": w.until_at}));
                 self.push(&mut e);
                 Ok(Some(w))
             }

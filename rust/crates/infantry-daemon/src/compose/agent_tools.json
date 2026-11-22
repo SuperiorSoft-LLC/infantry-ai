@@ -494,5 +494,38 @@
     "detail"
    ]
   }
+ },
+ {
+  "name": "infantry_prompt_answer",
+  "readOnly": false,
+  "description": "Answer a question (or tool approval) an agent is BLOCKED on: the answer returns to its blocked tool call. When questions.route sends a session's questions to you (the pm), the wake line names the promptId. promptId + answers (option labels; several only for a multi-select question) and/or otherText; for a tool approval pass decision (allow_once, allow_session, allow_always, deny). escalate=true hands a pm-then-owner question to the owner instead. With no promptId it lists the open prompts. Only the owner or the pm; the CLI does the same: infantry prompt answer <promptId> --answer <label> [--text <t>] | --escalate.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "promptId": {
+     "type": "string"
+    },
+    "answers": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "Option labels."
+    },
+    "otherText": {
+     "type": "string",
+     "description": "Your own words (when the question allows it)."
+    },
+    "decision": {
+     "type": "string",
+     "description": "Tool approvals only: allow_once, allow_session, allow_always, deny."
+    },
+    "escalate": {
+     "type": "boolean",
+     "description": "Hand a pm-then-owner question to the owner."
+    }
+   },
+   "additionalProperties": false
+  }
  }
 ]

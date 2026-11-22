@@ -12,7 +12,7 @@ use std::sync::Mutex;
 pub const WAKE_KINDS_SETTING: &str = "notify.wake.kinds";
 
 /// The cheapest default: a turn only when something needs action.
-pub const DEFAULT_WAKE_KINDS: &str = "comment.done, comment.issue, worker.failed, worker.idle, build.failed, owner.message";
+pub const DEFAULT_WAKE_KINDS: &str = "comment.done, comment.issue, worker.failed, worker.idle, build.failed, owner.message, session.needs_input";
 
 /// What to do with a notice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

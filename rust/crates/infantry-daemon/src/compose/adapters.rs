@@ -158,6 +158,25 @@ impl DaemonBoardEnv {
     }
 }
 
+/// NEEDS-INPUT-1: `questions.pmRole` (scopes app, project, role): the role whose live session answers a routed question.
+pub const QUESTIONS_PM_ROLE: &str = "questions.pmRole";
+
+impl DaemonBoardEnv {
+    /// The live session that answers [session]'s routed questions: the project's session of the `questions.pmRole` role
+    /// (default `pm`), never [session] itself. None = nobody to route to (the owner answers).
+    pub fn question_answerer(&self, session: &str) -> Option<String> {
+        let me = self.daemon.record(session)?;
+        let d = serde_json::json!({"session": session, "project": me.project_id, "role": me.role});
+        let role = self.settings.resolve(QUESTIONS_PM_ROLE, &d).get("value").and_then(|v| v.as_str()).map(|r| r.trim().to_string()).filter(|r| !r.is_empty()).unwrap_or_else(|| "pm".into());
+        self.daemon.records().into_iter().find(|r| r.id != session && r.role.as_deref() == Some(role.as_str()) && r.project_id == me.project_id && !ended(r)).map(|r| r.id)
+    }
+
+    /// One wake of [session] through the WAKE-1 policy (kind + dedupe key); false = it could not be delivered.
+    pub fn wake_session(&self, session: &str, kind: &str, key: &str, subject: &str, line: &str) -> bool {
+        BoardEnv::notify_notice(self, session, kind, key, subject, line)
+    }
+}
+
 impl BoardEnv for DaemonBoardEnv {
     fn now_ms(&self) -> i64 {
         super::now_ms()

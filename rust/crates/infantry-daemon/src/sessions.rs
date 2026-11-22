@@ -295,6 +295,8 @@ pub struct Daemon {
     role_brief: std::sync::OnceLock<Arc<dyn Fn(&str) -> Option<String> + Send + Sync>>,
     /// Where tool approvals and questions go (the owner's prompt cards); unset = sessions run with allow-all.
     prompter: std::sync::OnceLock<Arc<dyn crate::harness::Prompter>>,
+    /// NEEDS-INPUT-1: where the session's named hook events (`session.waiting_on` ...) go (the core event bus).
+    events: std::sync::OnceLock<Arc<dyn Fn(&str, serde_json::Value) + Send + Sync>>,
     mcp: std::sync::OnceLock<Arc<dyn McpSelector>>,
     /// ASSISTANT-1: the role the Assistant plays and what it runs on (the role binding); unset = the default role and harness.
     assistant_spec: std::sync::OnceLock<Arc<dyn Fn() -> AssistantSpec + Send + Sync>>,
@@ -387,6 +389,7 @@ impl Daemon {
             role_known: std::sync::OnceLock::new(),
             role_brief: std::sync::OnceLock::new(),
             prompter: std::sync::OnceLock::new(),
+            events: std::sync::OnceLock::new(),
             mcp: std::sync::OnceLock::new(),
             assistant_spec: std::sync::OnceLock::new(),
             assistant_lock: Mutex::new(()),
@@ -1056,7 +1059,9 @@ impl Daemon {
         if e.rec.run_count > 0 && !e.hs.as_ref().is_some_and(|h| h.process_alive()) {
             e.rec.resume_count += 1;
         }
-        e.rec.waiting = None;
+        if e.rec.waiting.take().is_some() {
+            self.named_event("session.waiting_off", serde_json::json!({"sessionId": e.rec.id, "projectId": e.rec.project_id, "why": "turn"}));
+        }
         self.push(e);
         let st = state_word(e.rec.state).to_ascii_uppercase();
         self.emit(e, wire::STATUS, wire::status(&st));
@@ -1161,6 +1166,17 @@ impl Daemon {
 
     pub fn set_prompter(&self, p: Arc<dyn crate::harness::Prompter>) {
         let _ = self.prompter.set(p);
+    }
+
+    pub fn set_event_sink(&self, f: Arc<dyn Fn(&str, serde_json::Value) + Send + Sync>) {
+        let _ = self.events.set(f);
+    }
+
+    /// A named hook event (`session.waiting_on` ...); nobody listening is fine.
+    pub(crate) fn named_event(&self, name: &str, payload: serde_json::Value) {
+        if let Some(f) = self.events.get() {
+            f(name, payload);
+        }
     }
 
     /// Adds the MCP servers each session was granted to its launch plan (set once, at composition).
