@@ -91,7 +91,7 @@ fn main() {
     let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap_or_else(|e| fail(e.to_string()));
     // Every unit, registered over the session manager (inside the runtime: units start background tasks).
     match rt.block_on(async { infantry_daemon::compose::build_with_mode(&daemon, &state_dir, mode) }) {
-        Ok(composed) => register_runner_pool(&composed, &state_dir, mode, &arg),
+        Ok(composed) => register_runner_pool(&composed, &state_dir, mode, &arg, rt.handle().clone()),
         Err(e) => eprintln!("[infantry] units not composed, serving the sessions frames only: {e}"),
     }
     let gateway = arg("--legacy-backend").or_else(|| auth::env("INFANTRY_LEGACY_BACKEND")).map(|cmdline| {
@@ -145,7 +145,7 @@ fn main() {
 
 /// RUNNER POOL REGISTRATION SPOT (RR-1): the paired remote runners and the owner-only `runner_admin` frame. The daemon core
 /// never names the pool; this root adds it as a late unit. A runner-only daemon has no runners to drive.
-fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, state_dir: &std::path::Path, mode: infantry_daemon::mode::Mode, arg: &dyn Fn(&str) -> Option<String>) {
+fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, state_dir: &std::path::Path, mode: infantry_daemon::mode::Mode, arg: &dyn Fn(&str) -> Option<String>, handle: tokio::runtime::Handle) {
     if mode == infantry_daemon::mode::Mode::Runner {
         serve_runner_link(composed, state_dir, arg);
         return;
@@ -155,6 +155,8 @@ fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, stat
     composed.late.add("runner-pool", &frames, Arc::new(infantry_runner_pool::AdminUnit { pool: pool.clone(), lend: composed.daemon.lender().map(|l| Arc::new(CheckLendOver(l, composed.daemon.providers())) as Arc<dyn infantry_runner_pool::CheckLend>) }));
     // RR-4: the paired runners join the registry a session is placed through (`local` is already there).
     composed.daemon.runner_registry().add_source(pool.clone());
+    // RR-7: a ticket pinned to a paired runner works in its own branch ON that runner (clone cache, worktree, push).
+    composed.daemon.set_remote_workspace(infantry_runner_pool::workspace::RemoteWorkspaces::new(composed.remote_host.clone(), handle));
     // RR-13: `runner_frame {runner, frame, data}`; `local` answers in-process through this daemon's own frames.
     let registry = composed.daemon.runner_registry();
     registry.set_local_scope(Arc::new(infantry_runner_source::FnScope(Box::new(owner_ask(composed)))));

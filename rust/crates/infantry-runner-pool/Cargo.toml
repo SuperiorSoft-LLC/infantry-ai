@@ -14,6 +14,8 @@ infantry-protocol = { path = "../infantry-protocol" }
 infantry-runner-link = { path = "../infantry-runner-link" }
 infantry-runner-api = { path = "../infantry-runner-api" }
 infantry-runner-source = { path = "../infantry-runner-source" }
+infantry-projects = { path = "../infantry-projects" }
+tokio = { version = "1", features = ["rt", "time"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 
 [dev-dependencies]

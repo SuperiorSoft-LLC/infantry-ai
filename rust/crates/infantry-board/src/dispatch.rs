@@ -536,6 +536,7 @@ impl Dispatcher {
                 base_branch: base,
                 recorded_branch: row.branch.clone(),
                 recorded_base: row.base.clone(),
+                runner: Some(exec.runner.clone()),
             };
             match self.workspaces.ensure(&req) {
                 Ok(w) => {

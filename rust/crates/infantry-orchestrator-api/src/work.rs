@@ -23,6 +23,9 @@ pub struct WorkspaceRequest {
     /// What the ticket already holds: reuse it, never cut a second branch for one ticket.
     pub recorded_branch: Option<String>,
     pub recorded_base: Option<String>,
+    /// RR-7: the runner the ticket runs on (`local` or a remote runner's name); the workspace is made on that runner.
+    #[serde(default)]
+    pub runner: Option<String>,
 }
 
 /// A ready ticket workspace.

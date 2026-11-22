@@ -1606,6 +1606,7 @@ name = "infantry-runner-pool"
 version = "0.4.7"
 dependencies = [
  "infantry-core",
+ "infantry-projects",
  "infantry-protocol",
  "infantry-runner-api",
  "infantry-runner-link",
@@ -1621,6 +1622,7 @@ name = "infantry-runner-source"
 version = "0.4.7"
 dependencies = [
  "infantry-runner-api",
+ "serde_json",
  "tokio",
 ]
 

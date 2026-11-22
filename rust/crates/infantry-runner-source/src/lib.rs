@@ -8,6 +8,8 @@
 //! A start that names a runner is NEVER answered with another one: [`RunnerRegistry::resolve`] returns a [`Refusal`] that
 //! names the runner and the reason (unknown, offline, outdated), so the caller refuses loudly and keeps the ticket where it is.
 
+pub mod remote;
+
 use infantry_runner_api::Runner;
 use std::sync::{Arc, Mutex};
 

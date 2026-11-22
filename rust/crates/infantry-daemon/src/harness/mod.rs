@@ -161,6 +161,14 @@ pub trait Harness: Send + Sync {
     fn context_window(&self, _model: &str) -> Option<u64> {
         None
     }
+    /// RR-7: [`Harness::store_stats`] read through `probe` (the files of the runner the session ran on).
+    fn store_stats_via(&self, _probe: &dyn infantry_harness::Probe, _provider_session_id: &str) -> Option<Vec<infantry_harness::stats::StatEvent>> {
+        None
+    }
+    /// RR-7: [`Harness::context_window`] read through `probe`.
+    fn context_window_via(&self, _probe: &dyn infantry_harness::Probe, _model: &str) -> Option<u64> {
+        None
+    }
 }
 
 /// One daemon session's harness side. Methods never block for long; output arrives through the [`EventSink`].

@@ -152,6 +152,9 @@ pub struct NewOpts {
     /// (branch, base, repo root) of the worktree in `cwd`.
     #[serde(skip)]
     pub worktree: Option<(String, String, String)>,
+    /// RR-7: the folder to run in ON the placed (remote) runner: a ticket worktree or the project's clone there.
+    #[serde(skip)]
+    pub runner_cwd: Option<String>,
 }
 
 /// What other units learn of a session's life (usage metering, mail wakes, the board's done protocol). Called with
@@ -296,6 +299,8 @@ pub struct Daemon {
     provider_env: std::sync::OnceLock<Arc<dyn Fn(&str) -> Vec<(String, String)> + Send + Sync>>,
     /// RR-6: what a start on a REMOTE runner lends `(runner, provider, project)`; unset = nothing is lent.
     lender: std::sync::OnceLock<Arc<crate::lender::Lender>>,
+    /// RR-7: a ticket's workspace on a remote runner (set by the runners plugin at the composition root).
+    remote_ws: std::sync::OnceLock<Arc<dyn infantry_runner_source::remote::RemoteWorkspace>>,
     /// RR-6b: the per-session tokens of the tunnel listener.
     pub tunnel: Arc<crate::tunnel::TunnelGate>,
     /// Whether a role exists (`session_swap` to a role); unset = any well-formed role.
@@ -403,6 +408,7 @@ impl Daemon {
             env_extra: std::sync::OnceLock::new(),
             provider_env: std::sync::OnceLock::new(),
             lender: std::sync::OnceLock::new(),
+            remote_ws: std::sync::OnceLock::new(),
             tunnel: Arc::default(),
             role_known: std::sync::OnceLock::new(),
             role_brief: std::sync::OnceLock::new(),
@@ -869,7 +875,7 @@ impl Daemon {
         // session's folder is a scratch folder ON the runner (the workspace is RR-7), never the orchestrator's working dir.
         let placed = self.place(opts.runner.as_deref(), opts.provider.as_deref(), verb)?;
         let cwd = match &placed {
-            Some((_, workdir)) => PathBuf::from(workdir),
+            Some((_, workdir)) => PathBuf::from(opts.runner_cwd.as_deref().filter(|c| !c.trim().is_empty()).unwrap_or(workdir)),
             None => match self.own_folder(opts, &id)? {
                 Some(own) => own,
                 None => opts.cwd.as_deref().filter(|c| !c.trim().is_empty()).map(PathBuf::from).unwrap_or_else(|| self.cfg.default_cwd.clone()),
@@ -900,7 +906,7 @@ impl Daemon {
         if let Some((name, _)) = &placed {
             rec.runner = name.clone();
         }
-        if let (Some((branch, base, root)), None) = (&opts.worktree, &placed) {
+        if let (Some((branch, base, root)), true) = (&opts.worktree, placed.is_none() || opts.runner_cwd.is_some()) {
             rec.worktree_path = Some(cwd.to_string_lossy().into_owned());
             rec.worktree_branch = Some(branch.clone());
             rec.worktree_base_ref = Some(base.clone());
@@ -1214,6 +1220,14 @@ impl Daemon {
     /// RR-6: wires what a remote start lends.
     pub fn set_lender(&self, l: Arc<crate::lender::Lender>) {
         let _ = self.lender.set(l);
+    }
+
+    pub fn set_remote_workspace(&self, w: Arc<dyn infantry_runner_source::remote::RemoteWorkspace>) {
+        let _ = self.remote_ws.set(w);
+    }
+
+    pub fn remote_workspace(&self) -> Option<Arc<dyn infantry_runner_source::remote::RemoteWorkspace>> {
+        self.remote_ws.get().cloned()
     }
 
     pub fn lender(&self) -> Option<Arc<crate::lender::Lender>> {

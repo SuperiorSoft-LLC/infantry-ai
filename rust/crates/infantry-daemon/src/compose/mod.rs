@@ -12,6 +12,7 @@
 //! (`plugin_tools` / `plugin_tool_call`) over one tool catalog.
 
 mod adapters;
+pub mod remote_ws;
 mod agent_frames;
 mod agent_registry;
 mod agent_tools;
@@ -113,6 +114,8 @@ pub struct Composed {
     pub prompts: Arc<PendingPrompts>,
     /// WAKE-2: the one wake gate (board notices, tool mails) so one event wakes a session once.
     pub wake_gate: Arc<infantry_mail::notify::wake::WakeGate>,
+    /// RR-7: what the runners plugin asks of this daemon to make a ticket's workspace on a remote runner.
+    pub remote_host: Arc<dyn infantry_runner_source::remote::RemoteHost>,
     next_conn: AtomicU64,
 }
 
@@ -229,8 +232,19 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     // ---- the board + its work half -------------------------------------------------------------------------
     let env = Arc::new(adapters::DaemonBoardEnv::new(daemon.clone(), projects.clone(), state_dir, usage.clone(), db.clone()));
     let board = Arc::new(TicketBoard::new(db.clone(), env.clone()));
-    let workspaces = Arc::new(adapters::DaemonWorkspaces { projects: projects.clone(), repo: repo.clone() });
-    let launcher = Arc::new(adapters::DaemonLauncher { daemon: daemon.clone(), handle: handle.clone(), worktrees: projects.worktrees.clone() });
+    // RR-7: a remote runner's workspace is made by the runners plugin (set on the daemon at the composition root).
+    let workspaces = Arc::new(adapters::DaemonWorkspaces { projects: projects.clone(), repo: repo.clone(), daemon: daemon.clone() });
+    let launcher = Arc::new(adapters::DaemonLauncher { daemon: daemon.clone(), handle: handle.clone(), worktrees: projects.worktrees.clone(), projects: projects.clone(), repo: repo.clone() });
+    daemon.observe(Arc::new(remote_ws::RemotePush { daemon: daemon.clone() }));
+    let remote_host: Arc<dyn infantry_runner_source::remote::RemoteHost> = Arc::new(remote_ws::DaemonHost {
+        daemon: daemon.clone(),
+        projects: projects.clone(),
+        repo: repo.clone(),
+        setting: {
+            let settings = settings::SettingsUnit { db: db.clone() };
+            Arc::new(move |key| settings.app(key))
+        },
+    });
     let dispatcher = Dispatcher::new(board.clone(), workspaces, launcher, bus.clone());
     let orchestrator = Arc::new(LocalOrchestrator::with_dispatcher(dispatcher.clone(), bus.clone()));
 
@@ -768,6 +782,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         late,
         prompts: prompts.clone(),
         wake_gate: env.wake_gate(),
+        remote_host,
         next_conn: AtomicU64::new(1),
     });
     if let Some(p) = &plugin_set {

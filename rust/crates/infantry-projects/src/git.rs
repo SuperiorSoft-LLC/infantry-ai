@@ -56,6 +56,12 @@ impl GitResult {
 /// Runs git. Implementations never panic on a non-zero exit; `Err` means git could not be started at all.
 pub trait GitCli: Send + Sync {
     fn run(&self, cwd: &Path, args: &[&str]) -> std::io::Result<GitResult>;
+
+    /// Whether `path` exists on the machine git runs on. The OS file system by default; a git that runs on a remote runner
+    /// answers from that host (RR-7), so the ticket-branch code asks here instead of the local disk.
+    fn path_exists(&self, path: &Path) -> bool {
+        path.exists()
+    }
 }
 
 pub type SharedGit = Arc<dyn GitCli>;
