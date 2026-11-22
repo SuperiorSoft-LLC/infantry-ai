@@ -70,3 +70,10 @@ unstamped run shows `dev (unstamped; version X, commit abcd1234)` from the launc
 
 `limits.health.briefEnvironment` (default 0 = off). At 1 every first turn carries one line (`Environment: OS arch; shells;
 project; off-limits ports ... Run infantry health`), about 60 tokens per session start. Off costs nothing.
+
+## Hop timings (debug, off by default)
+
+To find where a slow screen loses its time, stamp every hop a frame takes:
+
+- **The window** (`app/packages/client/src/hops.ts`): `debugHopTimings: true` in `ui.json`, or `INFANTRY_UI_HOPS=1` (`board` also opens the board by itself), or `?hops=1` in a browser. Each hop is one JSON line (`t` = ms since the page started) in the console and, in the app, in `<state>/hop-timings.log`: `tauri.send`, `tauri.recv`, `conn.decode`, `conn.frame`, `store.flush`, `board.request`, `board.parse`, `board.set`, `board.commit`, `board.painted`.
+- **The daemon**: `INFANTRY_HOP_TIMINGS=1` logs one `[hop] frame <type> ... answered in <ms>` line per client frame to stderr. A slow line is a handler; `Config::frame_detach_ms` (`limits.ws.frameDetachMs`, 150) is how long it may hold its connection's frame loop before later frames pass it.

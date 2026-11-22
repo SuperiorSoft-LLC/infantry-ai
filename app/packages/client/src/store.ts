@@ -10,6 +10,7 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { DaemonConnection, type LinkState, type TransportFactory } from "./connection";
 import { applyFrames, type TranscriptItem } from "./transcript";
+import { timedHop } from "./hops";
 import {
   CLIENT_SEND_PREFIX, Frame, RUN_IN_FLIGHT, STREAM_FRAMES, isRunning, json, parseReady,
   type AgentProfile, type Envelope, type FileWrite, type ProjectSummary, type ReadyInfo, type ReplayGap, type RunUsage, type SessionRecord,
@@ -148,8 +149,10 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
       if (batch.length === 0) return;
       io.queue = [];
       const s = get();
-      const next = reduce(s, batch);
-      set({ ...next, stats: { lastBatch: batch.length, flushes: s.stats.flushes + 1, frames: s.stats.frames + batch.length } });
+      timedHop("store.flush", () => {
+        const next = reduce(s, batch);
+        set({ ...next, stats: { lastBatch: batch.length, flushes: s.stats.flushes + 1, frames: s.stats.frames + batch.length } });
+      }, { frames: batch.length });
     };
 
     /** The whole batch against the current state: plain objects, one copy per touched session. */

@@ -9,7 +9,7 @@
 //            keystore. Unpaired (no URL yet), the app shows the connect screen instead of the shell.
 //   Stress:  INFANTRY_UI_STRESS=1 (Tauri) or `?stress=1` (browser): fake sessions, no daemon.
 import { useStore } from "zustand";
-import { createDaemonStore, startStress, type DaemonActions, type DaemonState, type DaemonStore, type HostEndpoint, type StressOptions } from "@infantry/client";
+import { createDaemonStore, enableHops, hop, startStress, type DaemonActions, type DaemonState, type DaemonStore, type HostEndpoint, type StressOptions } from "@infantry/client";
 import { host } from "@/host";
 
 let store: DaemonStore | null = null;
@@ -20,6 +20,8 @@ export let stressMode = false;
 export let localMode = false;
 /** The perf harness's scenario, when one was given. */
 export let perfScenario: string | null = null;
+/** Hop timings with INFANTRY_UI_HOPS=board: the window opens the board by itself (no synthetic input), so a run needs no click. */
+export let hopsOpenBoard = false;
 /** `embedded` | `daemon` | `connect` (desktop app), `remote` (phone app), `browser` otherwise. */
 export let runnerMode = "browser";
 /** Daemon mode: why the sidecar did not start (null = it is up). */
@@ -55,6 +57,16 @@ export async function initDaemon(): Promise<DaemonStore> {
   stressMode = e.stress;
   localMode = host.embedded !== null && e.local === true && !e.stress;
   perfScenario = e.perf ?? null;
+  const hopsQuery = new URLSearchParams(location.search).get("hops");
+  hopsOpenBoard = e.hops === "board" || hopsQuery === "board";
+  if (e.hops || hopsQuery) {
+    // One JSON line per hop: the console, and (in the app) <state>/hop-timings.log through the app's own command.
+    enableHops((line) => {
+      console.debug(`[hop] ${line}`);
+      if (host.kind !== "browser") void host.call("hops_report", { line }).catch(() => {});
+    });
+    hop("page.start");
+  }
   runnerMode = e.mode ?? (host.kind !== "browser" ? (localMode ? "embedded" : "connect") : "browser");
   daemonError = e.error ?? null;
   daemonNote = e.note ?? null;

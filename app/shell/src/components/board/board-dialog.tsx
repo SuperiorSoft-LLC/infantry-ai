@@ -6,7 +6,7 @@ import { useLayout } from "@/state/ui-state";
 import { DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor, closestCorners, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { LayoutGrid, Plus, X } from "lucide-react";
-import { LANES, LANE_TITLES, laneOf, matchesFilter } from "@infantry/client";
+import { LANES, LANE_TITLES, hop, laneOf, matchesFilter } from "@infantry/client";
 import { AppDialog, Button, EmptyState } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { FilterBar } from "./filter-bar";
@@ -37,6 +37,11 @@ export function BoardDialog({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (link === "open") boardStore().getState().ensureLoaded();
   }, [link]);
+  // Hop timings (off unless enabled): the commit that put the tickets on screen, and the first paint after it.
+  useEffect(() => {
+    hop("board.commit", { loaded, tickets: Object.keys(tickets).length });
+    if (loaded) requestAnimationFrame(() => hop("board.painted", { tickets: Object.keys(tickets).length }));
+  }, [loaded, tickets]);
 
   // A phone: one lane per screen, a swipe snaps to the next; a card drags after a long press, so a swipe scrolls (layout.ts).
   const layout = useLayout();

@@ -18,6 +18,8 @@ export interface HostEndpoint {
   local?: boolean;
   /** The perf harness's scenario (INFANTRY_PERF_SCENARIO), run by perf-scenario.ts. */
   perf?: string | null;
+  /** Hop timings are on (ui.json `debugHopTimings` or INFANTRY_UI_HOPS=1; `board` also opens the board): see hops.ts. */
+  hops?: string | null;
   /** `embedded` | `daemon` | `connect` (desktop), `remote` (phone). */
   mode?: string;
   /** Daemon mode: why the sidecar did not start; remote mode: why the token could not be read. */
