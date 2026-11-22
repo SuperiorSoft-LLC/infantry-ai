@@ -206,3 +206,17 @@ describe("harness install store", () => {
     expect([plain.login, plain.key?.name, plain.keyNeeded]).toEqual([null, "harness.pi.key", true]);
   });
 });
+
+describe("setup wizard after an update", () => {
+  const mem = () => { const m = new Map<string, string>(); return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) }; };
+  it("opens by itself only on a true first install, never once the flag is set", async () => {
+    const { autoOpens, markSetupDone, setupDone } = await import("../src");
+    const s = mem();
+    expect(setupDone(s)).toBe(false);
+    expect(autoOpens(setupDone(s), null, true)).toBe(true);
+    markSetupDone(s);
+    // update relaunch: the tool looks missing right now, the wizard stays closed
+    expect(autoOpens(setupDone(s), null, true)).toBe(false);
+    expect(setupDone(null)).toBe(false);
+  });
+});
