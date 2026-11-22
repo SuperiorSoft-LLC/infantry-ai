@@ -188,15 +188,19 @@ impl AdminUnit {
         };
         let stored = self.pool.runner_secret_names(name).unwrap_or_default();
         let harnesses = if harnesses.is_empty() { lend.harnesses() } else { harnesses };
+        let logins = self.pool.runner_logins(name).unwrap_or_default();
         for h in harnesses {
             let has = stored.iter().any(|n| n == &format!("harness.{h}.key") || n == &format!("harness.{h}.token"));
             // The runner's own login (a subscription, not an API key) counts: the harness row above already says it is signed in.
-            let signed_in = rows.iter().any(|r| r["id"] == format!("harness:{h}").as_str() && r["ok"] == true);
+            // What the runner's own harness tests (OAuth credentials file, CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY), asked of the runner itself.
+            let login = logins.iter().find(|(id, _, _)| id == &h);
+            let signed_in = login.is_some_and(|(_, ok, _)| *ok);
+            let via = login.and_then(|(_, _, at)| at.clone()).map(|a| format!(" ({a})")).unwrap_or_default();
             let (ok, detail, fix) = match lend.source(name, &h, has) {
-                CredentialSource::Lent => (true, "the key is lent by the orchestrator with each start", None),
-                CredentialSource::StoredOnRunner => (true, "the key is stored on the runner", None),
-                CredentialSource::None if signed_in => (true, "signed in on the runner with its own login (no key needed)", None),
-                CredentialSource::None => (false, "none: nothing is lent and the runner holds no key", Some("store a key on the runner (Settings > Runners, or runner_frame secret_set) or put one in this orchestrator's vault")),
+                CredentialSource::Lent => (true, "the key is lent by the orchestrator with each start".to_string(), None),
+                CredentialSource::StoredOnRunner => (true, "the key is stored on the runner".to_string(), None),
+                CredentialSource::None if signed_in => (true, format!("signed in on the runner{via}: its own login or key, nothing to lend"), None),
+                CredentialSource::None => (false, "not signed in on the runner, and no key is lent or stored".to_string(), Some("Set up this runner → Sign in, or set the key in the runner's provider section")),
             };
             rows.push(row(&format!("credential:{h}"), ok, detail, fix));
         }

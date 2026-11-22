@@ -141,7 +141,7 @@ pub fn recreate(docker: &dyn Docker, plan: &RecreatePlan, env_file: Option<&str>
     // A local-only tag has nothing to pull: a failed pull is fine when the image is already here.
     if let Err(e) = docker.run(&d(&["pull", &plan.image])) {
         if docker.run(&d(&["image", "inspect", &plan.image])).is_err() {
-            return Err(format!("image {} is not here and could not be pulled: {e}", plan.image));
+            return Err(format!("the image {} could not be pulled and is not on this machine, so the runner was not touched and still runs as before. Make that image available (build or publish it), then press Update runner again. Docker said: {e}", plan.image));
         }
     }
     progress("stopping the old container");

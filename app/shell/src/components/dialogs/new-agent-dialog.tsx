@@ -146,11 +146,12 @@ export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDra
             value={{ harness: draft.harness, group: draft.group, model: draft.model, effort: draft.effort ?? null }}
             harnesses={harnesses}
             catalog={catalog}
+            emptyText={remote && refusal ? "Could not read this runner's tools" : remote && listsLoaded ? "Nothing installed on this runner" : undefined}
             onChange={(v) => onChange({ ...draft, ...v })}
           />
           {remote && refusal && (
             <p role="alert" className="text-xs text-danger">
-              Could not read the tools on runner {draft.runner}: {refusal}
+              Could not read the tools on runner {draft.runner}: {refusal}. The runner may be too old to answer: Settings &gt; Runners &gt; Update runner.
             </p>
           )}
           {remote && !refusal && listsLoaded && harnesses.length === 0 && (

@@ -241,6 +241,14 @@ impl RunnerPool {
         Some(v["secrets"].as_array()?.iter().filter(|s| s["set"].as_bool() == Some(true)).filter_map(|s| s["name"].as_str().map(str::to_string)).collect())
     }
 
+    /// RR-VIS: the runner's own `providers` answer, as (id, signed in, where the login lives): what its harnesses really test.
+    pub fn runner_logins(&self, name: &str) -> Option<Vec<(String, bool, Option<String>)>> {
+        let entry = RunnerSource::entry(self, name)?;
+        let answer = entry.scope.request("providers", "{}").ok()?;
+        let v: serde_json::Value = serde_json::from_str(&answer).ok()?;
+        Some(v.as_array()?.iter().filter_map(|p| Some((p["id"].as_str()?.to_string(), p["available"].as_bool() != Some(false), p["loginAt"].as_str().map(str::to_string)))).collect())
+    }
+
     /// The app version runner `name` reported at its last answer.
     pub fn runner_app_version(&self, name: &str) -> Option<String> {
         self.app_versions.lock().unwrap_or_else(|e| e.into_inner()).get(name).cloned()

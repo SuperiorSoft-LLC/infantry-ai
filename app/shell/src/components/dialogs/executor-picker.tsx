@@ -29,8 +29,11 @@ export function ExecutorPicker({
   harnesses,
   catalog,
   onChange,
+  emptyText,
 }: {
   idPrefix: string;
+  /** RR-VIS: what the empty harness list says instead of "Loading harnesses..." once the answer is in (a refusal or an empty list). */
+  emptyText?: string;
   value: ExecutorValue;
   harnesses: HarnessInfo[];
   catalog: ModelGroup[];
@@ -45,7 +48,7 @@ export function ExecutorPicker({
       <Field id={`${idPrefix}-harness`} label="Harness" hint={unavailableLine(harnesses) ?? undefined}>
         <Select value={value.harness ?? undefined} onValueChange={(v) => onChange(pickHarness(value, v, harnesses))}>
           <SelectTrigger id={`${idPrefix}-harness`} className="w-full">
-            <SelectValue placeholder={harnesses.length ? "Pick a harness" : "Loading harnesses..."} />
+            <SelectValue placeholder={harnesses.length ? "Pick a harness" : (emptyText ?? "Loading harnesses...")} />
           </SelectTrigger>
           <SelectContent>
             {harnesses.map((h) => (
