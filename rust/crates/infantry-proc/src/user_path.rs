@@ -14,7 +14,8 @@ use std::time::{Duration, Instant};
 const REFRESH_EVERY: Duration = Duration::from_secs(20);
 static LAST: Mutex<Option<Instant>> = Mutex::new(None);
 
-fn same(a: &std::path::Path, b: &std::path::Path) -> bool {
+/// Whether two directory paths are the same folder (case and a trailing slash do not matter on Windows).
+pub fn same_dir(a: &std::path::Path, b: &std::path::Path) -> bool {
     if cfg!(windows) {
         let (a, b) = (a.to_string_lossy(), b.to_string_lossy());
         a.trim_end_matches(['\\', '/']).eq_ignore_ascii_case(b.trim_end_matches(['\\', '/']))
@@ -27,7 +28,7 @@ fn same(a: &std::path::Path, b: &std::path::Path) -> bool {
 pub fn merge(current: &OsStr, extra: &[PathBuf]) -> OsString {
     let mut dirs: Vec<PathBuf> = std::env::split_paths(current).filter(|d| !d.as_os_str().is_empty()).collect();
     for d in extra {
-        if !d.as_os_str().is_empty() && !dirs.iter().any(|x| same(x, d)) {
+        if !d.as_os_str().is_empty() && !dirs.iter().any(|x| same_dir(x, d)) {
             dirs.push(d.clone());
         }
     }

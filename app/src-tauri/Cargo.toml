@@ -40,6 +40,7 @@ ureq = { version = "2", default-features = false, features = ["tls"] }
 # it connects to a remote daemon only.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 infantry-harness = { path = "../../rust/crates/infantry-harness" }
+infantry-proc = { path = "../../rust/crates/infantry-proc" }
 infantry-harness-claude = { path = "../../rust/crates/infantry-harness-claude" }
 infantry-runner-local = { path = "../../rust/crates/infantry-runner-local" }
 tokio = { version = "1", features = ["rt", "sync", "time"] }

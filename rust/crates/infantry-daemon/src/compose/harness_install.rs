@@ -98,7 +98,9 @@ impl HarnessInstall {
                     },
                 };
                 let managed = path.as_ref().is_some_and(|p| p.starts_with(&self.prefix));
-                json!({ "id": id, "label": label, "npmPackage": pkg, "state": state, "installedVersion": version,
+                // A private copy the user's own install makes redundant (and used to shadow): offered for removal, never removed silently.
+                let private = if find_user_cli(&self.prefix, cmd).is_some() { find_private_cli(&self.prefix, cmd) } else { None };
+                json!({ "privateCopy": private.map(|p| p.display().to_string()), "id": id, "label": label, "npmPackage": pkg, "state": state, "installedVersion": version,
                         "path": path.map(|p| p.display().to_string()), "managed": managed })
             })
             .collect();
@@ -162,6 +164,25 @@ impl FrameUnit for HarnessInstall {
                 if let Some(bad) = ids.iter().find(|i| !KNOWN.iter().any(|k| k.0 == i.as_str())) {
                     return Err(Refusal::new(pf::HARNESS_INSTALL, format!("unknown harness '{bad}'")));
                 }
+                if let Some(rm) = req["remove"].as_array() {
+                    let mut removed = Vec::new();
+                    for id in rm.iter().filter_map(Value::as_str) {
+                        let Some((_, _, cmd, pkg)) = KNOWN.iter().find(|k| k.0 == id) else { return Err(Refusal::new(pf::HARNESS_INSTALL, format!("unknown harness '{id}'"))) };
+                        // Only a copy the user's own install makes redundant; the only copy there is stays.
+                        if find_user_cli(&self.prefix, cmd).is_none() {
+                            return Err(Refusal::new(pf::HARNESS_INSTALL, format!("{id}: there is no other copy on this PC, so the app's own is kept")));
+                        }
+                        remove_private(&self.prefix, cmd, pkg).map_err(|e| Refusal::new(pf::HARNESS_INSTALL, format!("{id}: {e}")))?;
+                        Self::note(&self.log, format!("{id}: removed the app's private copy"));
+                        removed.push(id.to_string());
+                    }
+                    self.versions.lock().unwrap_or_else(|e| e.into_inner()).clear();
+                    (self.on_changed)();
+                    let mut e = Envelope::new(pf::HARNESS_INSTALL_RESULT, json!({ "started": false, "removed": removed }).to_string());
+                    e.session_id = env.session_id.clone();
+                    e.request_id = env.request_id.clone();
+                    return Ok(vec![e]);
+                }
                 let (update, runtime) = (req["update"].as_bool().unwrap_or(false), req["runtime"].as_bool().unwrap_or(false));
                 self.start(ids, update, runtime).map_err(|e| Refusal::new(pf::HARNESS_INSTALL, e))?;
                 (pf::HARNESS_INSTALL_RESULT, json!({ "started": true }))
@@ -177,19 +198,27 @@ impl FrameUnit for HarnessInstall {
 
 // ---- finding things ----
 
-/// Puts [prefix] first on this process's PATH once (the harnesses and every child they start inherit it).
-fn add_to_path(prefix: &Path) {
+/// The PATH with the app's own tool dirs LAST: the user's own dirs (npm global, the native installer) always win, so a private
+/// copy in `harness-tools` can never shadow the `claude` the user runs in a terminal.
+fn path_with_prefix_last(cur: &std::ffi::OsStr, prefix_dirs: &[PathBuf]) -> std::ffi::OsString {
+    let own = |d: &PathBuf| prefix_dirs.iter().any(|p| infantry_proc::user_path::same_dir(p, d));
+    let dirs: Vec<PathBuf> = std::env::split_paths(cur).filter(|d| !own(d)).chain(prefix_dirs.iter().cloned()).collect();
+    std::env::join_paths(dirs).unwrap_or_else(|_| cur.to_os_string())
+}
+
+fn prefix_dirs(prefix: &Path) -> Vec<PathBuf> {
     let mut dirs = vec![prefix.to_path_buf()];
     if !cfg!(windows) {
         dirs.push(prefix.join("bin"));
     }
+    dirs
+}
+
+/// Puts [prefix] on this process's PATH after the user's own dirs (the harnesses and every child they start inherit it).
+fn add_to_path(prefix: &Path) {
     let cur = std::env::var_os("PATH").unwrap_or_default();
-    let have: Vec<PathBuf> = std::env::split_paths(&cur).collect();
-    let add: Vec<PathBuf> = dirs.into_iter().filter(|d| !have.contains(d)).collect();
-    if add.is_empty() {
-        return;
-    }
-    if let Ok(joined) = std::env::join_paths(add.into_iter().chain(have)) {
+    let joined = path_with_prefix_last(&cur, &prefix_dirs(prefix));
+    if joined != cur {
         std::env::set_var("PATH", joined);
     }
 }
@@ -198,18 +227,49 @@ fn exts() -> &'static [&'static str] {
     if cfg!(windows) { &[".cmd", ".exe", ""] } else { &[""] }
 }
 
-/// The app's own copy first (`<prefix>/<cmd>.cmd`), then the machine's PATH.
+/// The user's own copy (anywhere on PATH outside the app's tool folder), if there is one.
+fn find_user_cli(prefix: &Path, cmd: &str) -> Option<PathBuf> {
+    let own = prefix_dirs(prefix);
+    let cur = std::env::var_os("PATH").unwrap_or_default();
+    std::env::split_paths(&cur)
+        .filter(|d| !own.iter().any(|p| infantry_proc::user_path::same_dir(p, d)))
+        .flat_map(|d| exts().iter().map(move |e| d.join(format!("{cmd}{e}"))))
+        .find(|p| p.is_file())
+}
+
+/// The app's own copy (`<prefix>/<cmd>.cmd`), if there is one.
+fn find_private_cli(prefix: &Path, cmd: &str) -> Option<PathBuf> {
+    prefix_dirs(prefix).iter().flat_map(|d| exts().iter().map(move |e| d.join(format!("{cmd}{e}")))).find(|p| p.is_file())
+}
+
+/// The user's own copy first, then the app's own (a private copy is only ever the fallback).
 fn find_cli(prefix: &Path, cmd: &str) -> Option<PathBuf> {
-    let own = [prefix.to_path_buf(), prefix.join("bin")];
-    own.iter().flat_map(|d| exts().iter().map(move |e| d.join(format!("{cmd}{e}")))).find(|p| p.is_file()).or_else(|| infantry_harness::shim::find_on_path(&infantry_harness::LocalProbe, cmd))
+    find_user_cli(prefix, cmd).or_else(|| find_private_cli(prefix, cmd))
 }
 
 fn find_npm(prefix: &Path) -> Option<PathBuf> {
-    let own = prefix.join(if cfg!(windows) { "npm.cmd" } else { "bin/npm" });
-    if own.is_file() {
-        return Some(own);
+    find_user_cli(prefix, "npm").or_else(|| find_private_cli(prefix, "npm"))
+}
+
+/// Removes the app's private copy of a CLI (its shims and its package folder). The user's own copy is never touched.
+fn remove_private(prefix: &Path, cmd: &str, pkg: &str) -> Result<(), String> {
+    let mut gone = false;
+    for d in prefix_dirs(prefix) {
+        for e in [".cmd", ".ps1", ".exe", ""] {
+            let f = d.join(format!("{cmd}{e}"));
+            if f.is_file() {
+                std::fs::remove_file(&f).map_err(|e| format!("cannot remove {}: {e}", f.display()))?;
+                gone = true;
+            }
+        }
     }
-    find_cli(prefix, "npm")
+    let modules = if cfg!(windows) { prefix.join("node_modules") } else { prefix.join("lib").join("node_modules") };
+    let dir = pkg.split('/').fold(modules, |p, seg| p.join(seg));
+    if dir.is_dir() {
+        std::fs::remove_dir_all(&dir).map_err(|e| format!("cannot remove {}: {e}", dir.display()))?;
+        gone = true;
+    }
+    if gone { Ok(()) } else { Err("no private copy found".into()) }
 }
 
 fn read_version(path: &Path) -> Option<String> {
@@ -277,15 +337,20 @@ fn run_install(prefix: &Path, log: &Arc<Mutex<Vec<String>>>, ids: &[String], upd
 }
 
 fn npm_install(npm: &Path, prefix: &Path, pkg: &str, log_arc: Arc<Mutex<Vec<String>>>) -> Result<(), String> {
-    let mut path = std::ffi::OsString::from(prefix.as_os_str());
-    path.push(if cfg!(windows) { ";" } else { ":" });
-    path.push(std::env::var_os("PATH").unwrap_or_default());
-    let mut child = infantry_proc::command(npm)
-        // --loglevel=http makes npm print each package it fetches, so there is a live line to show.
-        .args(["install", "-g", "--no-fund", "--no-audit", "--loglevel=http", "--prefix"])
-        .arg(prefix)
+    // The user's own npm installs globally where the user's terminal looks (`%APPDATA%\npm`): the same `claude` they run themselves.
+    // Only the app's own npm (it installed Node.js because the PC had none) uses the app's folder.
+    let own_npm = npm.starts_with(prefix);
+    let mut cmd = infantry_proc::command(npm);
+    // --loglevel=http makes npm print each package it fetches, so there is a live line to show.
+    cmd.args(["install", "-g", "--no-fund", "--no-audit", "--loglevel=http"]);
+    if own_npm {
+        let mut path = std::ffi::OsString::from(prefix.as_os_str());
+        path.push(if cfg!(windows) { ";" } else { ":" });
+        path.push(std::env::var_os("PATH").unwrap_or_default());
+        cmd.arg("--prefix").arg(prefix).env("PATH", path);
+    }
+    let mut child = cmd
         .arg(format!("{pkg}@latest"))
-        .env("PATH", path)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -493,6 +558,7 @@ mod tests {
 
     #[test]
     fn a_status_lists_every_known_harness_and_refuses_an_unknown_id() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("inf-hi-{}", std::process::id()));
         let u = HarnessInstall::new(&dir, Arc::new(|| {}), Arc::new(|| {}));
         let r = u.report();
@@ -507,6 +573,10 @@ mod tests {
     /// INSTALL-PROGRESS-2: while a harness installs, the status says busy and carries the live `[npm]` line; the start is acked at once.
     #[test]
     fn a_harness_install_reports_busy_and_a_live_npm_line_while_it_runs() {
+        // The user's own npm now wins over the app's: with the machine's PATH this test would run the REAL npm. Only the fake one is on PATH.
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let before = std::env::var_os("PATH");
+        std::env::set_var("PATH", "");
         let dir = std::env::temp_dir().join(format!("inf-hi-live-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -550,6 +620,83 @@ exit 1
             assert!(Instant::now() < deadline + Duration::from_secs(10));
             std::thread::sleep(Duration::from_millis(100));
         }
+        restore_path(before);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn fake_cli(dir: &Path, name: &str) -> PathBuf {
+        std::fs::create_dir_all(dir).unwrap();
+        let f = dir.join(if cfg!(windows) { format!("{name}.cmd") } else { name.to_string() });
+        std::fs::write(&f, "echo 1.0.0").unwrap();
+        f
+    }
+
+    fn restore_path(before: Option<std::ffi::OsString>) {
+        match before {
+            Some(v) => std::env::set_var("PATH", v),
+            None => std::env::remove_var("PATH"),
+        }
+    }
+
+    /// Ticket 40cb6e84: the app's tool folder goes AFTER the user's dirs, so a private copy can never shadow the user's install.
+    #[test]
+    fn the_app_tool_dir_comes_after_the_users_dirs() {
+        let prefix = PathBuf::from("/app/harness-tools");
+        let cur = std::env::join_paths(["/app/harness-tools", "/usr/a", "/usr/b"]).unwrap();
+        let out = path_with_prefix_last(&cur, &[prefix.clone()]);
+        let dirs: Vec<PathBuf> = std::env::split_paths(&out).collect();
+        assert_eq!(dirs.first(), Some(&PathBuf::from("/usr/a")));
+        let pos = |d: &PathBuf| dirs.iter().position(|x| x == d).unwrap();
+        assert!(pos(&prefix) > pos(&PathBuf::from("/usr/b")), "{dirs:?}");
+        assert_eq!(dirs.iter().filter(|d| **d == prefix).count(), 1);
+    }
+
+    /// Ticket 40cb6e84: with the process PATH stripped, the user's registry dirs bring the npm dir's `codex` back, and it wins over a private copy.
+    #[test]
+    fn detection_finds_the_users_npm_dir_with_the_process_path_stripped() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let root = std::env::temp_dir().join(format!("inf-hi-det-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (npm_dir, prefix) = (root.join("npm"), root.join("harness-tools"));
+        let user = fake_cli(&npm_dir, "codex");
+        let private = fake_cli(&prefix, "codex");
+        let before = std::env::var_os("PATH");
+        std::env::set_var("PATH", "");
+        assert_eq!(find_cli(&prefix, "codex"), Some(private), "stripped PATH: only the private copy is seen");
+        infantry_proc::user_path::refresh_with(|| vec![npm_dir.clone()], true);
+        add_to_path(&prefix);
+        assert_eq!(find_cli(&prefix, "codex"), Some(user));
+        let dirs: Vec<PathBuf> = std::env::split_paths(&std::env::var_os("PATH").unwrap()).collect();
+        assert!(dirs.iter().position(|d| *d == npm_dir) < dirs.iter().position(|d| *d == prefix));
+        restore_path(before);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Ticket 40cb6e84: the wizard installs nothing for a tool the user already has; a private copy is removable only then.
+    #[test]
+    fn the_wizard_skips_a_tool_the_user_has_and_removes_only_a_redundant_private_copy() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let root = std::env::temp_dir().join(format!("inf-hi-skip-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (user_dir, prefix) = (root.join("npm"), root.join("harness-tools"));
+        fake_cli(&user_dir, "npm");
+        fake_cli(&user_dir, "codex");
+        let private = fake_cli(&prefix, "claude");
+        let before = std::env::var_os("PATH");
+        std::env::set_var("PATH", &user_dir);
+        let log: Arc<Mutex<Vec<String>>> = Arc::default();
+        run_install(&prefix, &log, &["codex".to_string()], false, false);
+        assert_eq!(*log.lock().unwrap(), vec!["codex: skipped - already installed".to_string()]);
+        let u = HarnessInstall::new(&root, Arc::new(|| {}), Arc::new(|| {}));
+        std::env::set_var("PATH", &user_dir);
+        assert!(u.report()["harnesses"][0]["privateCopy"].is_null(), "the only claude there is stays");
+        fake_cli(&user_dir, "claude");
+        assert_eq!(u.report()["harnesses"][0]["privateCopy"], private.display().to_string());
+        remove_private(&prefix, "claude", "@anthropic-ai/claude-code").unwrap();
+        assert!(!private.exists());
+        restore_path(before);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

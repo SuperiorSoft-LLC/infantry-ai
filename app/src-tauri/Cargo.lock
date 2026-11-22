@@ -1997,6 +1997,7 @@ dependencies = [
  "if-addrs",
  "infantry-harness",
  "infantry-harness-claude",
+ "infantry-proc",
  "infantry-runner-local",
  "reqwest",
  "semver",

@@ -16,6 +16,8 @@ export interface HarnessInstallStatus {
   installedVersion?: string | null;
   path?: string | null;
   managed?: boolean;
+  /** The app's own copy in harness-tools while the user has their own: offered for removal (never removed silently). */
+  privateCopy?: string | null;
   wanted?: string | null;
   latest?: string | null;
   note?: string | null;

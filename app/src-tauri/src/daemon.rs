@@ -291,6 +291,9 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch, log_keep: us
             cmd.env_remove(&k);
         }
     }
+    // The app relaunched by the updater inherits the INSTALLER's PATH, which lacks the user's own tool dirs (the npm global folder):
+    // every agent CLI then looked missing (ticket 40cb6e84). The daemon starts with the user's real PATH (registry) after what it has.
+    cmd.env("PATH", infantry_proc::user_path::extend(&std::env::var_os("PATH").unwrap_or_default().to_string_lossy()));
     // The agents' `infantry health` reports the app version from this (the app is the one place the installed version is known).
     cmd.env("INFANTRY_APP_VERSION", env!("CARGO_PKG_VERSION"));
     if launch.remote {

@@ -34,3 +34,10 @@ export function installHarnesses(store: HarnessInstallStore, ids: string[], opts
   if (sent && data && !data.busy) store.setState({ data: { ...data, busy: true } });
   return sent;
 }
+
+/** Removes the app's private copies of [ids] (only where the user has their own); the daemon refuses when it is the only copy. */
+export function removePrivateCopies(store: HarnessInstallStore, ids: string[]): boolean {
+  const sent = store.getState().send("harness_install", JSON.stringify({ remove: ids }));
+  if (sent) store.getState().refresh();
+  return sent;
+}
