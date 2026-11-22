@@ -336,7 +336,13 @@ impl Worker {
                     self.sink.emit(HarnessEvent::Exited { code });
                 }
                 Ev::ToolStarted { name, input, .. } => {
-                    for w in infantry_harness::writes::file_writes(&name, &input, infantry_harness::writes::WRITE_MAX_BYTES) {
+                    // Codex reports `file_change` as a summary only: its diff is read from the folder (changes.rs).
+                    let writes = if name == "file_change" {
+                        super::changes::summary_writes(&self.req.cwd, &input, infantry_harness::writes::WRITE_MAX_BYTES)
+                    } else {
+                        infantry_harness::writes::file_writes(&name, &input, infantry_harness::writes::WRITE_MAX_BYTES)
+                    };
+                    for w in writes {
                         self.sink.emit(HarnessEvent::Write(w.to_string()));
                     }
                     self.sink.emit(HarnessEvent::Tool(name));

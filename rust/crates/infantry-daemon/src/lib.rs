@@ -9,6 +9,7 @@ pub mod board;
 pub mod role_policy;
 pub mod compose;
 pub mod fresh_schema;
+pub mod frame_log;
 pub mod harness;
 pub mod boot;
 pub mod health;

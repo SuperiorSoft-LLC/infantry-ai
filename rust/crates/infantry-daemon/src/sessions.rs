@@ -222,6 +222,8 @@ struct Entry {
     removed: bool,
     /// (sequence, encoded frame) of the last [Config::replay_kept] frames.
     history: std::collections::VecDeque<(i64, String)>,
+    /// Lines in the on-disk copy of `history` (`frame_log`).
+    logged: usize,
     /// HARNESS-CARRY-1: the earlier conversation, sent with the next first turn (after a swap across harness or role).
     carry: Option<String>,
     /// What the harness reported (`session_stats`).
@@ -245,6 +247,7 @@ impl Entry {
             gen: 0,
             removed: false,
             history: Default::default(),
+            logged: 0,
             carry: None,
             stats: Stats::default(),
             episode: None,
@@ -352,6 +355,9 @@ impl Daemon {
             cache.push(rec.clone());
             let mut entry = Entry::new(rec, false, 0);
             entry.stats = Stats::load(&cfg.state_dir, &entry.rec.id);
+            entry.history = crate::frame_log::load(&cfg.state_dir, &entry.rec.id, cfg.replay_kept);
+            entry.logged = entry.history.len();
+            entry.seq = entry.history.back().map(|h| h.0).unwrap_or(0);
             list.push((entry.rec.id.clone(), Arc::new(Mutex::new(entry))));
         }
         let cfg_dir = cfg.state_dir.clone();
@@ -604,6 +610,7 @@ impl Daemon {
         while e.history.len() > self.cfg.replay_kept.max(1) {
             e.history.pop_front();
         }
+        e.logged = crate::frame_log::append(&self.cfg.state_dir, &e.rec.id, e.seq, &f, &e.history, e.logged, self.cfg.replay_kept);
         let _ = self.out.send(f);
     }
 
@@ -1443,6 +1450,7 @@ impl Daemon {
         let wd = entry.lock().unwrap().rec.working_dir.clone();
         self.drop_own_folder(&wd, sid);
         Stats::remove(&self.cfg.state_dir, sid);
+        crate::frame_log::remove(&self.cfg.state_dir, sid);
         self.dirty.store(true, Ordering::SeqCst);
         self.broadcast(wire::SESSIONS, self.sessions_json());
         Ok(())
