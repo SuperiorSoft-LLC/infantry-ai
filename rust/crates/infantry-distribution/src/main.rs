@@ -152,7 +152,7 @@ fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, stat
     }
     let pool = infantry_runner_pool::RunnerPool::open(state_dir);
     let frames = [infantry_runner_pool::ADMIN_FRAME.to_string()];
-    composed.late.add("runner-pool", &frames, Arc::new(infantry_runner_pool::AdminUnit { pool: pool.clone(), lend: composed.daemon.lender().map(|l| Arc::new(CheckLendOver(l)) as Arc<dyn infantry_runner_pool::CheckLend>) }));
+    composed.late.add("runner-pool", &frames, Arc::new(infantry_runner_pool::AdminUnit { pool: pool.clone(), lend: composed.daemon.lender().map(|l| Arc::new(CheckLendOver(l, composed.daemon.providers())) as Arc<dyn infantry_runner_pool::CheckLend>) }));
     // RR-4: the paired runners join the registry a session is placed through (`local` is already there).
     composed.daemon.runner_registry().add_source(pool.clone());
     // RR-13: `runner_frame {runner, frame, data}`; `local` answers in-process through this daemon's own frames.
@@ -257,9 +257,13 @@ fn serve_runner_link(composed: &Arc<infantry_daemon::compose::Composed>, state_d
 }
 
 /// RR-6: the daemon's lending policy as the runner check sees it.
-struct CheckLendOver(Arc<infantry_daemon::lender::Lender>);
+struct CheckLendOver(Arc<infantry_daemon::lender::Lender>, Vec<String>);
 
 impl infantry_runner_pool::CheckLend for CheckLendOver {
+    fn harnesses(&self) -> Vec<String> {
+        self.1.clone()
+    }
+
     fn git_credentials(&self, runner: &str, project: Option<&str>) -> Option<serde_json::Value> {
         self.0.git_credentials(runner, project).and_then(|l| serde_json::to_value(l).ok())
     }

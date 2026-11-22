@@ -16,6 +16,8 @@ pub trait CheckLend: Send + Sync {
     fn git_credentials(&self, runner: &str, project: Option<&str>) -> Option<Value>;
     /// Where `harness` gets its credential on `runner`: `runner_has_key` is whether the runner's own vault holds its key.
     fn source(&self, runner: &str, harness: &str, runner_has_key: bool) -> CredentialSource;
+    /// The harnesses this orchestrator knows (a process-only runner does not list its own).
+    fn harnesses(&self) -> Vec<String>;
 }
 
 /// Where a harness's credential comes from, for the check row.
@@ -129,6 +131,7 @@ impl AdminUnit {
             Err(e) => vec![row("git", false, format!("the runner did not answer the check: {e}"), None)],
         };
         let stored = self.pool.runner_secret_names(name).unwrap_or_default();
+        let harnesses = if harnesses.is_empty() { lend.harnesses() } else { harnesses };
         for h in harnesses {
             let has = stored.iter().any(|n| n == &format!("harness.{h}.key") || n == &format!("harness.{h}.token"));
             let (ok, detail, fix) = match lend.source(name, &h, has) {

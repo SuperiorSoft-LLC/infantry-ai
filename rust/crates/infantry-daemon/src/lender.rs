@@ -106,15 +106,20 @@ impl Lender {
                 break;
             }
             // Harness keys have their own path; the git secret goes only as the git credential.
-            if name.starts_with("harness.") || git.as_deref() == Some(name.as_str()) || !env_name(&name) {
+            if name.starts_with("harness.") || git.as_deref() == Some(name.as_str()) {
+                continue;
+            }
+            // A secret name is lowercase with `.` `-` `_`; its env variable is the upper-case form with `_` for the rest.
+            let var: String = name.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_uppercase() } else { '_' }).collect();
+            if !env_name(&var) {
                 continue;
             }
             let Some(fields) = self.keystore.resolve(&name, project).ok().flatten() else { continue };
             let Some(value) = fields.get(VALUE_FIELD).filter(|v| !v.is_empty()) else { continue };
-            if lent.env.iter().any(|e| e.name == name) {
+            if lent.env.iter().any(|e| e.name == var) {
                 continue;
             }
-            lent.env.push(LentVar { name, value: value.clone(), harness: None });
+            lent.env.push(LentVar { name: var, value: value.clone(), harness: None });
             taken += 1;
         }
         lent
