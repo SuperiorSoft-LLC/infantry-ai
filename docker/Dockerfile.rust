@@ -63,6 +63,11 @@ COPY --from=build /out/infantry /usr/local/bin/infantry
 COPY docker/entrypoint-rust.sh /usr/local/bin/infantry-entrypoint
 RUN chmod 755 /usr/local/bin/infantry-entrypoint
 
+# The app's harness install (harness_install.rs: <state>/harness-tools, binaries in its bin/) is on PATH after the baked
+# /opt/harness-tools links, so `docker exec <ctr> claude` works. Debian's /etc/profile resets PATH for login shells, so
+# /etc/profile.d re-adds it there too.
+RUN echo 'case ":$PATH:" in *:/data/harness-tools/bin:*) ;; *) PATH="$PATH:/data/harness-tools/bin"; export PATH ;; esac' > /etc/profile.d/infantry-harness-tools.sh  && chmod 644 /etc/profile.d/infantry-harness-tools.sh
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/harness-tools/bin
 ENV INFANTRY_MODE=runner \
     INFANTRY_STATE_DIR=/data \
     CLAUDE_CONFIG_DIR=/data/claude \
