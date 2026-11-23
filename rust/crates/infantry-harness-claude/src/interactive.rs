@@ -529,7 +529,10 @@ impl Interactive {
                     Some(Turn { own: true, submitted: true, opened_at: now, stop_at: self.unclaimed_stop_at.take(), ..Default::default() });
                 out.push(HarnessEvent::Warning(format!("claude: started a turn of its own ({why})")));
             } else if !self.queue.is_empty() && self.started_at.is_none() && screen::setup_screen(&screen::squeeze_rows(&self.rows)) {
-                let reason = NOT_SIGNED_IN.to_string();
+                // The reason keeps the fixed sentence first and adds what claude's screen really said, so a setup screen that is
+                // not a missing login (a theme or trust step, a wrong config dir) can be told apart from a real sign-out.
+                let reason = format!("{NOT_SIGNED_IN} Claude's screen said: {}", self.screen_tail());
+                out.push(HarnessEvent::Warning(format!("claude drew a setup screen before the first prompt; screen: {}", self.screen_tail())));
                 self.fail_queue(&reason, out);
             } else if !self.queue.is_empty() && self.ready() {
                 let prompt = self.queue.pop_front().unwrap_or_default();

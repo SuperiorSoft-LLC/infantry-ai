@@ -190,11 +190,17 @@ impl Backend for ProcessBackend {
             }
         }
         let runner = self.runner.clone();
+        // Logging only: what is launched (program, argument count and folder; never the env or the arguments, which can hold secrets).
+        let launch = format!("{} ({} args) in {}", spec.program, spec.args.len(), spec.cwd.as_deref().unwrap_or("(runner default folder)"));
         let handle = match self.rt.block_on(runner.spawn(spec)) {
             Ok(h) => h,
-            Err(e) => return StartAnswer { refusal: Some(e.to_string()), ..Default::default() },
+            Err(e) => {
+                eprintln!("[infantry] runner process start FAILED: {launch}: {e}");
+                return StartAnswer { refusal: Some(e.to_string()), ..Default::default() };
+            }
         };
         let sid = handle.id.0.clone();
+        eprintln!("[infantry] runner process {sid} started: {launch}");
         {
             let mut s = self.shared.0.lock().unwrap();
             // A process id this runner already restored keeps its sequence going (ids are unique per boot, so this is a
@@ -214,11 +220,23 @@ impl Backend for ProcessBackend {
         let id = sid.clone();
         self.rt.spawn(async move {
             let (mut out_mask, mut err_mask) = (Masker::new(secrets.clone()), Masker::new(secrets));
+            // Logging only: the last masked output of the process, written with its exit so a start that dies at once is explained.
+            let mut tail: Vec<u8> = Vec::new();
             while let Some(ev) = rx.recv().await {
                 match ev {
-                    ProcEvent::Output(b) => Self::push(&shared, &id, wire::PROC_OUTPUT, B64.encode(out_mask.feed(&b))),
-                    ProcEvent::Stderr(b) => Self::push(&shared, &id, wire::PROC_STDERR, B64.encode(err_mask.feed(&b))),
+                    ProcEvent::Output(b) => {
+                        let m = out_mask.feed(&b);
+                        keep_tail(&mut tail, &m);
+                        Self::push(&shared, &id, wire::PROC_OUTPUT, B64.encode(m))
+                    }
+                    ProcEvent::Stderr(b) => {
+                        let m = err_mask.feed(&b);
+                        keep_tail(&mut tail, &m);
+                        Self::push(&shared, &id, wire::PROC_STDERR, B64.encode(m))
+                    }
                     ProcEvent::Exited(code) => {
+                        let shown: String = String::from_utf8_lossy(&tail).chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+                        eprintln!("[infantry] runner process {id} exited with code {code}; last output: {}", if shown.trim().is_empty() { "(none)" } else { shown.trim() });
                         for (held, err) in [(out_mask.finish(), false), (err_mask.finish(), true)] {
                             if !held.is_empty() {
                                 Self::push(&shared, &id, if err { wire::PROC_STDERR } else { wire::PROC_OUTPUT }, B64.encode(held));
@@ -595,5 +613,14 @@ pub fn error_type(e: &infantry_runner_api::RunnerError) -> &'static str {
         Io(_) => "io",
         Disconnected(_) => "disconnected",
         _ => "io",
+    }
+}
+
+/// Logging only: keeps the last 2 KiB of a process's masked output.
+fn keep_tail(tail: &mut Vec<u8>, b: &[u8]) {
+    tail.extend_from_slice(b);
+    if tail.len() > 2048 {
+        let cut = tail.len() - 2048;
+        tail.drain(..cut);
     }
 }

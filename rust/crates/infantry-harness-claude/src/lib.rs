@@ -214,6 +214,14 @@ fn config_file(probe: &dyn Probe) -> Option<PathBuf> {
 /// config (made when missing). A login is a subscription token in [env] or the CLI's own credentials file (`claude auth login`).
 /// Touches nothing with a finished setup (onboarding done and a theme chosen) or a file it cannot parse.
 /// True = written. The theme picker is the first screen of an unseeded config, so a `theme` is seeded next to the flag.
+pub fn onboarding_seed(_env: &[(String, String)], _probe: &dyn Probe) -> Option<infantry_harness::runner::JsonSeed> {
+    // The path is resolved by the runner that spawns claude (its CLAUDE_CONFIG_DIR, else its home), never by this host.
+    let mut seed = infantry_harness::runner::JsonSeed { path: format!("${{{CONFIG_DIR_ENV}:-~}}/.claude.json"), ..Default::default() };
+    seed.set.insert("hasCompletedOnboarding".into(), serde_json::Value::Bool(true));
+    seed.defaults.insert("theme".into(), serde_json::Value::String("dark".into()));
+    Some(seed)
+}
+
 pub fn prepare_onboarding(env: &[(String, String)], probe: &dyn Probe) -> bool {
     // Seeded with or without a login: a fresh runner has none yet, and the theme picker would hide the login step.
     let _ = env;
@@ -335,10 +343,11 @@ impl Harness for ClaudeHarness {
 
     fn launch(&self, req: &LaunchRequest) -> Result<LaunchPlan, LaunchError> {
         let (session_id, resume) = self.session(req);
-        if self.mode == Mode::Interactive {
-            let _ = prepare_onboarding(&req.env, self.probe.as_ref());
-        }
         let mut spec = ProcessSpec::new(self.program.clone(), self.args(req, &session_id, resume)).cwd(req.cwd.to_string_lossy());
+        if self.mode == Mode::Interactive {
+            // The runner that spawns claude seeds ITS config dir (a linked runner's disk is not this machine's).
+            spec.seeds.extend(onboarding_seed(&req.env, self.probe.as_ref()));
+        }
         spec.env = req.env.clone();
         spec.env.push((TODO_ENV.into(), "1".into()));
         if let Some(n) = req.context_limit.filter(|n| *n > 0) {
@@ -362,11 +371,14 @@ impl Harness for ClaudeHarness {
                 if !spec.env.iter().any(|(k, _)| k.eq_ignore_ascii_case(TERM_ENV)) {
                     spec.env.push((TERM_ENV.into(), TERM_VALUE.into()));
                 }
-                let tail = self
-                    .transcript_path(&req.cwd, &session_id)
-                    .map(|p| TailSpec { path: p.to_string_lossy().into_owned(), from: if resume { TailFrom::End } else { TailFrom::Start } })
-                    .into_iter()
-                    .collect();
+                // The transcript is on the machine that runs claude: a linked runner's config dir is not this host's, so the path is
+                // the process's own CLAUDE_CONFIG_DIR when the request sets one, else a template the runner resolves.
+                let dir = match req.env.iter().find(|(k, _)| k == CONFIG_DIR_ENV).map(|(_, v)| v.as_str()).filter(|v| !v.is_empty()) {
+                    Some(d) => d.to_string(),
+                    None => format!("${{{CONFIG_DIR_ENV}:-~/.claude}}"),
+                };
+                let path = format!("{}/projects/{}/{session_id}.jsonl", dir.trim_end_matches(['/', '\\']), transcript::slug(&req.cwd.to_string_lossy()));
+                let tail = vec![TailSpec { path, from: if resume { TailFrom::End } else { TailFrom::Start } }];
                 Ok(LaunchPlan {
                     spec: spec.pty(self.pty),
                     stdin: None,

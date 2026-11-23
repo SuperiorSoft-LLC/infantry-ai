@@ -257,7 +257,14 @@ impl Runner for LocalRunner {
         Box::pin(async move {
             let hub = Arc::new(Hub::new(self.cfg.backlog_max_bytes));
             let grace = self.cfg.drain_grace;
-            let p = blocking(move || spawn::start(&spec, hub, grace).map_err(RunnerError::from)).await?;
+            let p = blocking(move || {
+                // The runner seeds its own disk (a CLI's first-run config) before it starts the process.
+                for seed in &spec.seeds {
+                    eprintln!("[infantry] runner seed {}: {}", infantry_runner_api::expand_seed_path(&seed.path, &spec.env), if seed.apply(&spec.env) { "written" } else { "unchanged or skipped" });
+                }
+                spawn::start(&spec, hub, grace).map_err(RunnerError::from)
+            })
+            .await?;
             let id = {
                 let n = self.next.fetch_add(1, Ordering::SeqCst);
                 ProcId(match &self.id_tag {
@@ -336,7 +343,7 @@ impl Runner for LocalRunner {
     fn tail(&self, spec: TailSpec) -> RunnerFuture<'_, mpsc::UnboundedReceiver<String>> {
         let poll = self.cfg.tail_poll;
         Box::pin(async move {
-            let path = PathBuf::from(&spec.path);
+            let path = PathBuf::from(infantry_runner_api::expand_seed_path(&spec.path, &[]));
             let start = match spec.from {
                 TailFrom::Offset(o) => o,
                 TailFrom::End => std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0),
