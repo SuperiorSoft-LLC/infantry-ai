@@ -1,0 +1,8 @@
+{
+  "_": "SVC-8: official plugins that ship in the app but live in the infantry-plugins repo (a native sidecar built there). rust/plugins/stage-external.sh stages each one and rust/plugins/stage.sh skips a module of the same name under plugins/official, so the shipped copy is the infantry-plugins one. The repo is the folder INFANTRY_PLUGINS_REPO names, else `repoDefault` (relative to the repository root). Add a plugin here, not in code.",
+  "repoEnv": "INFANTRY_PLUGINS_REPO",
+  "repoDefault": "../infantry-plugins",
+  "modules": [
+    { "name": "Infantry_Sites", "path": "official/Infantry_Sites" }
+  ]
+}

@@ -19,6 +19,14 @@ flag=""; [ "$profile" = "release" ] && flag="--release"
 cd "$here/.."
 target_dir="$(cargo metadata --format-version 1 --no-deps | python -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')"
 manifests=(plugins/official/*/module.json)
+# SVC-8: a module listed in bundled-external.json ships from the infantry-plugins repo (stage-external.sh below), so the
+# copy under plugins/official is not staged.
+external="$(python -c 'import json,sys; print(" ".join(m["path"].rsplit("/",1)[-1] for m in json.load(open(sys.argv[1])).get("modules") or []))' "$here/bundled-external.json")"
+kept=()
+for mj in "${manifests[@]}"; do
+  case " $external " in *" $(basename "$(dirname "$mj")") "*) echo "skip $(basename "$(dirname "$mj")"): shipped from the infantry-plugins repo";; *) kept+=("$mj");; esac
+done
+manifests=("${kept[@]}")
 if [ "${INFANTRY_STAGE_TEST:-}" = "1" ]; then manifests+=(plugins/test/*/module.json); fi
 
 # WEBUI-1: the web UI halves are built first, in one run, so each module below copies its ui/dist.
@@ -66,3 +74,4 @@ for mj in "${manifests[@]}"; do
   cp "$wasm" "$dest/$component"
   echo "staged $mod -> $dest/$component"
 done
+bash "$here/stage-external.sh" "$out" "$profile"

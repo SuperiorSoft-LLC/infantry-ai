@@ -81,6 +81,10 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout the infantry-plugins repo (SVC-8: bundled-external.json plugins are built from it)
+        uses: actions/checkout@v4
+        with: { repository: SuperiorSoft-LLC/infantry-plugins, path: infantry-plugins, token: '${{ secrets.INFANTRY_PLUGINS_TOKEN || github.token }}' }
+      - run: echo "INFANTRY_PLUGINS_REPO=$GITHUB_WORKSPACE/infantry-plugins" >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@v4
         with: { package_json_file: app/package.json }
       - uses: actions/setup-node@v4
@@ -99,7 +103,7 @@ jobs:
         run: bash app/src-tauri/scripts/updater-key.sh "$RUNNER_TEMP/key.json"
       - name: Build the installer (MSI, per user) with signed updater artifacts
         working-directory: app
-        env: { INFANTRY_BUNDLE_PROFILE: release, CARGO_BUILD_JOBS: '4' }
+        env: { INFANTRY_BUNDLE_PROFILE: release, INFANTRY_BUILD_ENV: prod, CARGO_BUILD_JOBS: '4' }   # SVC-8: a release build is prod (daemon endpoints and the bundled plugins')
         run: |
           set -euo pipefail
           bash src-tauri/scripts/stage-bundle.sh
@@ -129,6 +133,10 @@ jobs:
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout the infantry-plugins repo (SVC-8: bundled-external.json plugins are built from it)
+        uses: actions/checkout@v4
+        with: { repository: SuperiorSoft-LLC/infantry-plugins, path: infantry-plugins, token: '${{ secrets.INFANTRY_PLUGINS_TOKEN || github.token }}' }
+      - run: echo "INFANTRY_PLUGINS_REPO=$GITHUB_WORKSPACE/infantry-plugins" >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@v4
         with: { package_json_file: app/package.json }
       - uses: actions/setup-node@v4
@@ -213,7 +221,7 @@ jobs:
         run: bash app/src-tauri/scripts/updater-key.sh "$RUNNER_TEMP/key.json"
       - name: Build the AppImage with signed updater artifacts
         working-directory: app
-        env: { INFANTRY_BUNDLE_PROFILE: release, CARGO_BUILD_JOBS: '4' }
+        env: { INFANTRY_BUNDLE_PROFILE: release, INFANTRY_BUILD_ENV: prod, CARGO_BUILD_JOBS: '4' }   # SVC-8: a release build is prod (daemon endpoints and the bundled plugins')
         run: |
           set -euo pipefail
           bash src-tauri/scripts/stage-bundle.sh
@@ -239,6 +247,10 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout the infantry-plugins repo (SVC-8: bundled-external.json plugins are built from it)
+        uses: actions/checkout@v4
+        with: { repository: SuperiorSoft-LLC/infantry-plugins, path: infantry-plugins, token: '${{ secrets.INFANTRY_PLUGINS_TOKEN || github.token }}' }
+      - run: echo "INFANTRY_PLUGINS_REPO=$GITHUB_WORKSPACE/infantry-plugins" >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@v4
         with: { package_json_file: app/package.json }
       - uses: actions/setup-node@v4
@@ -257,7 +269,7 @@ jobs:
         run: bash app/src-tauri/scripts/updater-key.sh "$RUNNER_TEMP/key.json"
       - name: Build the app bundle with signed updater artifacts
         working-directory: app
-        env: { INFANTRY_BUNDLE_PROFILE: release, CARGO_BUILD_JOBS: '4' }
+        env: { INFANTRY_BUNDLE_PROFILE: release, INFANTRY_BUILD_ENV: prod, CARGO_BUILD_JOBS: '4' }   # SVC-8: a release build is prod (daemon endpoints and the bundled plugins')
         run: |
           set -euo pipefail
           bash src-tauri/scripts/stage-bundle.sh
