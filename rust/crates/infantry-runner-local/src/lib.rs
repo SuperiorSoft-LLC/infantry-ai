@@ -260,7 +260,7 @@ impl Runner for LocalRunner {
             let p = blocking(move || {
                 // The runner seeds its own disk (a CLI's first-run config) before it starts the process.
                 for seed in &spec.seeds {
-                    seed.apply();
+                    seed.apply(&spec.env);
                 }
                 spawn::start(&spec, hub, grace).map_err(RunnerError::from)
             })

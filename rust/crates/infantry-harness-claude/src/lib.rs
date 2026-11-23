@@ -214,10 +214,9 @@ fn config_file(probe: &dyn Probe) -> Option<PathBuf> {
 /// config (made when missing). A login is a subscription token in [env] or the CLI's own credentials file (`claude auth login`).
 /// Touches nothing with a finished setup (onboarding done and a theme chosen) or a file it cannot parse.
 /// True = written. The theme picker is the first screen of an unseeded config, so a `theme` is seeded next to the flag.
-pub fn onboarding_seed(env: &[(String, String)], probe: &dyn Probe) -> Option<infantry_harness::runner::JsonSeed> {
-    let _ = env;
-    let file = config_file(probe)?;
-    let mut seed = infantry_harness::runner::JsonSeed { path: file.to_string_lossy().into_owned(), ..Default::default() };
+pub fn onboarding_seed(_env: &[(String, String)], _probe: &dyn Probe) -> Option<infantry_harness::runner::JsonSeed> {
+    // The path is resolved by the runner that spawns claude (its CLAUDE_CONFIG_DIR, else its home), never by this host.
+    let mut seed = infantry_harness::runner::JsonSeed { path: format!("${{{CONFIG_DIR_ENV}:-~}}/.claude.json"), ..Default::default() };
     seed.set.insert("hasCompletedOnboarding".into(), serde_json::Value::Bool(true));
     seed.defaults.insert("theme".into(), serde_json::Value::String("dark".into()));
     Some(seed)

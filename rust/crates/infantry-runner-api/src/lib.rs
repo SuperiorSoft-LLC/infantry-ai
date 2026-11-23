@@ -105,6 +105,8 @@ pub struct ProcessSpec {
 /// file is made (with its folders); a file that is not a JSON object is left alone.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JsonSeed {
+    /// The file, resolved ON THE RUNNER: `${NAME}` is the value of NAME (the process env first, then the runner's own), `${NAME:-~}`
+    /// falls back to the runner's home folder when NAME is unset or empty, and a leading `~` is that home folder.
     pub path: String,
     #[serde(default)]
     pub set: serde_json::Map<String, serde_json::Value>,
@@ -114,8 +116,9 @@ pub struct JsonSeed {
 
 impl JsonSeed {
     /// Applies the seed on this host. True = the file was written.
-    pub fn apply(&self) -> bool {
-        let path = std::path::Path::new(&self.path);
+    pub fn apply(&self, env: &[(String, String)]) -> bool {
+        let resolved = expand_seed_path(&self.path, env);
+        let path = std::path::Path::new(&resolved);
         let mut obj = match std::fs::read_to_string(path) {
             Ok(t) => match serde_json::from_str::<serde_json::Value>(&t) {
                 Ok(serde_json::Value::Object(m)) => m,
@@ -138,6 +141,33 @@ impl JsonSeed {
             let _ = std::fs::create_dir_all(d);
         }
         serde_json::to_string(&obj).is_ok_and(|t| std::fs::write(path, t).is_ok())
+    }
+}
+
+fn runner_home() -> String {
+    std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).unwrap_or_default()
+}
+
+/// Expands `${NAME}`, `${NAME:-~}` and a leading `~` on this host (see [`JsonSeed::path`]).
+pub fn expand_seed_path(path: &str, env: &[(String, String)]) -> String {
+    let lookup = |n: &str| -> Option<String> {
+        env.iter().find(|(k, _)| k == n).map(|(_, v)| v.clone()).or_else(|| std::env::var(n).ok()).filter(|v| !v.is_empty())
+    };
+    let mut out = String::new();
+    let mut rest = path;
+    while let Some(i) = rest.find("${") {
+        out.push_str(&rest[..i]);
+        let Some(j) = rest[i..].find('}') else { break };
+        let inner = &rest[i + 2..i + j];
+        let (name, fallback) = inner.split_once(":-").map_or((inner, None), |(n, f)| (n, Some(f)));
+        let fb = |f: &str| if f == "~" { runner_home() } else { f.to_string() };
+        out.push_str(&lookup(name).unwrap_or_else(|| fallback.map(fb).unwrap_or_default()));
+        rest = &rest[i + j + 1..];
+    }
+    out.push_str(rest);
+    match out.strip_prefix('~') {
+        Some(t) => format!("{}{t}", runner_home()),
+        None => out,
     }
 }
 
@@ -367,16 +397,25 @@ mod json_seed_tests {
         let mut seed = JsonSeed { path: path.to_string_lossy().into_owned(), ..Default::default() };
         seed.set.insert("done".into(), true.into());
         seed.defaults.insert("theme".into(), "dark".into());
-        assert!(seed.apply());
+        assert!(seed.apply(&[]));
         let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!((v["done"].as_bool(), v["theme"].as_str()), (Some(true), Some("dark")));
         std::fs::write(&path, r#"{"theme":"light"}"#).unwrap();
-        assert!(seed.apply());
+        assert!(seed.apply(&[]));
         let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!((v["done"].as_bool(), v["theme"].as_str()), (Some(true), Some("light")));
-        assert!(!seed.apply(), "nothing to change");
+        assert!(!seed.apply(&[]), "nothing to change");
         std::fs::write(&path, "not json").unwrap();
-        assert!(!seed.apply(), "an unparseable file is left alone");
+        assert!(!seed.apply(&[]), "an unparseable file is left alone");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn path_expands_on_the_runner() {
+        use super::expand_seed_path as x;
+        let env = vec![("CFG".to_string(), "/data/claude".to_string())];
+        assert_eq!(x("${CFG}/.claude.json", &env), "/data/claude/.claude.json");
+        assert_eq!(x("${CFG_UNSET_X:-/fb}/a", &env), "/fb/a");
+        assert_eq!(x("${CFG_UNSET_X:-~}/.claude.json", &env), format!("{}/.claude.json", super::runner_home()));
     }
 }
