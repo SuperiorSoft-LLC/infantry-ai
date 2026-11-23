@@ -443,3 +443,7 @@ plugins (letters, digits, `_`, `-`; not `infantry`); exactly one of `command` (s
 tag in `provides`; a credential-looking env or header key (token, secret, password, key, ...) is never a plain value, name a Secrets
 entry in `envSecrets` / `headerSecrets`; `localOnly` servers are never sent to a remote runner. A server whose secret is not set is
 not offered.
+
+## Build environment (prod | staging | dev)
+
+A plugin's `daemon.endpoints` addresses are picked by the daemon's build environment. `INFANTRY_ENV=prod|staging|dev` is read at start (default prod). A build made with `INFANTRY_BUILD_ENV=prod` (the release workflow) is always prod: `INFANTRY_ENV` is ignored there. A local or test build leaves `INFANTRY_BUILD_ENV` unset (or bakes `staging`/`dev` as its default). An account provider descriptor may write `{api}` / `{site}` (any endpoint name) in its URLs: the core fills them from the same environment's endpoints, so a stage script does not have to render them.

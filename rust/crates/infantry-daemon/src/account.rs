@@ -195,13 +195,18 @@ fn now_ms() -> i64 {
 }
 
 /// The providers the installed official modules declare (`account.providers`); a bad descriptor is logged and skipped.
-pub fn declared_providers(plugins_dir: &Path, log: &dyn Fn(&str)) -> Vec<Provider> {
+///
+/// A descriptor may write `{name}` for a module endpoint (`daemon.endpoints.<name>`): it is replaced with that
+/// endpoint's address for `environment` (prod when the environment has none), so the provider's URLs come from the
+/// same environment as the plugin's own calls and no stage script has to render them.
+pub fn declared_providers(plugins_dir: &Path, environment: &str, log: &dyn Fn(&str)) -> Vec<Provider> {
     let mut out: Vec<Provider> = Vec::new();
     for tier in crate::compose::plugins::TIERS {
         let Ok(rd) = std::fs::read_dir(plugins_dir.join(tier)) else { continue };
         for e in rd.filter_map(|e| e.ok()) {
             let Some(v) = std::fs::read_to_string(e.path().join("module.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else { continue };
             for d in v.pointer("/account/providers").and_then(Value::as_array).into_iter().flatten() {
+                let d = &fill_endpoints(d, v.pointer("/daemon/endpoints"), environment);
                 match Provider::parse(d) {
                     Ok(p) if out.iter().all(|o| o.id != p.id) => out.push(p),
                     Ok(p) => log(&format!("account provider '{}' is declared twice; the first wins", p.id)),
@@ -211,6 +216,28 @@ pub fn declared_providers(plugins_dir: &Path, log: &dyn Fn(&str)) -> Vec<Provide
         }
     }
     out
+}
+
+/// `{name}` in every string of `v` -> the module endpoint `name` for `environment` (else prod). Unknown names stay.
+pub fn fill_endpoints(v: &Value, endpoints: Option<&Value>, environment: &str) -> Value {
+    let Some(eps) = endpoints.and_then(Value::as_object) else { return v.clone() };
+    fn walk(v: &Value, eps: &serde_json::Map<String, Value>, env: &str) -> Value {
+        match v {
+            Value::String(s) => {
+                let mut out = s.clone();
+                for (name, by_env) in eps {
+                    if let Some(addr) = by_env.get(env).or_else(|| by_env.get("prod")).and_then(Value::as_str) {
+                        out = out.replace(&format!("{{{name}}}"), addr.trim_end_matches('/'));
+                    }
+                }
+                Value::String(out)
+            }
+            Value::Array(a) => Value::Array(a.iter().map(|x| walk(x, eps, env)).collect()),
+            Value::Object(o) => Value::Object(o.iter().map(|(k, x)| (k.clone(), walk(x, eps, env))).collect()),
+            other => other.clone(),
+        }
+    }
+    walk(v, eps, environment)
 }
 
 impl Account {
@@ -335,7 +362,10 @@ impl Account {
                 o.insert(k.into(), x.clone());
             }
         }
-        let entitled: Vec<String> = doc.get("entitlements").and_then(Value::as_array).into_iter().flatten().filter_map(|x| x.as_str().map(String::from)).collect();
+        // Legacy `planActive && signedIn && holds(entitlement)`: the plan is active (no status counts as active) and the
+        // document's `permissions` list holds the service's entitlement.
+        let plan_active = doc.pointer("/plan/status").and_then(Value::as_str).map_or(true, |st| st == "active");
+        let entitled: Vec<String> = if signed_in && plan_active { doc.get("permissions").and_then(Value::as_array).into_iter().flatten().filter_map(|x| x.as_str().map(String::from)).collect() } else { Vec::new() };
         o.insert("permissions".into(), doc.get("permissions").cloned().unwrap_or(json!([])));
         let services: Vec<Value> = p
             .services
@@ -590,7 +620,7 @@ mod tests {
             if let Some(d) = self.doc.lock().unwrap().clone() {
                 return Ok((200, d));
             }
-            Ok((200, json!({"user": {"email": "alice@example.com"}, "plan": {"name": "Basic", "status": "active"}, "entitlements": ["hosting"]})))
+            Ok((200, json!({"user": {"email": "alice@example.com"}, "plan": {"name": "Basic", "status": "active"}, "permissions": ["hosting"]})))
         }
     }
     #[derive(Default)]
@@ -654,6 +684,40 @@ mod tests {
         let s = sign_in(json!({"email": "alice@example.com", "plan": null}));
         assert_eq!(s["email"], "a***@example.com");
         assert!(s.get("plan").is_none() && s["providers"][0].get("plan").is_none(), "a null plan stays absent: {s}");
+    }
+
+    fn entitled_with(doc: Value, signed_in: bool) -> Value {
+        let http = Arc::new(FakeHttp::default());
+        *http.doc.lock().unwrap() = Some(doc);
+        let tokens = Arc::new(MemTokens::default());
+        if signed_in {
+            tokens.set("acct_acme_refresh", "rt").unwrap();
+        }
+        let a = Account::new(vec![provider()], http, tokens);
+        a.state.lock().unwrap().access.insert("acme".into(), ("at".into(), i64::MAX));
+        a.status(None, true).unwrap()["services"][0]["entitled"].clone()
+    }
+
+    #[test]
+    fn entitled_needs_an_active_plan_and_the_permission() {
+        assert_eq!(entitled_with(json!({"plan": {"status": "active"}, "permissions": ["hosting"]}), true), true);
+        assert_eq!(entitled_with(json!({"permissions": ["hosting"]}), true), true, "no plan status counts as active");
+        assert_eq!(entitled_with(json!({"plan": null, "permissions": []}), true), false, "no permission");
+        assert_eq!(entitled_with(json!({"plan": {"status": "canceled"}, "permissions": ["hosting"]}), true), false, "plan not active");
+        assert_eq!(entitled_with(json!({"plan": {"status": "active"}, "permissions": ["hosting"]}), false), false, "signed out");
+    }
+
+    #[test]
+    fn descriptor_endpoint_placeholders_follow_the_environment() {
+        let eps = json!({"api": {"prod": "https://api.example", "staging": "http://127.0.0.1:1/api/"}, "site": {"prod": "https://site.example"}});
+        let d = json!({"id": "x", "accountUrl": "{api}/me", "signUpUrl": "{site}/up", "other": "{unknown}", "list": ["{api}"]});
+        let prod = fill_endpoints(&d, Some(&eps), "prod");
+        assert_eq!((prod["accountUrl"].as_str(), prod["signUpUrl"].as_str()), (Some("https://api.example/me"), Some("https://site.example/up")));
+        let stg = fill_endpoints(&d, Some(&eps), "staging");
+        assert_eq!(stg["accountUrl"], "http://127.0.0.1:1/api/me");
+        assert_eq!(stg["signUpUrl"], "https://site.example/up", "an environment without an address falls back to prod");
+        assert_eq!((stg["other"].as_str(), stg["list"][0].as_str()), (Some("{unknown}"), Some("http://127.0.0.1:1/api")));
+        assert_eq!(fill_endpoints(&d, None, "prod"), d);
     }
 
     #[test]

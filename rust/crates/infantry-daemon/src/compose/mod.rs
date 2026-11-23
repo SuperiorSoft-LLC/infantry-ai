@@ -456,7 +456,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
 
     // ---- the account hub: providers modules declare, device sign-in, refresh tokens in the vault ----------
     let account = crate::account::Account::new(
-        plugins_dir().as_deref().map(|d| crate::account::declared_providers(d, &|m| log_line(m))).unwrap_or_default(),
+        plugins_dir().as_deref().map(|d| crate::account::declared_providers(d, &crate::build_env::current(), &|m| log_line(m))).unwrap_or_default(),
         Arc::new(crate::account::UreqHttp),
         Arc::new(crate::account::VaultTokens { keystore: vault.keystore().clone() }),
     );

@@ -601,6 +601,9 @@ impl DaemonServices {
 }
 
 impl HostServices for DaemonServices {
+    fn environment(&self) -> String {
+        crate::build_env::current()
+    }
     fn log(&self, module: &str, level: LogLevel, line: &str) {
         eprintln!("[plugin:{module}] {level:?} {line}");
     }
