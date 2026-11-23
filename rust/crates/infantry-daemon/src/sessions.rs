@@ -1395,6 +1395,60 @@ impl Daemon {
         }
     }
 
+    /// RUNNER-OFFLINE-1: a session working on a paired runner that stays offline longer than `offline_sec()` (the setting
+    /// `limits.runners.offlineSessionSec`, read each round) is failed with "the runner went offline: <reason>" in its chat,
+    /// and daemon.log gets a line. The next prompt opens it again (resuming the conversation) once the runner is back.
+    pub fn start_runner_watch(self: &Arc<Self>, offline_sec: Arc<dyn Fn() -> u64 + Send + Sync>) {
+        let weak = Arc::downgrade(self);
+        let _ = std::thread::Builder::new().name("runner-offline-watch".into()).spawn(move || {
+            let mut since: BTreeMap<String, std::time::Instant> = BTreeMap::new();
+            loop {
+                std::thread::sleep(Duration::from_secs(2));
+                let Some(d) = weak.upgrade() else { return };
+                d.runner_watch_round(&mut since, Duration::from_secs(offline_sec().max(1)));
+            }
+        });
+    }
+
+    fn runner_watch_round(self: &Arc<Self>, since: &mut BTreeMap<String, std::time::Instant>, limit: Duration) {
+        use infantry_runner_source::Availability;
+        let down: BTreeMap<String, String> = self
+            .runner_registry()
+            .list()
+            .into_iter()
+            .filter_map(|r| match r.availability {
+                Availability::Offline(why) => Some((r.name, why)),
+                _ => None,
+            })
+            .collect();
+        since.retain(|k, _| down.contains_key(k));
+        for name in down.keys() {
+            since.entry(name.clone()).or_insert_with(std::time::Instant::now);
+        }
+        for (name, why) in &down {
+            if since.get(name).is_some_and(|t| t.elapsed() >= limit) {
+                self.runner_went_offline(name, why);
+            }
+        }
+    }
+
+    fn runner_went_offline(self: &Arc<Self>, runner: &str, why: &str) {
+        let entries: Vec<Arc<Mutex<Entry>>> = self.list.lock().unwrap().iter().map(|(_, e)| e.clone()).collect();
+        for en in entries {
+            let mut e = en.lock().unwrap();
+            if e.removed || !e.turn_active || e.rec.runner != runner {
+                continue;
+            }
+            let why = if why.trim().is_empty() { "nothing is listening on its link".to_string() } else { why.trim().to_string() };
+            let msg = format!("the runner went offline: {why} (runner '{runner}')");
+            eprintln!("[infantry] session {} ({} on runner {runner}): {msg}", e.rec.id, e.rec.provider);
+            if let Some(mut hs) = e.hs.take() {
+                hs.close(true);
+            }
+            self.end_turn(&mut e, TurnEnd::Failed, None, Some(msg), false);
+        }
+    }
+
     async fn reattach_one(self: Arc<Self>, id: &str) {
         use infantry_runner_api::{ProcEvent, ProcId, RunnerError};
         let Some((runner, proc)) = self.find(id).and_then(|en| {
@@ -1505,6 +1559,7 @@ impl Daemon {
 
     fn fail_start(&self, e: &mut Entry, err: String) {
         e.turn_active = false;
+        eprintln!("[infantry] session {} ({} on runner {}) start FAILED: {}", e.rec.id, e.rec.provider, e.rec.runner, err);
         e.rec.last_error = Some(err.clone());
         e.rec.is_process_alive = false;
         Self::set_state(e, SessionState::Failed);
@@ -1595,8 +1650,16 @@ impl Daemon {
         }
     }
 
-    fn end_turn(self: &Arc<Self>, e: &mut Entry, end: TurnEnd, code: Option<i32>, reason: Option<String>, alive: bool) {
+    fn end_turn(self: &Arc<Self>, e: &mut Entry, end: TurnEnd, code: Option<i32>, reason: Option<String>, mut alive: bool) {
         e.turn_active = false;
+        // A failed session ends its process (a failed start left claude running, FAIL-3). The next prompt opens it again and
+        // resumes the provider session, so nothing is lost; a process that already exited has no handle to close.
+        if end == TurnEnd::Failed && alive {
+            if let Some(mut hs) = e.hs.take() {
+                hs.close(false);
+            }
+            alive = false;
+        }
         e.rec.last_exit_code = code;
         e.rec.is_process_alive = alive;
         if !alive {
@@ -1614,6 +1677,8 @@ impl Daemon {
             }),
         };
         if end == TurnEnd::Failed {
+            // Logging only (daemon.log): a failed session says why, not only that it opened.
+            eprintln!("[infantry] session {} ({} on runner {}) FAILED: {}", e.rec.id, e.rec.provider, e.rec.runner, detail);
             e.rec.last_error = Some(detail.clone());
         } else {
             e.stats.assistant_turns += 1;

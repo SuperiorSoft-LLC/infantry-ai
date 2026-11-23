@@ -61,3 +61,11 @@ describe("transcript reducer", () => {
     expect(d.lines[1]).toEqual({ oldNo: 4, kind: "del", text: "old" });
   });
 });
+
+describe("a failed finish carries its reason", () => {
+  it("keeps the detail of a failed turn so the chat can show the real error", () => {
+    const why = "There's an issue with the selected model (not-a-real-model-xyz). It may not exist or you may not have access to it.";
+    const items = applyFrames([], [f("finished", { exitCode: null, outcome: "FAILED", detail: why }, 5)]);
+    expect(items[0]).toMatchObject({ kind: "finished", outcome: "FAILED", detail: why });
+  });
+});

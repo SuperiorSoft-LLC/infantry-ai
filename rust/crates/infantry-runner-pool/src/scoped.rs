@@ -71,6 +71,7 @@ pub struct FrameBackend {
 
 impl FrameBackend {
     pub fn new(inner: Box<dyn Backend>, ask: Ask) -> Self {
+        infantry_runner_link::process::set_log_sink(runner_log_push);
         FrameBackend { inner, ask }
     }
 }
