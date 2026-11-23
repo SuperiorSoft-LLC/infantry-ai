@@ -116,6 +116,8 @@ pub struct Composed {
     pub wake_gate: Arc<infantry_mail::notify::wake::WakeGate>,
     /// RR-7: what the runners plugin asks of this daemon to make a ticket's workspace on a remote runner.
     pub remote_host: Arc<dyn infantry_runner_source::remote::RemoteHost>,
+    /// The account hub; `account_token` is answered from it for a consumer plugin.
+    pub account: Arc<crate::account::Account>,
     next_conn: AtomicU64,
 }
 
@@ -458,6 +460,16 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         Arc::new(crate::account::UreqHttp),
         Arc::new(crate::account::VaultTokens { keystore: vault.keystore().clone() }),
     );
+    let account = {
+        let sdb = db.clone();
+        account.with_settings(move |k| {
+            let raw: Option<String> = sdb
+                .read(|c| c.query_row("SELECT value FROM settings WHERE key = ?1", [k], |r| r.get::<_, String>(0)).map(Some).or_else(|e| match e { rusqlite::Error::QueryReturnedNoRows => Ok(None), e => Err(e) }))
+                .ok()
+                .flatten();
+            raw.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).and_then(|v| v.as_str().map(String::from))
+        })
+    };
 
     // ---- pods: DAGs of unattended sessions; open pods from the last run are INTERRUPTED -------------------
     let pods = crate::pods::Pods::new(db.clone(), Arc::new(adapters::PodSessions { daemon: daemon.clone(), bus: bus.clone() }));
@@ -708,7 +720,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         vault.clone(),
         Arc::new(crate::mcp::McpUnit { registry: mcp.clone() }),
         board_side(Arc::new(crate::pods::PodsUnit { pods: pods.clone() })),
-        Arc::new(crate::account::AccountUnit { account }),
+        Arc::new(crate::account::AccountUnit { account: account.clone() }),
         Arc::new(timeline_unit),
         Arc::new(scripts_unit),
     ];
@@ -783,6 +795,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         prompts: prompts.clone(),
         wake_gate: env.wake_gate(),
         remote_host,
+        account: account.clone(),
         next_conn: AtomicU64::new(1),
     });
     if let Some(p) = &plugin_set {

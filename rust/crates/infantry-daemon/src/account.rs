@@ -21,7 +21,10 @@ pub mod frames {
     pub const STATUS: &str = "account_status";
     pub const SIGN_IN: &str = "account_sign_in";
     pub const SIGN_OUT: &str = "account_sign_out";
-    pub const ALL: &[&str] = &[STATUS, SIGN_IN, SIGN_OUT];
+    /// `account_token {provider}` -> `{accessToken, expiresAt}`: answered only to a plugin module the provider lists in
+    /// `consumers` (pinned by the plugin host, see `Account::token_for`); over the wire it is always refused.
+    pub const TOKEN: &str = "account_token";
+    pub const ALL: &[&str] = &[STATUS, SIGN_IN, SIGN_OUT, TOKEN];
 }
 
 /// The keystore entry holding every provider's refresh token (one field per provider).
@@ -30,6 +33,10 @@ pub const SECRET: &str = "infantry-account";
 pub const CACHE_MS: i64 = 30_000;
 /// The poll interval when the provider names none (RFC 8628 default).
 pub const POLL_DEFAULT_SECS: u64 = 5;
+/// The core setting naming this device on a provider's approve page (default: "Infantry on <hostname>").
+pub const DEVICE_NAME_KEY: &str = "account.deviceName";
+/// The longest device name sent.
+pub const DEVICE_NAME_MAX: usize = 80;
 /// The device-code grant (RFC 8628).
 pub const DEVICE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
 const ID_MAX: usize = 40;
@@ -57,6 +64,8 @@ pub struct Provider {
     pub billing_url: Option<String>,
     pub sign_up_url: Option<String>,
     pub services: Vec<Service>,
+    /// The plugin module ids allowed to read this provider's access token (`account_token`).
+    pub consumers: Vec<String>,
 }
 
 /// https, or http to this machine only.
@@ -112,6 +121,7 @@ impl Provider {
             account_url: url(v, "accountUrl", false)?,
             billing_url: url(v, "billingUrl", false)?,
             sign_up_url: url(v, "signUpUrl", false)?,
+            consumers: list(v, "consumers").into_iter().map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect(),
             services: v
                 .get("services")
                 .and_then(Value::as_array)
@@ -177,6 +187,7 @@ pub struct Account {
     tokens: Arc<dyn TokenStore>,
     state: Mutex<State>,
     clock: fn() -> i64,
+    settings: Box<dyn Fn(&str) -> Option<String> + Send + Sync>,
 }
 
 fn now_ms() -> i64 {
@@ -204,7 +215,34 @@ pub fn declared_providers(plugins_dir: &Path, log: &dyn Fn(&str)) -> Vec<Provide
 
 impl Account {
     pub fn new(providers: Vec<Provider>, http: Arc<dyn AccountHttp>, tokens: Arc<dyn TokenStore>) -> Arc<Account> {
-        Arc::new(Account { providers, http, tokens, state: Mutex::new(State::default()), clock: now_ms })
+        Arc::new(Account { providers, http, tokens, state: Mutex::new(State::default()), clock: now_ms, settings: Box::new(|_| None) })
+    }
+
+    /// The same hub reading core settings (`account.deviceName`) through `get`. Call before the hub is shared.
+    pub fn with_settings(self: Arc<Self>, get: impl Fn(&str) -> Option<String> + Send + Sync + 'static) -> Arc<Account> {
+        let mut a = Arc::try_unwrap(self).unwrap_or_else(|_| panic!("with_settings: the account is already shared"));
+        a.settings = Box::new(get);
+        Arc::new(a)
+    }
+
+    /// The name this device signs in under: the setting, else "Infantry on <hostname>".
+    pub fn device_name(&self) -> String {
+        let named = (self.settings)(DEVICE_NAME_KEY).map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+        let host = || std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).map(|h| h.trim().to_string()).ok().filter(|h| !h.is_empty()).unwrap_or_else(|| "this computer".into());
+        named.unwrap_or_else(|| format!("Infantry on {}", host())).chars().take(DEVICE_NAME_MAX).collect()
+    }
+
+    /// `account_token` for plugin `module`: the provider's live access token, only when the provider lists the module
+    /// in `consumers`. The refusal and the error never carry a token.
+    pub fn token_for(&self, provider: Option<&str>, module: &str) -> Result<Value, String> {
+        let p = self.provider(provider)?;
+        let module = module.trim();
+        if module.is_empty() || !p.consumers.iter().any(|c| c.eq_ignore_ascii_case(module)) {
+            return Err(format!("{} does not list '{module}' as a consumer of its account token", p.name));
+        }
+        let Some(token) = self.access(p) else { return Err(format!("not signed in to {}", p.name)) };
+        let until = self.state.lock().unwrap().access.get(&p.id).map(|(_, u)| *u).unwrap_or(0);
+        Ok(json!({ "accessToken": token, "expiresAt": until }))
     }
 
     fn provider(&self, id: Option<&str>) -> Result<&Provider, String> {
@@ -236,6 +274,21 @@ impl Account {
         }
     }
 
+    /// The account document; a 401 (the access token was revoked or aged out early) drops it and tries once with a
+    /// fresh one from the refresh token.
+    fn read_doc(&self, p: &Provider, url: &str, token: &str) -> Result<(u16, Value), String> {
+        match self.http.get_json(url, token)? {
+            (401, _) => {
+                self.state.lock().unwrap().access.remove(&p.id);
+                match self.access(p) {
+                    Some(t) => self.http.get_json(url, &t),
+                    None => Ok((401, Value::Null)),
+                }
+            }
+            other => Ok(other),
+        }
+    }
+
     fn keep_tokens(&self, p: &Provider, v: &Value) {
         if let Some(r) = s(v, "refresh_token") {
             let _ = self.tokens.set(&p.refresh_field(), &r);
@@ -262,7 +315,7 @@ impl Account {
                 let cached = self.state.lock().unwrap().docs.get(&p.id).filter(|(_, at)| !refresh && now - at < CACHE_MS).map(|(d, _)| d.clone());
                 doc = match cached {
                     Some(d) => d,
-                    None => match self.access(p).map(|t| self.http.get_json(url, &t)) {
+                    None => match self.access(p).map(|t| self.read_doc(p, url, &t)) {
                         Some(Ok((200, d))) => {
                             self.state.lock().unwrap().docs.insert(p.id.clone(), (d.clone(), now));
                             d
@@ -336,7 +389,7 @@ impl Account {
     pub fn sign_in(&self, provider: Option<&str>) -> Result<Value, String> {
         let p = self.provider(provider)?;
         let scope = p.scopes.join(" ");
-        let (code, v) = self.http.post_form(&p.device_url, &[("client_id", &p.client_id), ("scope", &scope)])?;
+        let (code, v) = self.http.post_form(&p.device_url, &[("client_id", &p.client_id), ("scope", &scope), ("device_name", &self.device_name())])?;
         if code != 200 {
             return Err(format!("{} refused the sign-in (HTTP {code})", p.name));
         }
@@ -422,6 +475,7 @@ impl FrameUnit for AccountUnit {
         let refuse = |m: String| Refusal::new(ty, m);
         let v = match ty {
             frames::STATUS => self.account.status(provider.as_deref(), d.get("refresh").and_then(Value::as_bool).unwrap_or(false)).map_err(refuse)?,
+            frames::TOKEN => return Err(refuse("only a plugin module that the provider lists as a consumer may ask, in process".into())),
             frames::SIGN_IN | frames::SIGN_OUT if !ctx.owner => return Err(refuse("the owner's act (the Account tab or the CLI)".into())),
             frames::SIGN_IN => {
                 let v = self.account.sign_in(provider.as_deref()).map_err(refuse)?;
@@ -583,5 +637,106 @@ mod tests {
         let bad = json!({"id": "x", "signIn": {"clientId": "c", "deviceAuthorizationUrl": "http://evil.test/d", "tokenUrl": "https://t"}});
         assert!(Provider::parse(&bad).unwrap_err().contains("https"));
         assert!(url_ok("http://127.0.0.1:9/x") && !url_ok("http://127.0.0.1.evil.test/x"));
+    }
+
+    /// A provider whose token endpoint hands out `at1`, then `at2`; the account document 401s on `at1`.
+    #[derive(Default)]
+    struct RotatingHttp {
+        issued: Mutex<u32>,
+        forms: Mutex<Vec<Vec<(String, String)>>>,
+    }
+    impl AccountHttp for RotatingHttp {
+        fn post_form(&self, url: &str, form: &[(&str, &str)]) -> Result<(u16, Value), String> {
+            self.forms.lock().unwrap().push(form.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect());
+            if url.ends_with("/device") {
+                return Ok((200, json!({"device_code": "dc", "user_code": "U-1", "verification_uri": "https://p.test/go", "expires_in": 600})));
+            }
+            let mut n = self.issued.lock().unwrap();
+            *n += 1;
+            Ok((200, json!({"access_token": format!("at{n}"), "refresh_token": "rt", "expires_in": 3600})))
+        }
+        fn get_json(&self, _url: &str, bearer: &str) -> Result<(u16, Value), String> {
+            if bearer == "at1" { Ok((401, Value::Null)) } else { Ok((200, json!({"plan": {"name": "Pro"}}))) }
+        }
+    }
+
+    fn consumer_provider() -> Provider {
+        Provider::parse(&json!({
+            "id": "acme", "name": "Acme", "accountUrl": "https://p.test/me", "consumers": ["Good_Mod", " "],
+            "signIn": {"clientId": "cli", "deviceAuthorizationUrl": "https://p.test/device", "tokenUrl": "https://p.test/token"}
+        }))
+        .unwrap()
+    }
+
+    fn signed_in(http: Arc<dyn AccountHttp>) -> Arc<Account> {
+        let tokens = Arc::new(MemTokens::default());
+        tokens.set("acct_acme_refresh", "rt").unwrap();
+        Account::new(vec![consumer_provider()], http, tokens)
+    }
+
+    #[test]
+    fn consumers_are_parsed_and_only_a_listed_module_gets_the_token() {
+        assert_eq!(consumer_provider().consumers, vec!["Good_Mod".to_string()]);
+        let a = signed_in(Arc::new(RotatingHttp::default()));
+        let ok = a.token_for(Some("acme"), "Good_Mod").unwrap();
+        assert_eq!(ok["accessToken"], "at1");
+        assert!(ok["expiresAt"].as_i64().unwrap() > 0);
+        let no = a.token_for(Some("acme"), "Evil_Mod").unwrap_err();
+        assert!(no.contains("consumer") && !no.contains("at1"), "{no}");
+        assert!(a.token_for(Some("acme"), "").is_err(), "no module, no token");
+        assert!(a.token_for(Some("nope"), "Good_Mod").is_err());
+    }
+
+    #[test]
+    fn a_provider_with_no_consumers_answers_nobody_and_a_signed_out_one_no_token() {
+        let none = Provider::parse(&json!({"id": "acme", "signIn": {"clientId": "c", "deviceAuthorizationUrl": "https://p.test/device", "tokenUrl": "https://p.test/token"}})).unwrap();
+        let tokens = Arc::new(MemTokens::default());
+        tokens.set("acct_acme_refresh", "rt").unwrap();
+        let a = Account::new(vec![none], Arc::new(RotatingHttp::default()), tokens);
+        assert!(a.token_for(Some("acme"), "Good_Mod").is_err());
+        let out = Account::new(vec![consumer_provider()], Arc::new(RotatingHttp::default()), Arc::new(MemTokens::default()));
+        assert!(out.token_for(Some("acme"), "Good_Mod").unwrap_err().contains("not signed in"));
+    }
+
+    #[test]
+    fn the_wire_frame_is_refused_for_everyone_owner_included_and_leaks_no_token() {
+        let unit = AccountUnit { account: signed_in(Arc::new(RotatingHttp::default())) };
+        for owner in [true, false] {
+            let ctx = FrameCtx { conn_id: 1, owner, bus: infantry_core::bus::EventBus::new(8) };
+            let r = unit.handle(&Envelope::new(frames::TOKEN, json!({"provider": "acme", "module": "Good_Mod", "_module": "Good_Mod"}).to_string()), &ctx);
+            let why = r.err().expect("refused").0;
+            assert!(why.starts_with("account_token refused:") && !why.contains("at1"), "{why}");
+        }
+        assert!(unit.frames().contains(&frames::TOKEN), "registered so it is refused, not unknown");
+    }
+
+    #[test]
+    fn the_token_is_in_no_status_view() {
+        let a = signed_in(Arc::new(RotatingHttp::default()));
+        let _ = a.token_for(Some("acme"), "Good_Mod").unwrap();
+        let s = a.status(None, true).unwrap().to_string();
+        assert!(!s.contains("at1") && !s.contains("at2") && !s.contains("\"rt\""), "{s}");
+    }
+
+    #[test]
+    fn status_refreshes_the_access_token_after_a_401() {
+        let http = Arc::new(RotatingHttp::default());
+        let a = signed_in(http.clone());
+        let s = a.status(None, true).unwrap();
+        assert_eq!(s["plan"], "Pro", "the retry with the fresh token read the document: {s}");
+        assert_eq!(*http.issued.lock().unwrap(), 2);
+    }
+
+    #[test]
+    fn sign_in_sends_a_device_name_from_the_setting_or_the_hostname() {
+        let http = Arc::new(RotatingHttp::default());
+        let a = Account::new(vec![consumer_provider()], http.clone(), Arc::new(MemTokens::default()));
+        a.sign_in(None).unwrap();
+        let sent = http.forms.lock().unwrap()[0].iter().find(|(k, _)| k == "device_name").map(|(_, v)| v.clone()).expect("device_name sent");
+        assert!(sent.starts_with("Infantry on "), "{sent}");
+        let a = Account::new(vec![consumer_provider()], http.clone(), Arc::new(MemTokens::default())).with_settings(|k| (k == DEVICE_NAME_KEY).then(|| "Anthony's desk".to_string()));
+        assert_eq!(a.device_name(), "Anthony's desk");
+        let long = Account::new(vec![], http, Arc::new(MemTokens::default())).with_settings(|_| Some("x".repeat(500)));
+        assert_eq!(long.device_name().chars().count(), DEVICE_NAME_MAX);
     }
 }

@@ -623,6 +623,13 @@ impl HostServices for DaemonServices {
         if let Some(why) = super::scope::refusal(&frame.r#type, &frame.data, frame.session_id.as_deref(), caller, &c.daemon.records(), max_depth) {
             return Err(why);
         }
+        // `account_token`: answered here, never through the frame registry, so the module is the host's (the manifest id)
+        // and no client can name another. The provider decides by its `consumers`.
+        if frame.r#type == crate::account::frames::TOKEN {
+            let provider = serde_json::from_str::<serde_json::Value>(&frame.data).ok().and_then(|v| v.get("provider").and_then(|p| p.as_str()).map(String::from));
+            let v = c.account.token_for(provider.as_deref(), module).map_err(|e| format!("account_token refused: {e}"))?;
+            return Ok(Frame { r#type: crate::account::frames::TOKEN.into(), data: v.to_string(), session_id: None, request_id: frame.request_id });
+        }
         // SEC-PLUGIN-1: the frame is the plugin's, not the owner's. It goes in as a non-owner unless the manifest lists
         // this frame type in daemon.ownerFrames (`as_owner`, official and core only). The one frame a plugin may always
         // send with the vault's owner authority is the read of ITS OWN secret, pinned to the calling module.
