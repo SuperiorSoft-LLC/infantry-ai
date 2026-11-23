@@ -22,6 +22,16 @@
       { "type": "sites_ssh_exec", "action": "sites.servers.ssh", "kind": "write", "description": "{server?, command, timeoutSec?} -> sites_ssh_exec {server, exitCode?, stdout, stderr, truncated?, timedOut?} (owner only)" },
       { "type": "sites_ssh_upload", "action": "sites.servers.ssh", "kind": "write", "description": "{server?, path, content} -> sites_ssh_upload {server, exitCode?, stdout, stderr} (owner only)" }
     ],
+    "config": [
+      {
+        "node": "Infantry_Sites.refresh", "group": "Sites", "title": "Sites tab", "tab": "Plugins", "order": 980,
+        "applies": "Applies to: the Sites tab while it is open and visible.",
+        "keywords": ["sites", "hosting", "refresh", "servers"],
+        "fields": [
+          { "key": "sites.refreshSeconds", "type": "number", "label": "Re-read the server list every (seconds, 0 = off)", "default": 30, "min": 0, "max": 3600, "step": 1, "scope": "app", "order": 1 }
+        ]
+      }
+    ],
     "endpoints": {
       "api": { "prod": "https://superiorsoftllc.tech/api/superiorsoft", "dev": "http://127.0.0.1:18953/api/superiorsoft", "staging": "http://127.0.0.1:18953/api/superiorsoft" },
       "site": { "prod": "https://superiorsoftllc.tech", "dev": "http://127.0.0.1:18953", "staging": "http://localhost:5173" }
