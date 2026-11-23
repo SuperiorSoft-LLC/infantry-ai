@@ -36,10 +36,9 @@ import {
   ScrollText,
   type LucideIcon,
 } from "lucide-react";
-import { declLabel, type Contribution, type SlotRegistry } from "@infantry/client";
-import { TabPage } from "@/components/tabs/tab-page";
+import { declLabel, mergedTabTarget, type Contribution, type SlotRegistry } from "@infantry/client";
 import { EpicsTab, PodsTab, ProfilesTab } from "@/components/panels/board-panels";
-import { McpPanel, ReviewPanel, ServicesTab, SitesPanel } from "@/components/panels/service-panels";
+import { McpPanel, ReviewPanel, ServicesTab } from "@/components/panels/service-panels";
 import { SettingsPage } from "@/components/panels/settings-page";
 import { CalendarTab } from "@/components/tabs/calendar-tab";
 import { RolesTab } from "@/components/roles/roles-tab";
@@ -99,7 +98,6 @@ const CENTRE: Def[] = [
   { id: "health", builtin: true, label: "Health", icon: Activity, render: () => <HealthTab /> },
   { id: "plugins", declared: "infantry.settings.plugins", builtin: true, label: "Plugins", icon: Puzzle, render: () => <PluginManager /> },
   { id: "services", declared: "infantry.account", builtin: true, label: "Services", icon: Server, render: () => <ServicesTab /> },
-  { id: "sites", declared: "infantry.sites", label: "Sites", icon: Globe, render: () => <TabPage title="Sites" description="Hosting servers (read-only here)"><SitesPanel /></TabPage> },
   { id: "settings", declared: "infantry.settings", label: "Settings", icon: Settings, render: () => <SettingsPage /> },
 ];
 
@@ -159,7 +157,8 @@ export function tabsFor(container: "center" | "right", reg: SlotRegistry | null)
   const defs = container === "center" ? CENTRE : RIGHT;
   if (!reg) return arrange(container, defs.map((d) => ({ ...d, plugin: null })));
   // A declaration with `"bar": false` stays registered (a layout or the bootstrap window draws it) but gets no tab in the bar.
-  const declared = reg.tabs.filter((t) => (t.decl.container ?? "center") === container && t.decl.bar !== false);
+  // A tab that lives inside Services now (Sites) never gets a bar tab of its own, even from an older module.json.
+  const declared = reg.tabs.filter((t) => (t.decl.container ?? "center") === container && t.decl.bar !== false && !mergedTabTarget(t.decl.id));
   const byId = new Map(declared.map((t) => [t.decl.id, t]));
   const known = new Set(defs.map((d) => d.declared).filter(Boolean) as string[]);
   // A catalog renderer serves its tab in whichever container declares it.
@@ -171,8 +170,10 @@ export function tabsFor(container: "center" | "right", reg: SlotRegistry | null)
 }
 
 /** Finds the entry for a stored view id across both containers. */
-export function entryFor(id: string, reg: SlotRegistry | null): TabEntry | undefined {
-  return tabsFor("center", reg).find((t) => t.id === id) ?? tabsFor("right", reg).find((t) => t.id === id);
+export function entryFor(idIn: string, reg: SlotRegistry | null): TabEntry | undefined {
+  const id = mergedTabTarget(idIn) ?? idIn; // an old saved view or link to Sites opens Services
+  const all = [...tabsFor("center", reg), ...tabsFor("right", reg)];
+  return all.find((t) => t.id === id) ?? all.find((t) => t.declared === id);
 }
 
 /** The tabs of one container, recomputed only when the registry changes. */

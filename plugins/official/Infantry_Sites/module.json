@@ -46,6 +46,6 @@
   ],
   "files": ["knowledge"],
   "tabs": [
-    { "id": "infantry.sites", "container": "center" }
+    { "id": "infantry.sites", "container": "center", "bar": false }
   ]
 }

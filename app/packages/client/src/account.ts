@@ -116,3 +116,55 @@ export function createSignInTracker() {
   };
 }
 export const signInTracker = createSignInTracker();
+
+// ---- The Services hub (SERVICES-2): a list of providers, a connected card opens its dashboard inside the tab. ----
+
+export type CardTone = "neutral" | "green" | "amber";
+
+/** The chip of a provider card: Connected, Waiting for approval (a sign-in flow runs), or Not connected. */
+export function cardChip(p: AccountProvider): { label: string; tone: CardTone } {
+  if (p.signedIn) return { label: "Connected", tone: "green" };
+  if (p.flow?.state === "pending") return { label: "Waiting for approval", tone: "amber" };
+  return { label: "Not connected", tone: "neutral" };
+}
+
+/** The list's empty text (Kotlin, AccountScreens.kt:131-134). */
+export const NO_PROVIDERS_TEXT = "No service has registered an account provider yet. A plugin adds one by publishing an account.provider/<id> endpoint";
+/** Kotlin's sign-out confirm (AccountScreens.kt:233-240). */
+export const signOutConfirm = (name: string) => ({ title: `Sign out of ${name}?`, body: "Plugins that use this account stop working until you sign in again." });
+
+/** One page of a service's dashboard: a service the daemon lists with the `section` that draws it. */
+export interface ServicePage {
+  id: string;
+  name: string;
+  section: string;
+}
+
+/** The dashboard pages of the account document: its `services` that name a `section`. */
+export function servicePages(data: Obj | null): ServicePage[] {
+  const list = data && Array.isArray(data.services) ? data.services : [];
+  return list.flatMap((raw) => {
+    const s = obj(raw);
+    const id = text(s, "id");
+    const section = text(s, "section");
+    return id && section ? [{ id, name: text(s, "name") ?? id, section }] : [];
+  });
+}
+
+/** The list, or one connected provider's dashboard. A provider that is no longer connected (signed out elsewhere) sends the view back to the list. */
+export function hubView(providers: AccountProvider[], openId: string | null): { kind: "list" } | { kind: "dashboard"; provider: AccountProvider } {
+  const p = openId ? providers.find((x) => x.id === openId) : undefined;
+  return p && p.signedIn ? { kind: "dashboard", provider: p } : { kind: "list" };
+}
+
+/** Views that used to be their own tab and now live inside Services (an old saved layout or link names them). */
+const MERGED_INTO_SERVICES: Record<string, string> = { sites: "services", "infantry.sites": "infantry.account" };
+export const mergedTabTarget = (id: string): string | null => MERGED_INTO_SERVICES[id] ?? null;
+
+/**
+ * Whether a card may open the approval page. Only a Sign in click of THIS mounted card does, and never when signed in:
+ * a stale answer left in the shared answer store by a sign-in that finished long ago must not open a page when the tab is shown again.
+ */
+export function shouldOpenApproval(o: { clickedHere: boolean; signedIn: boolean; uri: string | null; alreadyOpened: string | null }): boolean {
+  return o.clickedHere && !o.signedIn && !!o.uri && o.uri !== o.alreadyOpened;
+}
