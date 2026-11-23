@@ -1326,6 +1326,8 @@ impl Daemon {
         // RR-4: every session, local or remote, is opened on the runner its record names; an unknown, offline or outdated
         // runner fails the start loudly (no local fallback).
         let mut entry = self.runner_registry().resolve(&e.rec.runner).map_err(|r| r.to_string())?;
+        // Logging only: where the session opens (the launch command itself is logged by the runner that spawns it).
+        eprintln!("[infantry] session {} ({}) opening on runner {} ({})", e.rec.id, e.rec.provider, entry.name, entry.kind);
         // RR-6: a remote runner is lent the harness key, the project's secrets and a git credential with each start, instead
         // of the key travelling in the plain env. `local` is lent nothing (it uses this machine's own keys).
         if entry.kind == "remote" {
@@ -1567,6 +1569,8 @@ impl Daemon {
             }
             HarnessEvent::Exited { code } => {
                 e.hs = None;
+                // Logging only: a session that dies (a remote start that exits at once included) is named in daemon.log.
+                eprintln!("[infantry] session {} ({} on runner {}) exited with code {}", e.rec.id, e.rec.provider, e.rec.runner, code.map_or("none".to_string(), |c| c.to_string()));
                 // Tasks of a CLI that is gone are gone with it.
                 if !e.rec.background_tasks.is_empty() {
                     e.rec.background_tasks.clear();

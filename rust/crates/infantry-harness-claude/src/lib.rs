@@ -214,6 +214,15 @@ fn config_file(probe: &dyn Probe) -> Option<PathBuf> {
 /// config (made when missing). A login is a subscription token in [env] or the CLI's own credentials file (`claude auth login`).
 /// Touches nothing with a finished setup (onboarding done and a theme chosen) or a file it cannot parse.
 /// True = written. The theme picker is the first screen of an unseeded config, so a `theme` is seeded next to the flag.
+pub fn onboarding_seed(env: &[(String, String)], probe: &dyn Probe) -> Option<infantry_harness::runner::JsonSeed> {
+    let _ = env;
+    let file = config_file(probe)?;
+    let mut seed = infantry_harness::runner::JsonSeed { path: file.to_string_lossy().into_owned(), ..Default::default() };
+    seed.set.insert("hasCompletedOnboarding".into(), serde_json::Value::Bool(true));
+    seed.defaults.insert("theme".into(), serde_json::Value::String("dark".into()));
+    Some(seed)
+}
+
 pub fn prepare_onboarding(env: &[(String, String)], probe: &dyn Probe) -> bool {
     // Seeded with or without a login: a fresh runner has none yet, and the theme picker would hide the login step.
     let _ = env;
@@ -335,10 +344,11 @@ impl Harness for ClaudeHarness {
 
     fn launch(&self, req: &LaunchRequest) -> Result<LaunchPlan, LaunchError> {
         let (session_id, resume) = self.session(req);
-        if self.mode == Mode::Interactive {
-            let _ = prepare_onboarding(&req.env, self.probe.as_ref());
-        }
         let mut spec = ProcessSpec::new(self.program.clone(), self.args(req, &session_id, resume)).cwd(req.cwd.to_string_lossy());
+        if self.mode == Mode::Interactive {
+            // The runner that spawns claude seeds ITS config dir (a linked runner's disk is not this machine's).
+            spec.seeds.extend(onboarding_seed(&req.env, self.probe.as_ref()));
+        }
         spec.env = req.env.clone();
         spec.env.push((TODO_ENV.into(), "1".into()));
         if let Some(n) = req.context_limit.filter(|n| *n > 0) {

@@ -257,7 +257,14 @@ impl Runner for LocalRunner {
         Box::pin(async move {
             let hub = Arc::new(Hub::new(self.cfg.backlog_max_bytes));
             let grace = self.cfg.drain_grace;
-            let p = blocking(move || spawn::start(&spec, hub, grace).map_err(RunnerError::from)).await?;
+            let p = blocking(move || {
+                // The runner seeds its own disk (a CLI's first-run config) before it starts the process.
+                for seed in &spec.seeds {
+                    seed.apply();
+                }
+                spawn::start(&spec, hub, grace).map_err(RunnerError::from)
+            })
+            .await?;
             let id = {
                 let n = self.next.fetch_add(1, Ordering::SeqCst);
                 ProcId(match &self.id_tag {
