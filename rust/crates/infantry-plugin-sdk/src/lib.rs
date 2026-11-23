@@ -47,7 +47,12 @@ use types::{CallContext, Caller, Frame, HttpResponse, NamedEvent, RouteRequest};
 
 /// A daemon half. Every export has a default, so a plugin implements only what it declares.
 pub trait Plugin {
-    fn start() -> Result<(), String> {
+    /// Native sidecar only: how many calls (tools, frames, routes, hooks, events) may run at the same time. A long call
+    /// does not hold up the others up to this number; past it, calls wait their turn. A plugin that relies on one call
+    /// at a time (shared state it does not lock) sets this to 1. A WASM component is always one call at a time.
+    const MAX_CONCURRENT_CALLS: usize = 32;
+
+    fn start()-> Result<(), String> {
         Ok(())
     }
     fn stop() {}

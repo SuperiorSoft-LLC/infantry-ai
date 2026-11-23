@@ -89,6 +89,9 @@ a hot swap: the new version starts, takes over, and the old one drains its calls
 A sidecar speaks the JSON-lines form of the same world (`jsonl` in `infantry-plugin-wit`). With `infantry-plugin-sdk`
 you write one `impl Plugin` and `export_plugin!`; on `wasm32-wasip2` that is the component, and on a native target it
 defines `sidecar_main()` for a small `bin`. A sidecar must never print to stdout (use `host::log`).
+A sidecar runs calls at the same time, each on its own thread, up to `Plugin::MAX_CONCURRENT_CALLS` (default 32), so a
+long call does not hold up another; a plugin that relies on one call at a time sets it to 1 (a WASM component is always one
+call at a time). `start` and `stop` run alone.
 Steps: [Make a plugin](make-a-plugin.md).
 
 ### Not carried over
