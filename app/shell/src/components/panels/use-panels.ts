@@ -5,6 +5,7 @@
 import { useEffect } from "react";
 import { useStore } from "zustand";
 import {
+  accountQuerySpec,
   createEpicsStore,
   createMcpStore,
   createNoticeKindsStore,
@@ -48,6 +49,9 @@ export const probeStore = (frame: string) =>
       own: [frame],
     }),
   );
+
+/** The account hub's state: `account_status` answers and its pushes (a sign-in flow changing) both replace the data. */
+export const accountStore = () => once<Record<string, unknown> | null>("account", () => createQueryStore<Record<string, unknown> | null>(link(), accountQuerySpec));
 
 export function useQuery<T, R>(store: QueryStore<T>, select: (s: QueryState<T> & QueryActions) => R): R {
   return useStore(store, select);

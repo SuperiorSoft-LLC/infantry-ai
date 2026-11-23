@@ -327,7 +327,7 @@ impl Account {
                 };
             }
         }
-        if let Some(email) = doc.pointer("/user/email").and_then(Value::as_str) {
+        if let Some(email) = doc.get("email").or_else(|| doc.pointer("/user/email")).and_then(Value::as_str) {
             o.insert("user".into(), json!({ "email": mask_email(email) }));
         }
         for k in ["accountId", "memberRole", "plan", "limits", "usage", "reclaimableUntil", "error"] {
@@ -565,6 +565,7 @@ mod tests {
     struct FakeHttp {
         pending: Mutex<u32>,
         calls: Mutex<Vec<String>>,
+        doc: Mutex<Option<Value>>,
     }
     impl AccountHttp for FakeHttp {
         fn post_form(&self, url: &str, form: &[(&str, &str)]) -> Result<(u16, Value), String> {
@@ -586,6 +587,9 @@ mod tests {
         }
         fn get_json(&self, _url: &str, bearer: &str) -> Result<(u16, Value), String> {
             assert_eq!(bearer, "at");
+            if let Some(d) = self.doc.lock().unwrap().clone() {
+                return Ok((200, d));
+            }
             Ok((200, json!({"user": {"email": "alice@example.com"}, "plan": {"name": "Basic", "status": "active"}, "entitlements": ["hosting"]})))
         }
     }
@@ -630,6 +634,26 @@ mod tests {
         assert_eq!(a.sign_out(None).unwrap()["wasSignedIn"], true);
         assert!(http.calls.lock().unwrap().iter().any(|u| u.ends_with("/revoke")));
         assert_eq!(a.status(None, false).unwrap()["state"], "signed_out");
+    }
+
+    #[test]
+    fn the_account_document_has_a_top_level_email_and_a_plan_that_may_be_null() {
+        let sign_in = |doc: Value| {
+            let http = Arc::new(FakeHttp { doc: Mutex::new(Some(doc)), ..Default::default() });
+            let a = Account::new(vec![provider()], http, Arc::new(MemTokens::default()));
+            a.sign_in(None).unwrap();
+            while a.poll("acme").is_some() {}
+            a.status(None, true).unwrap()
+        };
+        let s = sign_in(json!({"email": "alice@example.com", "plan": {"status": "active"}, "permissions": ["hosting"]}));
+        assert_eq!(s["email"], "a***@example.com", "top-level email is masked: {s}");
+        assert_eq!(s["planStatus"], "active");
+        assert_eq!(s["providers"][0]["plan"]["status"], "active", "the plan is copied through");
+        assert_eq!(s["providers"][0]["user"]["email"], "a***@example.com");
+        assert!(!s.to_string().contains("alice@"), "no raw email in a view");
+        let s = sign_in(json!({"email": "alice@example.com", "plan": null}));
+        assert_eq!(s["email"], "a***@example.com");
+        assert!(s.get("plan").is_none() && s["providers"][0].get("plan").is_none(), "a null plan stays absent: {s}");
     }
 
     #[test]
