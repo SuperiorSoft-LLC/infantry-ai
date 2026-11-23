@@ -55,9 +55,24 @@ impl LoadedPlugin {
     fn cpu_ms(&self) -> u64 {
         self.decl.limits.cpu_ms_per_call.unwrap_or(self.limits.cpu_ms_per_call)
     }
-    fn tool_budget(&self) -> Budget {
-        let wall = self.decl.limits.tool_timeout_ms.unwrap_or(self.limits.tool_timeout_ms);
-        Budget { cpu_ms: self.cpu_ms(), wall_ms: wall.max(self.cpu_ms()) }
+    /// A tool's wall clock: its own declared `timeoutMs` (capped), else the plugin's, else the host default.
+    pub fn tool_timeout_ms(&self, name: &str) -> u64 {
+        let declared = self.decl.tools.iter().find(|t| t.name == name).and_then(|t| t.timeout_ms);
+        self.declared_wall(declared, self.decl.limits.tool_timeout_ms.unwrap_or(self.limits.tool_timeout_ms))
+    }
+    /// A frame's wall clock: its own declared `timeoutMs` (capped), else the plugin's, else the host default.
+    pub fn frame_timeout_ms(&self, frame_type: &str) -> u64 {
+        let declared = self.decl.frames.iter().find(|f| f.r#type == frame_type).and_then(|f| f.timeout_ms);
+        self.declared_wall(declared, self.decl.limits.call_timeout_ms.unwrap_or(self.limits.call_timeout_ms))
+    }
+    fn declared_wall(&self, declared: Option<u64>, fallback: u64) -> u64 {
+        declared.map_or(fallback, |d| d.min(self.limits.max_declared_timeout_ms.max(fallback)))
+    }
+    fn tool_budget(&self, name: &str) -> Budget {
+        Budget { cpu_ms: self.cpu_ms(), wall_ms: self.tool_timeout_ms(name).max(self.cpu_ms()) }
+    }
+    fn frame_budget(&self, frame_type: &str) -> Budget {
+        Budget { cpu_ms: self.cpu_ms(), wall_ms: self.frame_timeout_ms(frame_type).max(self.cpu_ms()) }
     }
     fn call_budget(&self) -> Budget {
         let wall = self.decl.limits.call_timeout_ms.unwrap_or(self.limits.call_timeout_ms);
@@ -78,7 +93,7 @@ impl LoadedPlugin {
         }
         let what = format!("call-tool({name})");
         let _acting = self.imports.acting_for(ctx.clone());
-        self.guard.run(&what, &|| self.probe(), || self.runtime.call_tool(name, args, ctx, self.tool_budget()))
+        self.guard.run(&what, &|| self.probe(), || self.runtime.call_tool(name, args, ctx, self.tool_budget(name)))
     }
 
     /// A declared frame; the reply frame or the exact `<type> refused: ...` text.
@@ -91,7 +106,7 @@ impl LoadedPlugin {
         }
         let what = format!("handle-frame({})", frame.r#type);
         let _acting = self.imports.acting_for(CallContext { caller: caller.clone(), client_session_id: caller.active_session.clone(), client_role: None, client_project_id: caller.project.clone() });
-        self.guard.run(&what, &|| self.probe(), || self.runtime.handle_frame(frame, caller, self.call_budget()))
+        self.guard.run(&what, &|| self.probe(), || self.runtime.handle_frame(frame, caller, self.frame_budget(&frame.r#type)))
     }
 
     pub fn handle_route(&self, request: &RouteRequest) -> Result<HttpResponse, CallError> {
@@ -473,5 +488,124 @@ mod tests {
         assert!(refusal(Tier::Official, &newer, &none).is_err());
         let kotlin: DaemonDecl = serde_json::from_str(r#"{"apiAtLeast":"1.48.0"}"#).unwrap();
         assert!(refusal(Tier::Official, &kotlin, &none).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+    use crate::services::MemoryServices;
+    use std::time::{Duration, Instant};
+
+    /// A runtime that behaves like a sidecar: a call sleeps `how_long(name)`, and one that outlasts its wall budget is a hang.
+    struct Slow;
+    impl Slow {
+        fn run(what: &str, sleep_ms: u64, b: Budget) -> Result<(), Fault> {
+            if sleep_ms > b.wall_ms {
+                std::thread::sleep(Duration::from_millis(b.wall_ms));
+                return Err(Fault::Hang(format!("{what} made no answer in {} ms", b.wall_ms)));
+            }
+            std::thread::sleep(Duration::from_millis(sleep_ms));
+            Ok(())
+        }
+    }
+    impl Plugin for Slow {
+        fn runtime(&self) -> &'static str {
+            "fake"
+        }
+        fn start(&self, _: Budget) -> Result<Result<(), String>, Fault> {
+            Ok(Ok(()))
+        }
+        fn stop(&self, _: Budget) -> Result<(), Fault> {
+            Ok(())
+        }
+        fn call_tool(&self, name: &str, args: &str, _: &CallContext, b: Budget) -> Result<Result<String, String>, Fault> {
+            Self::run(name, args.parse().unwrap_or(0), b).map(|_| Ok(format!("{name} done")))
+        }
+        fn handle_frame(&self, f: &Frame, _: &Caller, b: Budget) -> Result<Result<Option<Frame>, String>, Fault> {
+            Self::run(&f.r#type, f.data.parse().unwrap_or(0), b).map(|_| Ok(Some(Frame { r#type: format!("{}_reply", f.r#type), ..Default::default() })))
+        }
+        fn handle_route(&self, _: &RouteRequest, _: Budget) -> Result<Result<HttpResponse, String>, Fault> {
+            unreachable!()
+        }
+        fn on_hook(&self, _: &str, _: &str, _: Budget) -> Result<Result<String, String>, Fault> {
+            Ok(Ok(String::new()))
+        }
+        fn on_event(&self, _: u64, _: &NamedEvent, _: Budget) -> Result<(), Fault> {
+            Ok(())
+        }
+        fn cancel(&self) {}
+        fn memory_bytes(&self) -> Option<u64> {
+            None
+        }
+    }
+
+    /// Host default 300 ms stands in for the 10 s default; `fast` is undeclared, `slow` declares 2000 ms, `huge` declares far past the cap.
+    fn plugin() -> Arc<LoadedPlugin> {
+        let decl: DaemonDecl = serde_json::from_str(
+            r#"{"tools":[{"name":"t_fast"},{"name":"t_slow","timeoutMs":2000}],
+                "frames":[{"type":"fast"},{"type":"slow","timeoutMs":2000},{"type":"huge","timeoutMs":999999999}]}"#,
+        )
+        .unwrap();
+        let limits = HostLimits { call_timeout_ms: 300, tool_timeout_ms: 300, max_declared_timeout_ms: 5_000, cpu_ms_per_call: 50, strikes: 2, ..HostLimits::default() };
+        let imports = Arc::new(PluginImports::new("Acme_Slow", Tier::Official, decl.clone(), Arc::new(MemoryServices::new()), BTreeSet::new(), BTreeSet::new()));
+        let guard = Guard::new("Acme_Slow", GuardLimits { strikes: 2, cooldown_ms: 30_000, queue_limit: 8 }, |_| {}, |_| {});
+        let manifest: ModuleManifest = serde_json::from_str(r#"{"name":"Acme_Slow","version":"1.0.0"}"#).unwrap();
+        Arc::new(LoadedPlugin { id: "Acme_Slow".into(), version: "1.0.0".into(), tier: Tier::Official, dir: PathBuf::new(), decl, manifest, runtime: Box::new(Slow), guard, imports, limits })
+    }
+
+    fn frame(t: &str, ms: u64) -> Frame {
+        Frame { r#type: t.into(), data: ms.to_string(), ..Default::default() }
+    }
+    fn owner() -> Caller {
+        Caller { owner: true, ..Default::default() }
+    }
+
+    #[test]
+    fn default_budget_is_unchanged_and_a_declared_one_wins_up_to_the_cap() {
+        let p = plugin();
+        assert_eq!((p.frame_timeout_ms("fast"), p.tool_timeout_ms("t_fast")), (300, 300));
+        assert_eq!((p.frame_timeout_ms("slow"), p.tool_timeout_ms("t_slow")), (2000, 2000));
+        assert_eq!(p.frame_timeout_ms("huge"), 5_000, "a declared budget is cut to limits.plugins.maxDeclaredTimeoutMs");
+    }
+
+    #[test]
+    fn a_declared_frame_runs_past_the_default_and_is_no_strike() {
+        let p = plugin();
+        assert!(p.handle_frame(&frame("fast", 600), &owner()).is_err(), "undeclared: cut at the default");
+        assert!(p.handle_frame(&frame("slow", 600), &owner()).is_ok(), "declared: runs past the default");
+        assert!(p.handle_frame(&frame("slow", 600), &owner()).is_ok());
+        assert!(p.handle_frame(&frame("slow", 600), &owner()).is_ok());
+        assert!(!p.guard.is_cooling(), "slow calls inside their budget are never a strike");
+    }
+
+    #[test]
+    fn a_declared_tool_runs_past_the_default() {
+        let p = plugin();
+        let ctx = CallContext::default();
+        assert!(p.call_tool("t_fast", "600", &ctx).is_err());
+        assert_eq!(p.call_tool("t_slow", "600", &ctx).unwrap(), "t_slow done");
+    }
+
+    #[test]
+    fn over_budget_ends_readably_and_does_strike() {
+        let p = plugin();
+        let t = Instant::now();
+        let e = p.handle_frame(&frame("slow", 4000), &owner()).unwrap_err();
+        assert!(t.elapsed() < Duration::from_millis(3500), "ended at its own budget, not later");
+        assert!(e.message().contains("handle-frame(slow) hung") && e.message().contains("2000 ms"), "{}", e.message());
+    }
+
+    #[test]
+    fn another_frame_is_answered_during_a_slow_call() {
+        let p = plugin();
+        let p2 = p.clone();
+        let slow = std::thread::spawn(move || p2.handle_frame(&frame("slow", 1200), &owner()));
+        std::thread::sleep(Duration::from_millis(100));
+        let t = Instant::now();
+        assert!(p.handle_frame(&frame("fast", 0), &owner()).is_ok());
+        assert!(t.elapsed() < Duration::from_millis(400), "sites_list-style frame was not held behind the slow call");
+        assert!(slow.join().unwrap().is_ok());
+        assert!(!p.guard.is_cooling());
     }
 }

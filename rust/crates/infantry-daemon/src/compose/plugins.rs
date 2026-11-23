@@ -742,7 +742,11 @@ pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: toki
         composed: OnceLock::new(),
         http: OnceLock::new(),
     });
-    let host = match PluginHost::new(services.clone(), Default::default()) {
+    let mut limits = infantry_plugin_host::HostLimits::default();
+    if let Some(ms) = services.settings.lock().unwrap().get("limits.plugins.maxDeclaredTimeoutMs").and_then(|v| v.trim().parse::<u64>().ok()).filter(|v| *v > 0) {
+        limits.max_declared_timeout_ms = ms;
+    }
+    let host = match PluginHost::new(services.clone(), limits) {
         Ok(h) => Arc::new(h),
         Err(e) => {
             eprintln!("[infantry] plugins off: {e}");

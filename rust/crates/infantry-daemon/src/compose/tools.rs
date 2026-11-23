@@ -62,10 +62,16 @@ impl Tools {
         self.catalog()
             .into_iter()
             .map(|t| {
-                json!({
+                let mut d = json!({
                     "name": t.name, "description": t.description, "inputSchema": t.input_schema,
                     "annotations": {"readOnlyHint": t.read_only},
-                })
+                });
+                // A plugin tool that declares its own budget tells the caller how long to wait for it.
+                let own = self.plugins().and_then(|h| h.tools().into_iter().find(|e| e.decl.name == t.name).filter(|e| e.decl.timeout_ms.is_some()).and_then(|e| h.get(&e.module_id).map(|p| p.tool_timeout_ms(&t.name))));
+                if let Some(ms) = own {
+                    d["timeoutMs"] = json!(ms);
+                }
+                d
             })
             .collect()
     }

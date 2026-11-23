@@ -81,7 +81,7 @@ Two explicit exceptions, and no others:
 
 Every call goes through a guard. A call has a CPU budget (WASM fuel) and a wall-clock limit, WASM memory is capped, and a
 plugin that keeps failing is stopped by a breaker (strikes, then a cooldown, with a bounded queue). The numbers are the
-`limits.plugins.*` settings; a manifest may tune its own in `daemon.limits`. Loading a module that is already loaded is
+`limits.plugins.*` settings; a manifest may tune its own in `daemon.limits`, and give one frame or tool its own wall-clock budget with `timeoutMs` (cut to `limits.plugins.maxDeclaredTimeoutMs`; an undeclared call keeps the default, 10 s for a frame). A slow call inside its budget is no breaker strike. Loading a module that is already loaded is
 a hot swap: the new version starts, takes over, and the old one drains its calls and stops.
 
 ### Sidecars and the SDK
