@@ -281,7 +281,27 @@ function SignIn({ p }: { p: AccountProvider }) {
 /** One provider card of the list. A connected card opens its dashboard; the others offer Sign in. */
 function ProviderCard({ p, onOpen }: { p: AccountProvider; onOpen: () => void }) {
   const chip = cardChip(p);
+  const fromButton = (t: EventTarget) => t instanceof Element && !!t.closest("button, a, input");
   return (
+    <div
+      {...(p.signedIn
+        ? {
+            role: "button",
+            tabIndex: 0,
+            "aria-label": `Open ${p.name}`,
+            className: "cursor-pointer rounded-xl transition-colors hover:bg-muted/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring",
+            onClick: (e: React.MouseEvent) => {
+              if (!fromButton(e.target)) onOpen();
+            },
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) {
+                e.preventDefault();
+                onOpen();
+              }
+            },
+          }
+        : {})}
+    >
     <PanelCard title={p.name} action={<Chip tone={chip.tone}>{chip.label}</Chip>}>
       {p.description && <p className="text-xs text-muted-foreground">{p.description}</p>}
       {p.signedIn && p.plan && (
@@ -298,6 +318,7 @@ function ProviderCard({ p, onOpen }: { p: AccountProvider; onOpen: () => void })
         <SignIn p={p} />
       )}
     </PanelCard>
+    </div>
   );
 }
 
