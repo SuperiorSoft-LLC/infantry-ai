@@ -91,7 +91,7 @@ export function manageUrl(data: SiteRec | null): string | null {
 export function shownAnswer(data: SiteRec | null, refusal: string | null, lastGood: SiteRec | null): { data: SiteRec | null; error: string | null; stale: boolean } {
   const failed = refusal !== null || s(data, "state") === "unavailable";
   if (!failed) return { data, error: null, stale: false };
-  const error = refusal ?? s(data, "message") ?? "Hosting is unavailable right now.";
+  const error = (refusal ?? s(data, "message") ?? "Hosting is unavailable right now.").replace(/[. ]+$/, "");
   return lastGood ? { data: lastGood, error, stale: true } : { data, error: refusal, stale: false };
 }
 

@@ -56,7 +56,7 @@ export function createQueryStore<T>(link: FrameLink, spec: QuerySpec<T>): QueryS
         // Only answers to us: another client's list request answers the same type with its own filter.
         if (!req.settle(env)) return;
         const next = spec.parse(json<unknown>(env.data), get().data);
-        set(next === null ? { loading: false, loaded: true, refusal: `${spec.request}: the daemon's answer was not understood` } : { data: next, loaded: true, loading: false });
+        set(next === null ? { loading: false, loaded: true, refusal: `${spec.request}: the daemon's answer was not understood` } : { data: next, loaded: true, loading: false, refusal: null });
         return;
       }
       const fold = spec.pushes?.[env.type];

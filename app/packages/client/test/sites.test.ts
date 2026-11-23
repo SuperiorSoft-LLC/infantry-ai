@@ -119,3 +119,12 @@ describe("auto refresh", () => {
     expect(h.cleared()).toBe(true);
   });
 });
+
+describe("the outage text has one full stop", () => {
+  const good = { state: "ok", servers: [] };
+  it("trailing full stops of the refusal are dropped", () => {
+    expect(shownAnswer(null, "plugin down, retry in a moment.", good).error).toBe("plugin down, retry in a moment");
+    expect(shownAnswer({ state: "unavailable", message: "down.." }, null, good).error).toBe("down");
+  });
+});
+it("a refusal ending in s keeps its s", () => expect(shownAnswer(null, "no access", { state: "ok" }).error).toBe("no access"));
