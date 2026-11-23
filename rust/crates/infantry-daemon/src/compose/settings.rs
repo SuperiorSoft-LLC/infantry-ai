@@ -56,6 +56,11 @@ impl SettingsUnit {
         self.stored(key)
     }
 
+    /// Removes the app-scope row of `key` (back to the declared default).
+    pub fn clear_app(&self, key: &str) -> Result<(), String> {
+        self.db.write(|c| c.execute("DELETE FROM settings WHERE key = ?1", [key])).map(|_| ()).map_err(|e| e.to_string())
+    }
+
     pub fn resolve(&self, key: &str, d: &Value) -> Value {
         let mut layers = Vec::new();
         for (scope, target) in Self::targets(d) {

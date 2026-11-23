@@ -610,6 +610,14 @@ impl HostServices for DaemonServices {
     fn setting_get(&self, key: &str) -> Option<String> {
         self.settings.lock().unwrap().get(key).cloned()
     }
+    fn app_setting(&self, key: &str) -> Option<String> {
+        let raw: String = self.db.lock().ok()?.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)).ok()?;
+        match serde_json::from_str::<serde_json::Value>(&raw).ok()? {
+            serde_json::Value::Null => None,
+            serde_json::Value::String(s) => Some(s),
+            v => Some(v.to_string()),
+        }
+    }
     fn setting_set(&self, key: &str, value: &str) -> Result<(), String> {
         let mut s = self.settings.lock().unwrap();
         s.insert(key.into(), value.into());

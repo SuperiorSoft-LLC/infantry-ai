@@ -126,6 +126,9 @@ export function startAutoRefresh<T>(store: QueryStore<T>, o: AutoRefresh): { sto
     stop: () => {
       if (h !== null) clearT(h);
     },
-    poke: tick,
+    // 0 = off: becoming visible must not refresh either.
+    poke: () => {
+      if (o.seconds > 0) tick();
+    },
   };
 }

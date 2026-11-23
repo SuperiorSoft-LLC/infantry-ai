@@ -108,6 +108,11 @@ describe("auto refresh", () => {
     h.r.poke();
     expect(h.sent()).toBe(1);
   });
+  it("0 is off: becoming visible does not refresh", () => {
+    const h = harness(0);
+    h.r.poke();
+    expect(h.sent()).toBe(0);
+  });
   it("stop clears the timer", () => {
     const h = harness(30);
     h.r.stop();
