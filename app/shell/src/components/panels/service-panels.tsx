@@ -8,7 +8,7 @@
 //   Sites    `sites_list` (Infantry_Sites' `infantry_sites_list`): hosting servers, read-only
 import { useEffect, useMemo, useRef } from "react";
 import { Globe, GitPullRequest, Plug, Server, UserCircle } from "lucide-react";
-import { accountProviders, flowView, reviewQueue, signInBody, signInUri, signOutBody, type AccountProvider, type McpServerView } from "@infantry/client";
+import { accountProviders, flowView, reviewQueue, signInBody, signInTracker, signInUri, signOutBody, type AccountProvider, type McpServerView } from "@infantry/client";
 import { Button, Chip, EmptyState, PanelCard, Switch } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { TabPage } from "@/components/tabs/tab-page";
@@ -200,13 +200,17 @@ function SignInOut({ p }: { p: AccountProvider }) {
   const store = accountStore();
   const answers = probeStore("account_sign_in");
   const flow = flowView(p);
-  const code = useQuery(answers, (s) => s.data);
-  const signInRefusal = useQuery(answers, (s) => s.refusal);
+  const answer = useQuery(answers, (s) => s.data);
+  const rawRefusal = useQuery(answers, (s) => s.refusal);
+  // The answer store is shared by every card: only the card that clicked Sign in reacts to its answer or refusal.
+  const code = signInTracker.owns(p.id, answer) ? answer : null;
+  const signInRefusal = signInTracker.owns(p.id) ? rawRefusal : null;
   const refusal = useQuery(store, (s) => s.refusal);
   const shown = refusal ?? signInRefusal;
   const opened = useRef<string | null>(null);
   const start = () => {
     opened.current = null;
+    signInTracker.start(p.id);
     answers.getState().clearRefusal();
     answers.getState().refresh(signInBody(p.id));
   };

@@ -97,3 +97,22 @@ export const accountQuerySpec: QuerySpec<Obj | null> = {
   empty: null,
   own: ["account_status", "account_sign_in", "account_sign_out"],
 };
+
+/**
+ * Which provider card asked for the sign-in answer in the shared `account_sign_in` store. Every card reads that one answer
+ * and refusal, so only the card that clicked Sign in may open its page or show its refusal. The answer's own `provider`
+ * wins when the daemon names one.
+ */
+export function createSignInTracker() {
+  let clicked: string | null = null;
+  return {
+    start(provider: string): void {
+      clicked = provider;
+    },
+    owns(provider: string, answer: Obj | null = null): boolean {
+      const named = text(answer, "provider");
+      return (named ?? clicked) === provider;
+    },
+  };
+}
+export const signInTracker = createSignInTracker();

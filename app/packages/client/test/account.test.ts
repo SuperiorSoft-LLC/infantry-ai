@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { createQueryStore, type Envelope } from "../src";
 import type { FrameLink } from "../src/stores/link";
-import { accountQuerySpec, accountProviders, flowView, signInBody, signInUri, signOutBody } from "../src/account";
+import { accountQuerySpec, accountProviders, flowView, signInBody, createSignInTracker, signInUri, signOutBody } from "../src/account";
 
 const one = (extra: Record<string, unknown>) => accountProviders({ providers: [{ id: "ss", name: "SuperiorSoft", ...extra }] })[0];
 
@@ -60,5 +60,19 @@ describe("account store", () => {
     expect(reread.type).toBe("account_status");
     push({ type: "account_status", data: JSON.stringify({ providers: [{ id: "ss", signedIn: false }] }), requestId: reread.requestId });
     expect(view().signedIn).toBe(false);
+  });
+});
+
+describe("sign-in answer per provider card", () => {
+  it("with 2 providers only the clicked card opens the page and shows the refusal", () => {
+    const t = createSignInTracker();
+    const opened: string[] = [];
+    const answer = { verification_uri_complete: "https://x/y" };
+    t.start("b");
+    for (const id of ["a", "b"]) if (t.owns(id, answer) && signInUri(answer)) opened.push(id);
+    expect(opened).toEqual(["b"]);
+    expect(t.owns("a")).toBe(false);
+    expect(t.owns("b")).toBe(true);
+    expect(t.owns("a", { provider: "a" })).toBe(true);
   });
 });
