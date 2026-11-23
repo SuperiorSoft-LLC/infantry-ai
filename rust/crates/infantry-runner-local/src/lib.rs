@@ -343,7 +343,7 @@ impl Runner for LocalRunner {
     fn tail(&self, spec: TailSpec) -> RunnerFuture<'_, mpsc::UnboundedReceiver<String>> {
         let poll = self.cfg.tail_poll;
         Box::pin(async move {
-            let path = PathBuf::from(&spec.path);
+            let path = PathBuf::from(infantry_runner_api::expand_seed_path(&spec.path, &[]));
             let start = match spec.from {
                 TailFrom::Offset(o) => o,
                 TailFrom::End => std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0),

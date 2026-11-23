@@ -371,11 +371,14 @@ impl Harness for ClaudeHarness {
                 if !spec.env.iter().any(|(k, _)| k.eq_ignore_ascii_case(TERM_ENV)) {
                     spec.env.push((TERM_ENV.into(), TERM_VALUE.into()));
                 }
-                let tail = self
-                    .transcript_path(&req.cwd, &session_id)
-                    .map(|p| TailSpec { path: p.to_string_lossy().into_owned(), from: if resume { TailFrom::End } else { TailFrom::Start } })
-                    .into_iter()
-                    .collect();
+                // The transcript is on the machine that runs claude: a linked runner's config dir is not this host's, so the path is
+                // the process's own CLAUDE_CONFIG_DIR when the request sets one, else a template the runner resolves.
+                let dir = match req.env.iter().find(|(k, _)| k == CONFIG_DIR_ENV).map(|(_, v)| v.as_str()).filter(|v| !v.is_empty()) {
+                    Some(d) => d.to_string(),
+                    None => format!("${{{CONFIG_DIR_ENV}:-~/.claude}}"),
+                };
+                let path = format!("{}/projects/{}/{session_id}.jsonl", dir.trim_end_matches(['/', '\\']), transcript::slug(&req.cwd.to_string_lossy()));
+                let tail = vec![TailSpec { path, from: if resume { TailFrom::End } else { TailFrom::Start } }];
                 Ok(LaunchPlan {
                     spec: spec.pty(self.pty),
                     stdin: None,
