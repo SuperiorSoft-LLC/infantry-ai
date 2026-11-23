@@ -301,6 +301,8 @@ pub const SECRET_MOVE: &str = "secret_move";
 pub const SECRET_LOGIN: &str = "secret_login";
 pub const PLUGIN_SECRET_GET: &str = "plugin_secret_get";
 pub const PLUGIN_SECRET: &str = "plugin_secret";
+pub const PLUGIN_SECRET_SET: &str = "plugin_secret_set";
+pub const PLUGIN_SECRET_CLEAR: &str = "plugin_secret_clear";
 pub const SECRET_REVEAL: &str = "secret_reveal";
 pub const SECRET_BACKUP_EXPORT: &str = "secret_backup_export";
 pub const SECRET_BACKUP_IMPORT: &str = "secret_backup_import";
@@ -625,6 +627,8 @@ pub const ALL: &[&str] = &[
     SECRET_LOGIN,
     PLUGIN_SECRET_GET,
     PLUGIN_SECRET,
+    PLUGIN_SECRET_SET,
+    PLUGIN_SECRET_CLEAR,
     SECRET_REVEAL,
     SECRET_BACKUP_EXPORT,
     SECRET_BACKUP_IMPORT,

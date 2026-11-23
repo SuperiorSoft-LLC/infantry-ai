@@ -6,15 +6,16 @@
 //   Review   the converged pods' nodes waiting for review (`pod_query` / `pod` pushes)
 //   Account  `account_status` (Infantry_Account's `account.status`); Services lists its account providers
 //   Sites    `sites_list` (Infantry_Sites' `infantry_sites_list`): hosting servers, read-only
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Globe, GitPullRequest, Plug, Server, UserCircle } from "lucide-react";
-import { accountProviders, flowView, reviewQueue, signInBody, signInTracker, signInUri, signOutBody, type AccountProvider, type McpServerView } from "@infantry/client";
+import { accountProviders, accountState, flowView, manageUrl, serverStatus, settingKey, shownAnswer, siteDate, SITES_REFRESH_DEFAULT, SITES_REFRESH_KEY, SITES_REFRESH_NODE, startAutoRefresh, reviewQueue, signInBody, signInTracker, signInUri, signOutBody, type AccountProvider, type McpServerView } from "@infantry/client";
 import { Button, Chip, EmptyState, PanelCard, Switch } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { TabPage } from "@/components/tabs/tab-page";
 import { ago, RefusalBanner } from "@/components/knowledge/parts";
 import { RefreshButton, Served } from "./parts";
 import { host } from "@/host";
+import { settingsStore, useSettings } from "@/components/settings/use-settings";
 import { accountStore, mcpStore, podsStore, probeStore, useQuery, useQueryOnOpen } from "./use-panels";
 
 type Tone = "neutral" | "red" | "green" | "blue" | "amber";
@@ -160,35 +161,94 @@ export function AccountPanel({ quiet = false }: { quiet?: boolean }) {
   );
 }
 
-/** Hosting servers (read-only here). */
+/** The refresh period (seconds) from the `sites.refreshSeconds` setting; its declared default until the settings load. */
+function useRefreshSeconds(): number {
+  const values = useSettings((s) => s.values);
+  useEffect(() => settingsStore().getState().ensureLoaded(), []);
+  const v = values[settingKey(SITES_REFRESH_NODE, SITES_REFRESH_KEY)];
+  return typeof v === "number" && v >= 0 ? v : SITES_REFRESH_DEFAULT;
+}
+
+/** Hosting servers: follows the server's state on its own (no create, start, stop or delete here: those are on the website). */
 export function SitesPanel() {
   const store = probeStore("sites_list");
   useQueryOnOpen(store);
-  const data = useQuery(store, (s) => s.data);
+  const live = useQuery(store, (s) => s.data);
+  const refusal = useQuery(store, (s) => s.refusal);
+  const seconds = useRefreshSeconds();
+  const [good, setGood] = useState<{ data: Record<string, unknown>; at: number } | null>(null);
+  const [, tickAge] = useState(0);
+  // The last answer that was not a failure stays on screen when a later refresh fails.
+  useEffect(() => {
+    if (live && !refusal && str(live, "state") !== "unavailable") setGood({ data: live, at: Date.now() });
+  }, [live, refusal]);
+  useEffect(() => {
+    const visible = () => document.visibilityState !== "hidden";
+    const auto = startAutoRefresh(store, { seconds, visible });
+    document.addEventListener("visibilitychange", auto.poke);
+    const age = setInterval(() => tickAge((n) => n + 1), 15000);
+    return () => {
+      auto.stop();
+      clearInterval(age);
+      document.removeEventListener("visibilitychange", auto.poke);
+    };
+  }, [store, seconds]);
+  const { data, error, stale } = shownAnswer(live, refusal, good?.data ?? null);
   const servers = list(data, "servers");
+  const account = accountState(data);
+  const url = manageUrl(data);
+  const reclaim = siteDate(data?.reclaimableUntil);
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">Your hosting servers</span>
-        <RefreshButton store={store} />
+        <span className="flex items-center gap-1">
+          {url && (
+            <Button variant="ghost" size="xs" onClick={() => void host.openExternal(url).catch(() => undefined)}>
+              Manage on website
+            </Button>
+          )}
+          <RefreshButton store={store} />
+        </span>
       </div>
-      <Served store={store} frames="sites_list (Infantry_Sites state)">
+      {stale && error && (
+        <p role="status" className="rounded-lg border border-destructive/40 p-2 text-xs text-destructive">
+          Could not refresh: {error}. Showing the list from {good ? ago(good.at) : "earlier"}.
+        </p>
+      )}
+      <Served store={store} frames="sites_list (Infantry_Sites state)" banner={!stale}>
         {!data ? (
           <EmptyState icon={<Globe className="size-6" />} title="Reading sites…" />
-        ) : servers.length === 0 ? (
-          <EmptyState icon={<Globe className="size-6" />} title={str(data, "message") ?? "No servers"} />
         ) : (
-          <ul className="space-y-2">
-            {servers.map((s, i) => (
-              <li key={str(s, "id") ?? i} className="rounded-lg border p-2 text-[13px]">
-                <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate font-medium">{str(s, "name") ?? str(s, "id")}</span>
-                  <Chip tone={stateTone(str(s, "status") ?? "")}>{str(s, "status") ?? "?"}</Chip>
-                </div>
-                <p className="font-mono text-xs text-muted-foreground">{[str(s, "ip"), str(s, "region"), str(s, "size")].filter(Boolean).join(" · ")}</p>
-              </li>
-            ))}
-          </ul>
+          <>
+            {account && (
+              <div className="flex items-center gap-2 text-[13px]" role="status">
+                <Chip tone={account.tone}>{account.label}</Chip>
+                {account.text && <span>{account.text}</span>}
+              </div>
+            )}
+            {reclaim && <p className="text-xs text-muted-foreground">Reclaimable until {reclaim}</p>}
+            {servers.length === 0 ? (
+              !account && <EmptyState icon={<Globe className="size-6" />} title={str(data, "message") ?? "No servers"} />
+            ) : (
+              <ul className="space-y-2">
+                {servers.map((sv, i) => {
+                  const st = serverStatus(str(sv, "status"));
+                  const destroyAt = siteDate(sv.destroyAt);
+                  return (
+                    <li key={str(sv, "id") ?? i} className="rounded-lg border p-2 text-[13px]">
+                      <div className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate font-medium">{str(sv, "name") ?? str(sv, "id")}</span>
+                        <Chip tone={st.tone}>{st.label}</Chip>
+                      </div>
+                      <p className="font-mono text-xs text-muted-foreground">{[str(sv, "ip"), str(sv, "region"), str(sv, "size")].filter(Boolean).join(" · ")}</p>
+                      {destroyAt && <p className="text-xs text-muted-foreground">Destroys on {destroyAt}</p>}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </>
         )}
       </Served>
     </div>

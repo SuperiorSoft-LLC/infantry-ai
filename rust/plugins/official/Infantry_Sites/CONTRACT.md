@@ -17,6 +17,10 @@ The sidecar speaks the plugin host's JSON-lines mapping (`infantry-plugin-wit`, 
 | tool | `infantry_sites_ssh_exec` | `{server?, command, timeoutSec?}` | as the frame |
 | tool | `infantry_sites_ssh_upload` | `{server?, path, content}` | as the frame |
 
+`sites_ssh_exec` / `sites_ssh_upload` calls run at the same time (none waits for another, `sites_list` included), up to the
+manifest setting `limits.sites.ssh.maxConcurrent` (default 4); the call past it is refused with `limit: N SSH calls are already
+running ...`. A command that hit its timeout answers `timedOut: true` and a `message` that says so in words.
+
 Errors are `"<kind>: <message>"`, kind one of `signed_out, not_entitled, limit, not_configured, bad_request, not_found,
 unavailable, email_unverified, not_running, host_key_mismatch, auth_failed`. A server still being set up is not an error:
 `{status: "setting_up", retryAfterSec, message}`.

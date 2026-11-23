@@ -66,8 +66,14 @@ impl PluginImports {
     pub fn log(&self, level: LogLevel, line: &str) {
         self.services.log(&self.module_id, level, line);
     }
+    /// A declared config key: the owner's stored value (Settings), else the manifest default.
     pub fn config_get(&self, key: &str) -> Option<String> {
-        self.decl.config_default(key)
+        self.declared_value(key).or_else(|| self.decl.config_default(key))
+    }
+    /// The stored app-scope value of `key`, only when this plugin declares `key` (a plugin reads no one else's setting).
+    fn declared_value(&self, key: &str) -> Option<String> {
+        let declared = self.decl.config_fields().any(|c| c.get("key").and_then(|k| k.as_str()) == Some(key));
+        declared.then(|| self.services.app_setting(key)).flatten()
     }
     pub fn environment(&self) -> String {
         self.services.environment()
@@ -86,7 +92,8 @@ impl PluginImports {
     }
     pub fn setting_get(&self, key: &str) -> Result<Option<String>, String> {
         self.check("settings")?;
-        Ok(self.services.setting_get(&self.setting_key(key)?))
+        // The plugin's own value wins; else what the owner set in Settings for a key the plugin declares.
+        Ok(self.services.setting_get(&self.setting_key(key)?).or_else(|| self.declared_value(key)))
     }
     pub fn setting_set(&self, key: &str, value: &str) -> Result<(), String> {
         self.check("settings")?;
@@ -448,6 +455,23 @@ mod tests {
         assert_eq!(i.kv_get("k").unwrap().as_deref(), Some("v"));
         assert_eq!(i.kv_keys("").unwrap(), vec!["k"]);
         assert!(i.kv_delete("k").unwrap());
+    }
+
+    #[test]
+    fn a_setting_the_owner_stored_reaches_the_plugin_that_declares_it() {
+        let decl = DaemonDecl {
+            config: vec![serde_json::json!({"node":"Acme_X.ssh","fields":[{"key":"limits.x.connectTimeoutSec","type":"number","default":15,"scope":"daemon"}]})],
+            ..Default::default()
+        };
+        let svc = Arc::new(MemoryServices::new());
+        let i = PluginImports::new("Acme_X", Tier::Official, decl, svc.clone(), ["settings".to_string()].into(), BTreeSet::new());
+        assert_eq!(i.setting_get("limits.x.connectTimeoutSec").unwrap(), None); // nothing stored: the plugin uses its default
+        assert_eq!(i.config_get("limits.x.connectTimeoutSec").as_deref(), Some("15"));
+        svc.app_settings.lock().unwrap().insert("limits.x.connectTimeoutSec".into(), "42".into());
+        svc.app_settings.lock().unwrap().insert("other.key".into(), "9".into());
+        assert_eq!(i.setting_get("limits.x.connectTimeoutSec").unwrap().as_deref(), Some("42"));
+        assert_eq!(i.config_get("limits.x.connectTimeoutSec").as_deref(), Some("42"));
+        assert_eq!(i.setting_get("other.key").unwrap(), None); // a key the plugin did not declare is not its to read
     }
 
     #[test]

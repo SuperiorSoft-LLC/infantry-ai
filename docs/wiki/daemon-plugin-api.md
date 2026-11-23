@@ -53,6 +53,11 @@ Two explicit exceptions, and no others:
 - `plugin_secret_get` reads the secret of the calling plugin only (`plugin.<module id>`). The daemon takes the module from the
   host (the module id of the manifest), never from the request: a request that names another module is refused, and one that
   names none is filled in with the caller's. It needs no `ownerFrames` entry.
+- `plugin_secret_set {field, value}` and `plugin_secret_clear {field}` write and remove one field of that same entry, pinned
+  the same way (a request naming another module is refused). Field names are letters, digits and `_`, not starting with a
+  digit; `INFANTRY_*` is refused; a blank value is refused; a locked or full keystore answers a readable refusal; no error and
+  no answer holds a value (the answer is `plugin_secret` with a null value) and nothing is pushed. Clearing a missing field
+  is not an error. Neither needs an `ownerFrames` entry; a session, the CLI or a runner is refused (owner only).
 
 ### The model
 
@@ -76,7 +81,7 @@ Two explicit exceptions, and no others:
 
 Every call goes through a guard. A call has a CPU budget (WASM fuel) and a wall-clock limit, WASM memory is capped, and a
 plugin that keeps failing is stopped by a breaker (strikes, then a cooldown, with a bounded queue). The numbers are the
-`limits.plugins.*` settings; a manifest may tune its own in `daemon.limits`. Loading a module that is already loaded is
+`limits.plugins.*` settings; a manifest may tune its own in `daemon.limits`, and give one frame or tool its own wall-clock budget with `timeoutMs` (cut to `limits.plugins.maxDeclaredTimeoutMs`; an undeclared call keeps the default, 10 s for a frame). A slow call inside its budget is no breaker strike. Loading a module that is already loaded is
 a hot swap: the new version starts, takes over, and the old one drains its calls and stops.
 
 ### Sidecars and the SDK
@@ -84,6 +89,9 @@ a hot swap: the new version starts, takes over, and the old one drains its calls
 A sidecar speaks the JSON-lines form of the same world (`jsonl` in `infantry-plugin-wit`). With `infantry-plugin-sdk`
 you write one `impl Plugin` and `export_plugin!`; on `wasm32-wasip2` that is the component, and on a native target it
 defines `sidecar_main()` for a small `bin`. A sidecar must never print to stdout (use `host::log`).
+A sidecar runs calls at the same time, each on its own thread, up to `Plugin::MAX_CONCURRENT_CALLS` (default 32), so a
+long call does not hold up another; a plugin that relies on one call at a time sets it to 1 (a WASM component is always one
+call at a time). `start` and `stop` run alone.
 Steps: [Make a plugin](make-a-plugin.md).
 
 ### Not carried over

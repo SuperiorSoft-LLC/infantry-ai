@@ -18,6 +18,11 @@ pub trait HostServices: Send + Sync + 'static {
     /// A setting by its FULL key (`<Module>.x`).
     fn setting_get(&self, key: &str) -> Option<String>;
     fn setting_set(&self, key: &str, value: &str) -> Result<(), String>;
+    /// The owner's app-scope value of a BARE key the plugin declared in its manifest config (what Settings writes with
+    /// `config_set` / `settings_set`), as text; None = no value stored.
+    fn app_setting(&self, _key: &str) -> Option<String> {
+        None
+    }
     fn setting_remove(&self, key: &str) -> Result<(), String>;
     /// A frame into the daemon (DaemonApi ToolCall.request); the reply frame. `caller` is who the plugin is working
     /// for: the call context of the tool call, frame or capability running when it asked (None = the plugin's own
@@ -42,6 +47,8 @@ pub trait HostServices: Send + Sync + 'static {
 /// An in-memory [`HostServices`]: settings in a map, an in-memory SQLite, frames answered by a handler.
 pub struct MemoryServices {
     pub settings: Mutex<BTreeMap<String, String>>,
+    /// The owner's app-scope values by bare key (what Settings wrote), see [`HostServices::app_setting`].
+    pub app_settings: Mutex<BTreeMap<String, String>>,
     pub logs: Mutex<Vec<String>>,
     pub broadcasts: Mutex<Vec<(String, String)>>,
     pub events: Mutex<Vec<NamedEvent>>,
@@ -63,6 +70,7 @@ impl MemoryServices {
     pub fn new() -> Self {
         MemoryServices {
             settings: Mutex::default(),
+            app_settings: Mutex::default(),
             logs: Mutex::default(),
             broadcasts: Mutex::default(),
             events: Mutex::default(),
@@ -103,6 +111,9 @@ impl HostServices for MemoryServices {
     }
     fn setting_get(&self, key: &str) -> Option<String> {
         self.settings.lock().unwrap().get(key).cloned()
+    }
+    fn app_setting(&self, key: &str) -> Option<String> {
+        self.app_settings.lock().unwrap().get(key).cloned()
     }
     fn setting_set(&self, key: &str, value: &str) -> Result<(), String> {
         self.settings.lock().unwrap().insert(key.into(), value.into());

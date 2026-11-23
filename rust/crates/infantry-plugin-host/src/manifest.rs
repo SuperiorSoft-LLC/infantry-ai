@@ -119,6 +119,10 @@ pub struct ToolDecl {
     /// The tool's MCP input schema (JSON Schema object); None = any object. MCP clients show it as the tool's arguments.
     #[serde(default)]
     pub input_schema: Option<serde_json::Value>,
+    /// This tool's own wall-clock budget in ms (data, not code); capped by `limits.plugins.maxDeclaredTimeoutMs`.
+    /// None = the plugin's `daemon.limits.toolTimeoutMs`, else the host default.
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -132,6 +136,10 @@ pub struct FrameDecl {
     pub kind: String,
     #[serde(default)]
     pub owner_only: bool,
+    /// This frame's own wall-clock budget in ms (data, not code); capped by `limits.plugins.maxDeclaredTimeoutMs`.
+    /// None = the plugin's `daemon.limits.callTimeoutMs`, else the host default (10 s).
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 fn read() -> String {

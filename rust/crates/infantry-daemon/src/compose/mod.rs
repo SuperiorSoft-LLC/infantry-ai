@@ -29,6 +29,7 @@ pub mod ui_bundles;
 mod needs_input;
 mod notify_kinds;
 mod prompter;
+mod config;
 mod settings;
 pub mod scope;
 mod tools;
@@ -715,6 +716,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         Arc::new(tools::ToolsUnit { tools: tools.clone() }),
         Arc::new(crate::run::RunUnit { runs: runs.clone() }),
         Arc::new(settings::SettingsUnit { db: db.clone() }),
+        Arc::new(config::ConfigUnit { settings: settings::SettingsUnit { db: db.clone() }, plugins_dir: plugins_dir() }),
         Arc::new(notify_kinds::NotifyKindsUnit { settings: settings::SettingsUnit { db: db.clone() }, gate: env.wake_gate(), kinds: env.notice_kinds() }),
         armory.clone(),
         vault.clone(),

@@ -610,6 +610,14 @@ impl HostServices for DaemonServices {
     fn setting_get(&self, key: &str) -> Option<String> {
         self.settings.lock().unwrap().get(key).cloned()
     }
+    fn app_setting(&self, key: &str) -> Option<String> {
+        let raw: String = self.db.lock().ok()?.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)).ok()?;
+        match serde_json::from_str::<serde_json::Value>(&raw).ok()? {
+            serde_json::Value::Null => None,
+            serde_json::Value::String(s) => Some(s),
+            v => Some(v.to_string()),
+        }
+    }
     fn setting_set(&self, key: &str, value: &str) -> Result<(), String> {
         let mut s = self.settings.lock().unwrap();
         s.insert(key.into(), value.into());
@@ -635,9 +643,9 @@ impl HostServices for DaemonServices {
         }
         // SEC-PLUGIN-1: the frame is the plugin's, not the owner's. It goes in as a non-owner unless the manifest lists
         // this frame type in daemon.ownerFrames (`as_owner`, official and core only). The one frame a plugin may always
-        // send with the vault's owner authority is the read of ITS OWN secret, pinned to the calling module.
-        let own_secret = frame.r#type == infantry_protocol::frames::PLUGIN_SECRET_GET;
-        let data = if own_secret { super::scope::own_secret_request(module, &frame.data)? } else { frame.data };
+        // send with the vault's owner authority are the read, write and clear of ITS OWN secret, pinned to the calling module.
+        let own_secret = [infantry_protocol::frames::PLUGIN_SECRET_GET, infantry_protocol::frames::PLUGIN_SECRET_SET, infantry_protocol::frames::PLUGIN_SECRET_CLEAR].contains(&frame.r#type.as_str());
+        let data = if own_secret { super::scope::own_secret_request(&frame.r#type, module, &frame.data)? } else { frame.data };
         let owner = as_owner || own_secret;
         let _rt = self.handle.enter();
         let mut env = Envelope::new(frame.r#type.clone(), data);
@@ -742,7 +750,11 @@ pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: toki
         composed: OnceLock::new(),
         http: OnceLock::new(),
     });
-    let host = match PluginHost::new(services.clone(), Default::default()) {
+    let mut limits = infantry_plugin_host::HostLimits::default();
+    if let Some(ms) = services.settings.lock().unwrap().get("limits.plugins.maxDeclaredTimeoutMs").and_then(|v| v.trim().parse::<u64>().ok()).filter(|v| *v > 0) {
+        limits.max_declared_timeout_ms = ms;
+    }
+    let host = match PluginHost::new(services.clone(), limits) {
         Ok(h) => Arc::new(h),
         Err(e) => {
             eprintln!("[infantry] plugins off: {e}");

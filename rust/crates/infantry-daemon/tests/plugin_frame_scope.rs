@@ -125,3 +125,37 @@ async fn a_frame_the_manifest_lists_as_an_owner_frame_is_sent_as_the_owner_and_o
     let r = send(&plain, "secret_field_set", json!({ "name": "plain-note", "field": "K", "value": "fake-plain-0123456789" }));
     assert!(r.unwrap_err().contains("owner only"));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_plugin_writes_reads_and_clears_only_its_own_secret() {
+    let s = scratch();
+    let evil = s.plugin("Evil_Mod", &[]);
+    // Write, read back, overwrite, clear.
+    send(&evil, "plugin_secret_set", json!({ "field": "KEY", "value": "fake-written-0123456789" })).expect("own write");
+    assert_eq!(send(&evil, "plugin_secret_get", json!({ "field": "KEY" })).unwrap()["value"], "fake-written-0123456789");
+    let ack = send(&evil, "plugin_secret_set", json!({ "module": "evil_mod", "field": "KEY", "value": "fake-second-0123456789" })).unwrap();
+    assert!(ack["value"].is_null(), "a write answer must not carry a value: {ack}");
+    send(&evil, "plugin_secret_clear", json!({ "field": "KEY" })).expect("own clear");
+    assert!(send(&evil, "plugin_secret_get", json!({ "field": "KEY" })).unwrap()["value"].is_null());
+    send(&evil, "plugin_secret_clear", json!({ "field": "KEY" })).expect("clearing twice is fine");
+    // Another module: refused, and the victim's secret is untouched.
+    for (ty, data) in [("plugin_secret_set", json!({ "module": "Victim_Mod", "field": "TOKEN", "value": "fake-attack-0123456789" })), ("plugin_secret_clear", json!({ "module": "Victim_Mod", "field": "TOKEN" }))] {
+        let e = send(&evil, ty, data).unwrap_err();
+        assert!(e.contains("only its own") && !e.contains("fake-"), "{ty}: {e}");
+    }
+    let still = s.owner(&Envelope::new("plugin_secret_get", json!({ "module": "Victim_Mod", "field": "TOKEN" }).to_string())).unwrap();
+    assert!(still[0].data.contains("fake-victim-token-0123456789"));
+    // The Kotlin rules: bad name, INFANTRY_*, blank value; no error holds the value.
+    for (field, value) in [("1bad", "fake-v-0123456789"), ("has-dash", "fake-v-0123456789"), ("INFANTRY_TOKEN", "fake-v-0123456789"), ("infantry_x", "fake-v-0123456789"), ("OK", "   ")] {
+        let e = send(&evil, "plugin_secret_set", json!({ "field": field, "value": value })).unwrap_err();
+        assert!(!e.contains("fake-v-"), "an error holds the value: {e}");
+    }
+    assert!(send(&evil, "plugin_secret_clear", json!({ "field": "INFANTRY_TOKEN" })).is_err());
+    // A connection that is not the owner (a session, the CLI, a runner) is refused.
+    for (ty, data) in [("plugin_secret_set", json!({ "module": "Evil_Mod", "field": "K", "value": "fake-v-0123456789" })), ("plugin_secret_clear", json!({ "module": "Evil_Mod", "field": "TOKEN" }))] {
+        let e = s.c.request(&Envelope::new(ty, data.to_string()), false).map(|_| "answered".to_string()).unwrap_err();
+        assert!(e.contains("owner only"), "{ty}: {e}");
+    }
+    let own = s.owner(&Envelope::new("plugin_secret_get", json!({ "module": "Evil_Mod", "field": "TOKEN" }).to_string())).unwrap();
+    assert!(own[0].data.contains("fake-own-token-0123456789"), "the stored key must still be found");
+}
