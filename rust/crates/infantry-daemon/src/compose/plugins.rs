@@ -635,9 +635,9 @@ impl HostServices for DaemonServices {
         }
         // SEC-PLUGIN-1: the frame is the plugin's, not the owner's. It goes in as a non-owner unless the manifest lists
         // this frame type in daemon.ownerFrames (`as_owner`, official and core only). The one frame a plugin may always
-        // send with the vault's owner authority is the read of ITS OWN secret, pinned to the calling module.
-        let own_secret = frame.r#type == infantry_protocol::frames::PLUGIN_SECRET_GET;
-        let data = if own_secret { super::scope::own_secret_request(module, &frame.data)? } else { frame.data };
+        // send with the vault's owner authority are the read, write and clear of ITS OWN secret, pinned to the calling module.
+        let own_secret = [infantry_protocol::frames::PLUGIN_SECRET_GET, infantry_protocol::frames::PLUGIN_SECRET_SET, infantry_protocol::frames::PLUGIN_SECRET_CLEAR].contains(&frame.r#type.as_str());
+        let data = if own_secret { super::scope::own_secret_request(&frame.r#type, module, &frame.data)? } else { frame.data };
         let owner = as_owner || own_secret;
         let _rt = self.handle.enter();
         let mut env = Envelope::new(frame.r#type.clone(), data);

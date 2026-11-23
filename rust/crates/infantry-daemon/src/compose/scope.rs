@@ -56,15 +56,15 @@ fn kill_target(frame_session: Option<&str>, data: &str) -> Option<String> {
     frame_session.map(str::to_string).or_else(|| data.split_whitespace().next().map(str::to_string)).filter(|s| !s.is_empty())
 }
 
-/// SEC-PLUGIN-1: `plugin_secret_get` from a plugin reads the secret of THAT plugin and no other. The module comes from the
+/// SEC-PLUGIN-1 / SVC-SECRET: `plugin_secret_get`, `_set` and `_clear` from a plugin reach the secret of THAT plugin and no other. The module comes from the
 /// host (the manifest's module id), never from the request: a request that names another module is refused, one that
 /// names none is filled in. Returns the request data to dispatch.
-pub fn own_secret_request(module: &str, data: &str) -> Result<String, String> {
-    let mut v: Value = if data.trim().is_empty() { Value::Object(Default::default()) } else { serde_json::from_str(data).map_err(|e| format!("plugin_secret_get refused: malformed request ({e})"))? };
-    let Some(o) = v.as_object_mut() else { return Err("plugin_secret_get refused: malformed request".into()) };
+pub fn own_secret_request(frame: &str, module: &str, data: &str) -> Result<String, String> {
+    let mut v: Value = if data.trim().is_empty() { Value::Object(Default::default()) } else { serde_json::from_str(data).map_err(|e| format!("{frame} refused: malformed request ({e})"))? };
+    let Some(o) = v.as_object_mut() else { return Err(format!("{frame} refused: malformed request")) };
     if let Some(named) = o.get("module").and_then(Value::as_str).map(str::trim).filter(|m| !m.is_empty()) {
         if !named.eq_ignore_ascii_case(module) {
-            return Err(format!("plugin_secret_get refused: a plugin reads only its own secrets ({module}), not those of {named}"));
+            return Err(format!("{frame} refused: a plugin reaches only its own secrets ({module}), not those of {named}"));
         }
     }
     o.insert("module".into(), module.into());
@@ -143,11 +143,11 @@ mod tests {
 
     #[test]
     fn a_plugin_reads_only_its_own_secret() {
-        let own = own_secret_request("Acme_X", r#"{"field":"TOKEN"}"#).unwrap();
+        let own = own_secret_request("plugin_secret_get", "Acme_X", r#"{"field":"TOKEN"}"#).unwrap();
         assert_eq!(serde_json::from_str::<Value>(&own).unwrap(), serde_json::json!({ "module": "Acme_X", "field": "TOKEN" }));
-        assert!(own_secret_request("Acme_X", r#"{"module":"acme_x","field":"T"}"#).is_ok());
-        assert!(own_secret_request("Acme_X", r#"{"module":"Other_Y","field":"T"}"#).unwrap_err().contains("only its own"));
-        assert!(own_secret_request("Acme_X", "[1]").is_err() && own_secret_request("Acme_X", "{").is_err());
+        assert!(own_secret_request("plugin_secret_get", "Acme_X", r#"{"module":"acme_x","field":"T"}"#).is_ok());
+        assert!(own_secret_request("plugin_secret_get", "Acme_X", r#"{"module":"Other_Y","field":"T"}"#).unwrap_err().contains("only its own"));
+        assert!(own_secret_request("plugin_secret_get", "Acme_X", "[1]").is_err() && own_secret_request("plugin_secret_get", "Acme_X", "{").is_err());
     }
 
     #[test]

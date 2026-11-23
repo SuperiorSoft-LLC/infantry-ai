@@ -171,6 +171,14 @@ struct PluginSecretGet {
     field: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PluginSecretSet {
+    module: String,
+    field: String,
+    value: String,
+}
+
 /// The direct answer to `plugin_secret_get`; never pushed, never logged.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct PluginSecret {
@@ -441,7 +449,45 @@ impl KeystoreHandler {
                 let body = serde_json::to_string(&PluginSecret { module: req.module, field: req.field, value }).map_err(|_| VaultError::failed("encode"))?;
                 Ok(Answer { reply: infantry_protocol::envelope::Envelope::new(f::PLUGIN_SECRET, body), push: false })
             })(),
+            f::PLUGIN_SECRET_SET => (|| {
+                if self.restricted() {
+                    return Err(VaultError::invalid("secrets are locked under a restricted policy"));
+                }
+                let req: PluginSecretSet = decode(data)?;
+                let name = plugin_write_target(&req.module, &req.field)?;
+                ks.set_field(&name, &req.field, &req.value, None)?;
+                self.audit("set-field", &name, &req.field, None);
+                Ok(plugin_secret_ack(req.module, req.field)?)
+            })(),
+            f::PLUGIN_SECRET_CLEAR => (|| {
+                if self.restricted() {
+                    return Err(VaultError::invalid("secrets are locked under a restricted policy"));
+                }
+                let req: PluginSecretGet = decode(data)?;
+                let name = plugin_write_target(&req.module, &req.field)?;
+                if ks.delete_field(&name, &req.field, None)? {
+                    self.audit("delete-field", &name, &req.field, None);
+                }
+                Ok(plugin_secret_ack(req.module, req.field)?)
+            })(),
             _ => return None,
         })
     }
+}
+
+/// The keystore entry a plugin write lands in, after the Kotlin rules: a valid field name, never `INFANTRY_*`.
+fn plugin_write_target(module: &str, field: &str) -> Result<String, VaultError> {
+    keystore::check_field(field)?;
+    if field.to_uppercase().starts_with("INFANTRY_") {
+        return Err(VaultError::invalid("INFANTRY_* fields are never written by a plugin"));
+    }
+    let name = plugin_secret_name(module);
+    keystore::check_name(&name)?;
+    Ok(name)
+}
+
+/// The answer to a plugin write: the module and field, never a value, never pushed.
+fn plugin_secret_ack(module: String, field: String) -> Result<Answer, VaultError> {
+    let body = serde_json::to_string(&PluginSecret { module, field, value: None }).map_err(|_| VaultError::failed("encode"))?;
+    Ok(Answer { reply: infantry_protocol::envelope::Envelope::new(infantry_protocol::frames::PLUGIN_SECRET, body), push: false })
 }

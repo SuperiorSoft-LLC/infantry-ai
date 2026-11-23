@@ -53,6 +53,11 @@ Two explicit exceptions, and no others:
 - `plugin_secret_get` reads the secret of the calling plugin only (`plugin.<module id>`). The daemon takes the module from the
   host (the module id of the manifest), never from the request: a request that names another module is refused, and one that
   names none is filled in with the caller's. It needs no `ownerFrames` entry.
+- `plugin_secret_set {field, value}` and `plugin_secret_clear {field}` write and remove one field of that same entry, pinned
+  the same way (a request naming another module is refused). Field names are letters, digits and `_`, not starting with a
+  digit; `INFANTRY_*` is refused; a blank value is refused; a locked or full keystore answers a readable refusal; no error and
+  no answer holds a value (the answer is `plugin_secret` with a null value) and nothing is pushed. Clearing a missing field
+  is not an error. Neither needs an `ownerFrames` entry; a session, the CLI or a runner is refused (owner only).
 
 ### The model
 
