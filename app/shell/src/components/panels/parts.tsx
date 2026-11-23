@@ -61,7 +61,7 @@ export function ProjectPicker({ value, onChange }: { value: string | null; onCha
  * The panel body while [store] has no data of its own: a clean "not served" state when the daemon has no unit for the frame,
  * a dismissible banner for any other refusal, or [children].
  */
-export function Served<T>({ store, frames, children }: { store: QueryStore<T>; frames: string; children: ReactNode }) {
+export function Served<T>({ store, frames, children, banner = true }: { store: QueryStore<T>; frames: string; children: ReactNode; banner?: boolean }) {
   const refusal = useQuery(store, (s) => s.refusal);
   const link = useDaemon((s) => s.connection.state);
   if (isUnserved(refusal))
@@ -69,7 +69,7 @@ export function Served<T>({ store, frames, children }: { store: QueryStore<T>; f
   if (link !== "open") return <EmptyState icon={<RefreshCw className="size-6" />} title="Waiting for the daemon…" />;
   return (
     <>
-      <RefusalBanner text={refusal} onDismiss={() => store.getState().clearRefusal()} />
+      {banner && <RefusalBanner text={refusal} onDismiss={() => store.getState().clearRefusal()} />}
       {children}
     </>
   );

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 import { describe, expect, it } from "vitest";
-import { accountProviders, flowView, signInBody, signInUri } from "../src/account";
+import { createQueryStore, type Envelope } from "../src";
+import type { FrameLink } from "../src/stores/link";
+import { accountQuerySpec, accountProviders, flowView, signInBody, signInUri, signOutBody } from "../src/account";
 
 const one = (extra: Record<string, unknown>) => accountProviders({ providers: [{ id: "ss", name: "SuperiorSoft", ...extra }] })[0];
 
@@ -37,5 +39,26 @@ describe("account model", () => {
     expect(signInUri({ verificationUri: "https://a", verification_uri_complete: "https://b" })).toBe("https://b");
     expect(signInUri({ verificationUri: "https://a" })).toBe("https://a");
     expect(signInUri({})).toBeNull();
+  });
+});
+
+describe("account store", () => {
+  it("sign-out flips the card at once: the answer makes the store read account_status again", () => {
+    const sent: Envelope[] = [];
+    const ls = new Set<(e: Envelope) => void>();
+    const link: FrameLink = { sendFrame: (e) => (sent.push(e), true), onFrame: (l) => (ls.add(l), () => ls.delete(l)) };
+    const push = (e: Envelope) => ls.forEach((l) => l(e));
+    const store = createQueryStore(link, accountQuerySpec);
+    const view = () => accountProviders(store.getState().data)[0];
+    store.getState().refresh();
+    push({ type: "account_status", data: JSON.stringify({ providers: [{ id: "ss", signedIn: true, user: { email: "a***@x.com" }, plan: { status: "active" } }] }), requestId: sent[0].requestId });
+    expect(view()).toMatchObject({ signedIn: true, email: "a***@x.com", plan: "active" });
+    expect(store.getState().send("account_sign_out", signOutBody("ss"))).toBe(true);
+    const out = sent[sent.length - 1];
+    push({ type: "account_sign_out", data: "{}", requestId: out.requestId });
+    const reread = sent[sent.length - 1];
+    expect(reread.type).toBe("account_status");
+    push({ type: "account_status", data: JSON.stringify({ providers: [{ id: "ss", signedIn: false }] }), requestId: reread.requestId });
+    expect(view().signedIn).toBe(false);
   });
 });

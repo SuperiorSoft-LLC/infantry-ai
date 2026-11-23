@@ -26,6 +26,8 @@ export interface AccountProvider {
   flow: AccountFlow | null;
 }
 
+import type { QuerySpec } from "./stores/query";
+
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : null);
 const text = (o: Obj | null, k: string): string | null => (o && typeof o[k] === "string" && (o[k] as string) !== "" ? (o[k] as string) : null);
@@ -46,7 +48,7 @@ export function accountProviders(data: Obj | null): AccountProvider[] {
         description: text(p, "description"),
         signedIn: p.signedIn === true,
         email: text(obj(p.user), "email"),
-        plan: plan ? text(plan, "name") : text(p, "plan"),
+        plan: plan ? (text(plan, "name") ?? text(plan, "status")) : text(p, "plan"),
         error: text(p, "error"),
         flow: f && state ? { state: state as FlowState, userCode: text(f, "userCode"), verificationUri: text(f, "verificationUri"), error: text(f, "error") } : null,
       },
@@ -79,3 +81,19 @@ export const signOutBody = (provider: string): string => JSON.stringify({ provid
 export function signInUri(answer: Obj | null): string | null {
   return text(answer, "verification_uri_complete") ?? text(answer, "verificationUri");
 }
+
+/**
+ * The account store's spec. `account_status` answers and pushes replace the data; the answer to a sign-in or sign-out only
+ * means "the account changed", so the store reads `account_status` again and the card updates without a reload.
+ */
+export const accountQuerySpec: QuerySpec<Obj | null> = {
+  prefix: "account",
+  request: "account_status",
+  body: () => "{}",
+  answers: ["account_status"],
+  pushes: { account_status: (raw) => obj(raw) },
+  rereads: ["account_sign_in", "account_sign_out"],
+  parse: (raw) => obj(raw),
+  empty: null,
+  own: ["account_status", "account_sign_in", "account_sign_out"],
+};

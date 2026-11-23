@@ -6,13 +6,13 @@
 //   Review   the converged pods' nodes waiting for review (`pod_query` / `pod` pushes)
 //   Account  `account_status` (Infantry_Account's `account.status`); Services lists its account providers
 //   Sites    `sites_list` (Infantry_Sites' `infantry_sites_list`): hosting servers, read-only
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Globe, GitPullRequest, Plug, Server, UserCircle } from "lucide-react";
 import { accountProviders, flowView, reviewQueue, signInBody, signInUri, signOutBody, type AccountProvider, type McpServerView } from "@infantry/client";
 import { Button, Chip, EmptyState, PanelCard, Switch } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { TabPage } from "@/components/tabs/tab-page";
-import { ago } from "@/components/knowledge/parts";
+import { ago, RefusalBanner } from "@/components/knowledge/parts";
 import { RefreshButton, Served } from "./parts";
 import { host } from "@/host";
 import { accountStore, mcpStore, podsStore, probeStore, useQuery, useQueryOnOpen } from "./use-panels";
@@ -128,7 +128,7 @@ const str = (o: Record<string, unknown> | null, k: string): string | null => (o 
 const list = (o: Record<string, unknown> | null, k: string): Record<string, unknown>[] => (o && Array.isArray(o[k]) ? (o[k] as Record<string, unknown>[]) : []);
 
 /** Account state: signed in or not, the plan, and why when not. */
-export function AccountPanel() {
+export function AccountPanel({ quiet = false }: { quiet?: boolean }) {
   const store = accountStore();
   useQueryOnOpen(store);
   const data = useQuery(store, (s) => s.data);
@@ -138,7 +138,7 @@ export function AccountPanel() {
         <span className="text-xs text-muted-foreground">Your SuperiorSoft account</span>
         <RefreshButton store={store} />
       </div>
-      <Served store={store} frames="account_status (account.status), account_sign_in, account_sign_out">
+      <Served store={store} banner={!quiet} frames="account_status (account.status), account_sign_in, account_sign_out">
         {!data ? (
           <EmptyState icon={<UserCircle className="size-6" />} title="Reading the account…" />
         ) : (
@@ -201,17 +201,23 @@ function SignInOut({ p }: { p: AccountProvider }) {
   const answers = probeStore("account_sign_in");
   const flow = flowView(p);
   const code = useQuery(answers, (s) => s.data);
+  const signInRefusal = useQuery(answers, (s) => s.refusal);
+  const refusal = useQuery(store, (s) => s.refusal);
+  const shown = refusal ?? signInRefusal;
+  const opened = useRef<string | null>(null);
   const start = () => {
+    opened.current = null;
+    answers.getState().clearRefusal();
     answers.getState().refresh(signInBody(p.id));
   };
-  // The answer to our sign-in names the page to approve on: open it once per answer.
+  // The answer to our sign-in names the page to approve on: open it once per Sign in click (the store re-reads the account itself).
   useEffect(() => {
     const uri = signInUri(code);
-    if (uri) {
+    if (uri && opened.current !== uri) {
+      opened.current = uri;
       void host.openExternal(uri).catch(() => undefined);
-      store.getState().refresh();
     }
-  }, [code, store]);
+  }, [code]);
   // A pending flow finishes in the background; read the account again until it does.
   useEffect(() => {
     if (!flow?.pending) return;
@@ -220,6 +226,15 @@ function SignInOut({ p }: { p: AccountProvider }) {
   }, [flow?.pending, store]);
   return (
     <div className="mt-2 space-y-1.5 text-[13px]">
+      {shown && (
+        <RefusalBanner
+          text={shown}
+          onDismiss={() => {
+            store.getState().clearRefusal();
+            answers.getState().clearRefusal();
+          }}
+        />
+      )}
       {flow && (
         <div className="space-y-1" role="status">
           <Chip tone={flow.tone}>{flow.label}</Chip>
@@ -250,19 +265,19 @@ export function ServicesTab() {
   return (
     <TabPage title="Services" description="Runner, orchestrator and web hosting: services you sign in to" actions={<RefreshButton store={store} />}>
       <div className="mb-3">
-        <AccountPanel />
+        <AccountPanel quiet />
       </div>
-      <Served store={store} frames="account_status (account.status, with its services)">
+      <Served store={store} banner={false} frames="account_status (account.status, with its services)">
         {providers.length > 0 && (
           <div className="mb-3 grid gap-3 lg:grid-cols-2">
             {providers.map((p) => (
               <PanelCard key={p.id} title={p.name} action={<Chip tone={p.signedIn ? "green" : "neutral"}>{p.signedIn ? "signed in" : "signed out"}</Chip>}>
                 {p.description && <p className="text-xs text-muted-foreground">{p.description}</p>}
-                {p.signedIn && (p.email || p.plan) && (
+                {p.signedIn && (
                   <p className="text-xs">
                     {p.email}
-                    {p.email && p.plan ? " · " : ""}
-                    {p.plan && <Chip mono>{p.plan}</Chip>}
+                    {p.email ? " · " : ""}
+                    <Chip mono>{p.plan ?? "no plan"}</Chip>
                   </p>
                 )}
                 {p.error && <p className="text-xs text-destructive">{p.error}</p>}
