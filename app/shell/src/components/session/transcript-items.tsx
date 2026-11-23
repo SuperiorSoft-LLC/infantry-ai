@@ -111,12 +111,13 @@ export function AssistantText({ text }: { text: string }) {
   return <CommsText body={paragraphs(text)} />;
 }
 
-export function FinishedLine({ outcome, exitCode }: { outcome: string; exitCode: number | null }) {
+export function FinishedLine({ outcome, exitCode, detail }: { outcome: string; exitCode: number | null; detail?: string }) {
   const ok = outcome === "SUCCEEDED" || outcome === "succeeded";
   return (
     <div className={cn("text-xs", ok ? "text-info" : "text-danger")}>
       — finished: {outcome.toLowerCase().replace(/_/g, " ")}
       {exitCode != null && ` (exit ${exitCode})`}
+      {!ok && detail && <div className="mt-0.5 whitespace-pre-wrap break-words">{detail}</div>}
     </div>
   );
 }
@@ -150,7 +151,7 @@ export function TranscriptItemView({ item }: { item: TranscriptItem }) {
     case "edit":
       return <ChangeBox path={item.path} created={item.created} added={item.added} removed={item.removed} lines={item.lines} truncated={item.truncated} />;
     case "finished":
-      return <FinishedLine outcome={item.outcome} exitCode={item.exitCode} />;
+      return <FinishedLine outcome={item.outcome} exitCode={item.exitCode} detail={item.detail} />;
     case "note":
       return <TranscriptNote text={item.text} danger={item.tone === "danger"} />;
     case "gap":

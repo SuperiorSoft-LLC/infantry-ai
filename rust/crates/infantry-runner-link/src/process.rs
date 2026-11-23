@@ -27,6 +27,8 @@ struct Session {
     /// The highest sequence handed out (frames are numbered from here, not from `frames.len()`, so a session restored after
     /// a runner restart continues above the orchestrator's cursor).
     last_seq: i64,
+    /// ORPHAN-1: when an orchestrator last asked after this process (a frames pull naming it, a command, a stop).
+    touched: Option<Instant>,
 }
 
 #[derive(Default)]
@@ -136,6 +138,47 @@ impl ProcessBackend {
         self
     }
 
+    fn touch(&self, sid: &str) {
+        if let Some(sess) = self.shared.0.lock().unwrap().sessions.get_mut(sid) {
+            sess.touched = Some(Instant::now());
+        }
+    }
+
+    /// ORPHAN-1: a process no orchestrator has asked after for `grace_sec()` seconds (the setting
+    /// `limits.runners.orphanGraceSec`, read each round; 0 = never reap) belongs to no paired orchestrator any more (its
+    /// session was removed there): it is ended and forgotten, and the runner log says so. An orchestrator pulls the frames of
+    /// every session it owns continuously, so an owned process is never idle for long.
+    pub fn with_orphan_reaper(self, grace_sec: Arc<dyn Fn() -> u64 + Send + Sync>) -> Self {
+        let (shared, runner) = (self.shared.clone(), self.runner.clone());
+        self.rt.spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                let grace = grace_sec();
+                if grace == 0 {
+                    continue;
+                }
+                let orphans: Vec<String> = {
+                    let s = shared.0.lock().unwrap();
+                    s.sessions.iter().filter(|(_, x)| x.exited.is_none() && x.touched.is_some_and(|t| t.elapsed() >= Duration::from_secs(grace))).map(|(k, _)| k.clone()).collect()
+                };
+                for sid in orphans {
+                    log_line(&format!("process {sid} is owned by no orchestrator session for {grace} s: ending it"));
+                    eprintln!("[infantry] runner process {sid} is owned by no orchestrator session for {grace} s: ending it");
+                    let id = ProcId(sid.clone());
+                    let _ = runner.kill(&id, KillScope::Tree).await;
+                    let _ = runner.release(&id).await;
+                    let mut s = shared.0.lock().unwrap();
+                    s.sessions.remove(&sid);
+                    if let Some(log) = s.log.as_mut() {
+                        log.remove(&sid);
+                    }
+                    s.events.retain(|e| e.session_id != sid);
+                }
+            }
+        });
+        self
+    }
+
     fn append(sess: &mut Session, sid: &str, t: &str, data: String) -> i64 {
         sess.last_seq += 1;
         let mut e = Envelope::new(t, data);
@@ -195,18 +238,20 @@ impl Backend for ProcessBackend {
         let handle = match self.rt.block_on(runner.spawn(spec)) {
             Ok(h) => h,
             Err(e) => {
+                log_line(&format!("process start FAILED: {launch}: {e}"));
                 eprintln!("[infantry] runner process start FAILED: {launch}: {e}");
                 return StartAnswer { refusal: Some(e.to_string()), ..Default::default() };
             }
         };
         let sid = handle.id.0.clone();
+        log_line(&format!("process {sid} started: {launch}"));
         eprintln!("[infantry] runner process {sid} started: {launch}");
         {
             let mut s = self.shared.0.lock().unwrap();
             // A process id this runner already restored keeps its sequence going (ids are unique per boot, so this is a
             // guard, not the usual case).
             let last_seq = s.sessions.get(&sid).map_or(0, |x| x.last_seq);
-            s.sessions.insert(sid.clone(), Session { last_seq, ..Default::default() });
+            s.sessions.insert(sid.clone(), Session { last_seq, touched: Some(Instant::now()), ..Default::default() });
             if let Some(log) = s.log.as_mut() {
                 log.set(&sid, Mark { seq: last_seq, exited: None });
             }
@@ -235,7 +280,8 @@ impl Backend for ProcessBackend {
                         Self::push(&shared, &id, wire::PROC_STDERR, B64.encode(m))
                     }
                     ProcEvent::Exited(code) => {
-                        let shown: String = String::from_utf8_lossy(&tail).chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+                        let shown = readable_tail(&tail);
+                        log_line(&format!("process {id} exited with code {code}; last output: {}", if shown.trim().is_empty() { "(none)" } else { shown.trim() }));
                         eprintln!("[infantry] runner process {id} exited with code {code}; last output: {}", if shown.trim().is_empty() { "(none)" } else { shown.trim() });
                         for (held, err) in [(out_mask.finish(), false), (err_mask.finish(), true)] {
                             if !held.is_empty() {
@@ -269,6 +315,7 @@ impl Backend for ProcessBackend {
     }
 
     fn stop(&self, r: &StopRequest) -> StopAnswer {
+        self.touch(&r.session_id);
         let id = ProcId(r.session_id.clone());
         let scope = if r.force { KillScope::Tree } else { KillScope::Process };
         StopAnswer { stopped: self.rt.block_on(self.runner.kill(&id, scope)).is_ok() }
@@ -300,6 +347,7 @@ impl Backend for ProcessBackend {
     }
 
     fn command(&self, r: &CommandRequest) -> CommandAnswer {
+        self.touch(&r.session_id);
         let id = ProcId(r.session_id.clone());
         let done = |res: Result<(), infantry_runner_api::RunnerError>| match res {
             Ok(()) => CommandAnswer { kind: "done".into(), ..Default::default() },
@@ -581,6 +629,11 @@ impl Backend for ProcessBackend {
         let (m, cv) = &*self.shared;
         let deadline = Instant::now() + wait;
         let mut s = m.lock().unwrap();
+        for sid in r.resume_from.keys() {
+            if let Some(sess) = s.sessions.get_mut(sid) {
+                sess.touched = Some(Instant::now());
+            }
+        }
         loop {
             let mut frames = Vec::new();
             let mut more = false;
@@ -622,5 +675,72 @@ fn keep_tail(tail: &mut Vec<u8>, b: &[u8]) {
     if tail.len() > 2048 {
         let cut = tail.len() - 2048;
         tail.drain(..cut);
+    }
+}
+
+type LogSink = fn(&str);
+static LOG_SINK: std::sync::OnceLock<LogSink> = std::sync::OnceLock::new();
+
+/// The runner daemon registers where its own log tail lives (Details > Runner log tail); a process start, exit and error
+/// is written there as well as to stderr. Without a sink (an orchestrator process) a line goes to stderr only.
+pub fn set_log_sink(f: LogSink) {
+    let _ = LOG_SINK.set(f);
+}
+
+fn log_line(line: &str) {
+    if let Some(f) = LOG_SINK.get() {
+        f(line);
+    }
+}
+
+/// Logging only: a process's raw terminal output made readable: escape sequences (CSI, OSC, two-byte) are dropped and
+/// control characters become spaces.
+pub fn readable_tail(raw: &[u8]) -> String {
+    let text = String::from_utf8_lossy(raw);
+    let mut out = String::with_capacity(text.len());
+    let mut it = text.chars().peekable();
+    while let Some(c) = it.next() {
+        if c == '\u{1b}' {
+            match it.peek().copied() {
+                Some('[') => {
+                    it.next();
+                    for n in it.by_ref() {
+                        if ('@'..='~').contains(&n) {
+                            break;
+                        }
+                    }
+                }
+                Some(']') => {
+                    it.next();
+                    while let Some(n) = it.next() {
+                        if n == '\u{7}' {
+                            break;
+                        }
+                        if n == '\u{1b}' {
+                            it.next();
+                            break;
+                        }
+                    }
+                }
+                Some(_) => {
+                    it.next();
+                }
+                None => {}
+            }
+        } else {
+            out.push(if c.is_control() { ' ' } else { c });
+        }
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[cfg(test)]
+mod readable_tests {
+    use super::readable_tail;
+
+    #[test]
+    fn strips_terminal_escapes() {
+        let raw = b"\x1b[?25l\x1b[38;5;174mSomething\x1b[0m went\r\n\x1b]0;title\x07 wrong";
+        assert_eq!(readable_tail(raw), "Something went wrong");
     }
 }

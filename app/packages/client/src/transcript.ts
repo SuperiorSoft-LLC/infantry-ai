@@ -19,7 +19,7 @@ export type TranscriptItem =
   | { kind: "tools"; id: string; seq: number; count: number; tool: string; activity: string }
   | { kind: "edit"; id: string; seq: number; path: string; created: boolean; added: number; removed: number; lines: DiffLine[]; truncated: boolean }
   | { kind: "note"; id: string; seq: number; text: string; tone?: "danger" }
-  | { kind: "finished"; id: string; seq: number; outcome: string; exitCode: number | null }
+  | { kind: "finished"; id: string; seq: number; outcome: string; exitCode: number | null; detail?: string }
   | { kind: "gap"; id: string; seq: number; evicted: number };
 
 /** A message from someone other than the owner, as the Kotlin COMMS header writes it (legacy, pre-origin daemons). */
@@ -158,7 +158,7 @@ export function applyFrames(items: readonly TranscriptItem[], frames: readonly E
         break;
       case Frame.FINISHED: {
         const p = json<FinishedPayload>(f.data);
-        if (p) out.push({ kind: "finished", id, seq, outcome: p.outcome, exitCode: p.exitCode ?? null });
+        if (p) out.push({ kind: "finished", id, seq, outcome: p.outcome, exitCode: p.exitCode ?? null, detail: p.detail?.trim() || undefined });
         break;
       }
       case Frame.REPLAY_GAP: {

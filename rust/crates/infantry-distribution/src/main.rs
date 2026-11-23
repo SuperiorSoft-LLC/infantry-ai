@@ -170,6 +170,9 @@ fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, stat
     pool.set_allow_plain(Arc::new(move || plain_allowed(&|k: &str| read_setting(&c2, k))));
     let c3 = composed.clone();
     pool.set_update_wait(Arc::new(move || read_setting(&c3, infantry_runner_pool::update::UPDATE_WAIT_KEY).and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))).unwrap_or(0)));
+    // RUNNER-OFFLINE-1: a session on a runner that stays offline this long (seconds) fails with "the runner went offline".
+    let c4 = composed.clone();
+    composed.daemon.start_runner_watch(Arc::new(move || read_setting(&c4, "limits.runners.offlineSessionSec").and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))).filter(|n| *n > 0).unwrap_or(60)));
     pool.start_heartbeat(Arc::new(move || {
         let ask = infantry_protocol::envelope::Envelope::new("settings", serde_json::json!({"key": infantry_runner_pool::HEARTBEAT_KEY}).to_string());
         c.request(&ask, true)
@@ -254,7 +257,12 @@ fn serve_runner_link(composed: &Arc<infantry_daemon::compose::Composed>, state_d
     let boot_tag = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| format!("{:x}", d.as_millis())).unwrap_or_default();
     let backend = infantry_runner_link::process::ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default().with_id_tag(boot_tag)))
         .with_state_dir(&state_dir.join(infantry_runner_pool::LINK_DIR))
-        .with_lend_policy(lend);
+        .with_lend_policy(lend)
+        // ORPHAN-1: a process no paired orchestrator has asked after for this long (seconds; 0 = never) is ended and logged.
+        .with_orphan_reaper({
+            let c_orphan = composed.clone();
+            Arc::new(move || read_setting(&c_orphan, "limits.runners.orphanGraceSec").and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))).unwrap_or(900))
+        });
     // RR-13: this runner answers its own harness/provider/key frames over the link, only the ones the plugin offers.
     let backend = infantry_runner_pool::FrameBackend::new(Box::new(backend), Arc::new(owner_ask(composed)));
     match infantry_runner_pool::RunnerServe::start(state_dir, Box::new(backend), opts) {
