@@ -260,7 +260,7 @@ impl Runner for LocalRunner {
             let p = blocking(move || {
                 // The runner seeds its own disk (a CLI's first-run config) before it starts the process.
                 for seed in &spec.seeds {
-                    seed.apply(&spec.env);
+                    eprintln!("[infantry] runner seed {}: {}", infantry_runner_api::expand_seed_path(&seed.path, &spec.env), if seed.apply(&spec.env) { "written" } else { "unchanged or skipped" });
                 }
                 spawn::start(&spec, hub, grace).map_err(RunnerError::from)
             })
