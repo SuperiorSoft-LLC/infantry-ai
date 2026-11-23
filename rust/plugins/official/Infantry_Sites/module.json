@@ -37,5 +37,5 @@
       "site": { "prod": "https://superiorsoftllc.tech", "dev": "http://127.0.0.1:18953", "staging": "http://localhost:5173" }
     }
   },
-  "tabs": [{ "id": "infantry.sites", "container": "center" }]
+  "tabs": [{ "id": "infantry.sites", "container": "center", "bar": false }]
 }
