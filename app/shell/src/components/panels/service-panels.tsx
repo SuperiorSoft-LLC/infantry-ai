@@ -6,15 +6,16 @@
 //   Review   the converged pods' nodes waiting for review (`pod_query` / `pod` pushes)
 //   Account  `account_status` (Infantry_Account's `account.status`); Services lists its account providers
 //   Sites    `sites_list` (Infantry_Sites' `infantry_sites_list`): hosting servers, read-only
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Globe, GitPullRequest, Plug, Server, UserCircle } from "lucide-react";
-import { reviewQueue, type McpServerView } from "@infantry/client";
+import { accountProviders, flowView, reviewQueue, signInBody, signInUri, signOutBody, type AccountProvider, type McpServerView } from "@infantry/client";
 import { Button, Chip, EmptyState, PanelCard, Switch } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { TabPage } from "@/components/tabs/tab-page";
 import { ago } from "@/components/knowledge/parts";
 import { RefreshButton, Served } from "./parts";
-import { mcpStore, podsStore, probeStore, useQuery, useQueryOnOpen } from "./use-panels";
+import { host } from "@/host";
+import { accountStore, mcpStore, podsStore, probeStore, useQuery, useQueryOnOpen } from "./use-panels";
 
 type Tone = "neutral" | "red" | "green" | "blue" | "amber";
 const stateTone = (s: string): Tone => (/ok|ready|connected|running/i.test(s) ? "green" : /fail|error|denied/i.test(s) ? "red" : /auth|pending|start/i.test(s) ? "amber" : "neutral");
@@ -128,7 +129,7 @@ const list = (o: Record<string, unknown> | null, k: string): Record<string, unkn
 
 /** Account state: signed in or not, the plan, and why when not. */
 export function AccountPanel() {
-  const store = probeStore("account_status");
+  const store = accountStore();
   useQueryOnOpen(store);
   const data = useQuery(store, (s) => s.data);
   return (
@@ -194,18 +195,82 @@ export function SitesPanel() {
   );
 }
 
+/** Sign in starts the device-code flow and opens its page; Sign out ends it. A refusal is shown by the store's `Served`. */
+function SignInOut({ p }: { p: AccountProvider }) {
+  const store = accountStore();
+  const answers = probeStore("account_sign_in");
+  const flow = flowView(p);
+  const code = useQuery(answers, (s) => s.data);
+  const start = () => {
+    answers.getState().refresh(signInBody(p.id));
+  };
+  // The answer to our sign-in names the page to approve on: open it once per answer.
+  useEffect(() => {
+    const uri = signInUri(code);
+    if (uri) {
+      void host.openExternal(uri).catch(() => undefined);
+      store.getState().refresh();
+    }
+  }, [code, store]);
+  // A pending flow finishes in the background; read the account again until it does.
+  useEffect(() => {
+    if (!flow?.pending) return;
+    const t = setInterval(() => store.getState().refresh(), 3000);
+    return () => clearInterval(t);
+  }, [flow?.pending, store]);
+  return (
+    <div className="mt-2 space-y-1.5 text-[13px]">
+      {flow && (
+        <div className="space-y-1" role="status">
+          <Chip tone={flow.tone}>{flow.label}</Chip>
+          {flow.detail && <p className="text-xs text-muted-foreground">{flow.detail}</p>}
+          {flow.code && <p className="font-mono text-base font-semibold tracking-widest">{flow.code}</p>}
+        </div>
+      )}
+      {p.signedIn ? (
+        <Button size="sm" variant="outline" onClick={() => store.getState().send("account_sign_out", signOutBody(p.id))}>
+          Sign out
+        </Button>
+      ) : (
+        <Button size="sm" disabled={!!flow?.pending} onClick={start}>
+          {flow && !flow.pending ? "Try again" : "Sign in"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 /** The services that sign in through the account (Kotlin's Services tab, Infantry_Account). */
 export function ServicesTab() {
-  const store = probeStore("account_status");
+  const store = accountStore();
   useQueryOnOpen(store);
   const data = useQuery(store, (s) => s.data);
   const services = list(data, "services");
+  const providers = accountProviders(data);
   return (
     <TabPage title="Services" description="Runner, orchestrator and web hosting: services you sign in to" actions={<RefreshButton store={store} />}>
       <div className="mb-3">
         <AccountPanel />
       </div>
       <Served store={store} frames="account_status (account.status, with its services)">
+        {providers.length > 0 && (
+          <div className="mb-3 grid gap-3 lg:grid-cols-2">
+            {providers.map((p) => (
+              <PanelCard key={p.id} title={p.name} action={<Chip tone={p.signedIn ? "green" : "neutral"}>{p.signedIn ? "signed in" : "signed out"}</Chip>}>
+                {p.description && <p className="text-xs text-muted-foreground">{p.description}</p>}
+                {p.signedIn && (p.email || p.plan) && (
+                  <p className="text-xs">
+                    {p.email}
+                    {p.email && p.plan ? " · " : ""}
+                    {p.plan && <Chip mono>{p.plan}</Chip>}
+                  </p>
+                )}
+                {p.error && <p className="text-xs text-destructive">{p.error}</p>}
+                <SignInOut p={p} />
+              </PanelCard>
+            ))}
+          </div>
+        )}
         {services.length === 0 ? (
           <EmptyState icon={<Server className="size-6" />} title={data ? "No service registered" : "Reading services…"} />
         ) : (

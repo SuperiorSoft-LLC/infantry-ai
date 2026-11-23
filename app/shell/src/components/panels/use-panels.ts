@@ -49,6 +49,13 @@ export const probeStore = (frame: string) =>
     }),
   );
 
+/** The account hub's state: `account_status` answers and its pushes (a sign-in flow changing) both replace the data. */
+export const accountStore = () =>
+  once<Record<string, unknown> | null>("account", () => {
+    const parse = (raw: unknown) => (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null);
+    return createQueryStore<Record<string, unknown> | null>(link(), { prefix: "account", request: "account_status", body: () => "{}", answers: ["account_status"], pushes: { account_status: parse }, empty: null, parse, own: ["account_status", "account_sign_in", "account_sign_out"] });
+  });
+
 export function useQuery<T, R>(store: QueryStore<T>, select: (s: QueryState<T> & QueryActions) => R): R {
   return useStore(store, select);
 }
