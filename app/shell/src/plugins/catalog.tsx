@@ -36,7 +36,8 @@ import {
   ScrollText,
   type LucideIcon,
 } from "lucide-react";
-import { declLabel, mergedTabTarget, removedTabTarget, type Contribution, type SlotRegistry } from "@infantry/client";
+import { host } from "@/host";
+import { declLabel, hiddenUnderOs, mergedTabTarget, removedTabTarget, type Contribution, type SlotRegistry } from "@infantry/client";
 import { EpicsTab, PodsTab, ProfilesTab } from "@/components/panels/board-panels";
 import { McpPanel, ReviewPanel, ServicesTab } from "@/components/panels/service-panels";
 import { CalendarTab } from "@/components/tabs/calendar-tab";
@@ -155,7 +156,7 @@ export function tabsFor(container: "center" | "right", reg: SlotRegistry | null)
   if (!reg) return arrange(container, defs.map((d) => ({ ...d, plugin: null })));
   // A declaration with `"bar": false` stays registered (a layout or the bootstrap window draws it) but gets no tab in the bar.
   // A tab that lives elsewhere now (Sites in Services; Settings behind the cog; Prompts in the right panel) never gets a bar tab of its own, even from an older module.json.
-  const declared = reg.tabs.filter((t) => (t.decl.container ?? "center") === container && t.decl.bar !== false && !mergedTabTarget(t.decl.id) && !(container === "center" && removedTabTarget(t.decl.id)));
+  const declared = reg.tabs.filter((t) => (t.decl.container ?? "center") === container && t.decl.bar !== false && !(host.os && hiddenUnderOs(t.decl.id)) && !mergedTabTarget(t.decl.id) && !(container === "center" && removedTabTarget(t.decl.id)));
   const byId = new Map(declared.map((t) => [t.decl.id, t]));
   const known = new Set(defs.map((d) => d.declared).filter(Boolean) as string[]);
   // A catalog renderer serves its tab in whichever container declares it.

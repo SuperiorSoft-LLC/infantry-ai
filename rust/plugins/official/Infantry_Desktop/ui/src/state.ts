@@ -4,6 +4,12 @@
 // is in front. Minimizing hides an app but keeps it running (its state survives); closing ends it. Opening one app sends the
 // one in front to the taskbar-to-be (minimized) rather than closing it.
 
+/** BOS-24: under BattalionOS (the window is an OS app) the desktop lists no Apps app and offers no updates: the OS has its own. */
+export const appsListed = <T extends { id: string }>(all: readonly T[], underOs: boolean): T[] => all.filter((a) => !(underOs && a.id === "apps"));
+
+/** BOS-24: the updates the menu shows; none under BattalionOS, where the OS updates apps. */
+export const updatesShown = <T>(all: readonly T[], underOs: boolean): T[] => (underOs ? [] : [...all]);
+
 export type AppId = "orchestrator" | "apps";
 export type WindowState = "closed" | "open" | "minimized";
 

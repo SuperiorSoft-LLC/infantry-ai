@@ -25,9 +25,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@infantry/ui";
-import { AgentAvatar, SCOPE_ATTRIBUTE, useAgentActivity, usePreference, windowFrame, type FrameLink, type ShellProps } from "@infantry/ui-plugin-api";
+import { AgentAvatar, SCOPE_ATTRIBUTE, osApp, useAgentActivity, usePreference, windowFrame, type FrameLink, type ShellProps } from "@infantry/ui-plugin-api";
 import { cellAt, CELL_H, CELL_W, drop, DRAG_THRESHOLD, GRID_PAD, gridSize, neighbor, parsePositions, place, POSITIONS_KEY, serializePositions, type Direction, type GridSize } from "./grid";
-import { initialState, reduce, toggle, type AppId, type DesktopState } from "./state";
+import { appsListed, initialState, updatesShown, reduce, toggle, type AppId, type DesktopState } from "./state";
 import { appRoute, createUpdatesStore, versionLine, type AppUpdate, type UpdatesStore } from "./updates";
 
 /** What the "About" of an app says: the owner's legibility rule (an app is a plugin under Apache-2.0, not core). */
@@ -43,6 +43,9 @@ const APPS: readonly AppInfo[] = [
   { id: "orchestrator", name: "Infantry AI", icon: LayoutDashboard, plugin: "Infantry_Ui", version: "1.0.0" },
   { id: "apps", name: "Apps", icon: PackageOpen, plugin: "Infantry_Installer", version: "1.0.0" },
 ];
+
+/** BOS-24: the apps this window lists (no Apps app under BattalionOS). */
+const listed = (): AppInfo[] => appsListed(APPS, osApp() !== null);
 
 /** The layout contribution's preference value for this plugin: `<Plugin>/<id>`. */
 export const layoutChoice = (plugin: string): string => `${plugin}/infantry.desktop`;
@@ -326,7 +329,7 @@ function StartMenu({ state, onOpen }: { state: DesktopState; onOpen: (app: AppIn
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" className="w-auto min-w-48" data-testid="start-menu">
         <DropdownMenuLabel className="text-xs text-muted-foreground">Apps</DropdownMenuLabel>
-        {APPS.map((a) => {
+        {listed().map((a) => {
           const Icon = a.icon;
           return (
             <DropdownMenuItem key={a.id} onSelect={() => onOpen(a)} data-testid={`start-app-${a.id}`}>
@@ -359,7 +362,7 @@ function StartMenu({ state, onOpen }: { state: DesktopState; onOpen: (app: AppIn
  * badge counts them and its menu lists each as "name, installed → available". Picking one opens the Apps app on that app's page.
  */
 function UpdatesMenu({ store, onPick }: { store: UpdatesStore; onPick: (u: AppUpdate) => void }) {
-  const updates = useStore(store, (s) => s.updates);
+  const updates = updatesShown(useStore(store, (s) => s.updates), osApp() !== null);
   if (updates.length === 0) return null;
   return (
     <DropdownMenu>
@@ -395,7 +398,7 @@ function UpdatesMenu({ store, onPick }: { store: UpdatesStore; onPick: (u: AppUp
 
 /** Along the bottom on a desktop, a dock on a phone: the Start button, then one entry per open app. Clicking a minimized entry restores it; the front one minimizes. */
 function Taskbar({ state, updates, onToggle, onOpen, onOpenUpdate }: { state: DesktopState; updates: UpdatesStore | null; onToggle: (app: AppInfo) => void; onOpen: (app: AppInfo) => void; onOpenUpdate: (u: AppUpdate) => void }) {
-  const open = APPS.filter((a) => state.windows[a.id] !== "closed");
+  const open = listed().filter((a) => state.windows[a.id] !== "closed");
   return (
     <nav aria-label="Taskbar" data-testid="taskbar" className="flex h-full min-w-0 items-center gap-1">
       <StartMenu state={state} onOpen={onOpen} />
@@ -472,9 +475,9 @@ export function Desktop({ plugin, link, Shell, View }: { plugin: string; link: F
     <div className="flex h-full w-full flex-col overflow-hidden bg-gradient-to-br from-background via-muted to-background">
      <div className="relative min-h-0 flex-1 overflow-hidden">
       {state.front === null && (
-        <IconGrid apps={APPS} running={(id) => state.windows[id] !== "closed"} onOpen={(id) => dispatch({ type: "open", app: id })} onAbout={setAbout} />
+        <IconGrid apps={listed()} running={(id) => state.windows[id] !== "closed"} onOpen={(id) => dispatch({ type: "open", app: id })} onAbout={setAbout} />
       )}
-      {APPS.map(
+      {listed().map(
         (a) =>
           state.windows[a.id] !== "closed" && (
             <Window key={a.id} show={state.front === a.id}>

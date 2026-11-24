@@ -11,5 +11,12 @@ const REMOVED: Record<string, RemovedTabTarget> = {
   "infantry.prompts": { kind: "right", tab: "prompts" },
 };
 
+// BOS-24: under BattalionOS (window `app-<id>`) the OS lists, installs and updates apps in its own Apps list and Armory. Infantry AI's
+// own Apps tab (a screen for its own plugins) gets no tab there, so the two are never shown side by side. The Plugins screen stays.
+const HIDDEN_UNDER_OS = new Set(["infantry.installer"]);
+
+/** Whether tab [id] is left out of the tab bar while the window is an app of BattalionOS. */
+export const hiddenUnderOs = (id: string): boolean => HIDDEN_UNDER_OS.has(id);
+
 /** Where a removed centre tab id now lives, or null for any other id. */
 export const removedTabTarget = (id: string): RemovedTabTarget | null => REMOVED[id] ?? null;

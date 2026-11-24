@@ -29,3 +29,18 @@ describe("removed centre tabs", () => {
     expect(h).not.toContain("SessionActionButtons");
   });
 });
+
+describe("BOS-24: tabs hidden under BattalionOS", () => {
+  it("hides Infantry AI's own Apps tab there and no other", async () => {
+    const { hiddenUnderOs } = await import("../src");
+    expect(hiddenUnderOs("infantry.installer")).toBe(true);
+    for (const id of ["infantry.plugins", "infantry.settings", "cli", "infantry.chat"]) expect(hiddenUnderOs(id)).toBe(false);
+  });
+});
+
+describe("BOS-24: the tab bar leaves Apps out under the OS", () => {
+  it("the shell's tab list asks hiddenUnderOs with the host's os", () => {
+    const src = shell("plugins/catalog.tsx");
+    expect(src).toContain("host.os && hiddenUnderOs(t.decl.id)");
+  });
+});

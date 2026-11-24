@@ -53,3 +53,17 @@ describe("desktop window state", () => {
     expect(s.routes).toEqual({});
   });
 });
+
+describe("BOS-24: under BattalionOS the desktop lists no Apps app and shows no updates", () => {
+  const all = [{ id: "orchestrator" }, { id: "apps" }];
+  it("keeps both apps standalone and drops Apps under the OS", async () => {
+    const { appsListed } = await import("../src/state");
+    expect(appsListed(all, false).map((a) => a.id)).toEqual(["orchestrator", "apps"]);
+    expect(appsListed(all, true).map((a) => a.id)).toEqual(["orchestrator"]);
+  });
+  it("shows the updates standalone and none under the OS", async () => {
+    const { updatesShown } = await import("../src/state");
+    expect(updatesShown([1, 2], false)).toEqual([1, 2]);
+    expect(updatesShown([1, 2], true)).toEqual([]);
+  });
+});
