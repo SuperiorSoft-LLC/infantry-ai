@@ -5,6 +5,7 @@
 // platform API themselves.
 import { browserHost, type Host } from "@infantry/client";
 import { battalionAppId, battalionHost } from "./battalion";
+import { battalionFrameHost, frameAppId, windowLink } from "./battalion/frame";
 import { tauriHost } from "./tauri";
 
 /** Inside the Tauri app (desktop or phone). */
@@ -13,4 +14,7 @@ export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in
 /** Set when this window is an app window of BattalionOS. */
 const osApp = isTauri ? battalionAppId() : null;
 
-export const host: Host = osApp ? battalionHost(osApp) : isTauri ? tauriHost() : browserHost();
+/** Set when this page is drawn in a frame of the BattalionOS window (BOS-17): it calls the OS by messages. */
+const frameApp = osApp ? null : frameAppId();
+
+export const host: Host = osApp ? battalionHost(osApp) : frameApp ? battalionFrameHost(frameApp, windowLink()) : isTauri ? tauriHost() : browserHost();
