@@ -11,6 +11,7 @@ import { PerfOverlay, perfOn } from "./components/layout/perf-overlay";
 import { promptsStore } from "./components/session/use-prompts";
 import { uiPluginsStore } from "./plugins/web-plugins";
 import { listenDaemonNotices, startUpdateCheck } from "./components/settings/desktop-install";
+import { splashMessage, startFailed } from "./splash";
 import "@infantry/ui/styles.css";
 
 /** Removes the start splash (index.html) once the UI has rendered; a daemon fault shows its message on it instead. */
@@ -19,10 +20,6 @@ function hideSplash() {
   if (!el) return;
   el.style.opacity = "0";
   setTimeout(() => el.remove(), 220);
-}
-function splashMessage(text: string) {
-  const m = document.getElementById("splash-msg");
-  if (m) { m.textContent = text; m.hidden = false; }
 }
 /** BOOT-SPLASH-1: the daemon owns the boot steps; the splash only shows the current label and N of M, then hands over. */
 function bootLabel(data: string): { label: string; ready: boolean } | null {
@@ -89,7 +86,4 @@ void initDaemon().then(() => {
   if (perfScenario) requestAnimationFrame(() => void runPerfScenario(perfScenario as string));
   // RUST-UPD-1: an installed desktop checks its feed once at start and posts a notice; it never installs by itself.
   else startUpdateCheck();
-}).catch((err) => {
-  clearTimeout(splashTimer);
-  splashMessage(`Could not start: ${err instanceof Error ? err.message : String(err)}`);
-});
+}).catch((err) => startFailed(err, splashTimer));

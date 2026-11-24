@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 // BOS-17: the page in a frame of the OS window calls the OS by messages (the same app commands, the same results); in a window of its own
 // it keeps the direct commands. A page draws no title bar, desktop or taskbar of its own under the OS.
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { battalionFrameHost, frameAppId, frameCaller, type FrameLink } from "../../../shell/src/host/battalion/frame";
 
 /** A desktop that answers like the shell: `answers[cmd]` or a refusal; every request is recorded. */
@@ -24,11 +24,12 @@ function desktop(answers: Record<string, unknown>) {
 }
 
 describe("is this page in an OS frame", () => {
-  it("only with a parent window, a valid app id in the flag, and no Tauri window", () => {
+  it("only with a parent window and a valid app id in the flag (Tauri internals do not matter)", () => {
     expect(frameAppId({ framed: true, search: "?bos-app=infantry-ai" })).toBe("infantry-ai");
     expect(frameAppId({ framed: true, search: "?x=1&bos-app=infantry-ai" })).toBe("infantry-ai");
     expect(frameAppId({ framed: false, search: "?bos-app=infantry-ai" })).toBeNull();
-    expect(frameAppId({ framed: true, tauri: true, search: "?bos-app=infantry-ai" })).toBeNull();
+    // BOS-26: Windows gives the frame the Tauri internals of the OS window; being framed still decides it (the env no longer carries a Tauri flag).
+    expect(frameAppId({ framed: true, tauri: true, search: "?bos-app=infantry-ai" } as never)).toBe("infantry-ai");
     for (const s of ["", "?bos-app=", "?bos-app=A", "?bos-app=x", "?bos-app=a/b", "?other=infantry-ai"]) expect(frameAppId({ framed: true, search: s }), s).toBeNull();
   });
 });
@@ -125,5 +126,38 @@ describe("BOS-25: the native calls of the page, asked of the OS by name", () => 
     for (const c of ["update_check", "update_install", "cli_path_set", "ui_runner_set", "pairing_set", "remote_save", "hops_report", "perf_report"]) await expect(h.call(c)).rejects.toThrow(/not available under BattalionOS/);
     expect(d.sent).toEqual([]);
     expect(await h.call("os_window_info")).toMatchObject({ app: "infantry-ai" });
+  });
+});
+
+// BOS-26: on Windows wry injects the Tauri init script into sub-frames, so the page in the OS frame sees `__TAURI_INTERNALS__`.
+// The host the page picks must still be the frame link, never the Tauri window host.
+describe("host picked by a page in an OS frame that has Tauri internals", () => {
+  afterEach(() => (vi.unstubAllGlobals(), vi.resetModules()));
+  async function pick(framed: boolean) {
+    const posted: unknown[] = [];
+    const win: Record<string, unknown> = {
+      location: { search: "?bos-app=infantry-ai" },
+      __TAURI_INTERNALS__: { metadata: { currentWindow: { label: "main" } }, invoke: () => Promise.reject(new Error("must not be called")) },
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    win.parent = framed ? { postMessage: (m: unknown) => posted.push(m) } : win;
+    vi.stubGlobal("window", win);
+    vi.resetModules();
+    const m = await import("../../../shell/src/host/index");
+    return { m, posted };
+  }
+  it("framed: the frame host, isTauri false, and no os_ command is invoked directly", async () => {
+    const { m, posted } = await pick(true);
+    expect(m.isTauri).toBe(false);
+    expect(m.host.os?.appId).toBe("infantry-ai");
+    void m.host.endpoint().catch(() => undefined);
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({ bos: 1, cmd: "os_app_status" });
+    await expect(m.host.call("start_runner")).rejects.toThrow(/not available under BattalionOS/);
+  });
+  it("not framed (a Tauri window of its own): still the Tauri side, not the frame host", async () => {
+    const { m } = await pick(false);
+    expect(m.isTauri).toBe(true);
   });
 });

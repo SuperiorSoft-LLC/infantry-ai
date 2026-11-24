@@ -11,16 +11,22 @@ import { appIdOfLabel, badgeCount, endpointOf, type OsAppStatus } from "./os";
 /** The query the OS adds to the page's url in a frame: `?bos-app=<app id>`. It only tells the page it is in the OS; the OS trusts the frame. */
 export const FRAME_FLAG = "bos-app";
 
-/** The app id when this page is the page of an OS frame: it has a parent window, the flag names a valid app id, and it is not a Tauri window. */
-export function frameAppId(g: { search?: string; framed?: boolean; tauri?: boolean } = pageEnv()): string | null {
-  if (!g.framed || g.tauri) return null;
+/**
+ * The app id when this page is the page of an OS frame: it has a parent window and the flag names a valid app id. Being framed decides it,
+ * and nothing else: on Windows wry puts the Tauri initialization script (`__TAURI_INTERNALS__`) into every sub-frame too (wry 0.57
+ * `with_initialization_script_for_main_only`: "Windows: scripts are always added to subframes"), so the page in the OS frame sees Tauri
+ * internals of the OS window and must not take them for its own window. What the page claims about itself never gives it rights; the OS
+ * trusts the frame it made, not the message (docs/commands.md, "The page in a frame").
+ */
+export function frameAppId(g: { search?: string; framed?: boolean } = pageEnv()): string | null {
+  if (!g.framed) return null;
   const v = new URLSearchParams(g.search ?? "").get(FRAME_FLAG);
   return appIdOfLabel(v ? `app-${v}` : null);
 }
 
-function pageEnv(): { search?: string; framed?: boolean; tauri?: boolean } {
+function pageEnv(): { search?: string; framed?: boolean } {
   if (typeof window === "undefined") return {};
-  return { search: window.location.search, framed: window.parent !== window, tauri: "__TAURI_INTERNALS__" in window };
+  return { search: window.location.search, framed: window.parent !== window };
 }
 
 /** One request to the desktop and its answer (matched by the request id; only the parent window may answer). */
