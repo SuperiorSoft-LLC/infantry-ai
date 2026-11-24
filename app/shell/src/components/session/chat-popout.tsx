@@ -12,6 +12,8 @@ import { clampBox, dragBox, resizeBox, type Box, type Bounds } from "@infantry/c
 const KEY = "infantry.popout.";
 // x < 0 means "right". The default starts below the tab bar and tab headers (Sign out, header buttons), so it never covers them.
 const DEFAULT_Y = 200;
+// Bottom strip left free so the session composer (Send, Stop) is never covered by the untouched default.
+const COMPOSER_CLEAR = 170;
 const DEFAULT_BOX: Box = { x: -1, y: DEFAULT_Y, w: 420, h: 560 };
 
 interface Saved {
@@ -88,9 +90,9 @@ export function ChatPopout({ id, title, sessionId, variant = "popout", onClose, 
     }
   }, [id, saved]);
 
-  // The untouched default (right edge, y = DEFAULT_Y) gets shorter on a short window instead of sliding up over the headers.
+  // The untouched default (right edge, y = DEFAULT_Y) gets shorter on a short window instead of sliding up over the headers or down over the composer.
   const untouched = box.x < 0 && box.y === DEFAULT_Y;
-  const shown = clampBox(untouched ? { ...box, h: Math.max(240, Math.min(box.h, bounds.h - DEFAULT_Y - 12)) } : box, bounds);
+  const shown = clampBox(untouched ? { ...box, h: Math.max(240, Math.min(box.h, bounds.h - DEFAULT_Y - COMPOSER_CLEAR)) } : box, bounds);
   const patch = useCallback((p: Partial<Saved>) => setSaved((s) => ({ ...s, ...p })), []);
 
   const gesture = useRef<{ kind: "move" | "resize"; edge: string; px: number; py: number; start: Box } | null>(null);
