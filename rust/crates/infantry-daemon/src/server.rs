@@ -30,7 +30,7 @@ pub const BUILD: &str = concat!("rust-", env!("CARGO_PKG_VERSION"));
 pub fn build_id() -> &'static str {
     static ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     ID.get_or_init(|| {
-        let Some(bytes) = std::env::current_exe().ok().and_then(|e| std::fs::read(e).ok()) else { return "unknown".into() };
+        let Some(bytes) = crate::own_files::own_binary().and_then(|e| std::fs::read(e).ok()) else { return "unknown".into() };
         let mut h: u64 = 0xcbf2_9ce4_8422_2325;
         for b in &bytes {
             h = (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3);

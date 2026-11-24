@@ -190,7 +190,7 @@ pub fn config(plugins_dir: &Option<PathBuf>, setting: &dyn Fn(&str) -> Option<Va
     let bundled = crate::auth::env(BUNDLED_ENV)
         .or_else(|| one(setting(BUNDLED_KEY)))
         .map(PathBuf::from)
-        .or_else(|| std::env::current_exe().ok()?.parent().map(|p| p.join(BUNDLED_DIR)));
+        .or_else(|| crate::own_files::package_dir().map(|p| p.join(BUNDLED_DIR)));
     let canon = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
     let own = plugins_dir.as_deref().map(canon);
     let mut bundled_dir: Option<PathBuf> = None;

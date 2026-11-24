@@ -19,6 +19,7 @@ pub mod health;
 pub mod mcp;
 pub mod mode;
 pub mod os_app;
+pub mod own_files;
 pub mod pods;
 pub mod held;
 pub mod run;

@@ -123,7 +123,7 @@ fn crash_evidence(health_dir: &Path, pid: i64, dumps: Option<&Path>) -> Vec<Stri
         out.push(format!("crash file: {}", f.display()));
     }
     if let Some(dir) = dumps {
-        let exe = std::env::current_exe().ok().and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_else(|| "infantry-daemon.exe".into());
+        let exe = crate::own_files::own_binary().and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_else(|| "infantry-daemon.exe".into());
         let dump = dir.join(format!("{exe}.{pid}.dmp"));
         if dump.is_file() {
             out.push(format!("crash dump: {}", dump.display()));
@@ -417,7 +417,7 @@ pub fn daemon_registry_dir() -> PathBuf {
 /// Records this process in `dir` (best effort).
 pub fn register_daemon(dir: &Path, state_dir: &Path, port: u16) {
     let _ = std::fs::create_dir_all(dir);
-    let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+    let exe = crate::own_files::own_binary().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
     let v = serde_json::json!({"pid": std::process::id(), "port": port, "exe": exe, "cwd": std::env::current_dir().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(), "stateDir": state_dir.to_string_lossy(), "startedAt": now_ms()});
     let _ = std::fs::write(dir.join(format!("{}.json", std::process::id())), v.to_string());
 }

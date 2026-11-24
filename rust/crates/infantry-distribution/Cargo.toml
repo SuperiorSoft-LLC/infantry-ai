@@ -8,6 +8,10 @@ license = "Apache-2.0"
 description = "The Infantry AI distribution: the infantry-daemon binary, which links the daemon library and the concrete harnesses"
 publish = false
 
+[lib]
+name = "infantry_distribution"
+crate-type = ["cdylib", "rlib"]
+
 [[bin]]
 name = "infantry-daemon"
 path = "src/main.rs"
@@ -25,4 +29,8 @@ infantry-runner-link = { path = "../infantry-runner-link" }
 infantry-runner-local = { path = "../infantry-runner-local" }
 infantry-protocol = { path = "../infantry-protocol" }
 serde_json = "1"
+
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }
+
+[dev-dependencies]
+libloading = "0.7"

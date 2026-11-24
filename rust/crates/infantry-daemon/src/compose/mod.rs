@@ -141,7 +141,7 @@ fn plugins_dir() -> Option<PathBuf> {
     if let Some(d) = crate::auth::env(PLUGINS_DIR_ENV) {
         return Some(PathBuf::from(d));
     }
-    std::env::current_exe().ok()?.parent().map(|p| p.join("plugins"))
+    crate::own_files::package_dir().map(|p| p.join("plugins"))
 }
 
 /// PM-ROLE-1: the role catalog file of every module that declares one (`module.json` `roleCatalog`, a path inside the

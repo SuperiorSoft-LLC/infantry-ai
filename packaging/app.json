@@ -9,7 +9,7 @@
   "contract": { "min": 1, "max": 1 },
   "minOs": "0.1.0",
   "process": {
-    "windows-x86_64": { "exec": "bin/infantry-daemon.exe", "args": [], "env": {}, "readyTimeoutMs": 60000, "stopTimeoutMs": 15000 }
+    "windows-x86_64": { "library": "lib/infantry_distribution.dll", "args": [], "env": {}, "envScrub": ["INFANTRY_", "AGENTHQ_"], "readyTimeoutMs": 60000, "stopTimeoutMs": 15000 }
   },
   "ui": {
     "entry": "shell/dist/index.html",
@@ -21,6 +21,5 @@
     "schema": 1
   },
   "cli": [{ "name": "infantry", "exec": "bin/infantry.exe" }],
-  "permissions": ["process.spawn", "network", "files.user", "window"],
-  "onOsExit": "keep"
+  "permissions": ["process.spawn", "network", "files.user", "window"]
 }

@@ -35,7 +35,7 @@ impl LaunchBase {
                 None => env.push((crate::auth::TOKEN_ENV.into(), token.to_string())),
             }
         }
-        let cli = cli_launcher(get, std::env::current_exe().ok().as_deref());
+        let cli = cli_launcher(get, crate::own_files::bin_dir().map(|d| d.join("infantry-daemon")).as_deref());
         if let Some(c) = &cli {
             env.push((BIN_ENV.into(), c[0].clone()));
         }

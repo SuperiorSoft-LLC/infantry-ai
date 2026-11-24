@@ -19,10 +19,10 @@ def run_packager(tmp, version="9.8.7"):
     (inp / "plugins/official/Mod/module.json").write_text("{}")
     (inp / "dist").mkdir()
     (inp / "dist/index.html").write_text("<html></html>")
-    (inp / "d.exe").write_bytes(b"MZ daemon")
+    (inp / "d.dll").write_bytes(b"MZ library")
     (inp / "c.exe").write_bytes(b"MZ cli")
     out = Path(tmp) / "out"
-    r = subprocess.run([sys.executable, str(SCRIPT), "--daemon", str(inp / "d.exe"), "--cli", str(inp / "c.exe"), "--plugins", str(inp / "plugins"),
+    r = subprocess.run([sys.executable, str(SCRIPT), "--library", str(inp / "d.dll"), "--cli", str(inp / "c.exe"), "--plugins", str(inp / "plugins"),
                         "--dist", str(inp / "dist"), "--version", version, "--out", str(out)], capture_output=True, text=True)
     return r, out
 
@@ -61,7 +61,10 @@ class Package(unittest.TestCase):
                 names = z.namelist()
                 m = json.loads(z.read("app.json"))
             self.assertEqual((m["id"], m["version"], m["name"]), ("infantry-ai", "9.8.7", "Infantry AI"))
-            self.assertIn(m["process"]["windows-x86_64"]["exec"], names)
+            self.assertIn(m["process"]["windows-x86_64"]["library"], names)
+            self.assertNotIn("exec", m["process"]["windows-x86_64"])
+            self.assertNotIn("onOsExit", m)
+            self.assertFalse([n for n in names if n.endswith("infantry-daemon.exe")], "the daemon program is not in the package")
             self.assertIn(m["ui"]["entry"], names)
             self.assertIn(m["icon"], names)
             self.assertIn(m["cli"][0]["exec"], names)
@@ -73,9 +76,9 @@ class Package(unittest.TestCase):
 
     def test_a_missing_input_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
-            r = subprocess.run([sys.executable, str(SCRIPT), "--daemon", str(Path(tmp) / "no.exe"), "--cli", "x", "--plugins", tmp, "--dist", tmp], capture_output=True, text=True)
+            r = subprocess.run([sys.executable, str(SCRIPT), "--library", str(Path(tmp) / "no.dll"), "--cli", "x", "--plugins", tmp, "--dist", tmp], capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)
-            self.assertIn("daemon not found", r.stderr)
+            self.assertIn("library not found", r.stderr)
 
 
 class Workflows(unittest.TestCase):

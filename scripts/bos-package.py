@@ -3,11 +3,11 @@
 # Copyright (c) SuperiorSoft LLC
 """BOS-9: pack Infantry AI as a BattalionOS app.
 
-  scripts/bos-package --daemon D --cli C --plugins P --dist S [--version V] [--out DIR] [--base-url URL]
+  scripts/bos-package --library L --cli C --plugins P --dist S [--version V] [--out DIR] [--base-url URL]
                       [--minisign-key FILE] [--notes TEXT] [--platform windows-x86_64]
 
 Output in --out (default <repo>/dist-bosapp):
-  infantry-ai-<version>-<platform>.bosapp       a zip: app.json, assets/icon.png, bin/, plugins/, shell/dist/
+  infantry-ai-<version>-<platform>.bosapp       a zip: app.json, assets/icon.png, lib/ (the app library), bin/ (the CLI), plugins/, shell/dist/
   infantry-ai-<version>-<platform>.bosapp.sig   minisign signature of the zip
   feed.json                                     feed v1 (one platform entry) the Armory reads
   catalog-entry.json                            the catalog app entry, with the public key to pin
@@ -15,7 +15,8 @@ Output in --out (default <repo>/dist-bosapp):
 
 Without --minisign-key a THROWAWAY key is made (left in <out>/throwaway.key.json): fine locally, never trusted by a
 real install. With --minisign-key the `minisign` binary signs (`minisign -S`; the .pub file sits beside the key).
-Nothing is uploaded or released here.
+The package holds the daemon as a LIBRARY (lib/infantry_distribution.dll: the infantry-distribution cdylib); the
+infantry-daemon program is not in it. BattalionOS runs the library on its own worker. Nothing is uploaded or released here.
 """
 import argparse, base64, hashlib, json, os, shutil, subprocess, sys, zipfile
 from pathlib import Path
@@ -94,12 +95,12 @@ def add_tree(z, src, prefix):
     return n
 
 
-def build_zip(pkg, manifest, platform, daemon, cli, plugins, dist, icon):
+def build_zip(pkg, manifest, platform, library, cli, plugins, dist, icon):
     ext = EXE[platform]
     with zipfile.ZipFile(pkg, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("app.json", json.dumps(manifest, indent=2) + "\n")
         z.write(icon, manifest["icon"])
-        z.write(daemon, f"bin/infantry-daemon{ext}")
+        z.write(library, manifest["process"][platform]["library"])
         z.write(cli, f"bin/infantry{ext}")
         if not add_tree(z, plugins, "plugins"):
             fail(f"{plugins} holds no files")
@@ -118,7 +119,7 @@ def need_file(p, what):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--daemon", required=True)
+    ap.add_argument("--library", required=True, help="the infantry-distribution library (target/<profile>/infantry_distribution.dll)")
     ap.add_argument("--cli", required=True)
     ap.add_argument("--plugins", required=True, help="output of rust/plugins/stage.sh (official/<Module>/...)")
     ap.add_argument("--dist", required=True, help="the built shell (app/shell/dist)")
@@ -135,7 +136,7 @@ def main(argv=None):
     manifest = stamp_manifest(version)
     out = Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
-    daemon, cli = need_file(a.daemon, "daemon"), need_file(a.cli, "cli")
+    library, cli = need_file(a.library, "library"), need_file(a.cli, "cli")
     plugins, dist = Path(a.plugins), Path(a.dist)
     for d, w in ((plugins, "plugins dir"), (dist, "shell dist")):
         if not d.is_dir():
@@ -146,7 +147,7 @@ def main(argv=None):
 
     name = f"infantry-ai-{version}-{a.platform}.bosapp"
     pkg = out / name
-    build_zip(pkg, manifest, a.platform, daemon, cli, plugins, dist, icon)
+    build_zip(pkg, manifest, a.platform, library, cli, plugins, dist, icon)
     data = pkg.read_bytes()
     if a.minisign_key:
         sig = sign_with_minisign(a.minisign_key, pkg)
