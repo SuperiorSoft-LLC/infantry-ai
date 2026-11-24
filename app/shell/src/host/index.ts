@@ -5,7 +5,7 @@
 // platform API themselves.
 import { browserHost, type Host } from "@infantry/client";
 import { battalionAppId, battalionHost } from "./battalion";
-import { battalionFrameHost, frameAppId, windowLink } from "./battalion/frame";
+import { battalionFrameHost, frameAppId, installFrameDrag, windowLink } from "./battalion/frame";
 import { tauriHost } from "./tauri";
 
 /** Set when this page is drawn in a frame of the BattalionOS window (BOS-17): it calls the OS by messages. Being framed decides it (BOS-26). */
@@ -16,5 +16,8 @@ export const isTauri = !frameApp && typeof window !== "undefined" && "__TAURI_IN
 
 /** Set when this window is an app window of BattalionOS. */
 const osApp = isTauri ? battalionAppId() : null;
+
+// BOS-27: the drag areas of the page's own title bar start the window drag by message (the attribute does nothing in a frame).
+if (frameApp) installFrameDrag(windowLink());
 
 export const host: Host = frameApp ? battalionFrameHost(frameApp, windowLink()) : osApp ? battalionHost(osApp) : isTauri ? tauriHost() : browserHost();

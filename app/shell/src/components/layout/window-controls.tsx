@@ -3,11 +3,12 @@
 // Custom titlebar window buttons (Tauri decorations are off). Only the desktop app has them (HC-1 host.window): a browser
 // and a phone draw their own frame, so nothing renders there (UI-WINCTRL-WEB-1: no dead buttons widening a phone page).
 import { Minus, Square, X } from "lucide-react";
+import { useEffect } from "react";
 import type { HostWindow } from "@infantry/client";
 import { cn } from "@infantry/ui";
 import { host } from "@/host";
 
-type WindowAction = keyof HostWindow;
+type WindowAction = Exclude<keyof HostWindow, "bar">;
 
 function WinButton({ frame, label, action, danger, children }: { frame: HostWindow; label: string; action: WindowAction; danger?: boolean; children: React.ReactNode }) {
   return (
@@ -28,6 +29,11 @@ function WinButton({ frame, label, action, danger, children }: { frame: HostWind
 
 export function WindowControls() {
   const frame = host.window;
+  // BOS-27: under BattalionOS the OS draws its own bar until this one says it is there.
+  useEffect(() => {
+    frame?.bar?.(true);
+    return () => frame?.bar?.(false);
+  }, [frame]);
   if (!frame) return null;
   return (
     <div className="flex h-full items-stretch">
