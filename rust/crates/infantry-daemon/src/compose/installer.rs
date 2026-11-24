@@ -315,7 +315,7 @@ pub fn app_removal(id: &str, modules: &[(String, Value)], keep: Option<&str>) ->
 }
 
 /// Copies a module folder (files and folders; a link is refused, so a source cannot reach outside itself).
-fn copy_dir(from: &Path, to: &Path) -> Result<(), String> {
+pub(crate) fn copy_dir(from: &Path, to: &Path) -> Result<(), String> {
     std::fs::create_dir_all(to).map_err(|e| format!("{}: {e}", to.display()))?;
     for entry in std::fs::read_dir(from).map_err(|e| format!("{}: {e}", from.display()))? {
         let entry = entry.map_err(|e| e.to_string())?;

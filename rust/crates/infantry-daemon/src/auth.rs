@@ -125,6 +125,15 @@ impl AccessPolicy {
         Ok(AccessPolicy { digest: token.map(digest), browser_hosts, app_origins })
     }
 
+    /// BOS-7: the app's own origin (`BATTALION_UI_ORIGIN`) joins the origins admitted on `/ws`.
+    pub fn with_app_origin(mut self, origin: &str) -> AccessPolicy {
+        let o = origin.trim().trim_end_matches('/').to_ascii_lowercase();
+        if !o.is_empty() && !self.app_origins.contains(&o) {
+            self.app_origins.push(o);
+        }
+        self
+    }
+
     pub fn token_required(&self) -> bool {
         self.digest.is_some()
     }

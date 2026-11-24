@@ -15,6 +15,7 @@
 use infantry_daemon::auth::{self, AccessPolicy};
 use infantry_daemon::gateway::{self, legacy, Gateway, GatewayConfig, RouteTable};
 use infantry_daemon::harness;
+use infantry_daemon::os_app;
 use infantry_daemon::server::{self, App};
 use infantry_daemon::sessions::{Config, Daemon};
 use std::path::PathBuf;
@@ -61,7 +62,16 @@ fn main() {
         println!("infantry-daemon [--port N] [--host H] [--mode both|runner|orchestrator] [--link-port N] [--link-bind H] [--runner-host H] [--runner-public-port N] [--state-dir DIR] [--provider NAME] [--legacy-backend CMD] [--legacy-port N] [--gateway-routes JSON]");
         return;
     }
-    let port: u16 = match arg("--port").or_else(|| auth::env("INFANTRY_PORT")) {
+    // BOS-7: an app of BattalionOS only when the OS says so (`BATTALION_CONTRACT`); without it nothing below changes.
+    let os_env = os_app::OsEnv::from_env(&auth::env).unwrap_or_else(|e| fail(e));
+    let launch = match &os_env {
+        Some(o) => {
+            let dir = arg("--state-dir").or_else(|| auth::env("INFANTRY_STATE_DIR")).map(PathBuf::from).or_else(|| o.state_dir.clone()).unwrap_or_else(default_state_dir);
+            os_app::Launch::read(&dir).unwrap_or_else(|e| fail(e))
+        }
+        None => os_app::Launch::default(),
+    };
+    let port: u16 = match arg("--port").or_else(|| auth::env("INFANTRY_PORT")).or_else(|| launch.port.map(|p| p.to_string())) {
         Some(p) => p.trim().parse().unwrap_or_else(|_| fail(format!("bad port `{p}`"))),
         None => DEFAULT_PORT,
     };
@@ -70,11 +80,27 @@ fn main() {
     }
     // RUNNER-POOL-10: --mode, then INFANTRY_MODE; an unknown value refuses to start.
     let mode = infantry_daemon::mode::Mode::resolve(&[arg("--mode").as_deref(), auth::env("INFANTRY_MODE").as_deref()]).unwrap_or_else(|e| fail(e));
-    let host = arg("--host").or_else(|| auth::env("INFANTRY_HOST")).unwrap_or_else(|| "127.0.0.1".into());
-    let state_dir = arg("--state-dir").or_else(|| auth::env("INFANTRY_STATE_DIR")).map(PathBuf::from).unwrap_or_else(default_state_dir);
+    let host = arg("--host").or_else(|| auth::env("INFANTRY_HOST")).or_else(|| launch.host.clone()).unwrap_or_else(|| "127.0.0.1".into());
+    let state_dir = arg("--state-dir").or_else(|| auth::env("INFANTRY_STATE_DIR")).map(PathBuf::from).or_else(|| os_env.as_ref().and_then(|o| o.state_dir.clone())).unwrap_or_else(default_state_dir);
     if let Err(e) = std::fs::create_dir_all(&state_dir) {
         fail(format!("state dir {}: {e}", state_dir.display()));
     }
+    let os_runtime = os_env.map(|o| {
+        // Plugins live in the state dir; the package's own are only the bundled source (set before any thread starts).
+        let exe_plugins = std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.join("plugins")));
+        let bundled = ["INFANTRY_BUNDLED_PLUGINS_DIR", "INFANTRY_PLUGINS_DIR"].iter().find_map(|k| auth::env(k)).map(PathBuf::from).or_else(|| o.app_dir.as_ref().map(|d| d.join("plugins"))).or_else(|| exe_plugins.clone()).filter(|p| p.is_dir());
+        let legacy = auth::env(os_app::LEGACY_PLUGINS_ENV).map(PathBuf::from).or(exe_plugins);
+        let installed = state_dir.join(os_app::INSTALLED_DIR);
+        match os_app::prepare_plugins(&installed, bundled.as_deref(), legacy.as_deref()) {
+            Ok(r) => println!("[infantry] app mode: plugins in {} (migrated {}, synced {})", installed.display(), r.migrated.len(), r.synced.len()),
+            Err(e) => fail(format!("plugins dir {}: {e}", installed.display())),
+        }
+        std::env::set_var("INFANTRY_PLUGINS_DIR", &installed);
+        if let Some(b) = &bundled {
+            std::env::set_var("INFANTRY_BUNDLED_PLUGINS_DIR", b);
+        }
+        os_app::OsRuntime::new(o).unwrap_or_else(|e| fail(e))
+    });
     // RUST-BUG e0c433c9: a panic is written to <state>/health/panics.log, and the next start's health event names it.
     infantry_daemon::health::install_panic_log(&state_dir);
     let registry = harness_registry();
@@ -83,8 +109,21 @@ fn main() {
         Some(h) => Arc::from(h),
         None => fail(format!("no harness named `{provider}`")),
     };
-    let token = auth::token_from_environment().unwrap_or_else(|e| fail(e));
-    let policy = AccessPolicy::new(&host, token.as_deref()).unwrap_or_else(|e| fail(e));
+    let mut token = auth::token_from_environment().unwrap_or_else(|e| fail(e));
+    if token.is_none() {
+        // BOS-7: the launch file's token file (phone access) when no `INFANTRY_TOKEN*` is set.
+        if let Some(f) = &launch.token_file {
+            let t = std::fs::read_to_string(f).unwrap_or_else(|e| fail(format!("launch.json tokenFile {}: {e}", f.display())));
+            token = Some(t.trim_start_matches('\u{feff}').trim().to_string()).filter(|t| !t.is_empty());
+            if token.is_none() {
+                fail(format!("launch.json tokenFile {} is empty", f.display()));
+            }
+        }
+    }
+    let mut policy = AccessPolicy::new(&host, token.as_deref()).unwrap_or_else(|e| fail(e));
+    if let Some(origin) = os_runtime.as_ref().and_then(|o| o.env.ui_origin.as_deref()) {
+        policy = policy.with_app_origin(origin);
+    }
     let mut cfg = Config::new(state_dir.clone(), std::env::current_dir().unwrap_or_else(|_| state_dir.clone()));
     cfg.registry = registry;
     let daemon = Daemon::new(harness, cfg).unwrap_or_else(|e| fail(e));
@@ -118,6 +157,11 @@ fn main() {
         let listener = tokio::net::TcpListener::bind((host.as_str(), port)).await.unwrap_or_else(|e| fail(format!("port {port} could not be bound ({e})")));
         let bound = listener.local_addr().map(|a| a.port()).unwrap_or(port);
         let _ = std::fs::write(state_dir.join("daemon.port"), bound.to_string());
+        if let Some(os) = &os_runtime {
+            if let Err(e) = os.write_ready(&host, bound) {
+                fail(format!("ready file: {e}"));
+            }
+        }
         daemon.health.started(bound, server::BUILD);
         daemon.set_launch(infantry_daemon::harness::launch::LaunchBase::for_daemon(bound, &state_dir, token.as_deref(), &auth::env));
         println!("[infantry] listening on ws://{host}:{bound}/ws (health: http://{host}:{bound}/health)");
@@ -130,16 +174,26 @@ fn main() {
             }
         );
         let app = App { daemon, policy: Arc::new(policy) };
-        let stop = async {
-            let _ = tokio::signal::ctrl_c().await;
+        let os_stop = os_runtime.clone();
+        let stop = async move {
+            match os_stop {
+                // An app daemon ends on the OS's stop call too (the same graceful path as ctrl-c).
+                Some(os) => tokio::select! { _ = tokio::signal::ctrl_c() => {}, _ = os.stopped() => {} },
+                None => {
+                    let _ = tokio::signal::ctrl_c().await;
+                }
+            }
         };
         if let Some(g) = &gateway {
             println!("[infantry] gateway mode: frames no Rust unit owns go to the legacy backend on 127.0.0.1:{}", g.legacy.port);
         }
-        if let Err(e) = server::serve_with(listener, app, gateway, stop).await {
+        if let Err(e) = server::serve_os(listener, app, gateway, os_runtime.clone(), stop).await {
             eprintln!("[infantry] server stopped: {e}");
         }
         let _ = std::fs::remove_file(state_dir.join("daemon.port"));
+        if let Some(os) = &os_runtime {
+            os.clear_ready();
+        }
     });
 }
 

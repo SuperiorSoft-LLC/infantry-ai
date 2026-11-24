@@ -9,7 +9,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::http::{header, HeaderMap, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use infantry_protocol::Envelope;
 use futures_util::StreamExt;
@@ -50,6 +50,8 @@ pub struct App {
 struct Shared {
     app: App,
     gateway: Option<Arc<Gateway>>,
+    /// BOS-7: set only when the OS started this daemon as an app (`BATTALION_CONTRACT`).
+    os: Option<Arc<crate::os_app::OsRuntime>>,
 }
 
 fn h<'a>(headers: &'a HeaderMap, name: header::HeaderName) -> Option<&'a str> {
@@ -80,10 +82,27 @@ async fn health(State(s): State<Shared>, uri: Uri, headers: HeaderMap) -> Respon
         "ok": true, "provider": app.daemon.harness.name(), "contract": crate::wire::CONTRACT,
         "build": BUILD, "buildId": build_id(), "sessions": app.daemon.session_count(),
     });
+    // BOS-7: agent turns in flight, so the OS can ask before an update (only for an app daemon).
+    if s.os.is_some() {
+        use infantry_protocol::session::SessionState;
+        body["busy"] = serde_json::json!(app.daemon.records().iter().filter(|r| matches!(r.state, SessionState::Busy | SessionState::Starting)).count());
+    }
     if let Some(g) = &s.gateway {
         body["legacy"] = serde_json::json!({"port": g.legacy.port, "ready": g.backend_ready(), "pid": g.legacy.pid()});
     }
     ([(header::CONTENT_TYPE, "application/json")], body.to_string()).into_response()
+}
+
+/// BOS-7: `POST /stop` with the OS's per-start secret as bearer. The graceful path of [serve_with] does the rest.
+async fn stop(State(s): State<Shared>, headers: HeaderMap) -> Response {
+    let Some(os) = &s.os else { return (StatusCode::NOT_FOUND, "not found").into_response() };
+    if !os.stop_authorized(h(&headers, header::AUTHORIZATION)) {
+        let mut r = (StatusCode::UNAUTHORIZED, "the stop call needs the app's stop secret as a bearer token").into_response();
+        r.headers_mut().insert(header::WWW_AUTHENTICATE, "Bearer".parse().unwrap());
+        return r;
+    }
+    os.request_stop();
+    ([(header::CONTENT_TYPE, "application/json")], r#"{"ok":true,"stopping":true}"#).into_response()
 }
 
 async fn ws(
@@ -381,7 +400,7 @@ async fn tunnel_connection(daemon: Arc<Daemon>, sid: String, mut socket: WebSock
 }
 
 pub fn router(app: App) -> Router {
-    router_with(app, None)
+    router_with(app, None, None)
 }
 
 /// The units' HTTP routes (`/mail/*`) pass the same access policy as `/ws`.
@@ -418,9 +437,13 @@ async fn plugin_route(State(s): State<Shared>, req: axum::extract::Request) -> R
     resp.body(axum::body::Body::from(body)).unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
 }
 
-fn router_with(app: App, gateway: Option<Arc<Gateway>>) -> Router {
-    let shared = Shared { app: app.clone(), gateway };
-    let mut r = Router::new().route("/ws", get(ws)).route("/health", get(health)).fallback(plugin_route).with_state(shared.clone());
+fn router_with(app: App, gateway: Option<Arc<Gateway>>, os: Option<Arc<crate::os_app::OsRuntime>>) -> Router {
+    let shared = Shared { app: app.clone(), gateway, os: os.clone() };
+    let mut r = Router::new().route("/ws", get(ws)).route("/health", get(health));
+    if os.is_some() {
+        r = r.route(crate::os_app::STOP_PATH, post(stop));
+    }
+    let mut r = r.fallback(plugin_route).with_state(shared.clone());
     if let Some(extra) = app.daemon.units().and_then(|u| u.http()) {
         r = r.merge(extra.layer(axum::middleware::from_fn_with_state(shared, guarded)));
     }
@@ -438,6 +461,18 @@ pub async fn serve_with(
     listener: tokio::net::TcpListener,
     app: App,
     gateway: Option<Arc<Gateway>>,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+) -> std::io::Result<()> {
+    serve_os(listener, app, gateway, None, shutdown).await
+}
+
+/// [serve_with], as an app of BattalionOS when `os` is set: it adds `POST /stop` and `busy` in `/health`. The stop route
+/// only asks; the caller's `shutdown` (which waits on [crate::os_app::OsRuntime::stopped]) ends the server gracefully.
+pub async fn serve_os(
+    listener: tokio::net::TcpListener,
+    app: App,
+    gateway: Option<Arc<Gateway>>,
+    os: Option<Arc<crate::os_app::OsRuntime>>,
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> std::io::Result<()> {
     if let Some(g) = &gateway {
@@ -471,7 +506,7 @@ pub async fn serve_with(
     }
     let tunnel_app = app.clone();
     let tunnel_task = tunnel.map(|t| tokio::spawn(async move { let _ = axum::serve(t, tunnel_router(tunnel_app)).await; }));
-    let r = axum::serve(listener, router_with(app, gateway.clone())).with_graceful_shutdown(shutdown).await;
+    let r = axum::serve(listener, router_with(app, gateway.clone(), os)).with_graceful_shutdown(shutdown).await;
     if let Some(g) = &gateway {
         g.stop();
     }
