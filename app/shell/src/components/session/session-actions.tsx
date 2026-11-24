@@ -2,14 +2,13 @@
 // Copyright (c) SuperiorSoft LLC
 // Session actions (RUST-SESS-2): interrupt (the store's existing `interrupt`), restart (`session_restart`; a mid-turn
 // refusal offers a forced retry), switch provider/model (`session_swap`, providers from the launcher's harness list)
-// and remove. Session stats live in the one Stats modal (top-right button). The header buttons and the composer toolbar open the same dialogs; every dialog is
+// and remove. Session stats live in the one Stats modal (top-right button). The composer toolbar and the agent menu open these dialogs; every dialog is
 // the one modal.
 import { useEffect, useState } from "react";
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
-import { ArrowLeftRight, CircleX, RotateCw } from "lucide-react";
 import { createSessionActions, isMidTurnRefusal, type SessionActions } from "@infantry/client";
-import { AppDialog, Button, IconButton } from "@infantry/ui";
+import { AppDialog, Button } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { useLauncher } from "@/components/dialogs/new-agent-dialog";
 import { ExecutorPicker, type ExecutorValue } from "@/components/dialogs/executor-picker";
@@ -26,25 +25,6 @@ export function openSessionDialog(kind: Modal, sessionId: string): void {
 let actions: SessionActions | null = null;
 export function sessionActions(): SessionActions {
   return (actions ??= createSessionActions(daemonStore().getState()));
-}
-
-/** The header's action buttons. */
-export function SessionActionButtons({ sessionId, busy }: { sessionId: string; busy: boolean }) {
-  const interrupt = useDaemon((s) => s.interrupt);
-  const online = useDaemon((s) => s.connection.state === "open");
-  return (
-    <div role="toolbar" aria-label="Session controls" className="flex items-center gap-1">
-      <IconButton label="Interrupt" disabled={!busy || !online} onClick={() => interrupt(sessionId)}>
-        <CircleX />
-      </IconButton>
-      <IconButton label="Restart session" disabled={!online} onClick={() => openSessionDialog("restart", sessionId)}>
-        <RotateCw />
-      </IconButton>
-      <IconButton label="Switch provider or model" disabled={!online} onClick={() => openSessionDialog("swap", sessionId)}>
-        <ArrowLeftRight />
-      </IconButton>
-    </div>
-  );
 }
 
 /** Rendered once in the session view: whichever session dialog is open. */

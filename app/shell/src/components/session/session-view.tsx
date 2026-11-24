@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useUi } from "@/state/ui-state";
 import { useAgent } from "@/daemon/agents";
 import { TabContent } from "@/components/tabs/tab-content";
+import { removedTabTarget } from "@infantry/client";
 import { useTabs } from "@/plugins/catalog";
 import { SessionHeader } from "./session-header";
 import { SessionTabBar } from "./session-tab-bar";
@@ -18,8 +19,19 @@ export function SessionView() {
   const { sessionTab, set } = ui;
 
   // A tab whose plugin was disabled goes away: fall back to the CLI view.
+  // A saved view or link naming a removed tab (Settings, Prompts) goes where it lives now: the cog's dialog, the right panel.
   useEffect(() => {
-    if (!tabs.some((t) => t.id === sessionTab)) set("sessionTab", "cli");
+    const to = removedTabTarget(sessionTab);
+    if (!to) return;
+    if (to.kind === "dialog") set("dialog", to.dialog);
+    else {
+      set("rightTab", to.tab);
+      set("rightOpen", true);
+    }
+    set("sessionTab", "cli");
+  }, [sessionTab, set]);
+  useEffect(() => {
+    if (!removedTabTarget(sessionTab) && !tabs.some((t) => t.id === sessionTab)) set("sessionTab", "cli");
   }, [sessionTab, tabs, set]);
 
   return (
