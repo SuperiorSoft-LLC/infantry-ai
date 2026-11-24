@@ -10,7 +10,9 @@ import { ChatPanel, type ChatVariant } from "./chat-panel";
 import { clampBox, dragBox, resizeBox, type Box, type Bounds } from "@infantry/client";
 
 const KEY = "infantry.popout.";
-const DEFAULT_BOX: Box = { x: -1, y: 8, w: 420, h: 560 };
+// x < 0 means "right". The default starts below the tab bar and tab headers (Sign out, header buttons), so it never covers them.
+const DEFAULT_Y = 200;
+const DEFAULT_BOX: Box = { x: -1, y: DEFAULT_Y, w: 420, h: 560 };
 
 interface Saved {
   box: Box;
@@ -21,7 +23,12 @@ interface Saved {
 function load(id: string): Saved {
   try {
     const raw = localStorage.getItem(KEY + id);
-    if (raw) return { box: DEFAULT_BOX, minimized: false, maximized: false, ...JSON.parse(raw) };
+    if (raw) {
+      const r = { box: DEFAULT_BOX, minimized: false, maximized: false, ...JSON.parse(raw) };
+      // The old default (top right, never moved) was saved as is; it moves to the new default.
+      if (r.box.x < 0 && r.box.y === 8) r.box = { ...r.box, y: DEFAULT_Y };
+      return r;
+    }
   } catch {
     /* storage unavailable or corrupt: defaults */
   }
@@ -81,7 +88,9 @@ export function ChatPopout({ id, title, sessionId, variant = "popout", onClose, 
     }
   }, [id, saved]);
 
-  const shown = clampBox(box, bounds);
+  // The untouched default (right edge, y = DEFAULT_Y) gets shorter on a short window instead of sliding up over the headers.
+  const untouched = box.x < 0 && box.y === DEFAULT_Y;
+  const shown = clampBox(untouched ? { ...box, h: Math.max(240, Math.min(box.h, bounds.h - DEFAULT_Y - 12)) } : box, bounds);
   const patch = useCallback((p: Partial<Saved>) => setSaved((s) => ({ ...s, ...p })), []);
 
   const gesture = useRef<{ kind: "move" | "resize"; edge: string; px: number; py: number; start: Box } | null>(null);
