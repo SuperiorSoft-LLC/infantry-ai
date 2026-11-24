@@ -6,7 +6,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { browserHost, type Host, type HostOs } from "@infantry/client";
-import { appIdOfLabel, endpointOf, type OsAppStatus } from "./os";
+import { appIdOfLabel, badgeCount, endpointOf, type OsAppStatus } from "./os";
 
 export { appIdOfLabel, endpointOf } from "./os";
 
@@ -27,10 +27,11 @@ let badgeWarned = false;
 function osOf(appId: string): HostOs {
   return {
     appId,
-    showDesktop: () => invoke<void>("os_close_app_window", { id: appId }).catch((e) => Promise.reject(new Error(message(e)))),
+    // The OS knows which app this is from the window (no id is sent): it brings its desktop to the front and minimizes this window.
+    showDesktop: () => invoke<void>("os_show_desktop").catch((e) => Promise.reject(new Error(message(e)))),
     // A failed badge is shown once in the console, never thrown into the UI (it runs on every count change).
     badge: (working, needsInput) =>
-      invoke<void>("os_badge", { id: appId, working, needsInput }).catch((e) => {
+      invoke<void>("os_badge", { count: badgeCount(working, needsInput) }).catch((e) => {
         if (!badgeWarned) (badgeWarned = true), console.warn(`[infantry] os_badge: ${message(e)}`);
       }),
   };

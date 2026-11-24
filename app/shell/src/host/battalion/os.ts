@@ -26,3 +26,6 @@ export function endpointOf(st: OsAppStatus): HostEndpoint {
   if (!st.url) throw new Error(st.lastError ? `The app is not running: ${st.lastError}` : `The app is not running (state: ${st.state}).`);
   return { url: `${st.url.replace(/^http/, "ws").replace(/\/+$/, "")}/ws`, token: null, stress: false, mode: "daemon" };
 }
+
+/** The number on the app's icon (`os_badge {count}`): every agent that is working or waits for the owner; 0 clears it. */
+export const badgeCount = (working: number, needsInput: number): number => Math.max(0, Math.trunc(working) || 0) + Math.max(0, Math.trunc(needsInput) || 0);

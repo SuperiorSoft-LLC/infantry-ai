@@ -91,9 +91,9 @@ export interface LoginWindow {
 export interface HostOs {
   /** The app's id in the OS ("infantry-ai"). */
   readonly appId: string;
-  /** Back to the OS desktop: closes this window; the app keeps running (`os_close_app_window`). */
+  /** Back to the OS desktop: the OS brings it to the front and minimizes this window, which stays open; the app keeps running (`os_show_desktop`). */
   showDesktop(): Promise<void>;
-  /** The agent counts the OS shows on this app's icon (`os_badge`). */
+  /** The agent counts the OS shows on this app's icon as one number, working + needing input (`os_badge {count}`; 0 clears). */
   badge(working: number, needsInput: number): Promise<void>;
 }
 
