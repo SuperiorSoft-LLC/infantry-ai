@@ -5,7 +5,7 @@
 // they live in the daemon). The orchestrator is today's whole shell, drawn untouched. Built from the kit only.
 // DESK-5: the Start menu at the left end of the bottom strip lists the apps; the header's minimize / maximize / close are the
 // shell's own and drive the real window. The app menu acts on the APP inside this OS (minimize to the taskbar, close).
-import { useEffect, useReducer, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { ChevronsDown, Download, LayoutDashboard, LayoutGrid, Minus, MoreVertical, PackageOpen, Power, X } from "lucide-react";
 import {
@@ -26,6 +26,7 @@ import {
   TooltipTrigger,
 } from "@infantry/ui";
 import { AgentAvatar, SCOPE_ATTRIBUTE, useAgentActivity, usePreference, windowFrame, type FrameLink, type ShellProps } from "@infantry/ui-plugin-api";
+import { cellAt, CELL_H, CELL_W, drop, DRAG_THRESHOLD, GRID_PAD, gridSize, neighbor, parsePositions, place, POSITIONS_KEY, serializePositions, type Direction, type GridSize } from "./grid";
 import { initialState, reduce, toggle, type AppId, type DesktopState } from "./state";
 import { appRoute, createUpdatesStore, versionLine, type AppUpdate, type UpdatesStore } from "./updates";
 
@@ -63,19 +64,10 @@ function About({ app, onClose }: { app: AppInfo | null; onClose: () => void }) {
   );
 }
 
-function DesktopIcon({ app, running, onOpen, onAbout }: { app: AppInfo; running: boolean; onOpen: () => void; onAbout: () => void }) {
+function DesktopIcon({ app, running }: { app: AppInfo; running: boolean }) {
   const Icon = app.icon;
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        onAbout();
-      }}
-      title={`${app.name} (right-click for About)`}
-      className="group flex w-24 flex-col items-center gap-1.5 rounded-lg p-2 text-xs hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-    >
+    <>
       <span className="grid size-14 place-items-center rounded-xl border bg-card shadow-sm group-hover:border-foreground/40">
         <Icon className="size-7" />
       </span>
@@ -83,7 +75,126 @@ function DesktopIcon({ app, running, onOpen, onAbout }: { app: AppInfo; running:
         {running && <span className="size-1.5 rounded-full bg-foreground" aria-label="running" />}
         {app.name}
       </span>
-    </button>
+    </>
+  );
+}
+
+const ARROWS: Record<string, Direction> = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down" };
+
+/**
+ * DESKTOP-GRID-1: the icons on a grid. They fill columns from the top left; a mouse or pen drags one, it follows the pointer and
+ * snaps to the nearest cell on release (a free cell takes it, an occupied one swaps). Esc or a release outside cancels. Positions are
+ * saved by app id in a preference. Touch does not drag (it scrolls and taps as before). Arrow keys move the focus, Enter opens.
+ */
+function IconGrid({ apps, running, onOpen, onAbout }: { apps: readonly AppInfo[]; running: (id: AppId) => boolean; onOpen: (id: AppId) => void; onAbout: (a: AppInfo) => void }) {
+  const [raw, setRaw] = usePreference<string>(POSITIONS_KEY, "");
+  const saved = useMemo(() => parsePositions(raw), [raw]);
+  const box = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState<GridSize>({ cols: 1, rows: 1 });
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const measure = () => setSize((o) => { const n = gridSize(el.clientWidth, el.clientHeight); return n.cols === o.cols && n.rows === o.rows ? o : n; });
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const ids = useMemo(() => apps.map((a) => a.id as string), [apps]);
+  const shown = useMemo(() => place(ids, saved, size), [ids, saved, size]);
+  const refs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
+  const press = useRef<{ id: string; px: number; py: number; ox: number; oy: number; moved: boolean; pointer: number } | null>(null);
+  const swallowClick = useRef(false);
+
+  const finish = (e: { clientX: number; clientY: number } | null) => {
+    const p = press.current;
+    press.current = null;
+    setDrag(null);
+    if (!p || !p.moved) return;
+    swallowClick.current = true;
+    const rect = box.current?.getBoundingClientRect();
+    const cell = e && rect ? cellAt(e.clientX - rect.left, e.clientY - rect.top, size) : null;
+    if (!cell) return;
+    const next = drop(ids, saved, size, p.id, cell);
+    if (next !== saved) setRaw(serializePositions(next));
+  };
+
+  return (
+    <div ref={box} data-tauri-drag-region className="absolute inset-0 overflow-hidden" role="group" aria-label="Desktop" data-testid="desktop-grid">
+      {apps.map((a) => {
+        const cell = shown[a.id]!;
+        const dragging = drag?.id === a.id;
+        const left = GRID_PAD + cell.col * CELL_W;
+        const top = GRID_PAD + cell.row * CELL_H;
+        return (
+          <button
+            key={a.id}
+            ref={(el) => {
+              refs.current[a.id] = el;
+            }}
+            type="button"
+            data-testid={`desktop-icon-${a.id}`}
+            data-cell={`${cell.col},${cell.row}`}
+            onClick={() => {
+              if (swallowClick.current) {
+                swallowClick.current = false;
+                return;
+              }
+              onOpen(a.id);
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              onAbout(a);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && press.current) {
+                press.current.moved = true;
+                finish(null);
+                return;
+              }
+              const dir = ARROWS[e.key];
+              if (!dir) return;
+              const to = neighbor(shown, a.id, dir);
+              if (to) {
+                e.preventDefault();
+                refs.current[to]?.focus();
+              }
+            }}
+            onPointerDown={(e) => {
+              if (e.button !== 0 || e.pointerType === "touch") return;
+              press.current = { id: a.id, px: e.clientX, py: e.clientY, ox: left, oy: top, moved: false, pointer: e.pointerId };
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+            }}
+            onPointerMove={(e) => {
+              const p = press.current;
+              if (!p || p.id !== a.id) return;
+              const dx = e.clientX - p.px;
+              const dy = e.clientY - p.py;
+              if (!p.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+              p.moved = true;
+              setDrag({ id: a.id, x: p.ox + dx, y: p.oy + dy });
+            }}
+            onPointerUp={(e) => {
+              if (press.current?.id === a.id) finish(e);
+            }}
+            onPointerCancel={() => finish(null)}
+            onLostPointerCapture={() => {
+              if (press.current?.id === a.id) finish(null);
+            }}
+            title={`${a.name} (right-click for About)`}
+            style={{ left: dragging ? drag.x : left, top: dragging ? drag.y : top, width: CELL_W - 8, touchAction: "manipulation" }}
+            className={cn(
+              "group absolute flex flex-col items-center gap-1.5 rounded-lg p-2 text-xs select-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              dragging && "z-10 cursor-grabbing opacity-80 shadow-lg",
+            )}
+          >
+            <DesktopIcon app={a} running={running(a.id)} />
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -361,11 +472,7 @@ export function Desktop({ plugin, link, Shell, View }: { plugin: string; link: F
     <div className="flex h-full w-full flex-col overflow-hidden bg-gradient-to-br from-background via-muted to-background">
      <div className="relative min-h-0 flex-1 overflow-hidden">
       {state.front === null && (
-        <div data-tauri-drag-region className="absolute inset-0 flex flex-wrap content-start gap-2 p-4" role="group" aria-label="Desktop">
-          {APPS.map((a) => (
-            <DesktopIcon key={a.id} app={a} running={state.windows[a.id] !== "closed"} onOpen={() => dispatch({ type: "open", app: a.id })} onAbout={() => setAbout(a)} />
-          ))}
-        </div>
+        <IconGrid apps={APPS} running={(id) => state.windows[id] !== "closed"} onOpen={(id) => dispatch({ type: "open", app: id })} onAbout={setAbout} />
       )}
       {APPS.map(
         (a) =>
