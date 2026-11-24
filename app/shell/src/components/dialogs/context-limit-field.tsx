@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 // The Max context field (the Kotlin ContextLimitField): a text box, 250k / 500k / 1M / off presets under it, and any
 // value typed in (`300k`, `750000`). Shared by New agent and Modify session; one place, one wording.
-import { CONTEXT_PRESETS, formatContextLimit, parseContextLimit } from "@infantry/client";
+import { CONTEXT_PRESETS, CONTEXT_RANGE_TEXT, formatContextLimit, parseContextLimit } from "@infantry/client";
 import { Button, Input } from "@infantry/ui";
 
 export function ContextLimitField({ idPrefix, value, onChange, hint }: { idPrefix: string; value: string; onChange: (v: string) => void; hint?: string }) {
@@ -24,7 +24,7 @@ export function ContextLimitField({ idPrefix, value, onChange, hint }: { idPrefi
           </Button>
         )}
       </div>
-      {bad && <p className="text-xs text-danger">Not a size: use a number of tokens, 250k, 1m or off.</p>}
+      {bad && <p className="text-xs text-danger">{CONTEXT_RANGE_TEXT}</p>}
       {!bad && parsed != null && (
         <p className="text-xs text-muted-foreground">{parsed === 0 ? "No cap: the harness's own window." : `${formatContextLimit(parsed)} tokens (${parsed.toLocaleString()}).`}</p>
       )}
