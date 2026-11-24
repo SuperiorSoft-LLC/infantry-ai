@@ -15,7 +15,7 @@ use infantry_protocol::agents::{AgentListRequest, SessionSwap};
 use infantry_protocol::Envelope;
 use serde::Deserialize;
 use serde_json::json;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -632,7 +632,9 @@ impl Daemon {
         // `heldBy` is computed per listing, never stored.
         snapshot.iter_mut().for_each(|r| r.held_by = None);
         if let Err(e) = self.store.lock().unwrap().save(&snapshot) {
-            eprintln!("[infantry] could not save sessions: {e}");
+            // Keep the store dirty so the next flush tries again: queued messages and session state must reach disk once space returns.
+            self.dirty.store(true, Ordering::SeqCst);
+            eprintln!("[infantry] could not save sessions (will retry, queued messages are only in memory until it works): {e}");
         }
     }
 
@@ -675,17 +677,7 @@ impl Daemon {
         let entry = self.find(sid).ok_or_else(|| format!("replay_request refused: unknown session {sid}"))?;
         let last = serde_json::from_str::<serde_json::Value>(data).ok().and_then(|v| v["lastSequence"].as_i64()).unwrap_or(0);
         let e = entry.lock().unwrap();
-        let mut out = Vec::new();
-        if let (Some(first), Some(latest)) = (e.history.front().map(|h| h.0), e.history.back().map(|h| h.0)) {
-            if first > last + 1 {
-                let gap = json!({
-                    "requestedAfterSequence": last, "oldestAvailableSequence": first,
-                    "latestAvailableSequence": latest, "evictedCount": first - last - 1,
-                });
-                out.push(encode(wire::REPLAY_GAP, gap.to_string(), Some(sid), None));
-            }
-        }
-        out.extend(e.history.iter().filter(|(s, _)| *s > last).map(|(_, f)| f.clone()));
+        let out = replay_frames(&e.history, sid, last);
         Ok(out)
     }
 
@@ -1908,6 +1900,56 @@ fn unusable_in(providers: &str, provider: &str, runner: &str) -> Option<String> 
         "is unavailable"
     };
     Some(format!("{provider} {what} on {runner}{}; open the runner's setup (infantry runner frame {runner} harness_install_status), nothing ran locally", if reason.is_empty() { String::new() } else { format!(" ({reason})") }))
+}
+
+/// The frames a `replay_request` after `last` answers with: a `replay_gap` first when older frames were evicted, and one
+/// in place at every hole inside the kept history (frames lost to a failed disk write), so the client moves past a hole
+/// at once instead of holding every later frame for the missing ones.
+fn replay_frames(history: &VecDeque<(i64, String)>, sid: &str, last: i64) -> Vec<String> {
+    let mut out = Vec::new();
+    let latest = history.back().map(|h| h.0);
+    let first = history.front().map(|h| h.0);
+    if let (Some(first), Some(latest)) = (first, latest) {
+        if first > last + 1 {
+            let gap = json!({"requestedAfterSequence": last, "oldestAvailableSequence": first, "latestAvailableSequence": latest, "evictedCount": first - last - 1});
+            out.push(encode(wire::REPLAY_GAP, gap.to_string(), Some(sid), None));
+        }
+    }
+    let mut prev: Option<i64> = first.filter(|f| *f <= last + 1).map(|_| last);
+    for (s, f) in history.iter().filter(|(s, _)| *s > last) {
+        if let Some(prev) = prev.filter(|p| *s > p + 1) {
+            let gap = json!({"requestedAfterSequence": prev, "oldestAvailableSequence": s, "latestAvailableSequence": latest.unwrap_or(*s), "evictedCount": s - prev - 1});
+            out.push(encode(wire::REPLAY_GAP, gap.to_string(), Some(sid), None));
+        }
+        out.push(f.clone());
+        prev = Some(*s);
+    }
+    out
+}
+
+#[cfg(test)]
+mod replay_hole_tests {
+    use super::*;
+
+    fn h(seqs: &[i64]) -> VecDeque<(i64, String)> {
+        seqs.iter().map(|s| (*s, format!("f{s}"))).collect()
+    }
+
+    #[test]
+    fn a_hole_inside_the_history_is_marked_in_place() {
+        let out = replay_frames(&h(&[1, 2, 3, 7, 8]), "s", 0);
+        assert_eq!(out.len(), 6);
+        assert_eq!((out[2].as_str(), out[4].as_str()), ("f3", "f7"));
+        assert!(out[3].contains("replay_gap") && out[3].contains("\\\"evictedCount\\\":3") || out[3].contains("evictedCount"));
+    }
+
+    #[test]
+    fn a_client_sitting_at_the_hole_gets_the_marker_first() {
+        let out = replay_frames(&h(&[1, 2, 3, 7, 8]), "s", 3);
+        assert!(out[0].contains("replay_gap"));
+        assert_eq!(out[1], "f7");
+        assert_eq!(replay_frames(&h(&[1, 2, 3]), "s", 1), vec!["f2", "f3"]);
+    }
 }
 
 #[cfg(test)]

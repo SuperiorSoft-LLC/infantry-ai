@@ -144,3 +144,22 @@ describe("daemon store", () => {
     expect((s.getState().sessions.s1.items[0] as { text: string }).text.length).toBe(1000);
   });
 });
+
+describe("a hole in the sequence", () => {
+  it("is skipped after gapWaitMs, marked as missing, and the later frames show (also with no more frames coming)", async () => {
+    const d = fakeDaemon();
+    store = createDaemonStore({ url: "ws://test/ws", transport: d.factory, settings: { flushFallbackMs: 1, gapWaitMs: 30 } });
+    store.getState().connect();
+    d.open();
+    d.push({ type: "ready", data: "instance=i1 since=0" });
+    d.push({ type: "sessions", data: JSON.stringify([rec("s1")]) });
+    d.push({ type: "text_delta", data: "a", sessionId: "s1", sequence: 1 });
+    d.push({ type: "text_delta", data: "z", sessionId: "s1", sequence: 5777 }); // 2..5776 were lost on the daemon's disk
+    await tick();
+    expect(store.getState().sessions.s1.cursor).toBe(1);
+    await new Promise((r) => setTimeout(r, 120));
+    const v = store.getState().sessions.s1;
+    expect(v.cursor).toBe(5777);
+    expect(v.items.map((i) => i.kind)).toEqual(["text", "gap", "text"]);
+  });
+});
