@@ -152,8 +152,7 @@ def main(argv=None):
     chk = subprocess.run([sys.executable, str(REPO / "scripts/bos-crt-check.py"), str(pkg)], capture_output=True, text=True)
     if chk.returncode == 1:  # 2 = no PE file at all (a test fixture), not a failure
         pkg.unlink()
-        fail("a native file in the package imports the dynamic VC++ runtime:
-" + chk.stdout + chk.stderr)
+        fail("a native file in the package imports the dynamic VC++ runtime:\n" + chk.stdout + chk.stderr)
     data = pkg.read_bytes()
     if a.minisign_key:
         sig = sign_with_minisign(a.minisign_key, pkg)
