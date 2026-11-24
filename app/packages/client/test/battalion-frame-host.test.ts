@@ -78,3 +78,52 @@ describe("answers", () => {
     await expect(q).resolves.toEqual({ app: "infantry-ai" });
   });
 });
+
+describe("BOS-25: the native calls of the page, asked of the OS by name", () => {
+  it("pickFolder is os_pick_folder with the title; cancelled is null", async () => {
+    const d = desktop({ os_pick_folder: "C:\\work\\proj" });
+    expect(await battalionFrameHost("infantry-ai", d.link).pickFolder("Project folder")).toBe("C:\\work\\proj");
+    expect(d.sent.map((s) => [s.cmd, s.args])).toEqual([["os_pick_folder", { title: "Project folder" }]]);
+    expect(await battalionFrameHost("infantry-ai", desktop({ os_pick_folder: null }).link).pickFolder("x")).toBeNull();
+  });
+  it("a refused folder dialog (no files.user permission) is an error the caller can show", async () => {
+    await expect(battalionFrameHost("infantry-ai", desktop({}).link).pickFolder("x")).rejects.toThrow(/not available/);
+  });
+  it("openExternal is os_open_external with the url, and a refusal rejects (callers keep their catch)", async () => {
+    const d = desktop({ os_open_external: null });
+    await battalionFrameHost("infantry-ai", d.link).openExternal("https://example.com/a");
+    expect(d.sent.map((s) => [s.cmd, s.args])).toEqual([["os_open_external", { url: "https://example.com/a" }]]);
+    await expect(battalionFrameHost("infantry-ai", desktop({}).link).openExternal("file:///c:/x")).rejects.toThrow();
+  });
+  it("the sign-in window: the OS opens it; its addresses and its end come back to the page's handlers; close asks the OS", async () => {
+    const d = desktop({ os_login_window_open: null, os_login_window_close: null });
+    const h = battalionFrameHost("infantry-ai", d.link);
+    const urls: string[] = [];
+    let closed = 0;
+    const win = await h.openLoginWindow("https://claude.ai/login", ["https://claude.ai/"], { onUrl: (u) => void urls.push(u), onClosed: () => void closed++ });
+    expect(win).not.toBeNull();
+    expect(d.sent.map((s) => [s.cmd, s.args])).toEqual([["os_login_window_open", { url: "https://claude.ai/login" }]]);
+    d.deliver({ bos: 1, event: "os_login_url", url: "https://claude.ai/code?x=1" }, d.parent);
+    d.deliver({ bos: 1, event: "os_login_url", url: "https://claude.ai/code?x=1" }, { name: "another window" });
+    expect(urls).toEqual(["https://claude.ai/code?x=1"]); // only the desktop's events count
+    d.deliver({ bos: 1, event: "os_login_closed" }, d.parent);
+    expect(closed).toBe(1);
+    win!.close();
+    await Promise.resolve();
+    expect(d.sent.at(-1)?.cmd).toBe("os_login_window_close");
+  });
+  it("a refused sign-in window rejects and later events reach nobody", async () => {
+    const d = desktop({});
+    const urls: string[] = [];
+    await expect(battalionFrameHost("infantry-ai", d.link).openLoginWindow("https://x.test/", [], { onUrl: (u) => void urls.push(u), onClosed: () => {} })).rejects.toThrow(/not available/);
+    d.deliver({ bos: 1, event: "os_login_url", url: "https://x.test/y" }, d.parent);
+    expect(urls).toEqual([]);
+  });
+  it("the app's own window commands never leave the page; os_* commands go to the desktop", async () => {
+    const d = desktop({ os_window_info: { label: "app-infantry-ai", app: "infantry-ai" } });
+    const h = battalionFrameHost("infantry-ai", d.link);
+    for (const c of ["update_check", "update_install", "cli_path_set", "ui_runner_set", "pairing_set", "remote_save", "hops_report", "perf_report"]) await expect(h.call(c)).rejects.toThrow(/not available under BattalionOS/);
+    expect(d.sent).toEqual([]);
+    expect(await h.call("os_window_info")).toMatchObject({ app: "infantry-ai" });
+  });
+});

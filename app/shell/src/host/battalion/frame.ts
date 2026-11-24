@@ -5,7 +5,7 @@
 // (`os_window_info`, `os_app_status`, `os_app_health`, `os_close_app_window`, `os_badge`, `os_show_desktop`), the same results. The
 // desktop knows which app this is from the frame that sent the message, never from the message. In a window of its own (the pop out
 // later) the page keeps using the direct commands (`./index.ts`). No Tauri import here.
-import { browserHost, type Host, type HostOs } from "@infantry/client";
+import { browserHost, type Host, type HostOs, type LoginWindowHandlers } from "@infantry/client";
 import { appIdOfLabel, badgeCount, endpointOf, type OsAppStatus } from "./os";
 
 /** The query the OS adds to the page's url in a frame: `?bos-app=<app id>`. It only tells the page it is in the OS; the OS trusts the frame. */
@@ -34,12 +34,17 @@ export interface FrameLink {
 
 const message = (e: unknown) => (e instanceof Error ? e.message : typeof e === "string" ? e : (JSON.stringify(e) ?? String(e)));
 
-export function frameCaller(link: FrameLink, timeoutMs = 15_000) {
+/** An event the desktop sends this frame (BOS-25: the sign-in window reached an address, or ended): `{bos: 1, event, ...}`, from the parent only. */
+export type FrameEventHandler = (event: string, data: Record<string, unknown>) => void;
+
+export function frameCaller(link: FrameLink, timeoutMs = 15_000, onEvent?: FrameEventHandler) {
   let n = 0;
   const pending = new Map<string, { ok: (v: unknown) => void; fail: (e: Error) => void }>();
   link.listen((data, source) => {
     const d = data as { bos?: unknown; id?: unknown; ok?: unknown; result?: unknown; error?: unknown } | null;
-    if (source !== link.parent || !d || typeof d !== "object" || d.bos !== 1 || typeof d.id !== "string") return;
+    if (source !== link.parent || !d || typeof d !== "object" || d.bos !== 1) return;
+    if (typeof (d as { event?: unknown }).event === "string") return onEvent?.((d as { event: string }).event, d as Record<string, unknown>);
+    if (typeof d.id !== "string") return;
     const p = pending.get(d.id);
     if (!p) return;
     pending.delete(d.id);
@@ -74,7 +79,13 @@ function osOf(appId: string, call: ReturnType<typeof frameCaller>): HostOs {
 
 /** The Host for an OS frame: the page's own socket and fetch, no embedded runner, no frame buttons (the OS draws the window, taskbar and desktop). */
 export function battalionFrameHost(appId: string, link: FrameLink): Host {
-  const call = frameCaller(link);
+  const loginHandlers = new Set<LoginWindowHandlers>();
+  const call = frameCaller(link, undefined, (event, data) => {
+    for (const h of [...loginHandlers]) {
+      if (event === "os_login_url" && typeof data.url === "string") h.onUrl(data.url);
+      else if (event === "os_login_closed") (loginHandlers.delete(h), h.onClosed());
+    }
+  });
   const page = browserHost();
   return {
     ...page,
@@ -85,7 +96,29 @@ export function battalionFrameHost(appId: string, link: FrameLink): Host {
       const st = await call<OsAppStatus>("os_app_status").catch((e) => Promise.reject(new Error(message(e))));
       return endpointOf(st);
     },
-    call: <T>(command: string, args?: Record<string, unknown>) => call<T>(command, args),
+    // BOS-25: the native things the standalone app does with its own window are asked of the OS by name (the OS checks the manifest permission of each).
+    pickFolder: async (title) => (await call<string | null>("os_pick_folder", { title })) ?? null,
+    openExternal: async (url) => void (await call<void>("os_open_external", { url })),
+    async openLoginWindow(url, _watch, handlers) {
+      // The OS opens the window (the page cannot), as the standalone app does; every address it reaches comes back, then its end.
+      loginHandlers.add(handlers);
+      try {
+        await call<void>("os_login_window_open", { url });
+      } catch (e) {
+        loginHandlers.delete(handlers);
+        throw new Error(message(e));
+      }
+      return {
+        close() {
+          loginHandlers.delete(handlers);
+          void call<void>("os_login_window_close").catch(() => undefined);
+        },
+      };
+    },
+    // The app's own window commands (update, pairing, runner, CLI path, reports) have no meaning inside the OS: they never leave the page.
+    // Only the OS's own app commands (`os_*`) go to the desktop.
+    call: <T>(command: string, args?: Record<string, unknown>) =>
+      command.startsWith("os_") ? call<T>(command, args) : Promise.reject<T>(new Error(`'${command}' is not available under BattalionOS`)),
     listen: async () => () => {},
   };
 }
