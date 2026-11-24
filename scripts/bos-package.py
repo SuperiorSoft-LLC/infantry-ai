@@ -148,6 +148,12 @@ def main(argv=None):
     name = f"infantry-ai-{version}-{a.platform}.bosapp"
     pkg = out / name
     build_zip(pkg, manifest, a.platform, library, cli, plugins, dist, icon)
+    # BOS-CRT: a native file that imports the dynamic VC++ runtime stops on a clean Windows (STATUS_DLL_NOT_FOUND).
+    chk = subprocess.run([sys.executable, str(REPO / "scripts/bos-crt-check.py"), str(pkg)], capture_output=True, text=True)
+    if chk.returncode == 1:  # 2 = no PE file at all (a test fixture), not a failure
+        pkg.unlink()
+        fail("a native file in the package imports the dynamic VC++ runtime:
+" + chk.stdout + chk.stderr)
     data = pkg.read_bytes()
     if a.minisign_key:
         sig = sign_with_minisign(a.minisign_key, pkg)
