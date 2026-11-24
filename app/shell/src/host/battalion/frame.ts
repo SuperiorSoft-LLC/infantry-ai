@@ -5,7 +5,7 @@
 // (`os_window_info`, `os_app_status`, `os_app_health`, `os_close_app_window`, `os_badge`, `os_show_desktop`), the same results. The
 // desktop knows which app this is from the frame that sent the message, never from the message. In a window of its own (the pop out
 // later) the page keeps using the direct commands (`./index.ts`). No Tauri import here.
-import { browserHost, type Host, type HostOs, type HostWindow, type LoginWindowHandlers } from "@infantry/client";
+import { browserHost, type Host, type HostOs, type LoginWindowHandlers } from "@infantry/client";
 import { appIdOfLabel, badgeCount, endpointOf, type OsAppStatus } from "./os";
 
 /** The query the OS adds to the page's url in a frame: `?bos-app=<app id>`. It only tells the page it is in the OS; the OS trusts the frame. */
@@ -83,44 +83,7 @@ function osOf(appId: string, call: ReturnType<typeof frameCaller>): HostOs {
   };
 }
 
-/**
- * BOS-27: the OS window has no Windows title bar, so the page's own bar carries the window buttons: each asks the OS by name (the OS
- * accepts them from the app view on screen only). `bar` tells the OS the page's bar is there, so it draws none over it.
- */
-function windowOf(call: ReturnType<typeof frameCaller>): HostWindow {
-  const ask = (cmd: string, args?: Record<string, unknown>) => void call<void>(cmd, args).catch((e) => console.warn(`[infantry] ${cmd}: ${message(e)}`));
-  return {
-    minimize: () => ask("os_window_minimize"),
-    toggleMaximize: () => ask("os_window_toggle_maximize"),
-    close: () => ask("os_window_close"),
-    bar: (on) => ask("os_window_bar", { on }),
-  };
-}
-
-/** A pointer press that starts a window drag: the left button on an element that carries `data-tauri-drag-region` itself (not on a child of it, so buttons and fields in the bar stay clickable). */
-export function dragStart(e: { button: number; detail: number; target: unknown }): "drag" | "maximize" | null {
-  if (e.button !== 0) return null;
-  const t = e.target as { getAttribute?: (n: string) => string | null } | null;
-  const v = t?.getAttribute?.("data-tauri-drag-region");
-  if (v == null || v === "false") return null;
-  return e.detail >= 2 ? "maximize" : "drag";
-}
-
-/**
- * The attribute does nothing in a frame (Tauri's script is the OS shell's, not the page's): the page starts the drag by message on a
- * press on a drag area, and a double click on it toggles maximize. Returns the unsubscribe.
- */
-export function installFrameDrag(link: FrameLink, doc: Pick<Window, "addEventListener" | "removeEventListener"> = window): () => void {
-  let n = 0;
-  const on = (e: Event) => {
-    const a = dragStart(e as MouseEvent);
-    if (a) link.post({ bos: 1, id: `d${++n}`, cmd: a === "drag" ? "os_window_start_drag" : "os_window_toggle_maximize" });
-  };
-  doc.addEventListener("mousedown", on);
-  return () => doc.removeEventListener("mousedown", on);
-}
-
-/** The Host for an OS frame: the page's own socket and fetch, no embedded runner; the window buttons ask the OS by name (BOS-27), which draws the taskbar and desktop. */
+/** The Host for an OS frame: the page's own socket and fetch, no embedded runner, no frame buttons (the OS draws the window, taskbar and desktop). */
 export function battalionFrameHost(appId: string, link: FrameLink): Host {
   const loginHandlers = new Set<LoginWindowHandlers>();
   const call = frameCaller(link, undefined, (event, data) => {
@@ -134,7 +97,6 @@ export function battalionFrameHost(appId: string, link: FrameLink): Host {
     ...page,
     kind: "desktop",
     os: osOf(appId, call),
-    window: windowOf(call),
     version: async () => null,
     async endpoint() {
       const st = await call<OsAppStatus>("os_app_status").catch((e) => Promise.reject(new Error(message(e))));

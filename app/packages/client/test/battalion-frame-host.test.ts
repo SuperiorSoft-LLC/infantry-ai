@@ -3,7 +3,7 @@
 // BOS-17: the page in a frame of the OS window calls the OS by messages (the same app commands, the same results); in a window of its own
 // it keeps the direct commands. A page draws no title bar, desktop or taskbar of its own under the OS.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { battalionFrameHost, dragStart, frameAppId, frameCaller, installFrameDrag, type FrameLink } from "../../../shell/src/host/battalion/frame";
+import { battalionFrameHost, frameAppId, frameCaller, type FrameLink } from "../../../shell/src/host/battalion/frame";
 
 /** A desktop that answers like the shell: `answers[cmd]` or a refusal; every request is recorded. */
 function desktop(answers: Record<string, unknown>) {
@@ -35,9 +35,9 @@ describe("is this page in an OS frame", () => {
 });
 
 describe("the frame host", () => {
-  it("has the window buttons (BOS-27: they ask the OS by name) and carries the os commands", () => {
+  it("draws no frame buttons and carries the os commands", () => {
     const h = battalionFrameHost("infantry-ai", desktop({}).link);
-    expect(h.window).not.toBeNull();
+    expect(h.window).toBeNull();
     expect(h.embedded).toBeNull();
     expect(h.os?.appId).toBe("infantry-ai");
   });
@@ -159,53 +159,5 @@ describe("host picked by a page in an OS frame that has Tauri internals", () => 
   it("not framed (a Tauri window of its own): still the Tauri side, not the frame host", async () => {
     const { m } = await pick(false);
     expect(m.isTauri).toBe(true);
-  });
-});
-
-describe("BOS-27: the window buttons and the drag area of the page's own title bar", () => {
-  it("minimize, maximize, close and the bar say go to the OS by name (no id)", async () => {
-    const d = desktop({ os_window_minimize: null, os_window_toggle_maximize: null, os_window_close: null, os_window_bar: null });
-    const w = battalionFrameHost("infantry-ai", d.link).window!;
-    w.minimize();
-    w.toggleMaximize();
-    w.close();
-    w.bar?.(true);
-    await Promise.resolve();
-    expect(d.sent.map((s) => s.cmd)).toEqual(["os_window_minimize", "os_window_toggle_maximize", "os_window_close", "os_window_bar"]);
-    expect(d.sent[3]?.args).toEqual({ on: true });
-    expect(JSON.stringify(d.sent)).not.toContain("infantry-ai");
-  });
-  it("a refused window call is a console warning, never a thrown error", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const d = desktop({});
-    battalionFrameHost("infantry-ai", d.link).window!.close();
-    await new Promise((r) => setTimeout(r, 5));
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
-  });
-  it("drag area hit test: the drag area itself starts a drag, a double click maximizes; its children, other elements and other buttons do not", () => {
-    const region = { getAttribute: (n: string) => (n === "data-tauri-drag-region" ? "" : null) };
-    const button = { getAttribute: () => null };
-    const off = { getAttribute: (n: string) => (n === "data-tauri-drag-region" ? "false" : null) };
-    expect(dragStart({ button: 0, detail: 1, target: region })).toBe("drag");
-    expect(dragStart({ button: 0, detail: 2, target: region })).toBe("maximize");
-    expect(dragStart({ button: 0, detail: 1, target: button })).toBeNull();
-    expect(dragStart({ button: 0, detail: 1, target: off })).toBeNull();
-    expect(dragStart({ button: 2, detail: 1, target: region })).toBeNull();
-    expect(dragStart({ button: 0, detail: 1, target: null })).toBeNull();
-  });
-  it("installFrameDrag posts the drag message to the OS on a press on the drag area, and stops when removed", () => {
-    const d = desktop({});
-    let on: (e: unknown) => void = () => {};
-    const doc = { addEventListener: (_: string, f: (e: unknown) => void) => void (on = f), removeEventListener: () => void (on = () => {}) };
-    const off = installFrameDrag(d.link, doc as never);
-    const region = { getAttribute: () => "" };
-    on({ button: 0, detail: 1, target: region });
-    on({ button: 0, detail: 2, target: region });
-    on({ button: 0, detail: 1, target: { getAttribute: () => null } });
-    expect(d.sent.map((s) => s.cmd)).toEqual(["os_window_start_drag", "os_window_toggle_maximize"]);
-    off();
-    on({ button: 0, detail: 1, target: region });
-    expect(d.sent).toHaveLength(2);
   });
 });

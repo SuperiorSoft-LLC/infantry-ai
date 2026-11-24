@@ -37,8 +37,6 @@ export interface HostWindow {
   minimize(): void;
   toggleMaximize(): void;
   close(): void;
-  /** BOS-27: under BattalionOS, the page says its own title bar is there (`true`) or gone, so the OS draws none over it. Absent elsewhere. */
-  bar?(on: boolean): void;
 }
 
 export interface ResumableSession {
