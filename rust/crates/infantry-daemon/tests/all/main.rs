@@ -5,6 +5,7 @@
 mod agent_frames;
 mod assistant;
 mod background_tasks;
+mod context_limit;
 mod fresh_state;
 mod gateway;
 mod hung_child;

@@ -425,6 +425,9 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         let _ = creds_cell.set(c.clone());
         let for_sessions = c.clone();
         daemon.set_provider_env(Arc::new(move |provider| for_sessions.session_env(provider)));
+        // The default context limit of a session with no pin: `limits.session.defaultContextTokens`, scoped role > project > app.
+        let ctx_settings = settings::SettingsUnit { db: db.clone() };
+        daemon.set_context_default(Arc::new(move |project, role| settings::default_context_limit(&ctx_settings, project, role)));
         // RR-6: what a start on a remote runner lends (the harness key, project secrets, a git token).
         let lender = crate::lender::Lender {
             setting: Arc::new({

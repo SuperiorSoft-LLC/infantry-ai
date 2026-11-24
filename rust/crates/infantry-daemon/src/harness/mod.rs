@@ -45,6 +45,8 @@ pub struct OpenRequest {
     pub cwd: PathBuf,
     pub model: Option<String>,
     pub effort: Option<String>,
+    /// The most context (tokens) the session may hold; the harness maps it, or ignores it when it cannot cap.
+    pub context_limit: Option<u64>,
     /// The daemon's state dir (per-session files go under it).
     pub state_dir: PathBuf,
     /// The session env the agent process gets ([`launch::LaunchBase::session`]).
@@ -160,6 +162,10 @@ pub trait Harness: Send + Sync {
     /// The context window of `model` when this CLI's local catalog states it.
     fn context_window(&self, _model: &str) -> Option<u64> {
         None
+    }
+    /// Whether and how this harness honours a context limit (`supported` / `best_effort` / `unsupported`, and why).
+    fn context_limit_support(&self) -> (&'static str, &'static str) {
+        ("unsupported", "this harness has no way to cap its context; the limit is recorded, not applied")
     }
     /// RR-7: [`Harness::store_stats`] read through `probe` (the files of the runner the session ran on).
     fn store_stats_via(&self, _probe: &dyn infantry_harness::Probe, _provider_session_id: &str) -> Option<Vec<infantry_harness::stats::StatEvent>> {

@@ -281,6 +281,10 @@ impl Harness for ClaudeHarness {
         }
     }
 
+    fn context_limit_support(&self) -> (&'static str, &'static str) {
+        ("supported", "the CLI auto-compacts at this window (CLAUDE_CODE_AUTO_COMPACT_WINDOW), read when its process starts")
+    }
+
     fn models(&self, _probe: &dyn Probe) -> Vec<ModelInfo> {
         MODELS.iter().map(|(id, label)| ModelInfo { id: (*id).into(), label: (*label).into() }).collect()
     }

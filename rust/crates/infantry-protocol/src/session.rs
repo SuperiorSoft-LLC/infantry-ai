@@ -237,6 +237,10 @@ session_record! {
     #[serde(default)] effort: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")] context_limit: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")] context_limit_support: Option<String>,
+    /// Where `context_limit` came from: `ticket`, `session`, `role`, `project`, `app` or `default`.
+    #[serde(default, skip_serializing_if = "Option::is_none")] context_limit_source: Option<String>,
+    /// How the harness applies it (or why it does not).
+    #[serde(default, skip_serializing_if = "Option::is_none")] context_limit_how: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")] effort_support: Option<String>,
     #[serde(default)] agent_id: Option<String>,
     #[serde(default)] role: Option<String>,

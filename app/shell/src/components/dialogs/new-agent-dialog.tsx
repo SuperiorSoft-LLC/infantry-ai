@@ -14,6 +14,7 @@ import {
   withDefaults,
   withRole,
   isLocalRunner,
+  parseContextLimit,
   runnerRequest,
   type HarnessInfo,
   type LauncherStore,
@@ -23,6 +24,7 @@ import { EmptyState, Input, Textarea, cn } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { runnerStores } from "@/daemon/runner-stores";
 import { ExecutorPicker, RunnerPicker } from "./executor-picker";
+import { ContextLimitField } from "./context-limit-field";
 import { RoleAvatar } from "@/components/agents/agent-avatar";
 import { RoleGlyph } from "@/components/agents/role-icon";
 import { useRoles, useRolesLoaded } from "@/components/knowledge/use-knowledge";
@@ -177,7 +179,11 @@ export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDra
         </Step>
       )}
 
-      <Step n={runners.length > 0 ? 4 : 3} title="First task" missing={!draft.task.trim()}>
+      <Step n={runners.length > 0 ? 4 : 3} title="Max context (optional)">
+        <ContextLimitField idPrefix="new-agent" value={draft.contextLimit ?? ""} onChange={(contextLimit) => onChange({ ...draft, contextLimit })} hint="default from Settings (limits.session.defaultContextTokens)" />
+      </Step>
+
+      <Step n={runners.length > 0 ? 5 : 4} title="First task" missing={!draft.task.trim()}>
         <Textarea
           aria-label="First task"
           placeholder="What should this agent do first?"
@@ -203,5 +209,7 @@ export function addAgent(d: NewAgentDraft): void {
   if (d.model) opts.model = d.model;
   if (d.effort) opts.effort = d.effort;
   if (d.runner) opts.runner = d.runner;
+  const limit = parseContextLimit(d.contextLimit);
+  if (limit != null) opts.contextLimit = limit;
   if (store.spawnWith(opts)) store.sendFrame({ type: "prompt", data: d.task.trim() });
 }

@@ -22,6 +22,45 @@ fn row_key(scope: &str, target: &str, key: &str) -> String {
     format!("@scope/{scope}/{target}/{key}")
 }
 
+/// The setting a session's default context limit (tokens) is read from; 0 = off.
+pub const DEFAULT_CONTEXT_KEY: &str = "limits.session.defaultContextTokens";
+/// What the setting is when no scope sets it.
+pub const DEFAULT_CONTEXT_TOKENS: i32 = 500_000;
+
+/// A token count as the settings hold it: a number, or text such as `500000`, `500k`, `1m`, `off`.
+pub fn parse_tokens(v: &Value) -> Option<i32> {
+    if let Some(n) = v.as_i64() {
+        return Some(n.clamp(0, i32::MAX as i64) as i32);
+    }
+    let t = v.as_str()?.trim().to_lowercase();
+    if t == "off" || t == "none" {
+        return Some(0);
+    }
+    let (num, mult) = match t.chars().last()? {
+        'k' => (&t[..t.len() - 1], 1_000.0),
+        'm' => (&t[..t.len() - 1], 1_000_000.0),
+        _ => (t.as_str(), 1.0),
+    };
+    num.trim().parse::<f64>().ok().filter(|n| *n >= 0.0).map(|n| (n * mult).min(i32::MAX as f64) as i32)
+}
+
+/// `(tokens, source scope)` the default context limit resolves to for a spawn in `project` / `role`
+/// (session > role > project > app > default). 0 tokens = off.
+pub fn default_context_limit(settings: &SettingsUnit, project: Option<&str>, role: Option<&str>) -> Option<(i32, String)> {
+    let mut d = json!({});
+    if let Some(p) = project {
+        d["project"] = json!(p);
+    }
+    if let Some(r) = role {
+        d["role"] = json!(r);
+    }
+    let r = settings.resolve(DEFAULT_CONTEXT_KEY, &d);
+    match parse_tokens(&r["value"]) {
+        Some(n) => Some((n, r["scope"].as_str().unwrap_or("app").to_string())),
+        None => Some((DEFAULT_CONTEXT_TOKENS, "default".to_string())),
+    }
+}
+
 fn text(d: &Value, k: &str) -> Option<String> {
     d.get(k).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
 }
@@ -155,5 +194,38 @@ mod tests {
         assert_eq!(u.resolve("a.b", &json!({"project": "p"}))["value"], json!(5));
         assert!(u.set("a.b", None, &json!({})).is_err());
         let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[cfg(test)]
+mod context_default_tests {
+    use super::*;
+
+    #[test]
+    fn tokens_parse_numbers_suffixes_and_off() {
+        assert_eq!(parse_tokens(&json!(500000)), Some(500_000));
+        assert_eq!(parse_tokens(&json!("250k")), Some(250_000));
+        assert_eq!(parse_tokens(&json!("1m")), Some(1_000_000));
+        assert_eq!(parse_tokens(&json!("off")), Some(0));
+        assert_eq!(parse_tokens(&json!("many")), None);
+        assert_eq!(parse_tokens(&json!(-5)), Some(0));
+    }
+
+    #[test]
+    fn default_resolves_default_then_app_then_project_then_role_and_off() {
+        let dir = std::env::temp_dir().join(format!("ctxdef-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = std::sync::Arc::new(infantry_core::db::Db::open(dir.join("i.db")).unwrap());
+        db.write(|c| c.execute_batch("CREATE TABLE IF NOT EXISTS settings (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL)")).unwrap();
+        let u = SettingsUnit { db };
+        let at = |p: Option<&str>, r: Option<&str>| default_context_limit(&u, p, r).unwrap();
+        assert_eq!(at(Some("p1"), Some("pm")), (500_000, "default".into()));
+        u.set(DEFAULT_CONTEXT_KEY, Some(&json!("250k")), &json!({})).unwrap();
+        assert_eq!(at(Some("p1"), Some("pm")), (250_000, "app".into()));
+        u.set(DEFAULT_CONTEXT_KEY, Some(&json!(1_000_000)), &json!({"scope":"project","project":"p1"})).unwrap();
+        assert_eq!(at(Some("p1"), Some("pm")), (1_000_000, "project".into()));
+        assert_eq!(at(Some("p2"), None), (250_000, "app".into()));
+        u.set(DEFAULT_CONTEXT_KEY, Some(&json!(0)), &json!({"scope":"role","project":"p1","role":"pm"})).unwrap();
+        assert_eq!(at(Some("p1"), Some("pm")), (0, "role".into()));
     }
 }

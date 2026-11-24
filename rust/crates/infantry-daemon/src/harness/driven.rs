@@ -42,6 +42,10 @@ impl Harness for Driven {
         self.harness.commands()
     }
 
+    fn context_limit_support(&self) -> (&'static str, &'static str) {
+        self.harness.context_limit_support()
+    }
+
     // The local runner's files: the CLI's record lives on this machine.
     fn store_stats(&self, provider_session_id: &str) -> Option<Vec<infantry_harness::stats::StatEvent>> {
         self.harness.store_stats(&infantry_harness::LocalProbe, provider_session_id)
@@ -251,6 +255,7 @@ impl Worker {
         let mut base = LaunchRequest::new(self.req.cwd.clone());
         base.model = self.req.model.clone();
         base.effort = self.req.effort.clone();
+        base.context_limit = self.req.context_limit;
         // With no prompter nobody can answer an ask: such a session runs as it always did (allow all).
         base.approval = if self.req.prompter.is_some() { self.req.approval } else { ApprovalMode::AllowAll };
         base.resume = resume;
