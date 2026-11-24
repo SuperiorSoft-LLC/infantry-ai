@@ -238,6 +238,22 @@ mod tests {
     }
 
     #[test]
+    fn an_os_app_release_is_never_the_nightly() {
+        // BOS-9: os-app-v* releases hold a .bosapp and feed.json, never latest.json; even a published prerelease
+        // with a (wrongly) named latest.json must not be taken for a version of this app.
+        let a = |n: &str| format!(r#"{{"name":"latest.json","browser_download_url":"https://gh/{n}/latest.json"}}"#);
+        let json = format!(
+            r#"[{{"tag_name":"os-app-v9.9.9","prerelease":true,"draft":false,"assets":[{}]}},
+               {{"tag_name":"os-app-v0.7.3","prerelease":true,"draft":false,"assets":[{{"name":"feed.json","browser_download_url":"https://gh/os/feed.json"}}]}},
+               {{"tag_name":"rust-v0.1.2-nightly.1","prerelease":true,"draft":false,"assets":[{}]}}]"#,
+            a("os"), a("n")
+        );
+        assert_eq!(nightly_feed(&json).unwrap(), "https://gh/n/latest.json");
+        let only_os = r#"[{"tag_name":"os-app-v9.9.9","prerelease":true,"draft":false,"assets":[{"name":"feed.json","browser_download_url":"https://gh/os/feed.json"}]}]"#;
+        assert!(nightly_feed(only_os).is_err());
+    }
+
+    #[test]
     fn the_status_line_names_the_version_and_the_time() {
         assert_eq!(status_line("0.1.3", None, "14:05"), "up to date (0.1.3, checked 14:05)");
         assert_eq!(status_line("0.1.3", Some("0.1.4"), "14:05"), "0.1.4 available");

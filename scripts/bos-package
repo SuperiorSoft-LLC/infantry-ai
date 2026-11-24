@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) SuperiorSoft LLC
+# BOS-9: packs Infantry AI as a BattalionOS app (.bosapp + .sig + feed). See scripts/bos-package.py --help.
+exec python "$(cd "$(dirname "$0")" && pwd)/bos-package.py" "$@"

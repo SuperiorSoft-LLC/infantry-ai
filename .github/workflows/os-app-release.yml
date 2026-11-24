@@ -1,0 +1,107 @@
+# BOS-9: Infantry AI as an app of BattalionOS (.bosapp). DRAFT only.
+#
+# A tag os-app-v<version> (or a manual run) builds the daemon, the CLI, the staged plugins and the shell, packs them with
+# scripts/bos-package, and makes a DRAFT GitHub release os-app-v<version> holding the .bosapp, its .sig and feed.json.
+#
+# Two rules that keep the standalone app's updater safe (a workflow-text test pins both):
+#   1. make_latest is false (`gh release create --latest=false`): this repo's "latest" release is what every standalone updater reads (rust-promote.yml), so a
+#      package must never become it.
+#   2. No latest.json is uploaded: that name is the Tauri updater manifest. The OS app's feed is feed.json.
+# The owner tests the draft and publishes it by hand. Nothing here pushes a feed or a tag.
+#
+# Secrets (the OWNER creates them; none is in the repo): BOS_APP_SIGNING_KEY, the minisign secret key (unencrypted, as
+# made by `minisign -G -W`), and BOS_APP_PUBLIC_KEY, its .pub file. Without them the package is signed with a THROWAWAY
+# key and the release notes say so; nothing signed that way is trusted by a real install.
+name: os-app-release
+
+on:
+  push:
+    tags: ['os-app-v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: version to pack (default is the one in app/src-tauri/tauri.conf.json)
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: os-app-release
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults: { run: { shell: bash } }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        id: v
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then v="${GITHUB_REF_NAME#os-app-v}"; else v="${{ inputs.version }}"; fi
+          if [ -z "$v" ]; then v="$(python -c 'import json;print(json.load(open("app/src-tauri/tauri.conf.json"))["version"])')"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: app/package.json }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: pnpm, cache-dependency-path: app/pnpm-lock.yaml }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: wasm32-wasip2 }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: rust }
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+      - name: Build the shell
+        working-directory: app
+        run: pnpm build
+      - name: Build the daemon and the CLI
+        working-directory: rust
+        env: { INFANTRY_BUILD_ENV: prod, CARGO_BUILD_JOBS: '4' }
+        run: cargo build --release -p infantry-distribution -p infantry-cli
+      - name: Stage the plugins
+        run: bash rust/plugins/stage.sh "$RUNNER_TEMP/plugins" release
+      - name: Pack and sign
+        env:
+          KEY: ${{ secrets.BOS_APP_SIGNING_KEY }}
+          PUB: ${{ secrets.BOS_APP_PUBLIC_KEY }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          pip install cryptography
+          target="$(cd rust && cargo metadata --format-version 1 --no-deps | python -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')"
+          args=(--daemon "$target/release/infantry-daemon.exe" --cli "$target/release/infantry.exe"
+                --plugins "$RUNNER_TEMP/plugins" --dist app/shell/dist --version "$VERSION" --out dist-bosapp
+                --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/os-app-v${VERSION}/")
+          notes="Infantry AI $VERSION as a BattalionOS app. Draft: test it, then publish by hand."
+          if [ -n "$KEY" ] && [ -n "$PUB" ]; then
+            mkdir -p "$RUNNER_TEMP/k"; printf '%s\n' "$KEY" > "$RUNNER_TEMP/k/bos.key"; printf '%s\n' "$PUB" > "$RUNNER_TEMP/k/bos.pub"
+            args+=(--minisign-key "$RUNNER_TEMP/k/bos.key")
+          else
+            notes="$notes SIGNED WITH A THROWAWAY KEY: not trusted by a real install."
+          fi
+          python scripts/bos-package.py "${args[@]}" --notes "$notes"
+          rm -f dist-bosapp/throwaway.key.json
+      - uses: actions/upload-artifact@v4
+        with: { name: os-app, path: dist-bosapp/*, if-no-files-found: error }
+
+  draft:
+    needs: package
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: os-app, path: dist-bosapp }
+      - name: Draft release (never latest, no updater manifest)
+        run: |
+          set -euo pipefail
+          v="$(python3 -c 'import json;print(json.load(open("dist-bosapp/feed.json"))["version"])')"
+          tag="os-app-v$v"
+          files=(dist-bosapp/*.bosapp dist-bosapp/*.bosapp.sig dist-bosapp/feed.json dist-bosapp/catalog-entry.json dist-bosapp/public.key)
+          gh release create "$tag" "${files[@]}" --draft --prerelease --latest=false --title "Infantry AI $v (BattalionOS app)" \
+            --notes "$(python3 -c 'import json;print(json.load(open("dist-bosapp/feed.json")).get("notes",""))')"

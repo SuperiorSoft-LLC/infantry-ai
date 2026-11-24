@@ -1,0 +1,26 @@
+{
+  "manifest": 1,
+  "id": "infantry-ai",
+  "name": "Infantry AI",
+  "version": "0.0.0",
+  "publisher": "SuperiorSoft LLC",
+  "license": "MPL-2.0",
+  "icon": "assets/icon.png",
+  "contract": { "min": 1, "max": 1 },
+  "minOs": "0.1.0",
+  "process": {
+    "windows-x86_64": { "exec": "bin/infantry-daemon.exe", "args": [], "env": {}, "readyTimeoutMs": 60000, "stopTimeoutMs": 15000 }
+  },
+  "ui": {
+    "entry": "shell/dist/index.html",
+    "window": { "width": 1360, "height": 860 },
+    "connect": ["http://127.0.0.1:*", "ws://127.0.0.1:*", "http://localhost:*", "ws://localhost:*"]
+  },
+  "state": {
+    "dir": { "windows": "%LOCALAPPDATA%\\SuperiorSoft\\InfantryAI-Rust" },
+    "schema": 1
+  },
+  "cli": [{ "name": "infantry", "exec": "bin/infantry.exe" }],
+  "permissions": ["process.spawn", "network", "files.user", "window"],
+  "onOsExit": "keep"
+}
