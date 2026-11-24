@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 // Session actions (RUST-SESS-2): interrupt (the store's existing `interrupt`), restart (`session_restart`; a mid-turn
 // refusal offers a forced retry), switch provider/model (`session_swap`, providers from the launcher's harness list)
-// and remove. Session stats live in the one Stats modal (top-right button). The composer toolbar and the agent menu open these dialogs; every dialog is
+// and remove. Session stats live in the one Stats modal (top-right button). The composer toolbar opens these dialogs; every dialog is
 // the one modal.
 import { useEffect, useState } from "react";
 import { createStore } from "zustand/vanilla";
