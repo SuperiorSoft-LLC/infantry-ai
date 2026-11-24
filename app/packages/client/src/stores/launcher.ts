@@ -97,6 +97,8 @@ export interface NewAgentDraft {
   effort?: string | null;
   /** RR-9: where the agent runs: a runner name, `local` or `any`; null = the project default (nothing is sent). */
   runner?: string | null;
+  /** The max context as typed (`500k`, `1m`, `off`); blank = the setting's default. */
+  contextLimit?: string | null;
   task: string;
 }
 export const EMPTY_DRAFT: NewAgentDraft = { roleId: null, harness: null, group: null, model: null, effort: null, task: "" };

@@ -14,6 +14,8 @@ import {
   withDefaults,
   withRole,
   isLocalRunner,
+  parseContextLimit,
+  formatContextLimit,
   runnerRequest,
   type HarnessInfo,
   type LauncherStore,
@@ -23,6 +25,7 @@ import { EmptyState, Input, Textarea, cn } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { runnerStores } from "@/daemon/runner-stores";
 import { ExecutorPicker, RunnerPicker } from "./executor-picker";
+import { ContextLimitField } from "./context-limit-field";
 import { RoleAvatar } from "@/components/agents/agent-avatar";
 import { RoleGlyph } from "@/components/agents/role-icon";
 import { useRoles, useRolesLoaded } from "@/components/knowledge/use-knowledge";
@@ -75,6 +78,24 @@ export function useExecutorLists(runner: string | null | undefined) {
   return { harnesses: providers.length === 0 && refusal ? hello : providers, catalog, runners: here.runners, remote, loaded, refusal };
 }
 
+/** The effective default limit as the daemon resolves it (role > project > app > default): "default 500k". */
+function useContextDefault(project: string | null, role: string | null): string {
+  const open = useDaemon((s) => s.connection.state) === "open";
+  const [hint, setHint] = useState("default");
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    runnerRequest(daemonStore().getState(), null, "session_context_limit", JSON.stringify({ default: true, project, role }), 8000).then(
+      (e) => live && setHint(`default ${formatContextLimit((JSON.parse(e.data) as { contextLimit?: number }).contextLimit)}`.trim()),
+      () => live && setHint("default"),
+    );
+    return () => {
+      live = false;
+    };
+  }, [open, project, role]);
+  return hint;
+}
+
 function Step({ n, title, missing, children }: { n: number; title: string; missing?: boolean; children: React.ReactNode }) {
   return (
     <section className="space-y-2" aria-label={title}>
@@ -94,6 +115,7 @@ export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDra
   const bindings = useRoles((s) => s.bindings);
   const loaded = useRoles((s) => s.loaded);
   const [query, setQuery] = useState("");
+  const defaultHint = useContextDefault(null, draft.roleId);
   const all = useMemo(() => roleList(rolesById).filter((r) => !r.disabled), [rolesById]);
   const options = useMemo(() => rankRoles(all, query), [all, query]);
 
@@ -177,7 +199,11 @@ export function NewAgentBody({ draft, onChange, onSubmit }: { draft: NewAgentDra
         </Step>
       )}
 
-      <Step n={runners.length > 0 ? 4 : 3} title="First task" missing={!draft.task.trim()}>
+      <Step n={runners.length > 0 ? 4 : 3} title="Max context (optional)">
+        <ContextLimitField idPrefix="new-agent" value={draft.contextLimit ?? ""} onChange={(contextLimit) => onChange({ ...draft, contextLimit })} hint={defaultHint} />
+      </Step>
+
+      <Step n={runners.length > 0 ? 5 : 4} title="First task" missing={!draft.task.trim()}>
         <Textarea
           aria-label="First task"
           placeholder="What should this agent do first?"
@@ -203,5 +229,7 @@ export function addAgent(d: NewAgentDraft): void {
   if (d.model) opts.model = d.model;
   if (d.effort) opts.effort = d.effort;
   if (d.runner) opts.runner = d.runner;
+  const limit = parseContextLimit(d.contextLimit);
+  if (limit != null) opts.contextLimit = limit;
   if (store.spawnWith(opts)) store.sendFrame({ type: "prompt", data: d.task.trim() });
 }

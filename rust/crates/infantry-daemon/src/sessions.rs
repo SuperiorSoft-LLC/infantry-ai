@@ -47,6 +47,7 @@ pub fn owns(ty: &str) -> bool {
             | wire::KILL
             | wire::SESSION_DELETE
             | pf::SESSION_RESTART
+            | pf::SESSION_CONTEXT_LIMIT
             | pf::WAITING
             | pf::SESSION_SWAP
             | pf::SESSION_STATS_GET
@@ -120,6 +121,22 @@ impl Config {
     }
 }
 
+/// The default when no setting resolves (the setting's own default, 500k).
+const CONTEXT_FALLBACK: i32 = 500_000;
+/// The refusal text for a limit outside the range.
+pub const CONTEXT_RANGE: &str = "Use 10k to 10M, or off.";
+/// A context limit as a pin may carry it: 0 (off) or 10,000 to 10,000,000 tokens; anything else is refused, never clamped.
+pub fn check_context_limit(n: i64) -> Result<i32, String> {
+    if n == 0 || (10_000..=10_000_000).contains(&n) {
+        Ok(n as i32)
+    } else {
+        Err(CONTEXT_RANGE.to_string())
+    }
+}
+
+/// Resolves the default context limit of a session with no pin: `(project, role)` to `(tokens, source)`, 0 tokens = off.
+pub type ContextDefault = Arc<dyn Fn(Option<&str>, Option<&str>) -> Option<(i32, String)> + Send + Sync>;
+
 /// What a `new` frame may carry (JSON data, every field optional).
 #[derive(Debug, Default, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -141,7 +158,7 @@ pub struct NewOpts {
     pub project_id: Option<String>,
     #[serde(skip)]
     pub agent_id: Option<String>,
-    #[serde(skip)]
+    /// The most context (tokens) the session may hold; 0 = off. None = the setting's default applies.
     pub context_limit: Option<i32>,
     /// RR-4: where the session runs: a runner name, `local` or `any`. A start that names a runner never falls back to local.
     pub runner: Option<String>,
@@ -299,6 +316,8 @@ pub struct Daemon {
     env_extra: std::sync::OnceLock<Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>>,
     /// The env one provider's sessions get on top (its stored key or subscription token, the API key variable blanked).
     provider_env: std::sync::OnceLock<Arc<dyn Fn(&str) -> Vec<(String, String)> + Send + Sync>>,
+    /// The default context limit for a session the spawn did not pin: `(project, role)` to `(tokens, source)`; 0 tokens = off.
+    context_default: std::sync::OnceLock<ContextDefault>,
     /// RR-6: what a start on a REMOTE runner lends `(runner, provider, project)`; unset = nothing is lent.
     lender: std::sync::OnceLock<Arc<crate::lender::Lender>>,
     /// RR-7: a ticket's workspace on a remote runner (set by the runners plugin at the composition root).
@@ -421,6 +440,7 @@ impl Daemon {
             launch: Mutex::new(Default::default()),
             env_extra: std::sync::OnceLock::new(),
             provider_env: std::sync::OnceLock::new(),
+            context_default: std::sync::OnceLock::new(),
             lender: std::sync::OnceLock::new(),
             remote_ws: std::sync::OnceLock::new(),
             tunnel: Arc::default(),
@@ -796,6 +816,25 @@ impl Daemon {
                     Err(m) => vec![encode_req(wire::ERROR, format!("session_restart refused: {m}"), sid.as_deref(), None, req.as_deref())],
                 };
             }
+            pf::SESSION_CONTEXT_LIMIT => {
+                let v: serde_json::Value = serde_json::from_str(&env.data).unwrap_or(serde_json::Value::Null);
+                // `{"default": true, project?, role?}`: what a new agent gets with no pin (the New agent box shows it)
+                if v["default"].as_bool() == Some(true) {
+                    let d = self.context_default.get().and_then(|f| f(v["project"].as_str(), v["role"].as_str()));
+                    let (n, src) = d.unwrap_or((CONTEXT_FALLBACK, "default".to_string()));
+                    return vec![encode_req(pf::SESSION_CONTEXT_LIMIT, json!({"contextLimit": n, "source": src}).to_string(), None, None, req.as_deref())];
+                }
+                let s = v["sessionId"].as_str().map(String::from).or(sid.clone()).unwrap_or_default();
+                // a number of tokens (0 = off), or null / absent = back to the settings' default; anything else is refused
+                let limit = match &v["limit"] {
+                    serde_json::Value::Null => Ok(None),
+                    n => n.as_i64().ok_or_else(|| CONTEXT_RANGE.to_string()).and_then(check_context_limit).map(Some),
+                };
+                return match limit.and_then(|l| self.set_context_limit(s.trim(), l)) {
+                    Ok(effect) => vec![encode_req(pf::SESSION_CONTEXT_LIMIT, effect.to_string(), Some(s.trim()), None, req.as_deref())],
+                    Err(m) => vec![encode_req(wire::ERROR, format!("session_context_limit refused: {m}"), sid.as_deref(), None, req.as_deref())],
+                };
+            }
             pf::SESSION_SWAP => {
                 let r = serde_json::from_str::<SessionSwap>(&env.data).map_err(|e| format!("bad request ({e})")).and_then(|q| self.swap(q));
                 return match r {
@@ -906,7 +945,22 @@ impl Daemon {
         rec.ticket_id = some(&opts.ticket_id);
         rec.project_id = some(&opts.project_id);
         rec.agent_id = some(&opts.agent_id);
-        rec.context_limit = opts.context_limit;
+        // Order: the spawn's pin (a ticket's, or the New agent field) > the settings (session > role > project > app > default).
+        if let Some(n) = opts.context_limit {
+            check_context_limit(n as i64)?;
+        }
+        let (limit, source) = match opts.context_limit {
+            Some(n) => (Some(n.max(0)), Some(if rec.ticket_id.is_some() { "ticket" } else { "session" }.to_string())),
+            None => match self.context_default.get().and_then(|f| f(rec.project_id.as_deref(), rec.role.as_deref())) {
+                Some((n, scope)) => (Some(n.max(0)), Some(scope)),
+                None => (None, None),
+            },
+        };
+        let (support, how) = harness.context_limit_support();
+        rec.context_limit = limit;
+        rec.context_limit_source = source;
+        rec.context_limit_support = Some(support.to_string());
+        rec.context_limit_how = Some(how.to_string());
         rec.unattended = opts.unattended;
         rec.spawner_session_id = some(&opts.spawner);
         if let Some((name, _)) = &placed {
@@ -1145,6 +1199,7 @@ impl Daemon {
         } else if let Some(p) = e.rec.provider_session_id.clone().filter(|_| !warm) {
             self.emit(e, wire::STATUS, wire::status_activity(&provider, &format!("resuming provider session {p}")));
         }
+        self.resolve_stored_limit(e);
         if e.hs.is_none() {
             match self.open(e) {
                 Ok(hs) => e.hs = Some(hs),
@@ -1238,6 +1293,55 @@ impl Daemon {
 
     pub fn lender(&self) -> Option<Arc<crate::lender::Lender>> {
         self.lender.get().cloned()
+    }
+
+    /// Changes a session's context limit (tokens, 0 = off; None = back to the settings' default) without touching its
+    /// conversation. The harness reads the limit when its process starts, so a running process keeps the old one until
+    /// the session is restarted; the answer says which of the two applies (the truth of the harness).
+    pub fn set_context_limit(&self, id: &str, limit: Option<i32>) -> Result<serde_json::Value, String> {
+        let entry = self.find(id).ok_or_else(|| format!("unknown session {id}"))?;
+        let mut e = entry.lock().unwrap();
+        let (value, source) = match limit {
+            Some(n) => (Some(n.max(0)), Some("session".to_string())),
+            None => match self.context_default.get().and_then(|f| f(e.rec.project_id.as_deref(), e.rec.role.as_deref())) {
+                Some((n, scope)) => (Some(n.max(0)), Some(scope)),
+                None => (None, None),
+            },
+        };
+        e.rec.context_limit = value;
+        e.rec.context_limit_source = source.clone();
+        let running = e.hs.is_some();
+        let (support, _) = self.harness_for(Some(&e.rec.provider)).map(|h| h.context_limit_support()).unwrap_or(("unsupported", ""));
+        let effect = if support == "unsupported" {
+            "recorded only: this harness cannot cap its context"
+        } else if running {
+            "applies when this session's process next starts (restart it to apply now); the conversation is kept"
+        } else {
+            "applies on its next turn"
+        };
+        self.push(&mut e);
+        Ok(json!({"sessionId": id, "contextLimit": value, "source": source, "support": support, "effect": effect}))
+    }
+
+    /// A session saved before the limit existed has none stored: it takes the settings default now (role > project > app >
+    /// default), stored with its source, support and how, so it launches capped. An explicit 0 (off) is kept.
+    fn resolve_stored_limit(&self, e: &mut Entry) {
+        if e.rec.context_limit.is_some() {
+            return;
+        }
+        if let Some((n, scope)) = self.context_default.get().and_then(|f| f(e.rec.project_id.as_deref(), e.rec.role.as_deref())) {
+            e.rec.context_limit = Some(n.max(0));
+            e.rec.context_limit_source = Some(scope);
+        }
+        if let Some(h) = self.harness_for(Some(&e.rec.provider)) {
+            let (support, how) = h.context_limit_support();
+            e.rec.context_limit_support = Some(support.to_string());
+            e.rec.context_limit_how = Some(how.to_string());
+        }
+    }
+
+    pub fn set_context_default(&self, f: ContextDefault) {
+        let _ = self.context_default.set(f);
     }
 
     pub fn set_provider_env(&self, f: Arc<dyn Fn(&str) -> Vec<(String, String)> + Send + Sync>) {
@@ -1356,6 +1460,7 @@ impl Daemon {
             cwd: PathBuf::from(&e.rec.working_dir),
             model: e.rec.model.clone(),
             effort: e.rec.effort.clone(),
+            context_limit: e.rec.context_limit.filter(|n| *n > 0).map(|n| n as u64),
             state_dir: self.cfg.state_dir.clone(),
             env,
             mcp,
@@ -2059,5 +2164,68 @@ mod rr_qa2_tests {
         assert_eq!(command, &vec!["infantry".to_string(), "mcp".into(), "serve".into()]);
         assert!(menv.iter().all(|(k, _)| k != "INFANTRY_BIN" && k != "INFANTRY_STATE_DIR"));
         assert!(menv.contains(&kv("INFANTRY_PORT", "31000")));
+    }
+}
+
+#[cfg(test)]
+mod context_launch_tests {
+    use super::*;
+
+    fn daemon() -> (Arc<Daemon>, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("infantry-ctx-launch-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let d = Daemon::new(Arc::new(crate::harness::stub::Stub::default()), Config::new(dir.clone(), dir.clone())).unwrap();
+        crate::compose::build(&d, &dir).unwrap();
+        (d, dir)
+    }
+
+    fn limit(d: &Arc<Daemon>, sid: &str) -> (Option<i32>, Option<String>) {
+        let r = d.records().into_iter().find(|r| r.id == sid).unwrap();
+        (r.context_limit, r.context_limit_source)
+    }
+
+    /// An existing session has no stored limit: its next harness launch resolves the default and stores it; an explicit off stays off.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_session_saved_without_a_limit_launches_with_the_default_and_off_stays_off() {
+        let (d, dir) = daemon();
+        let old = d.launch(NewOpts::default()).unwrap();
+        let off = d.launch(NewOpts { context_limit: Some(0), ..Default::default() }).unwrap();
+        for (sid, none) in [(&old, true), (&off, false)] {
+            let entry = d.find(sid).unwrap();
+            let mut e = entry.lock().unwrap();
+            if none {
+                e.rec.context_limit = None;
+                e.rec.context_limit_source = None;
+                e.rec.context_limit_support = None;
+            }
+            e.hs = None;
+            d.turn_into(&mut e, "hi".into());
+        }
+        assert_eq!(limit(&d, &old), (Some(500_000), Some("default".into())), "the old session is on the default now, with its source");
+        let rec = d.records().into_iter().find(|r| r.id == old).unwrap();
+        assert!(rec.context_limit_support.is_some() && rec.context_limit_how.is_some(), "support and how are stored too");
+        assert_eq!(limit(&d, &off).0, Some(0), "an explicit off is kept");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_range_is_off_or_10k_to_10m_and_out_of_range_is_refused() {
+        assert_eq!(check_context_limit(0), Ok(0));
+        assert_eq!(check_context_limit(10_000), Ok(10_000));
+        assert_eq!(check_context_limit(10_000_000), Ok(10_000_000));
+        for bad in [-1, 1, 9_999, 10_000_001, 2_000_000_000] {
+            assert_eq!(check_context_limit(bad), Err("Use 10k to 10M, or off.".to_string()), "{bad}");
+        }
+        let (d, dir) = daemon();
+        assert!(d.launch(NewOpts { context_limit: Some(5_000), ..Default::default() }).unwrap_err().contains("10k to 10M"), "the spawn pin is refused");
+        let sid = d.launch(NewOpts::default()).unwrap();
+        let mut conn = Conn::default();
+        let frame = |limit: serde_json::Value| Envelope::new(pf::SESSION_CONTEXT_LIMIT, json!({"sessionId": sid, "limit": limit}).to_string());
+        let out = d.handle(frame(json!(5_000)), &mut conn).join("");
+        assert!(out.contains("10k to 10M"), "the frame is refused: {out}");
+        assert_eq!(limit(&d, &sid).0, Some(500_000), "not clamped, not changed");
+        let ok = d.handle(frame(json!(250_000)), &mut conn).join("");
+        assert!(ok.contains("250000"), "{ok}");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

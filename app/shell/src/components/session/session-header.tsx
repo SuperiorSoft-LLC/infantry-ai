@@ -17,7 +17,8 @@ const tokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n
 
 export function SessionHeader({ agent }: { agent: Agent }) {
   const effort = useDaemon((s) => s.sessions[agent.id]?.record.effort);
-  const limit = useDaemon((s) => s.sessions[agent.id]?.record.contextLimit);
+  const rec = useDaemon((s) => s.sessions[agent.id]?.record);
+  const limit = rec?.contextLimit;
   const auto = useAutomationStats(agent.id);
   const ui = useUi();
   return (
@@ -36,7 +37,15 @@ export function SessionHeader({ agent }: { agent: Agent }) {
         <Chip tone="red">{agent.provider}</Chip>
         <Chip tone="green">{agent.model}</Chip>
         {effort && <Chip>effort {effort}</Chip>}
-        {!!limit && <Chip>context {tokens(limit)}</Chip>}
+        {limit != null && (
+          <span title={`Max context: ${limit ? limit.toLocaleString() : "off"} tokens, from ${rec?.contextLimitSource ?? "the harness"}. ${rec?.contextLimitHow ?? ""}`}>
+            <Chip>
+              {limit ? `context ${tokens(limit)}` : "context off"}
+              {rec?.contextLimitSource ? ` \u00b7 ${rec.contextLimitSource}` : ""}
+              {rec?.contextLimitSupport === "unsupported" ? " \u00b7 not applied" : ""}
+            </Chip>
+          </span>
+        )}
         <Chip>runs {agent.runs}</Chip>
         {auto && (auto.turnsSaved > 0 || auto.wakes > 0) && (
           <span title={`Automation: wakes by reason ${Object.entries(auto.byReason).map(([k, v]) => `${k} ${v}`).join(", ") || "none"}`}>

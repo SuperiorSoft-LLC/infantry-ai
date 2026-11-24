@@ -508,6 +508,11 @@ pub trait Harness: Send + Sync {
     fn context_window(&self, _probe: &dyn Probe, _model: &str) -> Option<u64> {
         None
     }
+    /// Whether and how this CLI honours [`LaunchRequest::context_limit`]: `("supported" | "best_effort" | "unsupported", how)`.
+    /// The default is `unsupported`: the limit is recorded and reported, never passed on, never claimed.
+    fn context_limit_support(&self) -> (&'static str, &'static str) {
+        ("unsupported", "this harness has no way to cap its context; the limit is recorded, not applied")
+    }
     /// How the CLI is given its account (Kotlin module.json `credential` + `authModes` + `authProbe.loginArgv`): the API-key
     /// variable the app's guided setup and key screen fill, and the CLI's own sign-in command. None = it needs no key.
     fn credential(&self) -> Option<Credential> {

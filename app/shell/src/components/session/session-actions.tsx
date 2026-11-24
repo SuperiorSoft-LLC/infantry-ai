@@ -7,13 +7,14 @@
 import { useEffect, useState } from "react";
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
-import { createSessionActions, isMidTurnRefusal, type SessionActions } from "@infantry/client";
+import { createSessionActions, formatContextLimit, isMidTurnRefusal, parseContextLimit, type SessionActions } from "@infantry/client";
 import { AppDialog, Button } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { useLauncher } from "@/components/dialogs/new-agent-dialog";
+import { ContextLimitField } from "@/components/dialogs/context-limit-field";
 import { ExecutorPicker, type ExecutorValue } from "@/components/dialogs/executor-picker";
 
-type Modal = "restart" | "swap" | "delete";
+type Modal = "restart" | "swap" | "limit" | "delete";
 
 const modal = createStore<{ open: Modal | null; sessionId: string | null }>(() => ({ open: null, sessionId: null }));
 
@@ -34,6 +35,7 @@ export function SessionDialogs() {
   if (!open || !sessionId) return null;
   if (open === "restart") return <RestartDialog sessionId={sessionId} onClose={close} />;
   if (open === "swap") return <SwapDialog sessionId={sessionId} onClose={close} />;
+  if (open === "limit") return <ContextLimitDialog sessionId={sessionId} onClose={close} />;
   return <DeleteDialog sessionId={sessionId} onClose={close} />;
 }
 
@@ -115,6 +117,63 @@ function RestartDialog({ sessionId, onClose }: { sessionId: string; onClose: () 
         </p>
         <Refusal text={why} />
         {midTurn && <p className="text-xs text-muted-foreground">The session is mid-turn. Restarting anyway ends the running turn.</p>}
+      </div>
+    </AppDialog>
+  );
+}
+
+/** Modify session: show the effective max context and its source, change it, and say when it takes effect. */
+function ContextLimitDialog({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+  const record = useDaemon((s) => s.sessions[sessionId]?.record);
+  const [text, setText] = useState(formatContextLimit(record?.contextLimit));
+  const [busy, setBusy] = useState(false);
+  const [why, setWhy] = useState<string | null>(null);
+  const [effect, setEffect] = useState<string | null>(null);
+  const parsed = parseContextLimit(text);
+  const bad = text.trim() !== "" && parsed == null;
+  const now = record?.contextLimit == null ? "not set" : formatContextLimit(record.contextLimit);
+  const submit = (): void => {
+    setBusy(true);
+    setWhy(null);
+    sessionActions()
+      .setContextLimit(sessionId, parsed)
+      .then((r) => setEffect(r.effect), (e) => setWhy(String(e)))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <AppDialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title="Max context"
+      description={record ? `Now: ${now}${record.contextLimitSource ? ` (${record.contextLimitSource})` : ""} \u00b7 ${record.contextLimitSupport ?? "unknown support"}` : undefined}
+      footer={
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            {effect ? "Close" : "Cancel"}
+          </Button>
+          <Button size="sm" disabled={busy || bad} onClick={submit}>
+            Apply
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <ContextLimitField
+          idPrefix="modify"
+          value={text}
+          onChange={(v) => {
+            setText(v);
+            setEffect(null);
+          }}
+          hint="blank = the settings default"
+        />
+        {record?.contextLimitHow && <p className="text-xs text-muted-foreground">{record.contextLimitHow}</p>}
+        {effect && (
+          <p role="status" className="text-xs">
+            {effect}
+          </p>
+        )}
+        <Refusal text={why} />
       </div>
     </AppDialog>
   );

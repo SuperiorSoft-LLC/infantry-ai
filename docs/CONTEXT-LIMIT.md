@@ -66,3 +66,16 @@ harness's own window). `limits.session.compactMaxTokens` (default 0 = off) then 
 resolved value through the generic `contextLimit` field and reports `supported` / `best_effort` / `unsupported` as before. A lower
 value compacts earlier; each compaction costs a full-context summary plus a cache rebuild. `limits.session.contextCapTokens`
 (restart of a resting session on mail wake) is a separate, unchanged setting.
+
+## Every session, in the Rust daemon (ef447eb8)
+
+The Rust daemon resolves a limit for EVERY session at spawn, not only a ticket's: the spawn's pin (a ticket's, or the New agent
+"Max context" field, `new.contextLimit`; `0` = off) wins; else `limits.session.defaultContextTokens` read through the scoped
+settings (session > role > project > app), else the default **500000**. The record carries `contextLimit`,
+`contextLimitSource` (`ticket`, `session`, `role`, `project`, `app`, `default`), `contextLimitSupport` and `contextLimitHow`
+(the harness's own answer: `Harness::context_limit_support`; the default is `unsupported`, so a harness that cannot cap says so).
+The limit reaches the harness as `LaunchRequest.context_limit` (claude: `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, read when its process starts).
+
+Modify a running session: frame `session_context_limit {sessionId, limit}` (null = back to the default). The record changes at once;
+the answer's `effect` says when it applies: a running process keeps its limit until the session restarts (the conversation is kept),
+an unsupported harness only records it. The session menu's "Max context" dialog and the session header chip (value, source) use it.
