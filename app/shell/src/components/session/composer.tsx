@@ -13,7 +13,7 @@
 // Esc closes it until the text changes. An attached image becomes its `[image: <path>]` reference at the caret, so the
 // text IS the attachment list: deleting the reference releases the image.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeftRight, CircleX, MoreHorizontal, Paperclip, Play, RotateCw, SendHorizontal, Square, Trash2, UserPlus, X } from "lucide-react";
+import { ArrowLeftRight, CircleX, Gauge, MoreHorizontal, Paperclip, Play, RotateCw, SendHorizontal, Square, Trash2, UserPlus, X } from "lucide-react";
 import { cn, Textarea, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip, TooltipContent, TooltipTrigger } from "@infantry/ui";
 import {
   chatViewOf,
@@ -209,6 +209,7 @@ export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: st
   if (sessionId) {
     tools.push(
       { label: "Switch agent", icon: <ArrowLeftRight />, enabled: online, run: () => openSessionDialog("swap", sessionId) },
+      { label: "Max context", icon: <Gauge />, enabled: online, run: () => openSessionDialog("limit", sessionId) },
       {
         label: dormant ? "Resume session" : "Resume",
         icon: <Play />,

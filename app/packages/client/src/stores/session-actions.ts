@@ -56,6 +56,15 @@ export interface SessionSwapped {
   fromRole?: string | null;
 }
 
+export interface ContextLimitChanged {
+  sessionId: string;
+  contextLimit: number | null;
+  source: string | null;
+  support: string;
+  /** When it takes effect, as the harness answers it. */
+  effect: string;
+}
+
 export interface SwapRequest {
   sessionId: string;
   provider: string;
@@ -66,6 +75,8 @@ export interface SwapRequest {
 export interface SessionActions {
   restart(sessionId: string, force?: boolean): Promise<Envelope>;
   swap(req: SwapRequest): Promise<SessionSwapped>;
+  /** Changes the session's context limit (tokens, 0 = off; null = back to the settings default). */
+  setContextLimit(sessionId: string, limit: number | null): Promise<ContextLimitChanged>;
   stats(sessionId: string): Promise<SessionStats>;
   dispose(): void;
 }
@@ -133,6 +144,12 @@ export function createSessionActions(link: FrameLink, timeoutMs = 30_000): Sessi
       if (req.effort) body.effort = req.effort;
       const e = await request("session_swap", req.sessionId, body, ["session_swapped"]);
       return json<SessionSwapped>(e.data) ?? { sessionId: req.sessionId, provider: req.provider };
+    },
+    async setContextLimit(sessionId, limit) {
+      const e = await request("session_context_limit", sessionId, { sessionId, limit }, ["session_context_limit"]);
+      const r = json<ContextLimitChanged>(e.data);
+      if (!r) throw "session_context_limit: unreadable answer";
+      return r;
     },
     async stats(sessionId) {
       const e = await request("session_stats_get", sessionId, { sessionId }, ["session_stats"]);

@@ -135,6 +135,10 @@ impl Normalizer {
             Value::Object(o) => {
                 let mut m = Map::new();
                 for (k, x) in o {
+                    // The Kotlin goldens predate the per-session context limit (ef447eb8): additive Rust fields, not compared.
+                    if matches!(k.as_str(), "contextLimit" | "contextLimitSource" | "contextLimitSupport" | "contextLimitHow") {
+                        continue;
+                    }
                     m.insert(k.clone(), self.value(k, x));
                 }
                 Value::Object(m)

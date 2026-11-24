@@ -47,6 +47,7 @@ pub fn owns(ty: &str) -> bool {
             | wire::KILL
             | wire::SESSION_DELETE
             | pf::SESSION_RESTART
+            | pf::SESSION_CONTEXT_LIMIT
             | pf::WAITING
             | pf::SESSION_SWAP
             | pf::SESSION_STATS_GET
@@ -120,6 +121,9 @@ impl Config {
     }
 }
 
+/// Resolves the default context limit of a session with no pin: `(project, role)` to `(tokens, source)`, 0 tokens = off.
+pub type ContextDefault = Arc<dyn Fn(Option<&str>, Option<&str>) -> Option<(i32, String)> + Send + Sync>;
+
 /// What a `new` frame may carry (JSON data, every field optional).
 #[derive(Debug, Default, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -141,7 +145,7 @@ pub struct NewOpts {
     pub project_id: Option<String>,
     #[serde(skip)]
     pub agent_id: Option<String>,
-    #[serde(skip)]
+    /// The most context (tokens) the session may hold; 0 = off. None = the setting's default applies.
     pub context_limit: Option<i32>,
     /// RR-4: where the session runs: a runner name, `local` or `any`. A start that names a runner never falls back to local.
     pub runner: Option<String>,
@@ -299,6 +303,8 @@ pub struct Daemon {
     env_extra: std::sync::OnceLock<Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>>,
     /// The env one provider's sessions get on top (its stored key or subscription token, the API key variable blanked).
     provider_env: std::sync::OnceLock<Arc<dyn Fn(&str) -> Vec<(String, String)> + Send + Sync>>,
+    /// The default context limit for a session the spawn did not pin: `(project, role)` to `(tokens, source)`; 0 tokens = off.
+    context_default: std::sync::OnceLock<ContextDefault>,
     /// RR-6: what a start on a REMOTE runner lends `(runner, provider, project)`; unset = nothing is lent.
     lender: std::sync::OnceLock<Arc<crate::lender::Lender>>,
     /// RR-7: a ticket's workspace on a remote runner (set by the runners plugin at the composition root).
@@ -421,6 +427,7 @@ impl Daemon {
             launch: Mutex::new(Default::default()),
             env_extra: std::sync::OnceLock::new(),
             provider_env: std::sync::OnceLock::new(),
+            context_default: std::sync::OnceLock::new(),
             lender: std::sync::OnceLock::new(),
             remote_ws: std::sync::OnceLock::new(),
             tunnel: Arc::default(),
@@ -796,6 +803,16 @@ impl Daemon {
                     Err(m) => vec![encode_req(wire::ERROR, format!("session_restart refused: {m}"), sid.as_deref(), None, req.as_deref())],
                 };
             }
+            pf::SESSION_CONTEXT_LIMIT => {
+                let v: serde_json::Value = serde_json::from_str(&env.data).unwrap_or(serde_json::Value::Null);
+                let s = v["sessionId"].as_str().map(String::from).or(sid.clone()).unwrap_or_default();
+                // a number of tokens (0 = off), or null / absent = back to the settings' default
+                let limit = v["limit"].as_i64().map(|n| n.clamp(0, i32::MAX as i64) as i32);
+                return match self.set_context_limit(s.trim(), limit) {
+                    Ok(effect) => vec![encode_req(pf::SESSION_CONTEXT_LIMIT, effect.to_string(), Some(s.trim()), None, req.as_deref())],
+                    Err(m) => vec![encode_req(wire::ERROR, format!("session_context_limit refused: {m}"), sid.as_deref(), None, req.as_deref())],
+                };
+            }
             pf::SESSION_SWAP => {
                 let r = serde_json::from_str::<SessionSwap>(&env.data).map_err(|e| format!("bad request ({e})")).and_then(|q| self.swap(q));
                 return match r {
@@ -906,7 +923,19 @@ impl Daemon {
         rec.ticket_id = some(&opts.ticket_id);
         rec.project_id = some(&opts.project_id);
         rec.agent_id = some(&opts.agent_id);
-        rec.context_limit = opts.context_limit;
+        // Order: the spawn's pin (a ticket's, or the New agent field) > the settings (session > role > project > app > default).
+        let (limit, source) = match opts.context_limit {
+            Some(n) => (Some(n.max(0)), Some(if rec.ticket_id.is_some() { "ticket" } else { "session" }.to_string())),
+            None => match self.context_default.get().and_then(|f| f(rec.project_id.as_deref(), rec.role.as_deref())) {
+                Some((n, scope)) => (Some(n.max(0)), Some(scope)),
+                None => (None, None),
+            },
+        };
+        let (support, how) = harness.context_limit_support();
+        rec.context_limit = limit;
+        rec.context_limit_source = source;
+        rec.context_limit_support = Some(support.to_string());
+        rec.context_limit_how = Some(how.to_string());
         rec.unattended = opts.unattended;
         rec.spawner_session_id = some(&opts.spawner);
         if let Some((name, _)) = &placed {
@@ -1240,6 +1269,38 @@ impl Daemon {
         self.lender.get().cloned()
     }
 
+    /// Changes a session's context limit (tokens, 0 = off; None = back to the settings' default) without touching its
+    /// conversation. The harness reads the limit when its process starts, so a running process keeps the old one until
+    /// the session is restarted; the answer says which of the two applies (the truth of the harness).
+    pub fn set_context_limit(&self, id: &str, limit: Option<i32>) -> Result<serde_json::Value, String> {
+        let entry = self.find(id).ok_or_else(|| format!("unknown session {id}"))?;
+        let mut e = entry.lock().unwrap();
+        let (value, source) = match limit {
+            Some(n) => (Some(n.max(0)), Some("session".to_string())),
+            None => match self.context_default.get().and_then(|f| f(e.rec.project_id.as_deref(), e.rec.role.as_deref())) {
+                Some((n, scope)) => (Some(n.max(0)), Some(scope)),
+                None => (None, None),
+            },
+        };
+        e.rec.context_limit = value;
+        e.rec.context_limit_source = source.clone();
+        let running = e.hs.is_some();
+        let (support, _) = self.harness_for(Some(&e.rec.provider)).map(|h| h.context_limit_support()).unwrap_or(("unsupported", ""));
+        let effect = if support == "unsupported" {
+            "recorded only: this harness cannot cap its context"
+        } else if running {
+            "applies when this session's process next starts (restart it to apply now); the conversation is kept"
+        } else {
+            "applies on its next turn"
+        };
+        self.push(&mut e);
+        Ok(json!({"sessionId": id, "contextLimit": value, "source": source, "support": support, "effect": effect}))
+    }
+
+    pub fn set_context_default(&self, f: ContextDefault) {
+        let _ = self.context_default.set(f);
+    }
+
     pub fn set_provider_env(&self, f: Arc<dyn Fn(&str) -> Vec<(String, String)> + Send + Sync>) {
         let _ = self.provider_env.set(f);
     }
@@ -1356,6 +1417,7 @@ impl Daemon {
             cwd: PathBuf::from(&e.rec.working_dir),
             model: e.rec.model.clone(),
             effort: e.rec.effort.clone(),
+            context_limit: e.rec.context_limit.filter(|n| *n > 0).map(|n| n as u64),
             state_dir: self.cfg.state_dir.clone(),
             env,
             mcp,

@@ -41,6 +41,7 @@ pub const NEW: &str = "new";
 pub const SESSION_DELETE: &str = "session_delete";
 pub const SESSION_PROJECT: &str = "session_project";
 pub const SESSION_RESTART: &str = "session_restart";
+pub const SESSION_CONTEXT_LIMIT: &str = "session_context_limit";
 pub const SESSION_MCP_RECONNECT: &str = "session_mcp_reconnect";
 pub const MCP_LIST: &str = "mcp_list";
 pub const MCP_GET: &str = "mcp_get";
@@ -368,6 +369,7 @@ pub const ALL: &[&str] = &[
     SESSION_DELETE,
     SESSION_PROJECT,
     SESSION_RESTART,
+    SESSION_CONTEXT_LIMIT,
     SESSION_MCP_RECONNECT,
     MCP_LIST,
     MCP_GET,
