@@ -84,7 +84,22 @@ export interface LoginWindow {
   close(): void;
 }
 
+/**
+ * BOS-8: this window is one app of BattalionOS (the OS opened it as `app-<id>`). The OS owns updates, the desktop and the
+ * window; the app asks it through these two calls. Absent in the standalone app and in a browser.
+ */
+export interface HostOs {
+  /** The app's id in the OS ("infantry-ai"). */
+  readonly appId: string;
+  /** Back to the OS desktop: closes this window; the app keeps running (`os_close_app_window`). */
+  showDesktop(): Promise<void>;
+  /** The agent counts the OS shows on this app's icon (`os_badge`). */
+  badge(working: number, needsInput: number): Promise<void>;
+}
+
 export interface Host {
+  /** BOS-8: set only inside a BattalionOS app window; null/absent elsewhere. */
+  readonly os?: HostOs | null;
   readonly kind: HostKind;
   /** The frame buttons; null where the platform draws them (a browser) or there is no window frame (a phone). */
   readonly window: HostWindow | null;

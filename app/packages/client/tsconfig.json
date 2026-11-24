@@ -1,5 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "types": ["node"] },
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "@infantry/client": ["./src/index.ts"],
+      "@infantry/ui-plugin-api/contract": ["../ui-plugin-api/src/contract.ts"]
+    }
+  },
   "include": ["src", "test"]
 }

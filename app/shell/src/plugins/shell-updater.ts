@@ -6,8 +6,8 @@ import type { Host, UpdateInfo } from "@infantry/client";
 import type { ShellUpdater } from "@infantry/ui-plugin-api/contract";
 
 /** The desktop app's updater, or null where there is none (a browser; a phone installs through its own store flow). */
-export function shellUpdater(host: Pick<Host, "kind" | "call">): ShellUpdater | null {
-  if (host.kind !== "desktop") return null;
+export function shellUpdater(host: Pick<Host, "kind" | "call"> & { os?: Host["os"] }): ShellUpdater | null {
+  if (host.kind !== "desktop" || host.os) return null;
   return {
     async check() {
       const u = await host.call<UpdateInfo>("update_check");

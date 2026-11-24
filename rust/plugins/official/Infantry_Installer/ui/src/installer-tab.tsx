@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Download, PackageOpen, Power, RefreshCw, RotateCw, Trash2 } from "lucide-react";
 import { Button, EmptyState, ListRow, Progress, RefusalBanner, Switch, TabPage, type Tone } from "@infantry/ui";
-import { useLinkState } from "@infantry/ui-plugin-api";
+import { osApp, useLinkState } from "@infantry/ui-plugin-api";
 import { isBusy, progressOf } from "./armory";
 import { armoryStore, findApp, groupRows, installerStore, membersOf, routeApp, rowActions, useArmory, useInstaller, type PluginRow } from "./store";
 
@@ -101,6 +101,8 @@ function AppEntry({ app, rows, busy }: { app: PluginRow; rows: PluginRow[]; busy
 function UpdateBar({ id }: { id: string }) {
   const update = useArmory((s) => s.updates.find((u) => u.id === id));
   const p = useArmory((s) => progressOf(s, id));
+  // BOS-8: under BattalionOS the OS's own Armory updates apps; this half of the Apps tab is not drawn.
+  if (osApp()) return null;
   if (!update && p.phase === "idle") return null;
   const a = armoryStore().getState();
   const shell = update ? update.kind === "shell" || update.restart === "relaunch" : false;

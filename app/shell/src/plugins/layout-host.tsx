@@ -12,6 +12,7 @@ import type { LayoutRoot } from "@infantry/ui-plugin-api/layout";
 import type { ShellProps } from "@infantry/ui-plugin-api/contract";
 import { createLayoutProvider } from "@infantry/ui-plugin-api/layout";
 import { AppShell } from "@/components/layout/app-shell";
+import { host } from "@/host";
 import { DEFAULT_LAYOUT, setLayoutProvider, useLayoutProvider } from "./default-layout";
 import { usePreference } from "./preferences";
 import { usePlugins, usePluginsLoaded } from "./use-plugins";
@@ -112,7 +113,8 @@ function useChosenLayout(): { ready: boolean; Root: LayoutRoot<ComponentType<She
   }, [unset, loaded]);
   const wanted = useMemo(() => {
     if (choice === DEFAULT_LAYOUT_CHOICE) return undefined;
-    if (unset) return fills.find((f) => f.contribution.defaultLayout === true);
+    // BOS-8: under the OS the OS is the desktop, so no inner desktop starts here (an explicit choice still wins).
+    if (unset) return host.os ? undefined : fills.find((f) => f.contribution.defaultLayout === true);
     return fills.find((f) => `${f.plugin}/${f.contribution.id}` === choice);
   }, [choice, unset, fills]);
   const provider = useMemo(

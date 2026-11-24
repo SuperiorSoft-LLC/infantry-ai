@@ -14,6 +14,7 @@ import { AvatarStrip } from "@/components/agents/avatar-strip";
 import { Brand } from "./brand";
 import { ProjectPicker } from "./project-picker";
 import { WindowControls } from "./window-controls";
+import { OsDesktopButton } from "./os-desktop";
 
 export function TitleBar({ headerActions }: { headerActions?: ReactNode } = {}) {
   const ui = useUi();
@@ -86,6 +87,7 @@ export function TitleBar({ headerActions }: { headerActions?: ReactNode } = {}) 
       </IconButton>
       {/* Desktop app only (HC-1 host.window); a browser or a phone renders nothing here (UI-WINCTRL-WEB-1). */}
       {headerActions}
+      <OsDesktopButton />
       <WindowControls />
     </header>
   );

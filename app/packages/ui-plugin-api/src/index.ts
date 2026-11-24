@@ -42,6 +42,8 @@ export const useAgentActivity = (): AgentActivity => lent("useAgentActivity")();
 export const windowFrame = (): WindowFrame | null => lent("windowFrame")();
 
 /** The shell's own updater (Tauri updater + release feed), or null in a browser or on a phone (ARMORY-3). */
+/** BOS-8: the BattalionOS app id of this window, or null. Safe on a host that predates it. */
+export const osApp = (): string | null => host().api.osApp?.() ?? null;
 export const shellUpdater = (): ShellUpdater | null => lent("shellUpdater")();
 
 /** RR-14: opens the app's setup wizard aimed at [runner] (Runners tab: "Set up this runner"). */

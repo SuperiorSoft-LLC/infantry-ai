@@ -15,9 +15,10 @@ import { attentionStore } from "@/components/mail/use-mail";
 /** One of the app's own commands (HC-1 host.call; src-tauri update.rs, pairing.rs, android_update.rs). */
 const call = <T,>(cmd: string, args?: Record<string, unknown>): Promise<T> => host.call<T>(cmd, args);
 
-const desktop = () => host.kind === "desktop" && !isMobile;
+// BOS-8: inside BattalionOS the OS owns updates and the PATH; those rows do not exist there (host.os).
+const desktop = () => host.kind === "desktop" && !isMobile && !host.os;
 // RUST-UPD-2: the update commands exist on the desktop (Tauri updater plugin) and on Android (android_update.rs); iOS has none.
-const updatable = () => host.kind !== "browser";
+const updatable = () => host.kind !== "browser" && !host.os;
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function Row({ id, title, hint, children }: { id: string; title: string; hint: React.ReactNode; children?: React.ReactNode }) {
@@ -79,6 +80,11 @@ interface UpdaterView {
 
 /** Settings > About: version, channel, feed, check and install. */
 export function UpdaterRows() {
+  if (host.os) return null;
+  return <UpdaterRowsBody />;
+}
+
+function UpdaterRowsBody() {
   const [v, setV] = useState<UpdaterView | null>(null);
   const [feed, setFeed] = useState("");
   const [found, setFound] = useState<UpdateInfo | null>(null);

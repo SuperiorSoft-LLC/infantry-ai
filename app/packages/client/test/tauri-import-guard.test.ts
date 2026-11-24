@@ -12,7 +12,8 @@ const app = fileURLToPath(new URL("../../..", import.meta.url));
 const repo = join(app, "..");
 const IMPORT = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)["']@tauri-apps\//;
 const GLOBAL = /__TAURI(?:_INTERNALS)?__/;
-const IMPORT_ALLOWED = "app/shell/src/host/tauri/";
+// BOS-8: the OS-app host (host/battalion) is the second folder that may import @tauri-apps.
+const IMPORT_ALLOWED = ["app/shell/src/host/tauri/", "app/shell/src/host/battalion/"];
 const GLOBAL_ALLOWED = "app/shell/src/host/";
 
 function sources(dir: string, out: string[] = []): string[] {
@@ -57,7 +58,7 @@ describe("platform calls go through the host seam", () => {
       for (const file of sources(root)) {
         const rel = relative(repo, file).replace(/\\/g, "/");
         const text = readFileSync(file, "utf8");
-        if (!rel.startsWith(IMPORT_ALLOWED)) for (const line of hits(text, IMPORT)) offenders.push(`${rel}:${line} imports @tauri-apps`);
+        if (!IMPORT_ALLOWED.some((d) => rel.startsWith(d))) for (const line of hits(text, IMPORT)) offenders.push(`${rel}:${line} imports @tauri-apps`);
         if (!rel.startsWith(GLOBAL_ALLOWED)) for (const line of hits(text, GLOBAL)) offenders.push(`${rel}:${line} reads a Tauri global`);
       }
     }
@@ -66,7 +67,7 @@ describe("platform calls go through the host seam", () => {
 
   it("scans the shell and the host folder (the guard is not looking at an empty tree)", () => {
     const files = sources(join(app, "shell", "src")).map((f) => relative(repo, f).replace(/\\/g, "/"));
-    expect(files.some((f) => f.startsWith(IMPORT_ALLOWED))).toBe(true);
+    expect(files.some((f) => f.startsWith(IMPORT_ALLOWED[0]) ) && files.some((f) => f.startsWith(IMPORT_ALLOWED[1]))).toBe(true);
     expect(files.length).toBeGreaterThan(50);
   });
 });

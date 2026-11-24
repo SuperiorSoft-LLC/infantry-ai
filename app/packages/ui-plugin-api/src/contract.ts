@@ -168,6 +168,8 @@ export interface HostApi {
   windowFrame(): WindowFrame | null;
   /** The shell's own updater, or null where it has none (a browser, a phone) (ARMORY-3). */
   shellUpdater(): ShellUpdater | null;
+  /** BOS-8: the id of the BattalionOS app this window is, or null (standalone, browser). The OS owns updates and the desktop there. */
+  osApp?(): string | null;
   /** RR-14: opens the app's setup wizard aimed at the runner [runner] (`local` = this machine): tools, sign-in, keys and models there. */
   openRunnerSetup(runner: string): void;
 }
