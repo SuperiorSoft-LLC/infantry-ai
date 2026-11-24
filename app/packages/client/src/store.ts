@@ -23,13 +23,15 @@ export interface StoreSettings {
   sendAckSeconds: number;
   /** Frames held ahead of a gap before the client gives up on the gap and moves on. */
   maxHeldFrames: number;
+  /** How long frames held ahead of a gap wait for the missing ones before the client moves on and marks "output missing", ms. */
+  gapWaitMs: number;
   /** Latest-flush fallback when animation frames are throttled (a hidden window), ms. */
   flushFallbackMs: number;
   /** Ask every session's history on connect ("all") or only the one the user opens ("selected"). */
   historyOnConnect: "all" | "selected";
 }
 
-export const DEFAULT_SETTINGS: StoreSettings = { sendAckSeconds: 45, maxHeldFrames: 512, flushFallbackMs: 250, historyOnConnect: "all" };
+export const DEFAULT_SETTINGS: StoreSettings = { sendAckSeconds: 45, maxHeldFrames: 512, gapWaitMs: 2000, flushFallbackMs: 250, historyOnConnect: "all" };
 
 export interface PendingSend {
   clientId: string;
@@ -120,11 +122,12 @@ interface Internal {
   raf: number | null;
   fallback: ReturnType<typeof setTimeout> | null;
   ackTimers: Map<string, ReturnType<typeof setTimeout>>;
+  gapTimers: Map<string, ReturnType<typeof setTimeout>>;
 }
 
 export function createDaemonStore(opts: { url: string; transport: TransportFactory; settings?: Partial<StoreSettings>; offline?: boolean }): DaemonStore {
   const cfg: StoreSettings = { ...DEFAULT_SETTINGS, ...opts.settings };
-  const io: Internal = { queue: [], held: new Map(), raf: null, fallback: null, ackTimers: new Map() };
+  const io: Internal = { queue: [], held: new Map(), raf: null, fallback: null, ackTimers: new Map(), gapTimers: new Map() };
   let conn: DaemonConnection | null = null;
   const taps = new Set<(env: Envelope) => void>();
 
@@ -153,6 +156,26 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
         const next = reduce(s, batch);
         set({ ...next, stats: { lastBatch: batch.length, flushes: s.stats.flushes + 1, frames: s.stats.frames + batch.length } });
       }, { frames: batch.length });
+      watchGaps();
+    };
+
+    /** Frames held ahead of a gap that never fills (a range lost on the daemon's disk) must not stall the chat: after
+     *  `gapWaitMs` the client moves past the gap and shows what it has, marked as missing output. */
+    const watchGaps = () => {
+      for (const [sid, held] of io.held) {
+        if (held.size === 0 || io.gapTimers.has(sid)) continue;
+        io.gapTimers.set(sid, setTimeout(() => {
+          io.gapTimers.delete(sid);
+          const h = io.held.get(sid);
+          if (!h || h.size === 0) return;
+          const cursor = get().sessions[sid]?.cursor ?? 0;
+          const lowest = Math.min(...h.keys());
+          if (lowest <= cursor + 1) return schedule();
+          const data = JSON.stringify({ requestedAfterSequence: cursor, oldestAvailableSequence: lowest, latestAvailableSequence: Math.max(...h.keys()), evictedCount: lowest - cursor - 1 });
+          io.queue.push({ type: Frame.REPLAY_GAP, sessionId: sid, data });
+          schedule();
+        }, cfg.gapWaitMs));
+      }
     };
 
     /** The whole batch against the current state: plain objects, one copy per touched session. */

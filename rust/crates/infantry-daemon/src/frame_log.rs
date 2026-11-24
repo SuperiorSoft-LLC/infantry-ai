@@ -40,25 +40,44 @@ pub fn load(state_dir: &Path, sid: &str, keep: usize) -> VecDeque<(i64, String)>
 }
 
 /// Appends one frame. `lines` is how many lines the file holds (the caller tracks it); past twice `keep` the file is
-/// rewritten from `history` (which already holds this frame). Returns the new line count. Failures are silent: a log that
-/// cannot be written must never stop a session.
+/// rewritten from `history` (which already holds this frame). Returns the new line count. A failure (disk full) is
+/// logged loudly and leaves the count alone: a log that cannot be written must never stop a session, and the hole it
+/// leaves is marked to the client by `replay`.
 pub fn append(state_dir: &Path, sid: &str, seq: i64, frame: &str, history: &VecDeque<(i64, String)>, lines: usize, keep: usize) -> usize {
+    match try_append(state_dir, sid, seq, frame, history, lines, keep) {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln!("[infantry] could not save frame {seq} of session {sid} (history on disk now has a hole): {e}");
+            lines
+        }
+    }
+}
+
+fn try_append(state_dir: &Path, sid: &str, seq: i64, frame: &str, history: &VecDeque<(i64, String)>, lines: usize, keep: usize) -> std::io::Result<usize> {
     let path = file(state_dir, sid);
+    fs::create_dir_all(dir(state_dir))?;
     if lines + 1 > keep.max(1) * 2 {
         let body: String = history.iter().map(|(s, f)| line(*s, f)).collect();
         let tmp = path.with_extension("tmp");
-        if fs::create_dir_all(dir(state_dir)).is_ok() && fs::write(&tmp, body).is_ok() && fs::rename(&tmp, &path).is_ok() {
-            return history.len();
-        }
-        return lines;
+        fs::write(&tmp, body)?;
+        fs::rename(&tmp, &path)?;
+        return Ok(history.len());
     }
-    let _ = fs::create_dir_all(dir(state_dir));
-    let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) else { return lines };
-    if f.write_all(line(seq, frame).as_bytes()).is_ok() {
-        lines + 1
-    } else {
-        lines
+    let mut f = OpenOptions::new().create(true).append(true).open(&path)?;
+    // A failed earlier write can leave a half line: start on a fresh line so it cannot swallow this frame.
+    let mut text = line(seq, frame);
+    if f.metadata().map(|m| m.len() > 0).unwrap_or(false) && !ends_with_newline(&path) {
+        text.insert(0, '\n');
     }
+    f.write_all(text.as_bytes())?;
+    Ok(lines + 1)
+}
+
+fn ends_with_newline(path: &Path) -> bool {
+    use std::io::{Read, Seek, SeekFrom};
+    let Ok(mut f) = fs::File::open(path) else { return true };
+    let mut b = [0u8; 1];
+    f.seek(SeekFrom::End(-1)).is_ok() && f.read_exact(&mut b).is_ok() && b[0] == b'\n'
 }
 
 /// Drops a session's log (the session was deleted).
@@ -89,6 +108,18 @@ mod tests {
         let back = load(&d, "s1", 100);
         assert_eq!(back.iter().map(|x| x.0).collect::<Vec<_>>(), vec![1, 2, 3, 4]);
         assert_eq!(back[2].1, r#"{"type":"status","sequence":3}"#);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_half_written_line_does_not_swallow_the_next_frame() {
+        let d = tmp("half");
+        fs::create_dir_all(dir(&d)).unwrap();
+        fs::write(file(&d, "s1"), "{\"s\":1,\"f\":\"a\"}
+{\"s\":2,\"f\":\"b").unwrap();
+        let h = VecDeque::new();
+        append(&d, "s1", 3, "c", &h, 2, 100);
+        assert_eq!(load(&d, "s1", 10).iter().map(|x| x.0).collect::<Vec<_>>(), vec![1, 3]);
         let _ = fs::remove_dir_all(&d);
     }
 
