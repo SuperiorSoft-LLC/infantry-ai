@@ -12,7 +12,6 @@ import { useAutomationStats } from "@/daemon/use-timeline";
 import { ExternalLink } from "lucide-react";
 import { IconButton } from "@infantry/ui";
 import { useUi } from "@/state/ui-state";
-import { SessionActionButtons } from "./session-actions";
 
 const tokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 
@@ -58,7 +57,6 @@ export function SessionHeader({ agent }: { agent: Agent }) {
         <IconButton label="Pop out this chat" onClick={() => ui.popOut(agent.id)}>
           <ExternalLink />
         </IconButton>
-        <SessionActionButtons sessionId={agent.id} busy={agent.status === "working"} />
       </div>
     </div>
   );

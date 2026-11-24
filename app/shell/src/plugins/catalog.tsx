@@ -36,10 +36,9 @@ import {
   ScrollText,
   type LucideIcon,
 } from "lucide-react";
-import { declLabel, mergedTabTarget, type Contribution, type SlotRegistry } from "@infantry/client";
+import { declLabel, mergedTabTarget, removedTabTarget, type Contribution, type SlotRegistry } from "@infantry/client";
 import { EpicsTab, PodsTab, ProfilesTab } from "@/components/panels/board-panels";
 import { McpPanel, ReviewPanel, ServicesTab } from "@/components/panels/service-panels";
-import { SettingsPage } from "@/components/panels/settings-page";
 import { CalendarTab } from "@/components/tabs/calendar-tab";
 import { RolesTab } from "@/components/roles/roles-tab";
 import { NotesTab } from "@/components/knowledge/notes-tab";
@@ -90,7 +89,6 @@ const CENTRE: Def[] = [
   { id: "epics", declared: "infantry.epics", label: "Epics", icon: Layers, render: () => <EpicsTab /> },
   { id: "notes", declared: "infantry.notes", label: "Notes", icon: FileText, render: () => <NotesTab /> },
   { id: "skills", builtin: true, label: "Skills", icon: Sparkles, render: () => <SkillsTab /> },
-  { id: "prompts", builtin: true, label: "Prompts", icon: MessageSquare, render: () => <PromptsTab /> },
   { id: "scripts", builtin: true, label: "Scripts", icon: ScrollText, render: () => <ScriptsTab /> },
   { id: "run", declared: "infantry.run", label: "Run", icon: Play, render: () => <RunTab /> },
   { id: "git", declared: "infantry.git", label: "Git", icon: GitBranch, render: () => <GitTab /> },
@@ -98,7 +96,6 @@ const CENTRE: Def[] = [
   { id: "health", builtin: true, label: "Health", icon: Activity, render: () => <HealthTab /> },
   { id: "plugins", declared: "infantry.settings.plugins", builtin: true, label: "Plugins", icon: Puzzle, render: () => <PluginManager /> },
   { id: "services", declared: "infantry.account", builtin: true, label: "Services", icon: Server, render: () => <ServicesTab /> },
-  { id: "settings", declared: "infantry.settings", label: "Settings", icon: Settings, render: () => <SettingsPage /> },
 ];
 
 /** Right-panel tabs. */
@@ -157,8 +154,8 @@ export function tabsFor(container: "center" | "right", reg: SlotRegistry | null)
   const defs = container === "center" ? CENTRE : RIGHT;
   if (!reg) return arrange(container, defs.map((d) => ({ ...d, plugin: null })));
   // A declaration with `"bar": false` stays registered (a layout or the bootstrap window draws it) but gets no tab in the bar.
-  // A tab that lives inside Services now (Sites) never gets a bar tab of its own, even from an older module.json.
-  const declared = reg.tabs.filter((t) => (t.decl.container ?? "center") === container && t.decl.bar !== false && !mergedTabTarget(t.decl.id));
+  // A tab that lives elsewhere now (Sites in Services; Settings behind the cog; Prompts in the right panel) never gets a bar tab of its own, even from an older module.json.
+  const declared = reg.tabs.filter((t) => (t.decl.container ?? "center") === container && t.decl.bar !== false && !mergedTabTarget(t.decl.id) && !(container === "center" && removedTabTarget(t.decl.id)));
   const byId = new Map(declared.map((t) => [t.decl.id, t]));
   const known = new Set(defs.map((d) => d.declared).filter(Boolean) as string[]);
   // A catalog renderer serves its tab in whichever container declares it.

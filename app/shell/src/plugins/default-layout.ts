@@ -17,8 +17,8 @@ export const DEFAULT_LAYOUT: LayoutDocument = {
       id: "center",
       components: ids(
         "infantry.cli", "mail", "infantry.pods", "infantry.roles", "infantry.profiles", "infantry.triggers", "infantry.calendar",
-        "infantry.epics", "infantry.notes", "skills", "prompts", "scripts", "infantry.run", "infantry.git", "processes", "health",
-        "infantry.settings.plugins", "infantry.account", "infantry.settings",
+        "infantry.epics", "infantry.notes", "skills", "scripts", "infantry.run", "infantry.git", "processes", "health",
+        "infantry.settings.plugins", "infantry.account",
       ),
     },
     {
