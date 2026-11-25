@@ -46,6 +46,13 @@ pub fn run_with_context(context_json: &str) -> i32 {
         infantry_daemon::own_files::set_library(std::path::Path::new(dir).join("lib").join(LIBRARY_FILE));
     }
     let args: Vec<String> = ctx.get("args").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
-    crate::run_daemon(args);
-    0
+    // DAEMON-LOCK: a data folder already in use is an error returned to the host (code 3, the plain-words reason on stderr),
+    // never an exit of the host's process.
+    match crate::run_checked(args) {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("[infantry] refusing to start: {e}");
+            3
+        }
+    }
 }

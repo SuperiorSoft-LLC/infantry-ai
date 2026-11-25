@@ -29,9 +29,9 @@ pub enum LockError {
 impl std::fmt::Display for LockError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LockError::Held { state_dir, pid } => {
-                let who = pid.map(|p| format!("pid {p}")).unwrap_or_else(|| "an unknown pid".into());
-                write!(f, "state dir {} is already used by a live daemon ({who}); one daemon per state dir", state_dir.display())
+            LockError::Held { pid, .. } => {
+                let who = pid.map(|p| p.to_string()).unwrap_or_else(|| "unknown".into());
+                write!(f, "Infantry AI is already running with this data (process {who}). Close it first.")
             }
             LockError::Io(e) => write!(f, "state dir lock: {e}"),
         }
@@ -56,9 +56,47 @@ impl StateLock {
                 Err(TryLockError::Error(e)) => return Err(LockError::Io(format!("{}: {e}", path.display()))),
             }
         }
+        // An OLDER daemon (0.7.2 and before) takes no lock; it is seen by its recorded pid. The same wait lets one that is closing finish.
+        while let Some(pid) = legacy_holder(state_dir) {
+            if start.elapsed() >= wait {
+                return Err(LockError::Held { state_dir: state_dir.to_path_buf(), pid: Some(pid) });
+            }
+            std::thread::sleep(POLL);
+        }
         let _ = std::fs::write(state_dir.join(HOLDER_FILE), std::process::id().to_string());
         Ok(StateLock { _file: file })
     }
+}
+
+/// The pid of an older (lock-less) daemon using this folder, or None. `daemon.pid` must name a live process AND the port in
+/// `daemon.port` must answer `/health` as an Infantry AI daemon; a dead pid, a reused pid (another program, or nothing on
+/// that port) never blocks.
+pub fn legacy_holder(state_dir: &Path) -> Option<u32> {
+    legacy_holder_with(state_dir, &|p| crate::health::pid_alive(p as i64), &answers_as_daemon)
+}
+
+pub fn legacy_holder_with(state_dir: &Path, alive: &dyn Fn(u32) -> bool, is_daemon: &dyn Fn(u16) -> bool) -> Option<u32> {
+    let pid: u32 = std::fs::read_to_string(state_dir.join("daemon.pid")).ok()?.trim().parse().ok()?;
+    let port: u16 = std::fs::read_to_string(state_dir.join("daemon.port")).ok()?.trim().parse().ok()?;
+    (alive(pid) && is_daemon(port)).then_some(pid)
+}
+
+/// True when `127.0.0.1:port` answers `GET /health` as an Infantry AI daemon (`contract` and `buildId` in the JSON), or
+/// with 401/403 (a daemon that wants its token).
+fn answers_as_daemon(port: u16) -> bool {
+    use std::io::{Read, Write};
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let Ok(mut s) = std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(500)) else { return false };
+    let _ = s.set_read_timeout(Some(Duration::from_millis(800)));
+    let _ = s.set_write_timeout(Some(Duration::from_millis(500)));
+    if s.write_all(format!("GET /health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").as_bytes()).is_err() {
+        return false;
+    }
+    let mut buf = Vec::new();
+    let _ = s.take(64 * 1024).read_to_end(&mut buf);
+    let text = String::from_utf8_lossy(&buf);
+    let status = text.lines().next().unwrap_or("");
+    status.contains(" 401") || status.contains(" 403") || (status.contains(" 200") && text.contains("\"contract\"") && text.contains("\"buildId\""))
 }
 
 /// The pid the current holder recorded (None when unreadable).
@@ -115,5 +153,74 @@ mod tests {
         child.kill().unwrap();
         child.wait().unwrap();
         StateLock::acquire(d.path(), Duration::ZERO).expect("lock free right after the kill");
+    }
+
+    /// A tiny server on a free port that answers every request with `body` (what `/health` of a daemon, or of something else, says).
+    fn fake_health(body: &'static str) -> u16 {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            for mut c in l.incoming().flatten().take(40) {
+                let mut b = [0u8; 512];
+                let _ = c.read(&mut b);
+                let _ = c.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes());
+            }
+        });
+        port
+    }
+
+    fn old_daemon_files(d: &Path, pid: u32, port: u16) {
+        std::fs::write(d.join("daemon.pid"), pid.to_string()).unwrap();
+        std::fs::write(d.join("daemon.port"), port.to_string()).unwrap();
+    }
+
+    #[test]
+    fn an_older_daemons_live_pid_is_refused_and_nothing_is_written() {
+        let d = tempfile::tempdir().unwrap();
+        let port = fake_health(r#"{"ok":true,"contract":1,"buildId":"x"}"#);
+        old_daemon_files(d.path(), std::process::id(), port);
+        let err = StateLock::acquire(d.path(), Duration::from_millis(150)).unwrap_err();
+        assert_eq!(err, LockError::Held { state_dir: d.path().to_path_buf(), pid: Some(std::process::id()) });
+        assert_eq!(err.to_string(), format!("Infantry AI is already running with this data (process {}). Close it first.", std::process::id()));
+        assert!(!d.path().join(HOLDER_FILE).exists());
+    }
+
+    #[test]
+    fn a_dead_pid_never_blocks() {
+        let d = tempfile::tempdir().unwrap();
+        let port = fake_health(r#"{"ok":true,"contract":1,"buildId":"x"}"#);
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap()).args(["--list"]).stdout(std::process::Stdio::null()).spawn().unwrap();
+        let dead = child.id();
+        child.wait().unwrap();
+        old_daemon_files(d.path(), dead, port);
+        StateLock::acquire(d.path(), Duration::ZERO).unwrap();
+    }
+
+    #[test]
+    fn a_reused_pid_never_blocks() {
+        // The pid is alive (this process) but the recorded port answers like another program, or answers nothing.
+        let d = tempfile::tempdir().unwrap();
+        old_daemon_files(d.path(), std::process::id(), fake_health("<html>not infantry</html>"));
+        StateLock::acquire(d.path(), Duration::ZERO).unwrap();
+        let d2 = tempfile::tempdir().unwrap();
+        let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        old_daemon_files(d2.path(), std::process::id(), closed);
+        StateLock::acquire(d2.path(), Duration::ZERO).unwrap();
+    }
+
+    /// The standalone restart path: the old daemon is stopped and the new one starts at once; the start waits for the lock.
+    #[test]
+    fn a_start_waits_for_a_holder_that_is_closing() {
+        let d = tempfile::tempdir().unwrap();
+        let first = StateLock::acquire(d.path(), Duration::ZERO).unwrap();
+        let t = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(300));
+            drop(first);
+        });
+        let started = Instant::now();
+        StateLock::acquire(d.path(), Duration::from_secs(5)).unwrap();
+        assert!(started.elapsed() >= Duration::from_millis(250));
+        t.join().unwrap();
     }
 }

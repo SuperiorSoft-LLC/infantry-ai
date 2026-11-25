@@ -60,22 +60,36 @@ pub static STOP: tokio::sync::Notify = tokio::sync::Notify::const_new();
 /// The daemon: today's `infantry-daemon` program body, run with its arguments (without the program name). Returns when it
 /// has stopped. The program (`main.rs`) and the BattalionOS library entry (`os_lib`) both call it; nothing else differs.
 pub fn run_daemon(a: Vec<String>) {
+    if let Err(e) = run_checked(a) {
+        fail(e);
+    }
+}
+
+/// [`run_daemon`] for a caller that must not lose its process (the BattalionOS library): a refused start because the data
+/// folder is in use (DAEMON-LOCK) is the returned error, in plain words. The lock is held until this returns, so a stop
+/// followed by a start in the same process, or the host's update, takes it again. Other start failures still exit.
+pub fn run_checked(a: Vec<String>) -> Result<(), String> {
     let arg = |k: &str| a.iter().position(|x| x == k).and_then(|i| a.get(i + 1)).cloned();
     if a.iter().any(|x| x == "--build-id") {
         println!("{}", infantry_daemon::server::build_id());
-        return;
+        return Ok(());
     }
     if a.iter().any(|x| x == "--help" || x == "-h") {
-        println!("infantry-daemon [--port N] [--host H] [--mode both|runner|orchestrator] [--link-port N] [--link-bind H] [--runner-host H] [--runner-public-port N] [--state-dir DIR] [--provider NAME] [--legacy-backend CMD] [--legacy-port N] [--gateway-routes JSON]");
-        return;
+        println!("infantry-daemon [--port N] [--host H] [--mode both|runner|orchestrator] [--link-port N] [--link-bind H] [--runner-host H] [--runner-public-port N] [--state-dir DIR] [--provider NAME] [--legacy-backend CMD] [--legacy-port N] [--gateway-routes JSON] [--lock-wait-secs N]");
+        return Ok(());
     }
     // BOS-7: an app of BattalionOS only when the OS says so (`BATTALION_CONTRACT`); without it nothing below changes.
     let os_env = os_app::OsEnv::from_env(&auth::env).unwrap_or_else(|e| fail(e));
+    let state_dir = arg("--state-dir").or_else(|| auth::env("INFANTRY_STATE_DIR")).map(PathBuf::from).or_else(|| os_env.as_ref().and_then(|o| o.state_dir.clone())).unwrap_or_else(default_state_dir);
+    if let Err(e) = std::fs::create_dir_all(&state_dir) {
+        fail(format!("state dir {}: {e}", state_dir.display()));
+    }
+    // DAEMON-LOCK: one live Infantry AI per data folder, program or library alike; taken before any other file of the folder
+    // is opened (launch.json included), held until this function returns. A bounded wait covers a holder that is closing.
+    let lock_wait = arg("--lock-wait-secs").or_else(|| auth::env("INFANTRY_LOCK_WAIT_SECS")).map(|v| v.trim().parse::<u64>().map(std::time::Duration::from_secs).unwrap_or_else(|_| fail(format!("bad lock wait `{v}`")))).unwrap_or(infantry_daemon::state_lock::DEFAULT_WAIT);
+    let _state_lock = infantry_daemon::state_lock::StateLock::acquire(&state_dir, lock_wait).map_err(|e| e.to_string())?;
     let launch = match &os_env {
-        Some(o) => {
-            let dir = arg("--state-dir").or_else(|| auth::env("INFANTRY_STATE_DIR")).map(PathBuf::from).or_else(|| o.state_dir.clone()).unwrap_or_else(default_state_dir);
-            os_app::Launch::read(&dir).unwrap_or_else(|e| fail(e))
-        }
+        Some(_) => os_app::Launch::read(&state_dir).unwrap_or_else(|e| fail(e)),
         None => os_app::Launch::default(),
     };
     let port: u16 = match arg("--port").or_else(|| auth::env("INFANTRY_PORT")).or_else(|| launch.port.map(|p| p.to_string())) {
@@ -88,10 +102,6 @@ pub fn run_daemon(a: Vec<String>) {
     // RUNNER-POOL-10: --mode, then INFANTRY_MODE; an unknown value refuses to start.
     let mode = infantry_daemon::mode::Mode::resolve(&[arg("--mode").as_deref(), auth::env("INFANTRY_MODE").as_deref()]).unwrap_or_else(|e| fail(e));
     let host = arg("--host").or_else(|| auth::env("INFANTRY_HOST")).or_else(|| launch.host.clone()).unwrap_or_else(|| "127.0.0.1".into());
-    let state_dir = arg("--state-dir").or_else(|| auth::env("INFANTRY_STATE_DIR")).map(PathBuf::from).or_else(|| os_env.as_ref().and_then(|o| o.state_dir.clone())).unwrap_or_else(default_state_dir);
-    if let Err(e) = std::fs::create_dir_all(&state_dir) {
-        fail(format!("state dir {}: {e}", state_dir.display()));
-    }
     let os_runtime = os_env.map(|o| {
         // Plugins live in the state dir; the package's own are only the bundled source (set before any thread starts).
         let exe_plugins = infantry_daemon::own_files::package_dir().map(|p| p.join("plugins"));
@@ -202,6 +212,7 @@ pub fn run_daemon(a: Vec<String>) {
             os.clear_ready();
         }
     });
+    Ok(())
 }
 
 /// RUNNER POOL REGISTRATION SPOT (RR-1): the paired remote runners and the owner-only `runner_admin` frame. The daemon core

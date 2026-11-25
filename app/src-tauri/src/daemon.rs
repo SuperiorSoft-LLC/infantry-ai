@@ -254,6 +254,14 @@ pub fn rotate_log(state: &Path, keep: usize) -> Result<std::fs::File, String> {
     std::fs::File::create(at(0)).map_err(|e| format!("daemon log: {e}"))
 }
 
+/// The reason of a daemon that refused to start because the data folder is in use: the last `refusing to start:` line of its
+/// log, when it is the lock's plain-words message.
+pub fn refusal_in_log(log: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(log).ok()?;
+    let line = text.lines().rev().find_map(|l| l.split_once("refusing to start: ").map(|(_, why)| why.trim().to_string()))?;
+    line.starts_with("Infantry AI is already running with this data").then_some(line)
+}
+
 /// The daemon for `state`: the one already running there, else a new sidecar on `port` (0 = any free port).
 pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch, log_keep: usize) -> Result<Sidecar, String> {
     if FOREIGN_PORTS.contains(&port) {
@@ -311,7 +319,12 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch, log_keep: us
     let limit = start_timeout_ms();
     while start.elapsed() < Duration::from_millis(limit) {
         if let Ok(Some(status)) = child.try_wait() {
-            return Err(format!("{} exited at start ({status}); see {}", bin.display(), state.join(LOGS).join("daemon.log").display()));
+            let log_path = state.join(LOGS).join("daemon.log");
+            // DAEMON-LOCK: a refused start says why in plain words (the data is in use); that is what the person reads.
+            if let Some(why) = refusal_in_log(&log_path) {
+                return Err(why);
+            }
+            return Err(format!("{} exited at start ({status}); see {}", bin.display(), log_path.display()));
         }
         if let Some(p) = read_port(state).filter(|p| !FOREIGN_PORTS.contains(p)) {
             return Ok(Sidecar { url: format!("ws://127.0.0.1:{p}/ws"), child: Some(child), note: None });
@@ -325,6 +338,18 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch, log_keep: us
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_data_in_use_refusal_in_the_log_is_the_error_the_person_reads() {
+        let d = std::env::temp_dir().join(format!("lock-refusal-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let log = d.join("daemon.log");
+        std::fs::write(&log, "[infantry] x\n[infantry] refusing to start: Infantry AI is already running with this data (process 42). Close it first.\n").unwrap();
+        assert_eq!(refusal_in_log(&log).as_deref(), Some("Infantry AI is already running with this data (process 42). Close it first."));
+        std::fs::write(&log, "[infantry] refusing to start: bad port `x`\n").unwrap();
+        assert_eq!(refusal_in_log(&log), None);
+        let _ = std::fs::remove_dir_all(&d);
+    }
 
     #[test]
     fn logs_rotate_instead_of_truncating() {
