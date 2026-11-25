@@ -1,0 +1,99 @@
+# APK-0.8.0: a signed Android build of Infantry AI from this branch.
+#
+# A tag android-v<version> builds the arm64 APK (the same build, zipalign and apksigner steps as the android job of
+# rust-release.yml), signs it with the ANDROID_* secrets and makes the GitHub release android-v<version> holding
+# InfantryAI_<version>_arm64.apk and its .sha256.
+#
+# Rules that keep the standalone app's updater safe:
+#   1. The release is a PRERELEASE and never latest (`gh release create --prerelease --latest=false`): this repo's "latest"
+#      release is what every standalone updater reads (rust-promote.yml).
+#   2. No latest.json is uploaded: that name is the Tauri updater manifest.
+#   3. The ANDROID_* secrets are REQUIRED. Without them the run FAILS: no throwaway key is ever made, because a phone
+#      cannot update an install made from a different key.
+# The secrets exist in CI only: ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD.
+name: android-release
+
+on:
+  push:
+    tags: ['android-v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - name: Require the signing secrets and read the version
+        run: |
+          set -euo pipefail
+          for n in ANDROID_KEYSTORE_B64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!n}" ]; then echo "::error::the secret $n is missing: a tag run never signs with a throwaway key"; exit 1; fi
+          done
+          echo "VERSION=${GITHUB_REF_NAME#android-v}" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - name: The tag must match the app version
+        run: |
+          set -euo pipefail
+          cfg="$(python3 -c 'import json;print(json.load(open("app/src-tauri/tauri.conf.json"))["version"])')"
+          test "$cfg" = "$VERSION" || { echo "::error::tag version $VERSION differs from tauri.conf.json $cfg"; exit 1; }
+      - name: "Checkout the infantry-plugins repo (bundled-external.json plugins are built from it)"
+        uses: actions/checkout@v4
+        with: { repository: SuperiorSoft-LLC/infantry-plugins, path: infantry-plugins, token: '${{ secrets.INFANTRY_PLUGINS_TOKEN || github.token }}' }
+      - run: echo "INFANTRY_PLUGINS_REPO=$GITHUB_WORKSPACE/infantry-plugins" >> "$GITHUB_ENV"
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: app/package.json }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: pnpm, cache-dependency-path: app/pnpm-lock.yaml }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: aarch64-linux-android }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: app/src-tauri }
+      - name: Android SDK (runner's own) and NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${ANDROID_HOME:?the ubuntu runner should ship an Android SDK}"
+          sdkm="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$sdkm" || { echo "::error::no sdkmanager at $sdkm"; exit 1; }
+          yes | "$sdkm" --licenses >/dev/null || true
+          "$sdkm" --install "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+      - name: Build the APK (arm64)
+        working-directory: app
+        env: { CARGO_BUILD_JOBS: '4' }
+        run: pnpm tauri android build --apk --target aarch64 --config "{\"version\":\"$VERSION\"}"
+      - name: Sign the APK (release keystore)
+        run: |
+          set -euo pipefail
+          apk="$(find app/src-tauri/gen/android -path '*outputs/apk*' -name '*release*.apk' -print -quit)"
+          test -n "$apk" || { echo "::error::no release APK was built"; exit 1; }
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          mkdir -p dist
+          out="dist/InfantryAI_${VERSION}_arm64.apk"
+          "$bt/zipalign" -f -p 4 "$apk" "$RUNNER_TEMP/aligned.apk"
+          "$bt/apksigner" sign --ks "$RUNNER_TEMP/release.keystore" --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" --ks-key-alias "$ANDROID_KEY_ALIAS" --key-pass "pass:$ANDROID_KEY_PASSWORD" --out "$out" "$RUNNER_TEMP/aligned.apk"
+          "$bt/apksigner" verify --print-certs "$out" | grep -i "SHA-256 digest"
+          rm -f "$RUNNER_TEMP/release.keystore" "$out.idsig"
+          (cd dist && sha256sum "InfantryAI_${VERSION}_arm64.apk" > "InfantryAI_${VERSION}_arm64.apk.sha256")
+      - name: Release (prerelease, never latest, no updater manifest)
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          set -euo pipefail
+          gh release create "android-v$VERSION" "dist/InfantryAI_${VERSION}_arm64.apk" "dist/InfantryAI_${VERSION}_arm64.apk.sha256" \
+            --prerelease --latest=false --title "Infantry AI $VERSION for Android" --notes-file docs/android-release-notes.md
