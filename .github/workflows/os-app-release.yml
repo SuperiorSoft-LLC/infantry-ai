@@ -45,6 +45,10 @@ jobs:
     defaults: { run: { shell: bash } }
     steps:
       - uses: actions/checkout@v4
+      - name: "Checkout the infantry-plugins repo (bundled-external.json plugins are built from it)"
+        uses: actions/checkout@v4
+        with: { repository: SuperiorSoft-LLC/infantry-plugins, path: infantry-plugins, token: '${{ secrets.INFANTRY_PLUGINS_TOKEN || github.token }}' }
+      - run: echo "INFANTRY_PLUGINS_REPO=$GITHUB_WORKSPACE/infantry-plugins" >> "$GITHUB_ENV"
       - name: Version
         id: v
         run: |
