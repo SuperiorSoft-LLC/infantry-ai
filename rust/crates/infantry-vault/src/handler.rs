@@ -31,6 +31,8 @@ pub struct KnownSecret {
     pub uses_secret: String,
     pub for_mode: String,
     pub can_login: bool,
+    /// Sign out is offered (always, once a sign-in exists: also "start over" when nobody is signed in).
+    pub can_logout: bool,
     pub login_state: String,
     pub login_url: String,
     pub login_message: String,
@@ -55,7 +57,7 @@ pub fn plugin_secret_name(module: &str) -> String {
     format!("plugin.{}", module.to_lowercase())
 }
 
-pub const LOGIN_ACTIONS: &[&str] = &["start", "input", "cancel"];
+pub const LOGIN_ACTIONS: &[&str] = &["start", "input", "cancel", "signout"];
 
 // ---- wire ----
 
@@ -77,6 +79,8 @@ pub struct SecretRow {
     pub uses_secret: String,
     pub for_mode: String,
     pub can_login: bool,
+    #[serde(default)]
+    pub can_logout: bool,
     pub login_state: String,
     pub login_url: String,
     pub login_message: String,
@@ -311,6 +315,7 @@ impl KeystoreHandler {
                     uses_secret: k.uses_secret.clone(),
                     for_mode: k.for_mode.clone(),
                     can_login: k.can_login,
+                    can_logout: k.can_logout,
                     login_state: k.login_state.clone(),
                     login_url: k.login_url.clone(),
                     login_message: k.login_message.clone(),

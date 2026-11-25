@@ -55,4 +55,17 @@ describe("secrets store", () => {
     await paste;
     expect(JSON.stringify(s.getState())).not.toContain("sk-ant-oat01-secret");
   });
+
+  it("signs out and starts over: the answer is the daemon's fresh row, not a cached one", async () => {
+    const l = link();
+    const s = createSecretsStore(l);
+    const row = { name: "harness.claude.key", label: "Claude", set: false, tail: "", canLogin: true, canLogout: true };
+    const out = s.getState().login(row.name, "signout");
+    expect(JSON.parse(l.sent[0].data)).toEqual({ name: row.name, action: "signout", text: "" });
+    l.push({ type: "secret_state", data: JSON.stringify({ ...state, secrets: [{ ...row, signedIn: "false", loginState: "" }] }), requestId: l.sent[0].requestId });
+    await out;
+    expect(s.getState().builtIns[0]).toMatchObject({ canLogout: true, signedIn: "false", loginState: "" });
+    s.getState().refresh();
+    expect(l.sent[1]).toMatchObject({ type: "secret_status" });
+  });
 });

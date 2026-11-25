@@ -539,6 +539,8 @@ pub struct Credential {
     pub auth_modes: Vec<String>,
     /// The CLI's own sign-in, argv form (`claude auth login`); empty = no in-app sign-in.
     pub login_argv: Vec<String>,
+    /// The CLI's own sign-out, argv form (`claude auth logout`); empty = the app can only forget what it holds (a stored token, a half-finished sign-in).
+    pub logout_argv: Vec<String>,
     /// The env var the CLI reads a long-lived subscription token from (`CLAUDE_CODE_OAUTH_TOKEN`); empty = no token sign-in.
     pub token_env: String,
     /// The CLI's own command that opens the browser and prints that token (`claude setup-token`); empty = paste only.

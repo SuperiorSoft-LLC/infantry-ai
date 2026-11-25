@@ -33,6 +33,26 @@ export function SubscriptionSignIn({ id, label, onSignedIn, secrets, runner }: {
   const [hint, setHint] = useState<string | null>(null);
   const finished = useRef(false);
   useEffect(() => st.ensureLoaded(), [st]);
+  const [confirming, setConfirming] = useState(false);
+  const reread = () => (isLocalRunner(runner) ? daemonStore().getState().sendFrame({ type: "secret_status", data: "" }) : store.getState().refresh());
+  // The signed-in state is the tool's own answer, read fresh: when the window regains focus (the browser sign-in just ended
+  // there) and when a sign-in stops running; never only from what was read before.
+  useEffect(() => {
+    const onFocus = () => document.visibilityState !== "hidden" && reread();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runner, store]);
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    if (wasRunning.current && phase !== "running") reread();
+    wasRunning.current = phase === "running";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
   useEffect(() => {
     if (phase !== "running") return;
     const t = setInterval(() => (isLocalRunner(runner) ? daemonStore().getState().sendFrame({ type: "secret_status", data: "" }) : store.getState().refresh()), POLL_MS);
@@ -83,7 +103,7 @@ export function SubscriptionSignIn({ id, label, onSignedIn, secrets, runner }: {
   }, [phase, row?.signedIn, onSignedIn]);
 
   if (!row) return null;
-  const act = (action: "start" | "input" | "cancel", text = "") => {
+  const act = (action: "start" | "input" | "cancel" | "signout", text = "") => {
     setError(null);
     if (action === "start") {
       reported.current = false;
@@ -93,6 +113,7 @@ export function SubscriptionSignIn({ id, label, onSignedIn, secrets, runner }: {
     }
     st.login(row.name, action, text).catch((why) => setError(friendlyLoginError(why, finished.current)));
   };
+  const signedInNow = row.signedIn === "true";
   const invalid = row.loginMessage?.toLowerCase().startsWith("invalid");
   return (
     <div className="space-y-2" data-testid="subscription-sign-in">
@@ -160,6 +181,39 @@ export function SubscriptionSignIn({ id, label, onSignedIn, secrets, runner }: {
         <p role="alert" className="text-xs text-danger">
           {error}
         </p>
+      ) : null}
+      {row.canLogout ? (
+        confirming ? (
+          <div className="space-y-1" data-testid="sign-out-confirm">
+            <p className="text-xs">
+              {signedInNow ? `Sign out of ${label}?` : `Start over with ${label}?`} This affects {label} on this PC: {signedInNow ? "every agent that uses it is signed out too." : "a half-finished sign-in is forgotten."}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setConfirming(false);
+                  act("signout");
+                }}
+              >
+                {signedInNow ? "Sign out" : "Start over"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+                Keep it
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setConfirming(true)}>
+              {signedInNow ? "Sign out" : "Start over"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={reread}>
+              Check again
+            </Button>
+          </div>
+        )
       ) : null}
     </div>
   );

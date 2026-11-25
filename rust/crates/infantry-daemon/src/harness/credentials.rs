@@ -206,6 +206,7 @@ impl HarnessCredentials {
                     t.help = format!("Sign in with your {} subscription: the browser opens, you log in, and the token it shows is pasted here.", c.label);
                     t.login_command = c.token_argv.join(" ");
                     t.can_login = !c.token_argv.is_empty();
+                    t.can_logout = true;
                     t.signed_in = h.sign_in_problem(&probe).is_none().to_string();
                     let login = self.state(&token_name(&id));
                     (t.login_state, t.login_url, t.login_message) = (login.state, login.url, login.message);
@@ -220,6 +221,7 @@ impl HarnessCredentials {
                 k.auth_modes = c.auth_modes.clone();
                 k.login_command = c.login_argv.join(" ");
                 k.can_login = !c.login_argv.is_empty();
+                k.can_logout = k.can_login;
                 k.signed_in = if c.login_argv.is_empty() { "unknown".into() } else { h.sign_in_problem(&probe).is_none().to_string() };
                 k.login_state = login.state;
                 k.login_url = login.url;
@@ -260,8 +262,46 @@ impl HarnessCredentials {
                 }
                 Ok(())
             }
+            "signout" => self.sign_out(&id),
             other => Err(format!("unknown sign-in action '{other}'")),
         }
+    }
+
+    /// Sign [id] out, or start over when nobody is: stops any sign-in in progress (both flows), runs the tool's own sign-out
+    /// command (a failure of it is not an error when nobody was signed in), forgets the token the app holds and clears the
+    /// remembered state of the half-finished sign-in. Afterwards the state is read fresh; still signed in (an environment
+    /// variable, say) is said in words, never hidden.
+    fn sign_out(&self, id: &str) -> Result<(), String> {
+        let (h, c) = self.declared().find(|(h, _)| h.id() == id).map(|(h, c)| (h.clone(), c)).ok_or_else(|| format!("unknown harness '{id}'"))?;
+        for key in [id.to_string(), token_name(id)] {
+            if let Some(r) = self.runs.lock().unwrap_or_else(|e| e.into_inner()).remove(&key) {
+                r.kill();
+            }
+        }
+        let mut ran = None;
+        if !c.logout_argv.is_empty() {
+            let mut argv = infantry_harness::shim::launcher(&LocalProbe, &c.logout_argv[0], "node");
+            argv.extend(c.logout_argv[1..].iter().cloned());
+            ran = Some(
+                infantry_proc::command(&argv[0])
+                    .args(&argv[1..])
+                    .env(&c.env, "")
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status(),
+            );
+        }
+        if self.token(id).is_some() {
+            self.keystore.clear(&token_name(id), None).map_err(|e| format!("the stored token could not be removed: {e}"))?;
+        }
+        if h.sign_in_problem(&self.probe()).is_none() {
+            return Err(match ran {
+                Some(Err(e)) => format!("{} could not be signed out: its sign-out command did not run ({e}).", c.label),
+                _ => format!("{} still counts as signed in: it is signed in by an environment variable or a file the app does not remove. Sign out there.", c.label),
+            });
+        }
+        Ok(())
     }
 
     fn start(self: &Arc<Self>, id: &str, token: bool) -> Result<(), String> {
@@ -339,9 +379,9 @@ impl HarnessCredentials {
                 return;
             }
             // The probe after the exit is what counts: exit 0 and credentials on disk (or a stored token) = signed in.
-            let signed_in = h.sign_in_problem(&me.probe()).is_none();
+            let signed_in = late_check(|| h.sign_in_problem(&me.probe()).is_none());
             run.set(|s| {
-                if status && signed_in {
+                if signed_in {
                     s.state = LOGIN_DONE.into();
                     s.message = "Signed in.".into();
                 } else {
@@ -415,7 +455,7 @@ impl HarnessCredentials {
             run.kill_process();
             let current = me.runs.lock().unwrap_or_else(|e| e.into_inner()).get(&run_key).is_some_and(|r| Arc::ptr_eq(r, &run));
             if !run.cancelled.load(std::sync::atomic::Ordering::SeqCst) && current && !run.captured.load(std::sync::atomic::Ordering::SeqCst) {
-                let signed_in = h.sign_in_problem(&me.probe()).is_none();
+                let signed_in = late_check(|| h.sign_in_problem(&me.probe()).is_none());
                 run.set(|s| {
                     s.state = if signed_in { LOGIN_DONE } else { LOGIN_FAILED }.into();
                     if signed_in {
@@ -507,6 +547,22 @@ impl Probe for TokenProbe {
     fn list_dir(&self, path: &std::path::Path) -> Vec<std::path::PathBuf> {
         LocalProbe.list_dir(path)
     }
+}
+
+/// Credentials can land a moment after the sign-in command exits: the first check that says no is asked again, a few
+/// times, before the sign-in is called failed. The answer is the tool's own, read fresh each time.
+const LATE_CREDENTIAL_CHECKS: u32 = 6;
+const LATE_CREDENTIAL_WAIT_MS: u64 = 500;
+fn late_check(mut signed_in: impl FnMut() -> bool) -> bool {
+    for i in 0..=LATE_CREDENTIAL_CHECKS {
+        if signed_in() {
+            return true;
+        }
+        if i < LATE_CREDENTIAL_CHECKS {
+            std::thread::sleep(std::time::Duration::from_millis(LATE_CREDENTIAL_WAIT_MS));
+        }
+    }
+    false
 }
 
 fn cut(s: &str) -> String {
@@ -606,6 +662,7 @@ mod tests {
             help: "h".into(),
             auth_modes: vec![AUTH_API_KEY.into(), AUTH_SUBSCRIPTION.into()],
             login_argv: vec!["fake".into(), "auth".into(), "login".into()],
+            logout_argv: vec!["fake".into(), "auth".into(), "logout".into()],
             token_env: "FAKE_OAUTH".into(),
             token_argv: vec!["fake".into(), "setup-token".into()],
             token_prefix: "sk-fake-".into(),
@@ -614,6 +671,34 @@ mod tests {
         };
         let hc = HarnessCredentials::new(vec![Arc::new(Fake(Some(c))), Arc::new(Fake(None))], ks, Arc::new(move |_| setting.map(String::from)));
         (dir, hc)
+    }
+
+    #[test]
+    fn a_sign_in_whose_first_check_says_no_is_checked_again() {
+        let mut answers = vec![false, false, true].into_iter();
+        assert!(late_check(|| answers.next().unwrap_or(true)), "the credentials landed after the first look: signed in");
+        assert!(!late_check(|| false), "never signed in stays not signed in");
+    }
+
+    #[test]
+    fn sign_out_forgets_the_token_and_the_half_finished_sign_in() {
+        let (_d, hc) = creds(None);
+        hc.store_token("fake", "sk-fake-abc").unwrap();
+        assert!(hc.known().iter().all(|k| k.can_logout), "sign out is always offered");
+        assert_eq!(hc.known()[1].signed_in, "true");
+        hc.login("harness.fake.key", "signout", "").unwrap();
+        assert_eq!(hc.known()[1].signed_in, "false", "read fresh: the stored token is gone");
+        assert!(hc.token("fake").is_none());
+    }
+
+    #[test]
+    fn start_over_works_when_nobody_is_signed_in_and_clears_a_failed_run() {
+        let (_d, hc) = creds(None);
+        hc.login("harness.fake.key", "start", "").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        assert_eq!(hc.state("fake").state, LOGIN_FAILED, "the fake tool does not exist: the sign-in failed");
+        hc.login("harness.fake.key", "signout", "").unwrap();
+        assert_eq!(hc.state("fake"), LoginState::default(), "the remembered half-finished sign-in is gone");
     }
 
     #[test]

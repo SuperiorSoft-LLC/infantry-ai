@@ -30,6 +30,8 @@ export interface SecretRow {
   help?: string;
   /** The harness has an in-app sign-in on this row (a token flow: the browser opens, the token comes back). */
   canLogin?: boolean;
+  /** Sign out / start over is offered on this row (the harness declares its sign-out; always reachable). */
+  canLogout?: boolean;
   /** "true" | "false" | "unknown": the harness can answer now. */
   signedIn?: string;
   /** "" | running | done | failed. */
@@ -101,7 +103,7 @@ export interface SecretsActions {
   setBuiltIn(name: string, value: string): Promise<void>;
   clearBuiltIn(name: string): Promise<void>;
   /** start / input / cancel the in-app sign-in on a built-in row (`input` carries the pasted token or code; it is never kept here). */
-  login(name: string, action: "start" | "input" | "cancel", text?: string): Promise<void>;
+  login(name: string, action: "start" | "input" | "cancel" | "signout", text?: string): Promise<void>;
   /** Asks the daemon for one value after the OS check. Resolves with it; the caller shows it briefly, then drops it. */
   reveal(name: string, field: string, purpose: "reveal" | "copy", project?: string): Promise<SecretRevealed>;
   exportBackup(path: string, passphrase: string): Promise<{ path: string; secrets: number; method: string }>;
