@@ -82,9 +82,10 @@ async fn a_hung_child_is_flagged_then_killed_and_replaced_by_the_next_turn() {
     let rec = daemon.record(&sid).unwrap();
     assert!(rec.watch_label.as_deref().is_some_and(|l| l.starts_with("stalled")), "{:?}", rec.watch_label);
 
-    // The turn ends (a stop), the process stays; the owner prompts again.
+    // The turn ends, the persistent process stays; the owner prompts again. `Completed`, not `Failed`: since FAIL-3
+    // (453748498) a failed turn closes its handle itself and forgets the pid, which bypasses the hung-kill path under test.
     let sink = shared.sink.lock().unwrap().clone().unwrap();
-    sink.emit(HarnessEvent::TurnEnded { end: TurnEnd::Failed, exit_code: None, reason: None, process_alive: true });
+    sink.emit(HarnessEvent::TurnEnded { end: TurnEnd::Completed, exit_code: None, reason: None, process_alive: true });
     tokio::time::sleep(Duration::from_millis(300)).await;
     let d = daemon.clone();
     let s = sid.clone();
