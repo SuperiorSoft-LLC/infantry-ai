@@ -1,8 +1,8 @@
 **What this phone app connects to:** a PC running the normal Infantry AI app, or BattalionOS with Infantry AI 0.8.1 or later. It does **not** connect to BattalionOS with Infantry AI 0.8.0.
 
-**Infantry AI 0.8.1 for Android (arm64).** The phone is a remote control: it runs no daemon and no agents. It connects to the Infantry AI on your PC and shows your board, sessions and mail.
+**Infantry AI 0.8.2 for Android (arm64).** Install this one, not 0.8.1: in 0.8.1 a saved PC that was off kept the phone on the loading screen instead of the connect screen (found on an Android emulator). 0.8.2 gives the PC at most 7 seconds. The phone is a remote control: it runs no daemon and no agents. It connects to the Infantry AI on your PC and shows your board, sessions and mail.
 
-**What changed since 0.8.0**
+**What changed since 0.8.0** (same as 0.8.1, now with the loading-screen fix)
 - The app opens on the connect screen whenever the phone has no working PC: a fresh install, a PC that does not answer within about 5 seconds, a login the PC no longer accepts, or a login the phone cannot read. The screen says which PC and why, with **Scan QR** first and large, a pasted link, **Retry** and **Forget**. 0.8.0 opened the app straight onto a saved PC and, when that PC was off, said the daemon did not start.
 - The saved PC is kept until you press Forget or pair again. Retry never loses it.
 - **Scan QR** is one tap away inside the app (the QR button in the top bar and on the "not answering" banner), without forgetting the saved PC.

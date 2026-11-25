@@ -37,6 +37,8 @@ export let remote: { url: string; name: string | null } | null = null;
 /** PHONE-1: why a phone opened on the connect screen (null = it opened the app). `remote` is the saved PC, kept until Forget. */
 export let phoneStart: { why: ConnectWhy; detail: string | null } | null = null;
 /** PHONE-1: the in-app "Scan QR" asks for the connect screen once, without forgetting the saved PC. */
+/** A saved PC has this long (the Rust check has 5 s) before the phone opens the connect screen, whatever the check does. */
+const PHONE_CHECK_MS = 7000;
 export const ASK_CONNECT_KEY = "infantry.phone.connect";
 
 async function resolveEndpoint(): Promise<HostEndpoint> {
@@ -86,7 +88,7 @@ export async function initDaemon(): Promise<DaemonStore> {
     // PHONE-1: a saved PC that answers opens the app; anything else opens the connect screen (the pairing stays saved).
     const asked = (() => { try { return sessionStorage.getItem(ASK_CONNECT_KEY) === "1"; } catch { return false; } })();
     const canCheck = !!e.url && !e.error;
-    const check = canCheck && !asked ? await host.call<RemoteCheck>("remote_check").catch(() => null) : null;
+    const check = canCheck && !asked ? await Promise.race([host.call<RemoteCheck>("remote_check").catch(() => null), new Promise<null>((r) => setTimeout(() => r(null), PHONE_CHECK_MS))]) : null;
     const d = decidePhoneStart({ mode: e.mode, url: e.url, tokenError: e.error, check });
     if (asked && e.url) phoneStart = { why: "asked", detail: null };
     else if (d.open === "connect") phoneStart = { why: d.why, detail: e.error ?? null };

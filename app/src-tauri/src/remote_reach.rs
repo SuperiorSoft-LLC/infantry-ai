@@ -49,7 +49,10 @@ fn status_of(r: Result<ureq::Response, ureq::Error>) -> Result<u16, String> {
 
 pub fn reach(url: &str, token: Option<&str>) -> Reach {
     let Ok(base) = crate::daemon_http::http_base(url) else { return Reach::Unreachable };
-    let agent = ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(CHECK_SECS)).build();
+    let agent = {
+        let d = std::time::Duration::from_secs(CHECK_SECS);
+        ureq::AgentBuilder::new().timeout(d).timeout_connect(d).timeout_read(d).timeout_write(d).build()
+    };
     let health = status_of(agent.get(&format!("{base}/health")).call());
     if !matches!(health, Ok(c) if c < 500) {
         return classify(health, Err("skipped".into()));
