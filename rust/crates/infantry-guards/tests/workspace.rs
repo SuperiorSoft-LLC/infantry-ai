@@ -155,3 +155,27 @@ fn no_spawn_bypasses_the_windowless_helper() {
     }
     assert!(bad.is_empty(), "spawn bypasses infantry_proc::command (console window pops up on Windows):\n  {}", bad.join("\n  "));
 }
+
+/// SRC-CLEAN-1: a raw NUL byte in a tracked text source makes git treat the file as binary (its diff and secret scan
+/// are hidden). Write it as an escape instead. Binary files (by extension) are not looked at.
+#[test]
+fn no_nul_byte_in_tracked_source() {
+    let repo = rust_dir().join("..");
+    let out = std::process::Command::new("git").args(["ls-files", "-z"]).current_dir(&repo).output().expect("git ls-files");
+    assert!(out.status.success(), "git ls-files failed");
+    const EXT: &[&str] = &["rs", "ts", "tsx", "js", "mjs", "css", "json", "toml", "ps1", "py", "md", "yml"];
+    let mut bad = Vec::new();
+    for rel in out.stdout.split(|b| *b == 0).filter(|s| !s.is_empty()) {
+        let rel = String::from_utf8_lossy(rel);
+        let ext = rel.rsplit_once('.').map(|(_, e)| e).unwrap_or_default();
+        if !EXT.contains(&ext) {
+            continue;
+        }
+        if let Ok(bytes) = std::fs::read(repo.join(rel.as_ref())) {
+            if bytes.contains(&0) {
+                bad.push(rel.to_string());
+            }
+        }
+    }
+    assert!(bad.is_empty(), "raw NUL byte in tracked source (write it as an escape):\n  {}", bad.join("\n  "));
+}

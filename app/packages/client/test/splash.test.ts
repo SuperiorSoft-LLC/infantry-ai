@@ -14,7 +14,7 @@ describe("splash", () => {
     vi.useFakeTimers();
     const { el, doc } = splash();
     const late = vi.fn();
-    const timer = setTimeout(late, 8000);
+    const timer = setTimeout(late, 8000) as unknown as Parameters<typeof startFailed>[1];
     startFailed(new Error("os_app_status: the desktop did not answer"), timer, doc);
     expect(el.textContent).toBe("Could not start: os_app_status: the desktop did not answer");
     expect(el.hidden).toBe(false);
