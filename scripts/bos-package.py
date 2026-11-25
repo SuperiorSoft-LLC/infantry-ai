@@ -4,7 +4,7 @@
 """BOS-9: pack Infantry AI as a BattalionOS app.
 
   scripts/bos-package --library L --cli C --plugins P --dist S [--version V] [--out DIR] [--base-url URL]
-                      [--minisign-key FILE] [--notes TEXT] [--platform windows-x86_64]
+                      [--tauri-sign | --minisign-key FILE] [--notes TEXT] [--platform windows-x86_64]
 
 Output in --out (default <repo>/dist-bosapp):
   infantry-ai-<version>-<platform>.bosapp       a zip: app.json, assets/icon.png, lib/ (the app library), bin/ (the CLI), plugins/, shell/dist/
@@ -13,7 +13,12 @@ Output in --out (default <repo>/dist-bosapp):
   catalog-entry.json                            the catalog app entry, with the public key to pin
   public.key                                    minisign public key (the pinned one)
 
-Without --minisign-key a THROWAWAY key is made (left in <out>/throwaway.key.json): fine locally, never trusted by a
+--tauri-sign signs with the app's updater key (CI only): the private half comes from the environment
+(TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD, the secrets rust-release.yml uses), the public half is
+plugins.updater.pubkey in app/src-tauri/tauri.conf.json. `tauri signer sign` writes the signature base64-wrapped; the OS
+(battalion-host armory/package.rs verify_signature) wants the plain minisig text and the inner key line of the .pub file,
+so both are unwrapped here, and the signature is verified against the pinned key before anything is written.
+Without --minisign-key / --tauri-sign a THROWAWAY key is made (left in <out>/throwaway.key.json): fine locally, never trusted by a
 real install. With --minisign-key the `minisign` binary signs (`minisign -S`; the .pub file sits beside the key).
 The package holds the daemon as a LIBRARY (lib/infantry_distribution.dll: the infantry-distribution cdylib); the
 infantry-daemon program is not in it. BattalionOS runs the library on its own worker. Nothing is uploaded or released here.
@@ -85,6 +90,51 @@ def sign_with_minisign(key_file, pkg):
     return sig.read_text()
 
 
+def tauri_pub_line():
+    """The pinned key in the form the OS reads: the base64 line of the .pub file (tauri.conf.json holds the whole .pub, base64-wrapped)."""
+    conf = json.loads((REPO / "app/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
+    raw = conf["plugins"]["updater"]["pubkey"]
+    try:
+        text = base64.b64decode(raw).decode()
+        return text.strip().splitlines()[-1].strip()
+    except Exception:
+        fail("plugins.updater.pubkey in tauri.conf.json is not a base64 minisign .pub file")
+
+
+def verify_minisig(pub_line, sig_text, data):
+    """Check a prehashed ('ED') minisign signature the way the OS does; returns an error text or None."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    from cryptography.exceptions import InvalidSignature
+    try:
+        pub = base64.b64decode(pub_line)
+        lines = sig_text.strip().splitlines()
+        sig = base64.b64decode(lines[1])
+        if pub[:2] != b"Ed" or sig[:2] != b"ED":
+            return "not a prehashed ED signature over an Ed key"
+        if pub[2:10] != sig[2:10]:
+            return "the signature's key id is not the pinned key's"
+        Ed25519PublicKey.from_public_bytes(pub[10:]).verify(sig[10:], hashlib.blake2b(data, digest_size=64).digest())
+    except InvalidSignature:
+        return "the signature does not verify against the pinned key"
+    except Exception as e:
+        return f"unreadable signature or key: {e}"
+    return None
+
+
+def sign_with_tauri(pkg):
+    for v in ("TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
+        if v not in os.environ:
+            fail(f"--tauri-sign needs {v} in the environment")
+    pnpm = shutil.which("pnpm")
+    if not pnpm:
+        fail("--tauri-sign needs pnpm on PATH")
+    r = subprocess.run([pnpm, "tauri", "signer", "sign", str(pkg)], cwd=REPO / "app", capture_output=True, text=True)
+    sigfile = Path(str(pkg) + ".sig")
+    if r.returncode != 0 or not sigfile.is_file():
+        fail("tauri signer sign failed: " + (r.stderr or r.stdout).strip()[-300:])
+    return base64.b64decode(sigfile.read_text().strip()).decode()
+
+
 # ---- the zip ---------------------------------------------------------------------------------
 def add_tree(z, src, prefix):
     n = 0
@@ -128,6 +178,7 @@ def main(argv=None):
     ap.add_argument("--out", default=str(REPO / "dist-bosapp"))
     ap.add_argument("--base-url", help="where the package will be served; default is a file: url of --out")
     ap.add_argument("--minisign-key")
+    ap.add_argument("--tauri-sign", action="store_true", help="sign with the updater key from the environment (CI)")
     ap.add_argument("--notes", default="")
     a = ap.parse_args(argv)
     if a.platform not in EXE:
@@ -154,7 +205,15 @@ def main(argv=None):
         pkg.unlink()
         fail("a native file in the package imports the dynamic VC++ runtime:\n" + chk.stdout + chk.stderr)
     data = pkg.read_bytes()
-    if a.minisign_key:
+    if a.tauri_sign:
+        public = tauri_pub_line()
+        sig = sign_with_tauri(pkg)
+        bad = verify_minisig(public, sig, data)
+        if bad:
+            pkg.unlink()
+            Path(str(pkg) + ".sig").unlink(missing_ok=True)
+            fail("signed with the Tauri key but " + bad + " (is TAURI_SIGNING_PRIVATE_KEY the pair of tauri.conf.json's pubkey?)")
+    elif a.minisign_key:
         sig = sign_with_minisign(a.minisign_key, pkg)
         pubfile = Path(a.minisign_key).with_suffix(".pub")
         if not pubfile.is_file():
@@ -186,7 +245,7 @@ def main(argv=None):
         "channels": {"stable": base + "feed.json"},
     }
     (out / "catalog-entry.json").write_text(json.dumps(entry, indent=2) + "\n")
-    print(f"packed {pkg} ({len(data)} bytes, sha256 {feed['platforms'][a.platform]['sha256'][:12]}), key: {'given' if a.minisign_key else 'THROWAWAY'}")
+    print(f"packed {pkg} ({len(data)} bytes, sha256 {feed['platforms'][a.platform]['sha256'][:12]}), key: {'tauri' if a.tauri_sign else 'given' if a.minisign_key else 'THROWAWAY'}")
 
 
 if __name__ == "__main__":

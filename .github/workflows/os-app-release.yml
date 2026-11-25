@@ -1,17 +1,24 @@
-# BOS-9: Infantry AI as an app of BattalionOS (.bosapp). DRAFT only.
+# BOS-PUB-0: Infantry AI as an app of BattalionOS (.bosapp).
 #
-# A tag os-app-v<version> (or a manual run) builds the daemon, the CLI, the staged plugins and the shell, packs them with
-# scripts/bos-package, and makes a DRAFT GitHub release os-app-v<version> holding the .bosapp, its .sig and feed.json.
+# A tag os-app-v<version> (or a manual run) builds the daemon LIBRARY (infantry_distribution.dll, the infantry-distribution
+# cdylib; the package holds no daemon program), the CLI, the staged plugins and the shell, packs them with
+# scripts/bos-package.py, checks that no native file imports the dynamic VC++ runtime (scripts/bos-crt-check.py), signs
+# the package, and makes the GitHub release os-app-v<version> holding the .bosapp, its .sig, feed.json,
+# catalog-entry.json and public.key.
 #
-# Two rules that keep the standalone app's updater safe (a workflow-text test pins both):
-#   1. make_latest is false (`gh release create --latest=false`): this repo's "latest" release is what every standalone updater reads (rust-promote.yml), so a
-#      package must never become it.
+# Rules that keep the standalone app's updater safe (a workflow-text test pins them):
+#   1. The release is a PRERELEASE and never latest (`gh release create --prerelease --latest=false`): this repo's "latest"
+#      release is what every standalone updater reads (rust-promote.yml), so a package must never become it.
 #   2. No latest.json is uploaded: that name is the Tauri updater manifest. The OS app's feed is feed.json.
-# The owner tests the draft and publishes it by hand. Nothing here pushes a feed or a tag.
+#   3. Nothing here pushes a feed, a branch or the catalog. The channel feed (release bos-stable / bos-nightly) is moved
+#      by hand after the release is tested: scripts/bos-feed.py rebuilds it from the release's own assets and refuses a
+#      mismatch; the commands are in the BOS-PUB-0 done comment.
 #
-# Secrets (the OWNER creates them; none is in the repo): BOS_APP_SIGNING_KEY, the minisign secret key (unencrypted, as
-# made by `minisign -G -W`), and BOS_APP_PUBLIC_KEY, its .pub file. Without them the package is signed with a THROWAWAY
-# key and the release notes say so; nothing signed that way is trusted by a real install.
+# Signing: the SAME secrets rust-release.yml uses, TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, the
+# private half of plugins.updater.pubkey in app/src-tauri/tauri.conf.json, which is the key the catalog pins. They exist
+# in CI only. bos-package.py --tauri-sign unwraps what `tauri signer sign` writes (base64) into the plain minisig text the
+# OS verifies (battalion-host armory/package.rs), and verifies it against the pinned key before it writes anything.
+# A tag run REQUIRES the secrets; a manual run without them is signed with a THROWAWAY key and says so (not trusted).
 name: os-app-release
 
 on:
@@ -58,33 +65,41 @@ jobs:
       - name: Build the shell
         working-directory: app
         run: pnpm build
-      - name: Build the daemon and the CLI
+      - name: Build the daemon library and the CLI
         working-directory: rust
         env: { INFANTRY_BUILD_ENV: prod, CARGO_BUILD_JOBS: '4' }
         run: cargo build --release -p infantry-distribution -p infantry-cli
       - name: Stage the plugins
         run: bash rust/plugins/stage.sh "$RUNNER_TEMP/plugins" release
-      - name: Pack and sign
+      - name: Check the VC++ runtime (a clean Windows has none)
+        run: |
+          set -euo pipefail
+          target="$(cd rust && cargo metadata --format-version 1 --no-deps | python -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')"
+          python scripts/bos-crt-check.py "$target/release/infantry_distribution.dll" "$target/release/infantry.exe"
+      - name: Pack, check and sign
         env:
-          KEY: ${{ secrets.BOS_APP_SIGNING_KEY }}
-          PUB: ${{ secrets.BOS_APP_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           VERSION: ${{ steps.v.outputs.version }}
         run: |
           set -euo pipefail
           pip install cryptography
           target="$(cd rust && cargo metadata --format-version 1 --no-deps | python -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')"
-          args=(--daemon "$target/release/infantry-daemon.exe" --cli "$target/release/infantry.exe"
+          args=(--library "$target/release/infantry_distribution.dll" --cli "$target/release/infantry.exe"
                 --plugins "$RUNNER_TEMP/plugins" --dist app/shell/dist --version "$VERSION" --out dist-bosapp
                 --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/os-app-v${VERSION}/")
-          notes="Infantry AI $VERSION as a BattalionOS app. Draft: test it, then publish by hand."
-          if [ -n "$KEY" ] && [ -n "$PUB" ]; then
-            mkdir -p "$RUNNER_TEMP/k"; printf '%s\n' "$KEY" > "$RUNNER_TEMP/k/bos.key"; printf '%s\n' "$PUB" > "$RUNNER_TEMP/k/bos.pub"
-            args+=(--minisign-key "$RUNNER_TEMP/k/bos.key")
+          notes="Infantry AI $VERSION as a BattalionOS app."
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            args+=(--tauri-sign)
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "::error::A tag run needs the TAURI_SIGNING_PRIVATE_KEY secret (the key whose public half the catalog pins)"; exit 1
           else
             notes="$notes SIGNED WITH A THROWAWAY KEY: not trusted by a real install."
           fi
           python scripts/bos-package.py "${args[@]}" --notes "$notes"
           rm -f dist-bosapp/throwaway.key.json
+          # the release's own assets must agree with the feed (sha256, size, signature, url) and verify against the key
+          python scripts/bos-feed.py --assets dist-bosapp --repo "$GITHUB_REPOSITORY" --out "$RUNNER_TEMP/feed.check.json" --pubkey "$(cat dist-bosapp/public.key)"
       - uses: actions/upload-artifact@v4
         with: { name: os-app, path: dist-bosapp/*, if-no-files-found: error }
 
@@ -97,11 +112,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: { name: os-app, path: dist-bosapp }
-      - name: Draft release (never latest, no updater manifest)
+      - name: Release (prerelease, never latest, no updater manifest)
         run: |
           set -euo pipefail
           v="$(python3 -c 'import json;print(json.load(open("dist-bosapp/feed.json"))["version"])')"
           tag="os-app-v$v"
           files=(dist-bosapp/*.bosapp dist-bosapp/*.bosapp.sig dist-bosapp/feed.json dist-bosapp/catalog-entry.json dist-bosapp/public.key)
-          gh release create "$tag" "${files[@]}" --draft --prerelease --latest=false --title "Infantry AI $v (BattalionOS app)" \
+          gh release create "$tag" "${files[@]}" --prerelease --latest=false --title "Infantry AI $v (BattalionOS app)" \
             --notes "$(python3 -c 'import json;print(json.load(open("dist-bosapp/feed.json")).get("notes",""))')"

@@ -27,6 +27,54 @@ def run_packager(tmp, version="9.8.7"):
     return r, out
 
 
+def load(name):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name.replace("-", "_"), REPO / "scripts" / f"{name}.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+class Signing(unittest.TestCase):
+    def test_verify_minisig_accepts_the_package_signature_and_refuses_others(self):
+        pk = load("bos-package")
+        with tempfile.TemporaryDirectory() as tmp:
+            r, out = run_packager(tmp)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            data = (out / "infantry-ai-9.8.7-windows-x86_64.bosapp").read_bytes()
+            sig = (out / "infantry-ai-9.8.7-windows-x86_64.bosapp.sig").read_text()
+            pub = (out / "public.key").read_text().strip()
+            self.assertIsNone(pk.verify_minisig(pub, sig, data))
+            self.assertIsNotNone(pk.verify_minisig(pub, sig, data + b"x"))
+            other = base64.b64encode(b"Ed" + base64.b64decode(pub)[2:10] + bytes(32)).decode()
+            self.assertIsNotNone(pk.verify_minisig(other, sig, data))
+
+    def test_the_pinned_key_is_the_inner_line_of_the_tauri_pubkey(self):
+        pk = load("bos-package")
+        line = pk.tauri_pub_line()
+        raw = base64.b64decode(line)
+        self.assertEqual((raw[:2], len(raw)), (b"Ed", 42))
+        cat = REPO.parent.parent.parent / "battalionOS-apps/catalog.json"
+        if cat.is_file():  # the catalog must pin the line the OS reads, not the base64-wrapped .pub file
+            self.assertEqual(json.loads(cat.read_text())["apps"][0]["publicKey"], line)
+
+    def test_bos_feed_rebuilds_from_the_release_assets_and_refuses_a_mismatch(self):
+        feedmod = load("bos-feed")
+        with tempfile.TemporaryDirectory() as tmp:
+            r, out = run_packager(tmp)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            repo = "o/r"
+            d = json.loads((out / "feed.json").read_text())
+            p = d["platforms"]["windows-x86_64"]
+            p["url"] = f"https://github.com/{repo}/releases/download/os-app-v9.8.7/infantry-ai-9.8.7-windows-x86_64.bosapp"
+            (out / "feed.json").write_text(json.dumps(d))
+            self.assertEqual(feedmod.build_feed(out, repo, (out / "public.key").read_text())["version"], "9.8.7")
+            p["sha256"] = "0" * 64
+            (out / "feed.json").write_text(json.dumps(d))
+            with self.assertRaises(SystemExit):
+                feedmod.build_feed(out, repo)
+
+
 class Package(unittest.TestCase):
     def test_package_feed_and_signature_agree(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -89,19 +137,25 @@ class Workflows(unittest.TestCase):
             d = yaml.safe_load(f.read_text(encoding="utf-8"))
             self.assertIsInstance(d.get("jobs"), dict, f.name)
 
-    def test_os_app_release_is_draft_only_never_latest_and_no_updater_manifest(self):
+    def test_os_app_release_is_prerelease_never_latest_and_no_updater_manifest(self):
         text = (WF / "os-app-release.yml").read_text(encoding="utf-8")
         d = yaml.safe_load(text)
         self.assertEqual(d[True]["push"]["tags"], ["os-app-v*"])  # `on` parses as True
         steps = [s.get("run", "") for j in d["jobs"].values() for s in j.get("steps", [])]
         creates = [s for s in steps if "gh release create" in s]
         self.assertEqual(len(creates), 1)
-        self.assertIn("--draft", creates[0])
+        self.assertIn("--prerelease", creates[0])
+        self.assertNotIn("--draft", creates[0])
         self.assertIn("--latest=false", creates[0])
         self.assertNotIn("--latest=true", text)
         # no step publishes or uploads a Tauri updater manifest, and no other release call exists
         code = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
         self.assertNotIn("latest.json", code)
+        self.assertNotIn("--daemon", code)
+        self.assertIn("--library", code)
+        self.assertIn("bos-crt-check.py", code)
+        self.assertIn("TAURI_SIGNING_PRIVATE_KEY", code)
+        self.assertNotIn("BOS_APP_SIGNING_KEY", code)
         for bad in ("gh release edit", "gh release upload", "make_latest: true", "softprops/action-gh-release", "git push"):
             self.assertNotIn(bad, code)
         for s in d["jobs"].values():
