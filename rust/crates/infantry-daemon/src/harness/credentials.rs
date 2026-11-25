@@ -272,6 +272,10 @@ impl HarnessCredentials {
     /// remembered state of the half-finished sign-in. Afterwards the state is read fresh; still signed in (an environment
     /// variable, say) is said in words, never hidden.
     fn sign_out(&self, id: &str) -> Result<(), String> {
+        self.sign_out_within(id, std::time::Duration::from_secs(SIGN_OUT_LIMIT_SECS))
+    }
+
+    fn sign_out_within(&self, id: &str, limit: std::time::Duration) -> Result<(), String> {
         let (h, c) = self.declared().find(|(h, _)| h.id() == id).map(|(h, c)| (h.clone(), c)).ok_or_else(|| format!("unknown harness '{id}'"))?;
         for key in [id.to_string(), token_name(id)] {
             if let Some(r) = self.runs.lock().unwrap_or_else(|e| e.into_inner()).remove(&key) {
@@ -282,9 +286,8 @@ impl HarnessCredentials {
         if !c.logout_argv.is_empty() {
             let mut argv = infantry_harness::shim::launcher(&LocalProbe, &c.logout_argv[0], "node");
             argv.extend(c.logout_argv[1..].iter().cloned());
-            ran = Some(run_bounded(&argv, &c.env, std::time::Duration::from_secs(SIGN_OUT_LIMIT_SECS)));
+            ran = Some(run_bounded(&argv, &c.env, limit));
         }
-        let was_signed_in = h.sign_in_problem(&self.probe()).is_none();
         if self.token(id).is_some() {
             self.keystore.clear(&token_name(id), None).map_err(|e| format!("the stored token could not be removed: {e}"))?;
         }
@@ -292,7 +295,8 @@ impl HarnessCredentials {
             return Err(match ran {
                 Some(SignOut::Hung) => format!("{} may still be signed in: its sign-out command did not finish within {SIGN_OUT_LIMIT_SECS} seconds and was stopped. The app's own sign-in state is cleared; press Check again, or sign out in the tool itself.", c.label),
                 Some(SignOut::Failed(e)) => format!("{} could not be signed out: its sign-out command did not run ({e}).", c.label),
-                Some(SignOut::Exit(code)) if was_signed_in => format!("{} is still signed in: its sign-out command ended with an error (exit {code}). Sign out in the tool itself, then press Check again.", c.label),
+                Some(SignOut::Exit(code)) if code != 0 => format!("{} is still signed in: its sign-out command ended with an error (exit {code}). Sign out in the tool itself, then press Check again.", c.label),
+                // Exit 0 and still signed in: the tool did its part; what keeps the sign-in is outside it.
                 _ => format!("{} still counts as signed in: it is signed in by an environment variable or a file the app does not remove. Sign out there.", c.label),
             });
         }
@@ -724,6 +728,80 @@ mod tests {
         };
         let hc = HarnessCredentials::new(vec![Arc::new(Fake(Some(c))), Arc::new(Fake(None))], ks, Arc::new(move |_| setting.map(String::from)));
         (dir, hc)
+    }
+
+
+    /// A harness signed in while a marker file exists (a file or variable the app does not own).
+    struct Marked(std::path::PathBuf, Credential);
+    impl Harness for Marked {
+        fn id(&self) -> &str {
+            "marked"
+        }
+        fn capabilities(&self) -> Capabilities {
+            Fake(None).capabilities()
+        }
+        fn models(&self, _: &dyn Probe) -> Vec<ModelInfo> {
+            Vec::new()
+        }
+        fn sign_in_problem(&self, _: &dyn Probe) -> Option<String> {
+            (!self.0.exists()).then(|| "not signed in".into())
+        }
+        fn launch(&self, _: &LaunchRequest) -> Result<LaunchPlan, LaunchError> {
+            Err(LaunchError("no".into()))
+        }
+        fn credential(&self) -> Option<Credential> {
+            Some(self.1.clone())
+        }
+    }
+
+    /// sign_out end to end with a fake tool: [tool] is its sign-out argv, the marker file is what keeps it signed in.
+    fn sign_out_with(tool: Vec<String>, limit: std::time::Duration) -> (Result<(), String>, bool) {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("signed-in");
+        std::fs::write(&marker, "x").unwrap();
+        let ks = Arc::new(Keystore::with(dir.path(), Arc::new(|_| None), None, infantry_vault::limits::Limits::default()));
+        let c = Credential { env: "FAKE_API_KEY".into(), label: "Marked".into(), logout_argv: tool, ..Default::default() };
+        let hc = HarnessCredentials::new(vec![Arc::new(Marked(marker.clone(), c))], ks, Arc::new(|_| None));
+        let r = hc.sign_out_within("marked", limit);
+        (r, marker.exists())
+    }
+
+    #[test]
+    fn sign_out_exit_0_and_still_signed_in_names_the_variable_or_file_not_an_error() {
+        let (r, _) = sign_out_with(fake(&["cmd", "/c", "exit", "0"], &["sh", "-c", "exit 0"]), std::time::Duration::from_secs(10));
+        let m = r.unwrap_err();
+        assert!(m.contains("environment variable or a file"), "{m}");
+        assert!(!m.contains("error"), "{m}");
+    }
+
+    #[test]
+    fn sign_out_exit_1_and_still_signed_in_says_error_with_the_code() {
+        let (r, _) = sign_out_with(fake(&["cmd", "/c", "exit", "1"], &["sh", "-c", "exit 1"]), std::time::Duration::from_secs(10));
+        let m = r.unwrap_err();
+        assert!(m.contains("ended with an error (exit 1)"), "{m}");
+    }
+
+    #[test]
+    fn sign_out_of_a_hanging_tool_says_it_did_not_finish() {
+        let t = std::time::Instant::now();
+        let (r, _) = sign_out_with(fake(&["ping", "-n", "30", "127.0.0.1"], &["sleep", "30"]), std::time::Duration::from_millis(600));
+        let m = r.unwrap_err();
+        assert!(m.contains("did not finish within"), "{m}");
+        assert!(t.elapsed() < std::time::Duration::from_secs(10));
+    }
+
+    #[test]
+    fn sign_out_exit_0_and_signed_out_is_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("signed-in");
+        std::fs::write(&marker, "x").unwrap();
+        let ks = Arc::new(Keystore::with(dir.path(), Arc::new(|_| None), None, infantry_vault::limits::Limits::default()));
+        let m = marker.to_string_lossy().to_string();
+        let tool = fake(&["cmd", "/c", "del", &m], &["rm", &m]);
+        let c = Credential { env: "FAKE_API_KEY".into(), label: "Marked".into(), logout_argv: tool, ..Default::default() };
+        let hc = HarnessCredentials::new(vec![Arc::new(Marked(marker.clone(), c))], ks, Arc::new(|_| None));
+        assert!(hc.sign_out_within("marked", std::time::Duration::from_secs(10)).is_ok());
+        assert!(!marker.exists());
     }
 
     #[test]
