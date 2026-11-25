@@ -16,14 +16,15 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import { ArrowLeftRight, CircleX, Gauge, MoreHorizontal, Paperclip, Play, RotateCw, SendHorizontal, Square, Trash2, UserPlus, X } from "lucide-react";
 import { cn, Textarea, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip, TooltipContent, TooltipTrigger } from "@infantry/ui";
 import {
-  chatViewOf,
+  chatKey,
   composerStatusLine,
   composerToolsThatFit,
   imageRefs,
   imageTag,
   insertAt,
   matchSlash,
-  patchChatView,
+  setDraft,
+  draftOf,
   slashCatalog,
   slashPrefix,
   splitComposerTools,
@@ -40,7 +41,7 @@ import { useUi } from "@/state/ui-state";
 import { openSessionDialog } from "./session-actions";
 import { readImageFile, Thumb } from "./chat-images";
 import { useProjects } from "@/components/git/use-projects";
-import { useChatView } from "./use-chat-view";
+import { useChatDraft, useChatView } from "./use-chat-view";
 import { PromptCards } from "./prompt-cards";
 import { ComposerRound } from "./floating-chip";
 
@@ -116,8 +117,11 @@ function ComposerMore({ rest }: { rest: Act[] }) {
 
 /** `windowId` keys the remembered draft / expanded state (CHAT-MINIMIZE-1); minimize itself is ChatPanel's floater. */
 export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: string | null; busy: boolean; windowId?: string }) {
-  const { draft: text, expanded } = useChatView(windowId);
-  const setText = (t: string) => patchChatView(windowId, { draft: t });
+  const { expanded } = useChatView(windowId);
+  // CHAT-DRAFT-1: the draft is this chat's in this window, never the window's (it must not follow into another chat).
+  const chat = chatKey(sessionId);
+  const text = useChatDraft(windowId, chat);
+  const setText = (t: string) => setDraft(windowId, chat, t);
   const ui = useUi();
   const record = useDaemon((s) => (sessionId ? s.sessions[sessionId]?.record : undefined));
   const queued = record?.queued ?? NO_QUEUE;
@@ -137,6 +141,8 @@ export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: st
   // ---- attachments: an image becomes its `[image: path]` reference at the caret (Kotlin ATTACH-INLINE-1) ----
   const [uploading, setUploading] = useState(0);
   const [attachError, setAttachError] = useState<string | null>(null);
+  // An attach error is about the chat it happened in; it does not follow into another chat.
+  useEffect(() => setAttachError(null), [chat]);
   const sessionProject = record?.projectId;
   const currentProject = useProjects((p) => p.currentId);
   const project = sessionProject || currentProject;
@@ -149,6 +155,8 @@ export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: st
     else setAttachError(null);
     if (!project) return setAttachError("Pick a project first: images are stored in a project.");
     let caret = box.current?.selectionStart ?? text.length;
+    const into = chat; // an upload lands in the chat it was started from, even if the user switched away meanwhile
+
     for (const f of files.filter((f) => f.type.startsWith("image/"))) {
       const name = f.name || "pasted image";
       if (f.size > IMAGE_MAX) {
@@ -159,9 +167,9 @@ export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: st
       try {
         const r = await uploadImage(daemonStore().getState(), project, await readImageFile(f), f.type, f.name);
         if (r.ok) {
-          const cur = chatViewOf(windowId).draft;
+          const cur = draftOf(windowId, into);
           const at = insertAt(cur, caret, imageTag(r.path));
-          patchChatView(windowId, { draft: at.text });
+          setDraft(windowId, into, at.text);
           caret = at.caret;
         } else setAttachError(`${name}: ${r.text}`);
       } catch {
@@ -200,10 +208,11 @@ export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: st
     if (!sessionId || !goneText) return;
     const back = daemonStore().getState().takeGoneText(sessionId);
     if (!back) return;
-    const cur = chatViewOf(windowId).draft;
-    if (!cur.includes(back)) patchChatView(windowId, { draft: cur.trim() ? `${back}
+    // The words go back into THAT chat's draft only; a "New agent" started from here starts empty.
+    const cur = draftOf(windowId, sessionId);
+    if (!cur.includes(back)) setDraft(windowId, sessionId, cur.trim() ? `${back}
 
-${cur}` : back });
+${cur}` : back);
   }, [sessionId, goneText, windowId]);
   const submit = () => {
     if (!canSend) return;

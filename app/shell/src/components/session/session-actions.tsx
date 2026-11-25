@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
-import { createSessionActions, formatContextLimit, isMidTurnRefusal, parseContextLimit, type SessionActions } from "@infantry/client";
+import { chatKey, createSessionActions, dropChatDraft, formatContextLimit, isMidTurnRefusal, parseContextLimit, type SessionActions } from "@infantry/client";
 import { AppDialog, Button } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { useLauncher } from "@/components/dialogs/new-agent-dialog";
@@ -52,6 +52,7 @@ function DeleteDialog({ sessionId, onClose }: { sessionId: string; onClose: () =
   const name = useDaemon((s) => s.sessions[sessionId]?.record.role ?? null);
   const remove = (): void => {
     daemonStore().getState().sendFrame({ type: "session_delete", data: sessionId, sessionId });
+    dropChatDraft(chatKey(sessionId)); // CHAT-DRAFT-1: a chat removed for good takes its unsent text with it
     onClose();
   };
   return (
