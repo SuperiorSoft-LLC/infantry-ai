@@ -88,6 +88,19 @@ pub fn run_checked(a: Vec<String>) -> Result<(), String> {
     // is opened (launch.json included), held until this function returns. A bounded wait covers a holder that is closing.
     let lock_wait = arg("--lock-wait-secs").or_else(|| auth::env("INFANTRY_LOCK_WAIT_SECS")).map(|v| v.trim().parse::<u64>().map(std::time::Duration::from_secs).unwrap_or_else(|_| fail(format!("bad lock wait `{v}`")))).unwrap_or(infantry_daemon::state_lock::DEFAULT_WAIT);
     let _state_lock = infantry_daemon::state_lock::StateLock::acquire(&state_dir, lock_wait).map_err(|e| e.to_string())?;
+    // BOS-33: the phone settings live in this state dir (the OS may not have said which folder it is).
+    let os_env = os_env.map(|mut o| {
+        o.state_dir = Some(state_dir.clone());
+        o
+    });
+    if os_env.is_some() {
+        // A person who had phone connections ON in the standalone app keeps it here, once (same port, same token).
+        match infantry_daemon::phone::migrate_standalone(&state_dir, infantry_daemon::phone::standalone_settings_dir().as_deref(), infantry_daemon::phone::standalone_default_state().as_deref()) {
+            Ok(true) => println!("[infantry] phone access carried over from the standalone app"),
+            Ok(false) => {}
+            Err(e) => eprintln!("[infantry] phone access was not carried over: {e}"),
+        }
+    }
     let launch = match &os_env {
         Some(_) => os_app::Launch::read(&state_dir).unwrap_or_else(|e| fail(e)),
         None => os_app::Launch::default(),
@@ -171,7 +184,23 @@ pub fn run_checked(a: Vec<String>) -> Result<(), String> {
         .unwrap_or_else(|e| fail(e))
     });
     rt.block_on(async move {
-        let listener = tokio::net::TcpListener::bind((host.as_str(), port)).await.unwrap_or_else(|e| fail(format!("port {port} could not be bound ({e})")));
+        let (listener, host) = match tokio::net::TcpListener::bind((host.as_str(), port)).await {
+            Ok(l) => {
+                if os_runtime.is_some() {
+                    let _ = std::fs::remove_file(state_dir.join(infantry_daemon::phone::NOTE_FILE));
+                }
+                (l, host)
+            }
+            // BOS-33: an app of the OS whose phone port is taken still starts, on this computer only, and Settings says why.
+            Err(e) if os_runtime.is_some() && !auth::is_loopback_host(&host) => {
+                let why = format!("Phone connections are on, but port {port} is in use ({e}), so Infantry AI started on this computer only. Close what uses the port, then restart the app.");
+                infantry_daemon::phone::write_note(&state_dir, &why);
+                eprintln!("[infantry] {why}");
+                let l = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap_or_else(|e| fail(format!("no loopback port could be bound ({e})")));
+                (l, "127.0.0.1".to_string())
+            }
+            Err(e) => fail(format!("port {port} could not be bound ({e})")),
+        };
         let bound = listener.local_addr().map(|a| a.port()).unwrap_or(port);
         let _ = std::fs::write(state_dir.join("daemon.port"), bound.to_string());
         if let Some(os) = &os_runtime {

@@ -6,7 +6,7 @@ use crate::auth::{self, AccessPolicy};
 use crate::gateway::Gateway;
 use crate::sessions::{Conn, Daemon};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::State;
+use axum::extract::{ConnectInfo, State};
 use axum::http::{header, HeaderMap, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -67,10 +67,63 @@ fn refuse(r: auth::Refusal) -> Response {
 }
 
 fn check(app: &App, uri: &Uri, headers: &HeaderMap) -> Option<Response> {
+    check_from(app, false, uri, headers)
+}
+
+/// [check] knowing whether the peer is on this computer (BOS-33: the OS's own page skips the phone token only then).
+fn check_from(app: &App, peer_loopback: bool, uri: &Uri, headers: &HeaderMap) -> Option<Response> {
     let protocols = h(headers, header::SEC_WEBSOCKET_PROTOCOL);
     app.policy
-        .check(uri.path(), h(headers, header::HOST), h(headers, header::ORIGIN), h(headers, header::AUTHORIZATION), protocols)
+        .check_from(peer_loopback, uri.path(), h(headers, header::HOST), h(headers, header::ORIGIN), h(headers, header::AUTHORIZATION), protocols)
         .map(refuse)
+}
+
+fn peer_is_loopback(peer: Option<&ConnectInfo<std::net::SocketAddr>>) -> bool {
+    peer.is_some_and(|ConnectInfo(a)| a.ip().is_loopback())
+}
+
+/// BOS-33: `GET|POST /os/phone`, the Settings > Daemon phone-access rows of an app of BattalionOS. Served to the OS's own page
+/// only (its origin, a loopback Host, a loopback peer): never to a paired phone or another origin, even one holding the token.
+/// `GET ?reveal=1` adds the token (only when on); `POST` `{"enabled":bool}` writes launch.json and, when it changed,
+/// asks the OS to restart the app (the daemon stops; the OS's normal restart brings it back with the new bind).
+async fn os_phone(State(s): State<Shared>, peer: Option<axum::Extension<ConnectInfo<std::net::SocketAddr>>>, method: axum::http::Method, uri: Uri, headers: HeaderMap, body: axum::body::Bytes) -> Response {
+    let Some(os) = &s.os else { return (StatusCode::NOT_FOUND, "not found").into_response() };
+    let loopback = peer_is_loopback(peer.as_ref().map(|axum::Extension(c)| c));
+    let origin = h(&headers, header::ORIGIN);
+    let cors = origin.filter(|_| s.app.policy.is_os_page(loopback, h(&headers, header::HOST), origin));
+    let Some(allowed) = cors else { return (StatusCode::FORBIDDEN, "phone access is set from the app's own page only").into_response() };
+    let Some(state) = os.env.state_dir.clone() else { return (StatusCode::CONFLICT, "this app has no state folder to keep the phone settings in").into_response() };
+    let mut resp = if method == axum::http::Method::OPTIONS {
+        StatusCode::NO_CONTENT.into_response()
+    } else if method == axum::http::Method::POST {
+        let enabled = serde_json::from_slice::<serde_json::Value>(&body).ok().and_then(|v| v.get("enabled").and_then(|e| e.as_bool()));
+        let Some(on) = enabled else { return (StatusCode::BAD_REQUEST, r#"send {"enabled": true|false}"#).into_response() };
+        let changed = crate::phone::enabled(&state) != on;
+        let port = os.bound_port();
+        match tokio::task::spawn_blocking(move || crate::phone::set(&state, on, port)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => return (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        }
+        if changed {
+            os.request_stop();
+        }
+        ([(header::CONTENT_TYPE, "application/json")], serde_json::json!({"ok": true, "restart": changed}).to_string()).into_response()
+    } else {
+        let reveal = uri.query().is_some_and(|q| q.split('&').any(|p| p == "reveal=1" || p == "reveal=true"));
+        let ifaces: Vec<(String, std::net::IpAddr)> = if_addrs::get_if_addrs().map(|v| v.into_iter().map(|i| (i.name.clone(), i.ip())).collect()).unwrap_or_default();
+        let port = os.bound_port();
+        let v = crate::phone::get(&state, port, &ifaces, reveal);
+        ([(header::CONTENT_TYPE, "application/json"), (header::CACHE_CONTROL, "no-store")], v.to_string()).into_response()
+    };
+    let hd = resp.headers_mut();
+    if let Ok(v) = allowed.parse() {
+        hd.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, v);
+    }
+    hd.insert(header::VARY, "Origin".parse().unwrap());
+    hd.insert(header::ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, OPTIONS".parse().unwrap());
+    hd.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, "content-type".parse().unwrap());
+    resp
 }
 
 async fn health(State(s): State<Shared>, uri: Uri, headers: HeaderMap) -> Response {
@@ -107,13 +160,14 @@ async fn stop(State(s): State<Shared>, headers: HeaderMap) -> Response {
 
 async fn ws(
     State(s): State<Shared>,
+    peer: Option<axum::Extension<ConnectInfo<std::net::SocketAddr>>>,
     uri: Uri,
     headers: HeaderMap,
     upgrade: Result<WebSocketUpgrade, axum::extract::ws::rejection::WebSocketUpgradeRejection>,
 ) -> Response {
     let app = s.app;
     // Access first: an unauthenticated caller learns nothing about the route, upgrade or not.
-    if let Some(r) = check(&app, &uri, &headers) {
+    if let Some(r) = check_from(&app, peer_is_loopback(peer.as_ref().map(|axum::Extension(c)| c)), &uri, &headers) {
         return r;
     }
     let upgrade = match upgrade {
@@ -441,7 +495,7 @@ fn router_with(app: App, gateway: Option<Arc<Gateway>>, os: Option<Arc<crate::os
     let shared = Shared { app: app.clone(), gateway, os: os.clone() };
     let mut r = Router::new().route("/ws", get(ws)).route("/health", get(health));
     if os.is_some() {
-        r = r.route(crate::os_app::STOP_PATH, post(stop));
+        r = r.route(crate::os_app::STOP_PATH, post(stop)).route("/os/phone", axum::routing::any(os_phone));
     }
     let mut r = r.fallback(plugin_route).with_state(shared.clone());
     if let Some(extra) = app.daemon.units().and_then(|u| u.http()) {
@@ -506,7 +560,7 @@ pub async fn serve_os(
     }
     let tunnel_app = app.clone();
     let tunnel_task = tunnel.map(|t| tokio::spawn(async move { let _ = axum::serve(t, tunnel_router(tunnel_app)).await; }));
-    let r = axum::serve(listener, router_with(app, gateway.clone(), os)).with_graceful_shutdown(shutdown).await;
+    let r = axum::serve(listener, router_with(app, gateway.clone(), os).into_make_service_with_connect_info::<std::net::SocketAddr>()).with_graceful_shutdown(shutdown).await;
     if let Some(g) = &gateway {
         g.stop();
     }

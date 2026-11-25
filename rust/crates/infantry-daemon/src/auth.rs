@@ -77,6 +77,8 @@ pub struct AccessPolicy {
     digest: Option<[u8; 32]>,
     browser_hosts: Vec<String>,
     app_origins: Vec<String>,
+    /// BOS-33: the OS's own page origin (`BATTALION_UI_ORIGIN`); it alone may skip the token, and only from this computer.
+    os_origin: Option<String>,
 }
 
 fn digest(s: &str) -> [u8; 32] {
@@ -122,16 +124,34 @@ impl AccessPolicy {
         if let Some(v) = env(WEB_ORIGINS_ENV) {
             app_origins.extend(v.split(',').map(|o| o.trim().trim_end_matches('/').to_ascii_lowercase()).filter(|o| !o.is_empty()));
         }
-        Ok(AccessPolicy { digest: token.map(digest), browser_hosts, app_origins })
+        Ok(AccessPolicy { digest: token.map(digest), browser_hosts, app_origins, os_origin: None })
     }
 
     /// BOS-7: the app's own origin (`BATTALION_UI_ORIGIN`) joins the origins admitted on `/ws`.
     pub fn with_app_origin(mut self, origin: &str) -> AccessPolicy {
         let o = origin.trim().trim_end_matches('/').to_ascii_lowercase();
         if !o.is_empty() && !self.app_origins.contains(&o) {
-            self.app_origins.push(o);
+            self.app_origins.push(o.clone());
+        }
+        if !o.is_empty() {
+            self.os_origin = Some(o);
         }
         self
+    }
+
+    /// BOS-33: true for the OS's own page: exactly its origin, a loopback Host and a loopback peer address. A phone (any
+    /// other peer) is never this, whatever headers it sends, so the page may connect without the phone token.
+    pub fn is_os_page(&self, peer_loopback: bool, host: Option<&str>, origin: Option<&str>) -> bool {
+        let (Some(o), Some(os)) = (origin, &self.os_origin) else { return false };
+        peer_loopback && o.trim().trim_end_matches('/').eq_ignore_ascii_case(os) && host.is_some_and(|h| is_loopback_host(&host_name(h)))
+    }
+
+    /// [check], with the peer's address: the OS's own page is admitted on `/ws` without the token.
+    pub fn check_from(&self, peer_loopback: bool, path: &str, host: Option<&str>, origin: Option<&str>, authorization: Option<&str>, protocols: Option<&str>) -> Option<Refusal> {
+        if path == "/ws" && self.is_os_page(peer_loopback, host, origin) {
+            return None;
+        }
+        self.check(path, host, origin, authorization, protocols)
     }
 
     pub fn token_required(&self) -> bool {
@@ -232,6 +252,19 @@ impl AccessPolicy {
 mod tests {
     use super::*;
     const T: &str = "0123456789abcdef0123456789abcdef";
+
+    #[test]
+    fn the_os_page_skips_the_token_only_from_this_computer() {
+        let p = AccessPolicy::new("0.0.0.0", Some(T)).unwrap().with_app_origin("http://127.0.0.1:5000/");
+        let o = Some("http://127.0.0.1:5000");
+        assert_eq!(p.check_from(true, "/ws", Some("127.0.0.1:18990"), o, None, None), None);
+        // A phone forging the origin and the host from another address is refused; so is a wrong origin or host.
+        assert_eq!(p.check_from(false, "/ws", Some("127.0.0.1:18990"), o, None, None).unwrap().status, 401);
+        assert_eq!(p.check_from(true, "/ws", Some("192.168.1.5:18990"), o, None, None).unwrap().status, 401);
+        assert_eq!(p.check_from(true, "/ws", Some("127.0.0.1"), Some("http://evil.example"), None, None).unwrap().status, 403);
+        assert_eq!(p.check_from(true, "/ws", Some("127.0.0.1"), None, None, None).unwrap().status, 401);
+        assert!(!AccessPolicy::new("0.0.0.0", Some(T)).unwrap().is_os_page(true, Some("127.0.0.1"), o));
+    }
 
     #[test]
     fn loopback_without_token_checks_the_host() {

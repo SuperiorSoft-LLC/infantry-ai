@@ -229,7 +229,21 @@ export function CliPathRow() {
   );
 }
 
+/** BOS-33: under BattalionOS there is no Tauri host; the daemon serves the same rows at `/os/phone` to the OS's own page only. */
+const underOs = () => host.kind === "desktop" && !isMobile && !!host.os;
+async function osPhone<T>(init?: { enabled: boolean }, reveal = false): Promise<T> {
+  const ep = await host.endpoint();
+  if (!ep) throw new Error("The app's daemon is not running.");
+  const base = ep.url.replace(/^ws/, "http").replace(/\/ws\/?$/, "");
+  const r = await fetch(`${base}/os/phone${reveal ? "?reveal=1" : ""}`, init ? { method: "POST", body: JSON.stringify(init), headers: { "Content-Type": "text/plain" } } : undefined);
+  if (!r.ok) throw new Error((await r.text().catch(() => "")) || `Phone access answered ${r.status}`);
+  return (await r.json()) as T;
+}
+const pairingGet = (reveal: boolean) => (underOs() ? osPhone<PairingView>(undefined, reveal) : call<PairingView>("pairing_get", { reveal }));
+
 interface PairingView {
+  /** BOS-33: why the daemon is not on the network (a taken port). */
+  note?: string | null;
   available: boolean;
   enabled: boolean;
   port: number | null;
@@ -260,20 +274,26 @@ export function PairingRows() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const load = (reveal: boolean) =>
-    call<PairingView>("pairing_get", { reveal }).then(
+    pairingGet(reveal).then(
       (x) => (setV(x), setAddress((a) => (a && x.addresses.some((o) => o.address === a) ? a : (x.addresses[0]?.address ?? null)))),
       () => setV(null),
     );
   useEffect(() => {
-    if (desktop()) void load(false);
+    if (desktop() || underOs()) void load(false);
   }, []);
   if (!v?.available) return null;
   const toggle = async (on: boolean) => {
     setBusy(true);
     setError(null);
     try {
-      await call("pairing_set", { enabled: on });
-      location.reload(); // the sidecar restarted with a new bind (and token): reconnect through `endpoint`.
+      if (underOs()) {
+        // The daemon wrote launch.json and stopped; the OS's normal restart brings it back with the new bind.
+        const r = await osPhone<{ restart: boolean }>({ enabled: on });
+        if (r.restart) await new Promise((res) => setTimeout(res, 1500));
+      } else {
+        await call("pairing_set", { enabled: on });
+      }
+      location.reload(); // the daemon restarted with a new bind (and token): reconnect through `endpoint`.
     } catch (e) {
       setError(message(e));
       setBusy(false);
@@ -285,7 +305,7 @@ export function PairingRows() {
       <Row
         id="set-phone"
         title="Allow phone connections"
-        hint={error ? <span className="text-danger">{error}</span> : "Restarts the daemon on every network interface with a token. Off: this computer only."}
+        hint={error ? <span className="text-danger">{error}</span> : v.note ? <span className="text-danger">{v.note}</span> : "Restarts the daemon on every network interface with a token. Off: this computer only."}
       >
         <Switch id="set-phone" checked={v.enabled} disabled={busy} onCheckedChange={(on) => void toggle(on)} />
       </Row>

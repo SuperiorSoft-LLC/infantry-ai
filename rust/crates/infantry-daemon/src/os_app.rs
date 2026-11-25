@@ -74,6 +74,8 @@ pub struct OsRuntime {
     pub env: OsEnv,
     stop_digest: [u8; 32],
     stop: tokio::sync::Notify,
+    /// BOS-33: the port this daemon bound (set when the ready file is written), for the phone-access rows.
+    bound_port: std::sync::atomic::AtomicU16,
 }
 
 fn digest(s: &str) -> [u8; 32] {
@@ -88,7 +90,7 @@ impl OsRuntime {
         if t.is_empty() {
             return Err(format!("{TOKEN_FILE_ENV} {} is empty", env.token_file.display()));
         }
-        Ok(Arc::new(OsRuntime { stop_digest: digest(t), env, stop: tokio::sync::Notify::new() }))
+        Ok(Arc::new(OsRuntime { stop_digest: digest(t), env, stop: tokio::sync::Notify::new(), bound_port: Default::default() }))
     }
 
     /// True when `Authorization: Bearer <secret>` carries the stop secret (constant time on the digests).
@@ -109,9 +111,14 @@ impl OsRuntime {
 
     /// Writes the ready file for a daemon listening on `bind_host:port`. The OS only accepts a loopback url.
     pub fn write_ready(&self, bind_host: &str, port: u16) -> Result<(), String> {
+        self.bound_port.store(port, std::sync::atomic::Ordering::Relaxed);
         let Some(path) = &self.env.ready_file else { return Ok(()) };
         let body = ready_json(bind_host, port, std::process::id())?;
         write_atomic(path, body.as_bytes())
+    }
+
+    pub fn bound_port(&self) -> u16 {
+        self.bound_port.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Removes the ready file (a clean stop leaves none behind).
