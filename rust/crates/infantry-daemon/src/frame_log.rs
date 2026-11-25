@@ -25,14 +25,44 @@ fn line(seq: i64, frame: &str) -> String {
     s
 }
 
+/// Frames in file order -> strictly increasing numbers (CHAT-SEQ-1). Two daemons that wrote one chat leave numbers that
+/// go back or repeat: a line identical to one already read is dropped (the same message twice); a line whose number is
+/// not above the highest so far is a different message, kept in writing order under highest+1 (its `sequence` field is
+/// rewritten to match). So a start continues above the HIGHEST number in the file, and a client never sees a step back.
+fn normalize(lines: impl Iterator<Item = (i64, String)>) -> VecDeque<(i64, String)> {
+    let mut out = VecDeque::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut high = 0i64;
+    for (s, f) in lines {
+        if !seen.insert(f.clone()) {
+            continue;
+        }
+        if s > high {
+            high = s;
+            out.push_back((s, f));
+            continue;
+        }
+        high += 1;
+        let f = match serde_json::from_str::<serde_json::Value>(&f) {
+            Ok(mut v) if v.get("sequence").is_some() => {
+                v["sequence"] = serde_json::json!(high);
+                v.to_string()
+            }
+            _ => f,
+        };
+        out.push_back((high, f));
+    }
+    out
+}
+
 /// The last `keep` frames of a session, oldest first. A missing or damaged file gives what could be read.
 pub fn load(state_dir: &Path, sid: &str, keep: usize) -> VecDeque<(i64, String)> {
     let Ok(text) = fs::read_to_string(file(state_dir, sid)) else { return VecDeque::new() };
-    let mut out: VecDeque<(i64, String)> = text
-        .lines()
-        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
-        .filter_map(|v| Some((v.get("s")?.as_i64()?, v.get("f")?.as_str()?.to_string())))
-        .collect();
+    let mut out: VecDeque<(i64, String)> = normalize(
+        text.lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter_map(|v| Some((v.get("s")?.as_i64()?, v.get("f")?.as_str()?.to_string()))),
+    );
     while out.len() > keep.max(1) {
         out.pop_front();
     }
@@ -140,6 +170,28 @@ mod tests {
         let back = load(&d, "s1", keep);
         assert_eq!(back.iter().map(|x| x.0).collect::<Vec<_>>(), vec![18, 19, 20]);
         let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn repeated_and_backward_numbers_load_once_in_order_above_the_highest() {
+        let d = tmp("seq1");
+        let mut hist = VecDeque::new();
+        let fr = |n: i64, t: &str| format!(r#"{{"type":"status","sequence":{n},"data":"{t}"}}"#);
+        let mut lines = 0;
+        // 1..3, then a second writer restarts at 2 with different messages, one exact repeat of 3, then 4.
+        for (n, t) in [(1, "a"), (2, "b"), (3, "c"), (2, "x"), (3, "c"), (3, "y"), (4, "d")] {
+            let f = fr(n, t);
+            hist.push_back((n, f.clone()));
+            lines = append(&d, "s", n, &f, &hist, lines, 100);
+        }
+        let back = load(&d, "s", 100);
+        let seqs: Vec<i64> = back.iter().map(|h| h.0).collect();
+        assert_eq!(seqs, vec![1, 2, 3, 4, 5, 6]);
+        let texts: Vec<String> = back.iter().map(|h| serde_json::from_str::<serde_json::Value>(&h.1).unwrap()["data"].as_str().unwrap().to_string()).collect();
+        assert_eq!(texts, vec!["a", "b", "c", "x", "y", "d"]);
+        for (s, f) in &back {
+            assert_eq!(serde_json::from_str::<serde_json::Value>(f).unwrap()["sequence"], *s);
+        }
     }
 
     #[test]
