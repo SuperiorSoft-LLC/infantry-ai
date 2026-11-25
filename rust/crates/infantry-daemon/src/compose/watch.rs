@@ -21,6 +21,8 @@ pub struct Ports {
     pub settings: super::settings::SettingsUnit,
     pub prompts: Arc<PendingPrompts>,
     pub bus: EventBus,
+    /// A ticket's status by id; the composition root wires it. None = no ticket counts as open work.
+    pub ticket_status: Option<Arc<dyn Fn(&str) -> Option<String> + Send + Sync>>,
 }
 
 /// The generic stall event's name: a session is waiting on a prompt nobody answered, or printed nothing for too long.
@@ -59,6 +61,16 @@ impl WatchPorts for Ports {
 
     fn blocked_limit(&self) -> Option<i64> {
         self.settings.app("session.blockedMinutes").and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|x| x.trim().parse().ok()))).filter(|n| *n >= 0).map(|n| n * 60_000)
+    }
+
+    /// A worker's ticket is open while it is in progress.
+    fn work_open(&self, rec: &SessionRecord) -> bool {
+        let (Some(status_of), Some(t)) = (self.ticket_status.as_ref(), rec.ticket_id.as_deref()) else { return false };
+        status_of(t).as_deref() == Some(status::IN_PROGRESS)
+    }
+
+    fn idle_work_limit(&self) -> Option<i64> {
+        self.settings.app("session.idleWorkMinutes").and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|x| x.trim().parse().ok()))).filter(|n| *n >= 0).map(|n| n * 60_000)
     }
 
     fn limits(&self) -> (Option<i64>, Option<i64>) {
@@ -149,7 +161,7 @@ mod tests {
         let worker = daemon.launch(NewOpts { prompt: Some("go".into()), spawner: Some(lead.clone()), ticket_id: Some("t1".into()), ..Default::default() }).unwrap();
         let mut events = c.bus.subscribe_events();
         let attention = Arc::new(AttentionStore::new(c.db.clone(), Arc::new(crate::sessions::now_ms)).unwrap());
-        let ports = Ports { daemon: daemon.clone(), mail: c.mail.clone(), attention: attention.clone(), settings: super::super::settings::SettingsUnit { db: c.db.clone() }, prompts: c.prompts.clone(), bus: c.bus.clone() };
+        let ports = Ports { daemon: daemon.clone(), mail: c.mail.clone(), attention: attention.clone(), settings: super::super::settings::SettingsUnit { db: c.db.clone() }, prompts: c.prompts.clone(), bus: c.bus.clone(), ticket_status: None };
         let (p, w) = (c.prompts.clone(), worker.clone());
         tokio::spawn(async move { p.request_approval(&w, "Bash", "rm -rf x", None).await });
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -158,7 +170,7 @@ mod tests {
         let early = crate::sessions::now_ms() + cfg.blocked_ms - 60_000;
         tokio::task::spawn_blocking(move || d.watch_tick(&ports, &cfg, early)).await.unwrap();
         assert!(attention.list(true).is_empty(), "under the limit nothing is raised");
-        let ports = Ports { daemon: daemon.clone(), mail: c.mail.clone(), attention: attention.clone(), settings: super::super::settings::SettingsUnit { db: c.db.clone() }, prompts: c.prompts.clone(), bus: c.bus.clone() };
+        let ports = Ports { daemon: daemon.clone(), mail: c.mail.clone(), attention: attention.clone(), settings: super::super::settings::SettingsUnit { db: c.db.clone() }, prompts: c.prompts.clone(), bus: c.bus.clone(), ticket_status: None };
         let d = daemon.clone();
         let late = crate::sessions::now_ms() + cfg.blocked_ms + 1_000;
         tokio::task::spawn_blocking(move || d.watch_tick(&ports, &cfg, late)).await.unwrap();

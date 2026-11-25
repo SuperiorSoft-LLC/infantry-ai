@@ -151,6 +151,14 @@ pub trait WatchPorts: Send + Sync {
     }
     /// Raises one attention item for the owner (kind `stalled`).
     fn raise(&self, rec: &SessionRecord, outcome: &str, detail: &str);
+    /// Whether the session's work item (its ticket) is still open, i.e. someone expects the worker to go on.
+    fn work_open(&self, _rec: &SessionRecord) -> bool {
+        false
+    }
+    /// `session.idleWorkMinutes` in ms when set (0 = off); None keeps the [`WatchConfig`] value.
+    fn idle_work_limit(&self) -> Option<i64> {
+        None
+    }
     /// Sends the session one nudge; false = it could not be sent.
     fn nudge(&self, _rec: &SessionRecord, _body: &str) -> bool {
         false
@@ -179,12 +187,15 @@ pub struct WatchConfig {
     pub nudge_interval_ms: i64,
     /// A BUSY turn blocked on an unanswered prompt (approval or question) this long is BLOCKED (`session.blockedMinutes`).
     pub blocked_ms: i64,
+    /// SESSION-GHOST-1 B: a worker at rest whose work is still open, with no turn and no output this long, raises ONE
+    /// notice (`session.idleWorkMinutes`, 0 = off). A new turn re-arms it.
+    pub idle_work_ms: i64,
 }
 
 impl Default for WatchConfig {
     fn default() -> Self {
         const MIN: i64 = 60_000;
-        WatchConfig { poll_ms: 30_000, quiet_ms: 15 * MIN, hung_kill_ms: 30 * MIN, stall_ms: 5 * MIN, nudge_interval_ms: 5 * MIN, blocked_ms: 5 * MIN }
+        WatchConfig { poll_ms: 30_000, quiet_ms: 15 * MIN, hung_kill_ms: 30 * MIN, stall_ms: 5 * MIN, nudge_interval_ms: 5 * MIN, blocked_ms: 5 * MIN, idle_work_ms: 20 * MIN }
     }
 }
 
@@ -240,6 +251,17 @@ pub fn apply_blocked(watch: &mut AgentWatch, turn_active: bool, blocked: Option<
     watch.pending_since = Some(p.since);
     watch.pending = Some(p.summary.clone());
     Some(format!("blocked:{}", p.key))
+}
+
+/// Minutes a worker has been at rest with no turn and no output, when that is past `idle_work_ms` (pure: the tests call
+/// it). None while a turn runs, for a session not at rest, one that said it waits, or when the limit is off.
+pub fn idle_work_minutes(rec: &SessionRecord, turn_active: bool, turn_started: i64, now: i64, cfg: &WatchConfig) -> Option<i64> {
+    if turn_active || cfg.idle_work_ms <= 0 || rec.state != SessionState::Idle || rec.waiting.is_some() {
+        return None;
+    }
+    let activity = rec.last_output_at.unwrap_or(0).max(turn_started).max(rec.last_turn_at.unwrap_or(0)).max(rec.spawned_at);
+    let silent = now - activity;
+    (silent >= cfg.idle_work_ms).then_some(silent / 60_000)
 }
 
 fn label(r: &SessionRecord) -> String {
@@ -571,7 +593,7 @@ impl Daemon {
     /// One watchdog pass: `session.watch` on every record whose watch changed, then the nudges and attention items.
     pub fn watch_tick(self: &Arc<Self>, ports: &dyn WatchPorts, cfg: &WatchConfig, now: i64) {
         let (quiet, hung) = ports.limits();
-        let cfg = &WatchConfig { quiet_ms: quiet.unwrap_or(cfg.quiet_ms), hung_kill_ms: hung.unwrap_or(cfg.hung_kill_ms), blocked_ms: ports.blocked_limit().unwrap_or(cfg.blocked_ms), ..cfg.clone() };
+        let cfg = &WatchConfig { quiet_ms: quiet.unwrap_or(cfg.quiet_ms), hung_kill_ms: hung.unwrap_or(cfg.hung_kill_ms), blocked_ms: ports.blocked_limit().unwrap_or(cfg.blocked_ms), idle_work_ms: ports.idle_work_limit().unwrap_or(cfg.idle_work_ms), ..cfg.clone() };
         let entries: Vec<_> = self.list.lock().unwrap().iter().map(|(_, e)| e.clone()).collect();
         let mut acts = Vec::new();
         for entry in entries {
@@ -585,12 +607,21 @@ impl Daemon {
             } else {
                 (AgentWatch { state: "IDLE".into(), pending_since: None, pending: None, last_activity_at: e.rec.last_heartbeat, nudges: 0 }, None)
             };
-            let key = if ports.enabled(e.rec.project_id.as_deref()) && e.turn_active {
+            let mut key = if ports.enabled(e.rec.project_id.as_deref()) && e.turn_active {
                 let b = ports.blocked(&e.rec, now);
                 apply_blocked(&mut watch, true, b.as_ref(), now, cfg).or(key)
             } else {
                 key
             };
+            // SESSION-GHOST-1 B: at rest, its work still open, nothing pending for it, silent past the limit: one notice per run.
+            let mut idle_work = None;
+            if key.is_none() && ports.enabled(e.rec.project_id.as_deref()) {
+                idle_work = idle_work_minutes(&e.rec, e.turn_active, e.turn_started, now, cfg)
+                    .filter(|_| ports.work_open(&e.rec) && ports.pending(&e.rec, now).is_none() && ports.blocked(&e.rec, now).is_none());
+                if idle_work.is_some() {
+                    key = Some(format!("idle:{}:{}", e.rec.id, e.rec.run_count));
+                }
+            }
             // A BUSY turn silent past the kill limit: its child is hung, the next turn replaces it.
             let silent = now - watch.last_activity_at;
             if e.turn_active && cfg.hung_kill_ms > 0 && silent >= cfg.hung_kill_ms {
@@ -603,6 +634,15 @@ impl Daemon {
             }
             let mut episode = e.episode.take();
             if let Some(ep) = episode.as_mut() {
+                if let Some(mins) = idle_work.filter(|_| !ep.raised) {
+                    ep.raised = true;
+                    let last = e.rec.last_action.clone().unwrap_or_else(|| "-".into());
+                    acts.push(Act::Raise(
+                        e.rec.clone(),
+                        "watchdog_idle".into(),
+                        format!("Agent {} has had no turn and no output for {mins} min while its work is still open; last action: {last} (the session is left as it is).", label(&e.rec)),
+                    ));
+                }
                 match watch.state.as_str() {
                     "QUIET" if !ep.raised => {
                         ep.raised = true;
@@ -806,5 +846,102 @@ mod tests {
         assert_eq!((f::SESSION_RESTART, f::SESSION_SWAP, f::SESSION_SWAPPED, f::SESSION_STATS_GET, f::SESSION_STATS), (
             "session_restart", "session_swap", "session_swapped", "session_stats_get", "session_stats"
         ));
+    }
+}
+
+#[cfg(test)]
+mod idle_work_tests {
+    //! SESSION-GHOST-1 B: a worker at rest on open work raises ONE notice after the limit; a new turn re-arms it; a
+    //! worker waiting on an answer, a closed ticket or a limit of 0 raises nothing. The clock is the `now` passed in.
+    use super::*;
+    use crate::sessions::{Config, NewOpts};
+    use std::sync::atomic::{AtomicBool, Ordering as O};
+    use std::sync::Mutex;
+
+    #[derive(Default)]
+    struct Fake {
+        open: AtomicBool,
+        question: AtomicBool,
+        raised: Mutex<Vec<(String, String)>>,
+    }
+    impl WatchPorts for Fake {
+        fn work_open(&self, _r: &SessionRecord) -> bool {
+            self.open.load(O::SeqCst)
+        }
+        fn blocked(&self, _r: &SessionRecord, _now: i64) -> Option<Pending> {
+            self.question.load(O::SeqCst).then(|| Pending { key: "q".into(), since: 0, summary: "a question".into() })
+        }
+        fn raise(&self, _r: &SessionRecord, outcome: &str, detail: &str) {
+            self.raised.lock().unwrap().push((outcome.into(), detail.into()));
+        }
+    }
+
+    const MIN: i64 = 60_000;
+
+    /// A worker on ticket t1 at rest since `t0` (its last turn and output), its last action "Bash npm run dev".
+    fn setup(t0: i64) -> (Arc<Daemon>, String, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("infantry-idle-work-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let d = Daemon::new(Arc::new(crate::harness::stub::Stub::default()), Config::new(dir.clone(), dir.clone())).unwrap();
+        let sid = d.launch(NewOpts { ticket_id: Some("t1".into()), ..Default::default() }).unwrap();
+        rest(&d, &sid, t0);
+        (d, sid, dir)
+    }
+
+    fn rest(d: &Daemon, sid: &str, at: i64) {
+        let en = d.find(sid).unwrap();
+        let mut e = en.lock().unwrap();
+        e.turn_active = false;
+        e.turn_started = at;
+        e.rec.state = SessionState::Idle;
+        e.rec.spawned_at = at;
+        e.rec.last_turn_at = Some(at);
+        e.rec.last_output_at = Some(at);
+        e.rec.last_action = Some("Bash npm run dev".into());
+    }
+
+    fn tick(d: &Arc<Daemon>, p: &Fake, now: i64) -> usize {
+        d.watch_tick(p, &WatchConfig::default(), now);
+        p.raised.lock().unwrap().len()
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_idle_worker_on_open_work_raises_one_notice_and_a_new_turn_re_arms_it() {
+        let t0 = 1_000_000;
+        let (d, sid, dir) = setup(t0);
+        let p = Fake::default();
+        p.open.store(true, O::SeqCst);
+        assert_eq!(tick(&d, &p, t0 + 19 * MIN), 0, "under the limit: nothing");
+        assert_eq!(tick(&d, &p, t0 + 20 * MIN), 1, "at the limit: one notice");
+        let (outcome, detail) = p.raised.lock().unwrap()[0].clone();
+        assert_eq!(outcome, "watchdog_idle");
+        assert!(detail.contains("20 min") && detail.contains("Bash npm run dev"), "{detail}");
+        assert_eq!(tick(&d, &p, t0 + 90 * MIN), 1, "ONE notice, not one per tick");
+        // A new turn (and its end) re-arms it.
+        d.find(&sid).unwrap().lock().unwrap().rec.run_count += 1;
+        let t1 = t0 + 100 * MIN;
+        rest(&d, &sid, t1);
+        assert_eq!(tick(&d, &p, t1 + 5 * MIN), 1);
+        assert_eq!(tick(&d, &p, t1 + 25 * MIN), 2, "the next silence raises again");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn no_notice_when_waiting_on_an_answer_or_the_work_is_closed_or_the_limit_is_off() {
+        let t0 = 1_000_000;
+        let (d, sid, dir) = setup(t0);
+        let p = Fake::default();
+        assert_eq!(tick(&d, &p, t0 + 60 * MIN), 0, "the ticket is not in progress");
+        p.open.store(true, O::SeqCst);
+        p.question.store(true, O::SeqCst);
+        assert_eq!(tick(&d, &p, t0 + 60 * MIN), 0, "a pending question is already shown");
+        p.question.store(false, O::SeqCst);
+        d.find(&sid).unwrap().lock().unwrap().rec.waiting = Some(SessionWaiting { reason: "owner".into(), since: 0, until_at: i64::MAX, expires_at: i64::MAX, clear_on_output: false, output_grace_ms: 0 });
+        assert_eq!(tick(&d, &p, t0 + 60 * MIN), 0, "it said it waits");
+        d.find(&sid).unwrap().lock().unwrap().rec.waiting = None;
+        d.watch_tick(&p, &WatchConfig { idle_work_ms: 0, ..WatchConfig::default() }, t0 + 60 * MIN);
+        assert_eq!(p.raised.lock().unwrap().len(), 0, "0 = off");
+        assert_eq!(tick(&d, &p, t0 + 60 * MIN), 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

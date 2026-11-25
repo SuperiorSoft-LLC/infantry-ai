@@ -710,6 +710,10 @@ impl Daemon {
         let now = now_ms();
         e.rec.last_heartbeat = now;
         e.rec.last_event_at = Some(now);
+        // SESSION-GHOST-1: a removed session's late write (a turn end, a status) never puts it back on the list.
+        if e.removed {
+            return;
+        }
         let data = serde_json::to_string(&e.rec).unwrap_or_default();
         self.emit(e, wire::SESSION, data);
         let mut cache = self.cache.lock().unwrap();
@@ -1930,8 +1934,23 @@ impl Daemon {
     fn delete(&self, sid: &str) -> Result<(), String> {
         let entry = {
             let mut list = self.list.lock().unwrap();
-            let i = list.iter().position(|(i, _)| i == sid).ok_or("session_delete refused: no such session")?;
-            list.remove(i).1
+            match list.iter().position(|(i, _)| i == sid) {
+                Some(i) => list.remove(i).1,
+                None => {
+                    drop(list);
+                    // SESSION-GHOST-1: an id only the list copy still holds is taken off the list.
+                    let mut cache = self.cache.lock().unwrap();
+                    let before = cache.len();
+                    cache.retain(|r| r.id != sid);
+                    if cache.len() == before {
+                        return Err("session_delete refused: no such session".into());
+                    }
+                    drop(cache);
+                    self.dirty.store(true, Ordering::SeqCst);
+                    self.broadcast(wire::SESSIONS, self.sessions_json());
+                    return Ok(());
+                }
+            }
         };
         {
             self.tunnel.revoke(sid);
@@ -1940,8 +1959,9 @@ impl Daemon {
             if let Some(mut hs) = e.hs.take() {
                 hs.close(true);
             }
+            // Under the session's lock (lock order: session, then cache), so no write of it can land after this.
+            self.cache.lock().unwrap().retain(|r| r.id != sid);
         }
-        self.cache.lock().unwrap().retain(|r| r.id != sid);
         let wd = entry.lock().unwrap().rec.working_dir.clone();
         self.drop_own_folder(&wd, sid);
         Stats::remove(&self.cfg.state_dir, sid);
@@ -2227,5 +2247,51 @@ mod context_launch_tests {
         let ok = d.handle(frame(json!(250_000)), &mut conn).join("");
         assert!(ok.contains("250000"), "{ok}");
         let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[cfg(test)]
+mod ghost_tests {
+    //! SESSION-GHOST-1: a session written after its delete (a caller found it before, wrote after) never comes back to
+    //! the list; an id only the list still knows is removable; a restart serves no ghost.
+    use super::*;
+
+    fn daemon() -> (Arc<Daemon>, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("infantry-ghost-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        (Daemon::new(Arc::new(crate::harness::stub::Stub::default()), Config::new(dir.clone(), dir.clone())).unwrap(), dir)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_write_after_the_delete_never_brings_the_session_back() {
+        let (d, dir) = daemon();
+        let sid = d.launch(NewOpts { prompt: Some("go".into()), ..Default::default() }).unwrap();
+        // A late frame's path found the entry before the delete and writes after it (the turn end of a worker ended).
+        let held = d.find(&sid).unwrap();
+        d.delete(&sid).unwrap();
+        {
+            let mut e = held.lock().unwrap();
+            Daemon::set_state(&mut e, SessionState::Busy);
+            d.push(&mut e);
+        }
+        assert!(d.record(&sid).is_none(), "the deleted session is back on the list");
+        d.flush();
+        drop(d);
+        let again = Daemon::new(Arc::new(crate::harness::stub::Stub::default()), Config::new(dir.clone(), dir.clone())).unwrap();
+        assert!(again.record(&sid).is_none(), "a restart serves the ghost");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_id_only_the_list_knows_is_removed_from_the_list() {
+        let (d, dir) = daemon();
+        let sid = d.launch(NewOpts::default()).unwrap();
+        // The list copy outlives the session manager's entry (the ghost state seen on the owner's daemon).
+        d.list.lock().unwrap().retain(|(i, _)| i != &sid);
+        assert!(d.record(&sid).is_some());
+        d.delete_session(&sid).expect("removing a list-only id is OK");
+        assert!(d.record(&sid).is_none());
+        assert!(d.delete_session(&sid).unwrap_err().contains("no such session"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
