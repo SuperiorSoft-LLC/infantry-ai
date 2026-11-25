@@ -50,3 +50,5 @@ scratch/
 
 # Built web UI halves of modules (WEBUI-1): rust/plugins/stage.sh builds them from ui/src.
 **/ui/dist/
+__pycache__/
+*.pyc
