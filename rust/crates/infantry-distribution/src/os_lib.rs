@@ -51,7 +51,9 @@ pub fn run_with_context(context_json: &str) -> i32 {
     match crate::run_checked(args) {
         Ok(()) => 0,
         Err(e) => {
-            eprintln!("[infantry] refusing to start: {e}");
+            // The host shows the LAST line: the plain reason stands alone on it.
+            eprintln!("[infantry] refusing to start (code 3)");
+            eprintln!("{e}");
             3
         }
     }

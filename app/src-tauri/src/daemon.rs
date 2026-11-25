@@ -262,6 +262,16 @@ pub fn refusal_in_log(log: &Path) -> Option<String> {
     line.starts_with("Infantry AI is already running with this data").then_some(line)
 }
 
+/// BOS-32: removes `daemon.port` only when the daemon behind it is gone. Returns the port of a daemon that still answers
+/// (the file stays: a refused start must not delete a live daemon's port file).
+fn clear_dead_port_file(state: &Path) -> Option<u16> {
+    let live = read_port(state).filter(|p| healthy(*p));
+    if live.is_none() {
+        let _ = std::fs::remove_file(port_file(state));
+    }
+    live
+}
+
 /// The daemon for `state`: the one already running there, else a new sidecar on `port` (0 = any free port).
 pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch, log_keep: usize) -> Result<Sidecar, String> {
     if FOREIGN_PORTS.contains(&port) {
@@ -282,7 +292,7 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch, log_keep: us
         }
         stop(state)?;
     }
-    let _ = std::fs::remove_file(port_file(state));
+    let kept = clear_dead_port_file(state);
     let bin = binary()?;
     // RUST-BUG 2617b342: never truncate the log. `<state>/logs/daemon.log` is rotated to daemon.1.log ... daemon.<keep>.log.
     let log = rotate_log(state, log_keep)?;
@@ -326,7 +336,7 @@ pub fn ensure(state: &Path, port: u16, cwd: &Path, launch: &Launch, log_keep: us
             }
             return Err(format!("{} exited at start ({status}); see {}", bin.display(), log_path.display()));
         }
-        if let Some(p) = read_port(state).filter(|p| !FOREIGN_PORTS.contains(p)) {
+        if let Some(p) = read_port(state).filter(|p| !FOREIGN_PORTS.contains(p) && Some(*p) != kept) {
             return Ok(Sidecar { url: format!("ws://127.0.0.1:{p}/ws"), child: Some(child), note: None });
         }
         std::thread::sleep(Duration::from_millis(20));
@@ -349,6 +359,34 @@ mod tests {
         std::fs::write(&log, "[infantry] refusing to start: bad port `x`\n").unwrap();
         assert_eq!(refusal_in_log(&log), None);
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_live_daemons_port_file_is_kept_and_a_dead_ones_removed() {
+        let dir = std::env::temp_dir().join(format!("port-keep-{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let t = std::thread::spawn(move || {
+            if let Ok((mut c, _)) = l.accept() {
+                let mut b = [0u8; 512];
+                let _ = std::io::Read::read(&mut c, &mut b);
+                let body = "{\"ok\":true}";
+                let _ = c.write_all(format!("HTTP/1.1 200 OK
+Content-Length: {}
+Connection: close
+
+{body}", body.len()).as_bytes());
+            }
+        });
+        std::fs::write(port_file(&dir), port.to_string()).unwrap();
+        assert_eq!(clear_dead_port_file(&dir), Some(port));
+        assert!(port_file(&dir).exists(), "a live daemon's port file stays");
+        t.join().unwrap();
+        // The listener is gone: nothing answers, so the file is stale and removed.
+        assert_eq!(clear_dead_port_file(&dir), None);
+        assert!(!port_file(&dir).exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
