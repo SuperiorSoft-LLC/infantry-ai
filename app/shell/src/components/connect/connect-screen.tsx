@@ -146,7 +146,7 @@ export function ConnectScreen() {
         <div>
           <h1 className="text-lg font-semibold">{isMobile ? "Connect to your PC" : "Connect to your daemon"}</h1>
           <p className="text-xs text-muted-foreground">
-            {isMobile ? "This phone shows the Infantry AI running on your PC. Scan the QR code the PC shows (Settings > Daemon > Let a phone connect)." : "This phone runs no agents. It connects to the Infantry daemon on your computer or server."}
+            {isMobile ? "This phone shows the Infantry AI running on your PC. Scan the QR code the PC shows (Settings > Daemon > Allow phone connections)." : "This phone runs no agents. It connects to the Infantry daemon on your computer or server."}
           </p>
         </div>
         {isMobile && (
