@@ -184,7 +184,7 @@ pub fn run_checked(a: Vec<String>) -> Result<(), String> {
         .unwrap_or_else(|e| fail(e))
     });
     rt.block_on(async move {
-        let (listener, host) = match tokio::net::TcpListener::bind((host.as_str(), port)).await {
+        let (listener, host) = match infantry_daemon::listen::bind_exclusive(host.as_str(), port) {
             Ok(l) => {
                 if os_runtime.is_some() {
                     let _ = std::fs::remove_file(state_dir.join(infantry_daemon::phone::NOTE_FILE));

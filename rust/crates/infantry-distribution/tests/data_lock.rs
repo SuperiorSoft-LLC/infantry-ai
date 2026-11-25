@@ -87,10 +87,10 @@ fn a_program_holds_the_folder_a_second_program_and_the_library_are_refused() {
     wait_for(60, || port_file(&state).is_file().then_some(()));
 
     let err = program_refused(&state, &d.path().join("second.log"));
-    assert!(err.contains(WORDS) && err.contains(&format!("process {})", first.id())) && err.contains("Close it first."), "{err}");
+    assert!(err.contains(WORDS) && err.contains(&format!("process {})", first.id())) && err.contains("press Retry."), "{err}");
 
     let lib = library(&state).join().unwrap().unwrap_err();
-    assert!(lib.starts_with(WORDS) && lib.contains(&first.id().to_string()) && lib.ends_with("Close it first."), "{lib}");
+    assert!(lib.starts_with(WORDS) && lib.contains(&first.id().to_string()) && lib.ends_with("press Retry."), "{lib}");
     // The refused starts did not take the first one's files.
     assert!(port_file(&state).is_file());
     first.kill().unwrap();

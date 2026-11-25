@@ -31,7 +31,7 @@ impl std::fmt::Display for LockError {
         match self {
             LockError::Held { pid, .. } => {
                 let who = pid.map(|p| p.to_string()).unwrap_or_else(|| "unknown".into());
-                write!(f, "Infantry AI is already running with this data (process {who}). Close it first.")
+                write!(f, "Infantry AI is already running with this data (process {who}). Closing its window can leave it running in the background: end process {who} (Task Manager, Details tab, End task), then press Retry.")
             }
             LockError::Io(e) => write!(f, "state dir lock: {e}"),
         }
@@ -68,17 +68,27 @@ impl StateLock {
     }
 }
 
-/// The pid of an older (lock-less) daemon using this folder, or None. `daemon.pid` must name a live process AND the port in
-/// `daemon.port` must answer `/health` as an Infantry AI daemon; a dead pid, a reused pid (another program, or nothing on
-/// that port) never blocks.
+/// The pid of an older (lock-less) daemon using this folder, or None. An older daemon is seen by what it really keeps:
+/// `health/status.json` (pid, port, running), `daemon.pid` and `daemon.port` (any of them may be stale or missing: 0.7.2 left
+/// a dead pid in `daemon.pid` while it ran). A recorded pid must be ALIVE and a recorded port must answer `/health` as an
+/// Infantry AI daemon (a 401/403 counts); a dead pid, or a reused pid whose port answers nothing like a daemon, never blocks.
 pub fn legacy_holder(state_dir: &Path) -> Option<u32> {
     legacy_holder_with(state_dir, &|p| crate::health::pid_alive(p as i64), &answers_as_daemon)
 }
 
 pub fn legacy_holder_with(state_dir: &Path, alive: &dyn Fn(u32) -> bool, is_daemon: &dyn Fn(u16) -> bool) -> Option<u32> {
-    let pid: u32 = std::fs::read_to_string(state_dir.join("daemon.pid")).ok()?.trim().parse().ok()?;
-    let port: u16 = std::fs::read_to_string(state_dir.join("daemon.port")).ok()?.trim().parse().ok()?;
-    (alive(pid) && is_daemon(port)).then_some(pid)
+    let num = |f: &Path| std::fs::read_to_string(f).ok().and_then(|t| t.trim().parse::<u32>().ok());
+    let status: Option<serde_json::Value> = std::fs::read_to_string(state_dir.join("health").join(crate::health::STATUS)).ok().and_then(|t| serde_json::from_str(&t).ok());
+    let mut pids: Vec<u32> = Vec::new();
+    let mut ports: Vec<u16> = Vec::new();
+    if let Some(st) = status.filter(|st| st["running"].as_bool().unwrap_or(true)) {
+        pids.extend(st["pid"].as_u64().and_then(|p| u32::try_from(p).ok()));
+        ports.extend(st["port"].as_u64().and_then(|p| u16::try_from(p).ok()));
+    }
+    pids.extend(num(&state_dir.join("daemon.pid")));
+    ports.extend(num(&state_dir.join("daemon.port")).and_then(|p| u16::try_from(p).ok()));
+    let pid = pids.into_iter().filter(|p| *p != 0).find(|p| alive(*p))?;
+    ports.into_iter().filter(|p| *p != 0).any(|p| is_daemon(p)).then_some(pid)
 }
 
 /// True when `127.0.0.1:port` answers `GET /health` as an Infantry AI daemon (`contract` and `buildId` in the JSON), or
@@ -182,8 +192,45 @@ mod tests {
         old_daemon_files(d.path(), std::process::id(), port);
         let err = StateLock::acquire(d.path(), Duration::from_millis(150)).unwrap_err();
         assert_eq!(err, LockError::Held { state_dir: d.path().to_path_buf(), pid: Some(std::process::id()) });
-        assert_eq!(err.to_string(), format!("Infantry AI is already running with this data (process {}). Close it first.", std::process::id()));
+        assert_eq!(err.to_string(), format!("Infantry AI is already running with this data (process {0}). Closing its window can leave it running in the background: end process {0} (Task Manager, Details tab, End task), then press Retry.", std::process::id()));
         assert!(!d.path().join(HOLDER_FILE).exists());
+    }
+
+    /// The 2026-11-24 case: `daemon.pid` holds a dead pid, `daemon.port` is gone; only `health/status.json` names the live daemon.
+    #[test]
+    fn an_older_daemon_is_seen_by_its_status_file_when_daemon_pid_is_dead() {
+        let d = tempfile::tempdir().unwrap();
+        let port = fake_health(r#"{"ok":true,"contract":1,"buildId":"x"}"#);
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap()).args(["--list"]).stdout(std::process::Stdio::null()).spawn().unwrap();
+        let dead = child.id();
+        child.wait().unwrap();
+        std::fs::write(d.path().join("daemon.pid"), dead.to_string()).unwrap();
+        std::fs::create_dir_all(d.path().join("health")).unwrap();
+        std::fs::write(d.path().join("health/status.json"), format!(r#"{{"pid":{},"port":{port},"running":true}}"#, std::process::id())).unwrap();
+        let err = StateLock::acquire(d.path(), Duration::from_millis(150)).unwrap_err();
+        assert_eq!(err, LockError::Held { state_dir: d.path().to_path_buf(), pid: Some(std::process::id()) });
+        assert!(!d.path().join(HOLDER_FILE).exists() && !d.path().join("launch.json").exists());
+        // A record that says running:false, or a port that answers nothing, never blocks.
+        std::fs::write(d.path().join("health/status.json"), format!(r#"{{"pid":{},"port":{port},"running":false}}"#, std::process::id())).unwrap();
+        StateLock::acquire(d.path(), Duration::ZERO).unwrap();
+    }
+
+    /// A daemon that wants its token answers 401: it still counts as a daemon.
+    #[test]
+    fn a_daemon_that_answers_401_counts() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            for mut c in l.incoming().flatten().take(10) {
+                let mut b = [0u8; 512];
+                let _ = c.read(&mut b);
+                let _ = c.write_all(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            }
+        });
+        let d = tempfile::tempdir().unwrap();
+        old_daemon_files(d.path(), std::process::id(), port);
+        assert!(StateLock::acquire(d.path(), Duration::from_millis(100)).is_err());
     }
 
     #[test]
