@@ -237,7 +237,7 @@ function SignInStep({ id, label, rows, recheck, st }: { id: string; label: strin
       <p className="text-xs text-muted-foreground">{login && showKey ? `Choose one way to connect ${label}.` : `Connect ${label} so your agent can answer.`}</p>
       {login && (
         <ChoiceCard title={`Log in with your ${label} subscription`} subtitle={`A login window opens so you can log in to your ${label} account.`}>
-          <SubscriptionSignIn id={id} label={label} onSignedIn={recheck} secrets={st.secrets} runner={st.runner} />
+          <SubscriptionSignIn id={id} label={label} onSignedIn={recheck} secrets={st.secrets} runner={st.runner} named={false} />
         </ChoiceCard>
       )}
       {showKey && keyRowOf && (

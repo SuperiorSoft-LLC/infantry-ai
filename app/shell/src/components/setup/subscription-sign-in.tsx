@@ -18,8 +18,10 @@ const POLL_MS = 1500;
 /**
  * [secrets] is the store of the machine the login runs on (default: this one); for another runner its state is re-read through that
  * runner's link. The login page and the code field are the same: the page opens on THIS machine and the code is pasted back.
+ * [named] (default) puts the tool's label and its state ("Signed in" / "Not signed in", the row's own answer) above the buttons; the guided
+ * setup passes false because its card already names the tool.
  */
-export function SubscriptionSignIn({ id, label, onSignedIn, secrets, runner }: { id: string; label: string; onSignedIn: () => void; secrets?: SecretsStore; runner?: string }) {
+export function SubscriptionSignIn({ id, label, onSignedIn, secrets, runner, named = true }: { id: string; label: string; onSignedIn: () => void; secrets?: SecretsStore; runner?: string; named?: boolean }) {
   const store = secrets ?? secretsStore();
   const st = useStore(store);
   const row = loginRow(id, st.builtIns);
@@ -117,6 +119,12 @@ export function SubscriptionSignIn({ id, label, onSignedIn, secrets, runner }: {
   const invalid = row.loginMessage?.toLowerCase().startsWith("invalid");
   return (
     <div className="space-y-2" data-testid="subscription-sign-in">
+      {named ? (
+        <div className="flex items-center gap-2 text-xs" data-testid="sign-in-state">
+          <span className="font-medium">{label}</span>
+          {row.signedIn === "true" || row.signedIn === "false" ? <span className={row.signedIn === "true" ? "text-ok" : "text-muted-foreground"}>{row.signedIn === "true" ? "Signed in" : "Not signed in"}</span> : null}
+        </div>
+      ) : null}
       {phase === "running" ? (
         <>
           <p className="text-xs">Finish logging in in the login window. This screen updates by itself when you are done.</p>
@@ -162,7 +170,7 @@ export function SubscriptionSignIn({ id, label, onSignedIn, secrets, runner }: {
           </Button>
         </>
       ) : phase === "done" || row.signedIn === "true" ? (
-        <p className="text-xs text-ok">✓ Logged in with your {label} subscription.</p>
+        named ? null : <p className="text-xs text-ok">✓ Logged in with your {label} subscription.</p>
       ) : phase === "failed" ? (
         <>
           <p role="alert" className="text-xs text-danger">
