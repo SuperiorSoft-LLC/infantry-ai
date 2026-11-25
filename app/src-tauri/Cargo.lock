@@ -1935,7 +1935,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-harness"
-version = "0.5.0"
+version = "0.8.0"
 dependencies = [
  "infantry-runner-api",
  "serde_json",
@@ -1944,7 +1944,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-harness-claude"
-version = "0.5.0"
+version = "0.8.0"
 dependencies = [
  "infantry-harness",
  "serde",
@@ -1954,11 +1954,11 @@ dependencies = [
 
 [[package]]
 name = "infantry-proc"
-version = "0.5.0"
+version = "0.8.0"
 
 [[package]]
 name = "infantry-runner"
-version = "0.5.0"
+version = "0.8.0"
 dependencies = [
  "libc",
  "portable-pty",
@@ -1969,16 +1969,17 @@ dependencies = [
 
 [[package]]
 name = "infantry-runner-api"
-version = "0.5.0"
+version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
  "serde",
+ "serde_json",
  "tokio",
 ]
 
 [[package]]
 name = "infantry-runner-local"
-version = "0.5.0"
+version = "0.8.0"
 dependencies = [
  "infantry-proc",
  "infantry-runner",
@@ -1993,7 +1994,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-tauri"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "if-addrs",
  "infantry-harness",
