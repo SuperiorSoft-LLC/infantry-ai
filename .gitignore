@@ -52,3 +52,6 @@ scratch/
 **/ui/dist/
 __pycache__/
 *.pyc
+
+# BOS-31: the dev app folder (scripts/bos-dev-app.ps1)
+/dist-bosdev/
