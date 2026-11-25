@@ -139,11 +139,15 @@ interface Internal {
   gapTimers: Map<string, ReturnType<typeof setTimeout>>;
   /** The last text sent to each session (a `queue_add` has no requestId), for a `session_gone` refusal. */
   lastText: Map<string, string>;
+  /** CHAT-GONE-2: the first sessions list after a READY does not mark missing sessions removed; it asks again. */
+  listUnconfirmed: boolean;
+  /** CHAT-GONE-2: a refused session's `lastHeartbeat` at the refusal; a listed record newer than it is alive. */
+  goneBeat: Map<string, number>;
 }
 
 export function createDaemonStore(opts: { url: string; transport: TransportFactory; settings?: Partial<StoreSettings>; offline?: boolean }): DaemonStore {
   const cfg: StoreSettings = { ...DEFAULT_SETTINGS, ...opts.settings };
-  const io: Internal = { queue: [], held: new Map(), raf: null, fallback: null, ackTimers: new Map(), gapTimers: new Map(), lastText: new Map() };
+  const io: Internal = { queue: [], held: new Map(), raf: null, fallback: null, ackTimers: new Map(), gapTimers: new Map(), lastText: new Map(), listUnconfirmed: false, goneBeat: new Map() };
   let conn: DaemonConnection | null = null;
   const taps = new Set<(env: Envelope) => void>();
 
@@ -235,6 +239,7 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
             io.ackTimers.delete(p.clientId);
           }
           gone = { ...gone, [id]: { reason: "refused", text: p?.text ?? io.lastText.get(id) } };
+          io.goneBeat.set(id, sessions[id]?.record.lastHeartbeat ?? 0);
           io.lastText.delete(id);
           const v = sessions[id];
           if (v) {
@@ -242,6 +247,15 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
             sessions[id] = { ...v, record: { ...v.record, state: "EXITED", turnActive: false } };
           }
           continue;
+        }
+        // CHAT-GONE-2: a stream frame of a session is a sign of life: a "refused" mark is lifted, and the last text
+        // sent to it can no longer be refused (a queue_add has no ack of its own; its answer is the session's frames).
+        if (sid && STREAM_FRAMES.has(env.type)) {
+          io.lastText.delete(sid);
+          if (gone[sid]?.reason === "refused") {
+            const { [sid]: _, ...rest } = gone;
+            gone = rest;
+          }
         }
         if (sid && STREAM_FRAMES.has(env.type) && env.sequence != null) {
           if (!sessions[sid] && env.type === Frame.SESSION) {
@@ -272,6 +286,9 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
             const restarted = io.instance !== undefined && io.instance !== ready.instance;
             io.instance = ready.instance;
             connection = { ...connection, ready };
+            io.listUnconfirmed = true;
+            // CHAT-GONE-2: a new daemon instance: what the old one refused or removed says nothing about this one.
+            if (restarted && Object.keys(gone).length) gone = {};
             if (restarted) {
               io.held.clear();
               writeSessions();
@@ -288,8 +305,20 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
             const keep: Record<string, SessionView> = {};
             // CHAT-GONE-1: a session that left the list is gone; one that is listed again is not.
             const listed = new Set(list.map((r) => r.id));
-            const left = Object.keys(sessions).filter((id) => !listed.has(id) && !gone[id]);
-            const back = Object.keys(gone).filter((id) => listed.has(id) && gone[id].reason === "removed");
+            const byId = new Map(list.map((r) => [r.id, r]));
+            // CHAT-GONE-2: the first list after a READY may be empty or partial (a store still loading, a relayed
+            // backend): what is missing from it is kept as it was and the list is asked again; the next list decides.
+            const unconfirmed = io.listUnconfirmed;
+            io.listUnconfirmed = false;
+            const missing = Object.keys(sessions).filter((id) => !listed.has(id) && !gone[id]);
+            const left = unconfirmed ? [] : missing;
+            if (unconfirmed && missing.length) out({ type: Frame.SESSIONS, data: "" });
+            const back = Object.keys(gone).filter((id) => {
+              const r = byId.get(id);
+              if (!r) return false;
+              // a "refused" session stays gone while it is only listed; a newer heartbeat than at the refusal is life
+              return gone[id].reason === "removed" || r.lastHeartbeat > (io.goneBeat.get(id) ?? Infinity);
+            });
             if (left.length || back.length) {
               gone = { ...gone };
               for (const id of left) gone[id] = { reason: "removed" };
@@ -306,6 +335,7 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
                 askHistory(r.id, v.cursor);
               }
             }
+            if (unconfirmed) for (const id of missing) keep[id] = sessions[id];
             sessions = keep;
             break;
           }
@@ -361,6 +391,8 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
           case Frame.PROMPT_ACK: {
             const p = env.requestId ? pending[env.requestId] : undefined;
             if (p) pending = { ...pending, [p.clientId]: { ...p, state: "accepted" } };
+            // CHAT-GONE-2: an acknowledged send can no longer be refused: its text never comes back into the box.
+            if (p) io.lastText.delete(p.sessionId);
             break;
           }
         }

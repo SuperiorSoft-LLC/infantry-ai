@@ -24,10 +24,13 @@ export function AgentSidebar() {
   const agents = useAgentList();
   const link = useDaemon((s) => s.connection.state);
   const select = useCallback((id: string) => ui.set("selectedAgentId", id), [ui.set]);
-  // Open the newest session when nothing (or a session that is gone) is selected.
+  // Open the newest session when nothing (or a session that is unknown) is selected. CHAT-GONE-2: a chat open on a
+  // worker the daemon reports gone stays open, so it can say so (it does not jump to another worker's chat).
+  const selectedGone = useDaemon((s) => !!s.gone[ui.selectedAgentId]);
   useEffect(() => {
+    if (selectedGone) return;
     if (agents.length > 0 && !agents.some((a) => a.id === ui.selectedAgentId)) ui.set("selectedAgentId", agents[0].id);
-  }, [agents, ui.selectedAgentId, ui.set]);
+  }, [agents, ui.selectedAgentId, ui.set, selectedGone]);
   const q = ui.search.trim().toLowerCase();
   const visible = agents.filter(
     (a) =>

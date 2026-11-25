@@ -4,6 +4,7 @@
 import { useEffect } from "react";
 import { useUi } from "@/state/ui-state";
 import { useAgent } from "@/daemon/agents";
+import { useDaemon } from "@/daemon/daemon";
 import { TabContent } from "@/components/tabs/tab-content";
 import { removedTabTarget } from "@infantry/client";
 import { useTabs } from "@/plugins/catalog";
@@ -15,6 +16,8 @@ import { SessionDialogs } from "./session-actions";
 export function SessionView() {
   const ui = useUi();
   const agent = useAgent(ui.selectedAgentId);
+  // CHAT-GONE-2: a selected worker the daemon reports gone keeps its chat open, which then says it is gone.
+  const goneId = useDaemon((s) => (s.gone[ui.selectedAgentId] ? ui.selectedAgentId : null));
   const tabs = useTabs("center");
   const { sessionTab, set } = ui;
 
@@ -40,7 +43,7 @@ export function SessionView() {
       {!ui.chatMax && <SessionTabBar tabs={tabs} value={ui.sessionTab} onChange={(id) => ui.set("sessionTab", id)} />}
 
       {ui.sessionTab === "cli" ? (
-        <FullChatPanel sessionId={agent?.id ?? null} />
+        <FullChatPanel sessionId={agent?.id ?? goneId} />
       ) : (
         <TabContent tab={ui.sessionTab} />
       )}

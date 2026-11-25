@@ -155,6 +155,82 @@ describe("daemon store", () => {
     expect(s.getState().gone).toEqual({});
   });
 
+  it("CHAT-GONE-2: a new daemon instance clears every gone mark", async () => {
+    const { d, s } = connected();
+    d.push({ type: "ready", data: "instance=i1 since=0" });
+    d.push({ type: "sessions", data: JSON.stringify([rec("a"), rec("b")]) });
+    await tick();
+    s.getState().send("a", "too early");
+    const id = d.sent.find((e) => e.type === "prompt")!.requestId!;
+    d.push({ type: "error", data: "session_gone a: prompt refused: unknown session a", sessionId: "a", requestId: id });
+    d.push({ type: "sessions", data: JSON.stringify([rec("a")]) });
+    await tick();
+    expect(Object.keys(s.getState().gone).sort()).toEqual(["a", "b"]);
+    d.push({ type: "ready", data: "instance=i2 since=0" });
+    d.push({ type: "sessions", data: JSON.stringify([rec("a"), rec("b")]) });
+    await tick();
+    expect(s.getState().gone).toEqual({});
+  });
+
+  it("CHAT-GONE-2: on the same instance a refused session stays gone while only listed; a sign of life clears it", async () => {
+    const { d, s } = connected();
+    d.push({ type: "ready", data: "instance=i1 since=0" });
+    d.push({ type: "sessions", data: JSON.stringify([rec("a"), rec("b")]) });
+    await tick();
+    s.getState().send("a", "x");
+    s.getState().send("b", "y");
+    for (const e of d.sent.filter((e) => e.type === "prompt"))
+      d.push({ type: "error", data: `session_gone ${e.sessionId}: prompt refused`, sessionId: e.sessionId, requestId: e.requestId });
+    await tick();
+    d.push({ type: "sessions", data: JSON.stringify([rec("a"), rec("b")]) }); // only listed: still gone
+    await tick();
+    expect(s.getState().gone.a?.reason).toBe("refused");
+    expect(s.getState().gone.b?.reason).toBe("refused");
+    d.push({ type: "sessions", data: JSON.stringify([{ ...rec("a"), lastHeartbeat: 11 }, rec("b")]) }); // newer heartbeat
+    d.push({ type: "text_delta", data: "hi", sessionId: "b", sequence: 1 }); // a stream frame
+    await tick();
+    expect(s.getState().gone).toEqual({});
+  });
+
+  it("CHAT-GONE-2: the first list after READY (empty or partial) does not flash removed; it asks again and the next decides", async () => {
+    const { d, s } = connected();
+    d.push({ type: "ready", data: "instance=i1 since=0" });
+    d.push({ type: "policy", data: "{}" });
+    d.push({ type: "sessions", data: JSON.stringify([rec("a"), rec("b")]) });
+    await tick();
+    // reconnect to the same instance; the daemon sends ready, policy, sessions in that order
+    d.push({ type: "ready", data: "instance=i1 since=0" });
+    d.push({ type: "policy", data: "{}" });
+    d.push({ type: "sessions", data: JSON.stringify([]) });
+    await tick();
+    expect(s.getState().gone).toEqual({});
+    expect(Object.keys(s.getState().sessions).sort()).toEqual(["a", "b"]);
+    expect(d.sent.filter((e) => e.type === "sessions").length).toBe(1);
+    d.push({ type: "sessions", data: JSON.stringify([rec("a")]) });
+    await tick();
+    expect(s.getState().gone).toEqual({ b: { reason: "removed" } });
+  });
+
+  it("CHAT-GONE-2: an acknowledged send is never put back in the box by a later refusal", async () => {
+    const { d, s } = connected();
+    d.push({ type: "ready", data: "instance=i1 since=0" });
+    d.push({ type: "sessions", data: JSON.stringify([rec("a"), rec("q", "BUSY")]) });
+    await tick();
+    s.getState().send("a", "hours ago");
+    const id = d.sent.find((e) => e.type === "prompt")!.requestId!;
+    d.push({ type: "prompt_ack", data: "", sessionId: "a", requestId: id });
+    s.getState().send("q", "queued long ago");
+    d.push({ type: "session", data: JSON.stringify(rec("q", "BUSY")), sessionId: "q", sequence: 1 }); // queue_add answered
+    await tick();
+    // much later the sessions are removed, and a queue_add (no requestId) is refused
+    d.push({ type: "error", data: "session_gone a: queue_add refused: unknown session a", sessionId: "a" });
+    d.push({ type: "error", data: "session_gone q: queue_add refused: unknown session q", sessionId: "q" });
+    await tick();
+    expect(s.getState().gone.a).toMatchObject({ reason: "refused", text: undefined });
+    expect(s.getState().gone.q).toMatchObject({ reason: "refused", text: undefined });
+    expect(s.getState().takeGoneText("a")).toBeUndefined();
+  });
+
   it("marks a send with no answer as failed after sendAckSeconds", async () => {
     const { d, s } = connected();
     d.push({ type: "ready", data: "instance=i1 since=0" });
