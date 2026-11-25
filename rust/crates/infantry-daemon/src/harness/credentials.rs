@@ -282,22 +282,17 @@ impl HarnessCredentials {
         if !c.logout_argv.is_empty() {
             let mut argv = infantry_harness::shim::launcher(&LocalProbe, &c.logout_argv[0], "node");
             argv.extend(c.logout_argv[1..].iter().cloned());
-            ran = Some(
-                infantry_proc::command(&argv[0])
-                    .args(&argv[1..])
-                    .env(&c.env, "")
-                    .stdin(std::process::Stdio::null())
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status(),
-            );
+            ran = Some(run_bounded(&argv, &c.env, std::time::Duration::from_secs(SIGN_OUT_LIMIT_SECS)));
         }
+        let was_signed_in = h.sign_in_problem(&self.probe()).is_none();
         if self.token(id).is_some() {
             self.keystore.clear(&token_name(id), None).map_err(|e| format!("the stored token could not be removed: {e}"))?;
         }
         if h.sign_in_problem(&self.probe()).is_none() {
             return Err(match ran {
-                Some(Err(e)) => format!("{} could not be signed out: its sign-out command did not run ({e}).", c.label),
+                Some(SignOut::Hung) => format!("{} may still be signed in: its sign-out command did not finish within {SIGN_OUT_LIMIT_SECS} seconds and was stopped. The app's own sign-in state is cleared; press Check again, or sign out in the tool itself.", c.label),
+                Some(SignOut::Failed(e)) => format!("{} could not be signed out: its sign-out command did not run ({e}).", c.label),
+                Some(SignOut::Exit(code)) if was_signed_in => format!("{} is still signed in: its sign-out command ended with an error (exit {code}). Sign out in the tool itself, then press Check again.", c.label),
                 _ => format!("{} still counts as signed in: it is signed in by an environment variable or a file the app does not remove. Sign out there.", c.label),
             });
         }
@@ -553,6 +548,44 @@ impl Probe for TokenProbe {
 /// times, before the sign-in is called failed. The answer is the tool's own, read fresh each time.
 const LATE_CREDENTIAL_CHECKS: u32 = 6;
 const LATE_CREDENTIAL_WAIT_MS: u64 = 500;
+/// How long a tool's own sign-out command may run before it is ended (its process tree) and reported as not finished.
+const SIGN_OUT_LIMIT_SECS: u64 = 20;
+
+enum SignOut {
+    Exit(i32),
+    Hung,
+    Failed(std::io::Error),
+}
+
+/// Runs a sign-out command with a bounded wait; past [limit] its process tree is ended.
+fn run_bounded(argv: &[String], blank_env: &str, limit: std::time::Duration) -> SignOut {
+    let mut child = match infantry_proc::command(&argv[0])
+        .args(&argv[1..])
+        .env(blank_env, "")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => return SignOut::Failed(e),
+    };
+    let end = std::time::Instant::now() + limit;
+    loop {
+        match child.try_wait() {
+            Ok(Some(st)) => return SignOut::Exit(st.code().unwrap_or(-1)),
+            Ok(None) if std::time::Instant::now() < end => std::thread::sleep(std::time::Duration::from_millis(50)),
+            Ok(None) => {
+                infantry_proc::kill_pid(child.id());
+                let _ = child.kill();
+                let _ = child.wait();
+                return SignOut::Hung;
+            }
+            Err(e) => return SignOut::Failed(e),
+        }
+    }
+}
+
 fn late_check(mut signed_in: impl FnMut() -> bool) -> bool {
     for i in 0..=LATE_CREDENTIAL_CHECKS {
         if signed_in() {
@@ -627,6 +660,26 @@ fn seen(run: &Run, raw: &str) {
 
 #[cfg(test)]
 mod tests {
+    fn fake(windows: &[&str], unix: &[&str]) -> Vec<String> {
+        (if cfg!(windows) { windows } else { unix }).iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn a_sign_out_tool_that_hangs_is_ended_after_the_limit() {
+        let argv = fake(&["ping", "-n", "30", "127.0.0.1"], &["sleep", "30"]);
+        let t = std::time::Instant::now();
+        let r = run_bounded(&argv, "FAKE_API_KEY", std::time::Duration::from_millis(600));
+        assert!(matches!(r, SignOut::Hung), "the hung tool is reported as not finished");
+        assert!(t.elapsed() < std::time::Duration::from_secs(10), "the wait is bounded: {:?}", t.elapsed());
+    }
+
+    #[test]
+    fn a_sign_out_tool_that_exits_1_is_reported_with_its_code() {
+        let argv = fake(&["cmd", "/c", "exit", "1"], &["sh", "-c", "exit 1"]);
+        assert!(matches!(run_bounded(&argv, "FAKE_API_KEY", std::time::Duration::from_secs(10)), SignOut::Exit(1)));
+        assert!(matches!(run_bounded(&["no-such-tool-xyz".into()], "FAKE_API_KEY", std::time::Duration::from_secs(1)), SignOut::Failed(_)));
+    }
+
     use super::*;
     use infantry_harness::{Capabilities, LaunchError, LaunchPlan, LaunchRequest, ModelInfo, Probe};
 
