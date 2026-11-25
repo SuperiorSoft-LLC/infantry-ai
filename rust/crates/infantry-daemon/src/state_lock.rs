@@ -29,9 +29,12 @@ pub enum LockError {
 impl std::fmt::Display for LockError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LockError::Held { pid, .. } => {
-                let who = pid.map(|p| p.to_string()).unwrap_or_else(|| "unknown".into());
+            LockError::Held { pid: Some(who), .. } => {
                 write!(f, "Infantry AI is already running with this data (process {who}). Closing its window can leave it running in the background: end process {who} (Task Manager, Details tab, End task), then press Retry.")
+            }
+            // The pid is not certain: no number is named and nothing is asked to be ended by number.
+            LockError::Held { pid: None, .. } => {
+                write!(f, "Infantry AI is already running with this data. Closing its window can leave it running in the background: end the Infantry AI program in Task Manager (the Infantry AI entries in the Details tab), then press Retry.")
             }
             LockError::Io(e) => write!(f, "state dir lock: {e}"),
         }
@@ -57,9 +60,9 @@ impl StateLock {
             }
         }
         // An OLDER daemon (0.7.2 and before) takes no lock; it is seen by its recorded pid. The same wait lets one that is closing finish.
-        while let Some(pid) = legacy_holder(state_dir) {
+        while let Some(holder) = legacy_holder(state_dir) {
             if start.elapsed() >= wait {
-                return Err(LockError::Held { state_dir: state_dir.to_path_buf(), pid: Some(pid) });
+                return Err(LockError::Held { state_dir: state_dir.to_path_buf(), pid: holder });
             }
             std::thread::sleep(POLL);
         }
@@ -72,11 +75,22 @@ impl StateLock {
 /// `health/status.json` (pid, port, running), `daemon.pid` and `daemon.port` (any of them may be stale or missing: 0.7.2 left
 /// a dead pid in `daemon.pid` while it ran). A recorded pid must be ALIVE and a recorded port must answer `/health` as an
 /// Infantry AI daemon (a 401/403 counts); a dead pid, or a reused pid whose port answers nothing like a daemon, never blocks.
-pub fn legacy_holder(state_dir: &Path) -> Option<u32> {
-    legacy_holder_with(state_dir, &|p| crate::health::pid_alive(p as i64), &answers_as_daemon)
+pub fn legacy_holder(state_dir: &Path) -> Option<Option<u32>> {
+    let reg = crate::health::daemon_registry_dir();
+    legacy_holder_with(state_dir, &|p| crate::health::pid_alive(p as i64), &answers_as_daemon, &crate::listen::listener_pid, &|pid, port| registry_state_dir(&reg, pid, port))
 }
 
-pub fn legacy_holder_with(state_dir: &Path, alive: &dyn Fn(u32) -> bool, is_daemon: &dyn Fn(u16) -> bool) -> Option<u32> {
+/// DAEMON-LOCK-4. `Some(Some(pid))`: certain pid. `None`: nothing shown. A recorded port must answer `/health` as a daemon, and
+/// the process LISTENING on it (asked of the OS) is named only when shown to be THIS folder's: its machine-registry record
+/// (`<pid>.json`, same pid and port) names this state dir, or (no record) the pid is one this folder itself recorded.
+/// A daemon of ANOTHER folder never blocks; a recorded pid that does not listen on the port is never named (it may be reused).
+pub fn legacy_holder_with(
+    state_dir: &Path,
+    alive: &dyn Fn(u32) -> bool,
+    is_daemon: &dyn Fn(u16) -> bool,
+    listener: &dyn Fn(u16) -> Option<u32>,
+    folder_of: &dyn Fn(u32, u16) -> Option<PathBuf>,
+) -> Option<Option<u32>> {
     let num = |f: &Path| std::fs::read_to_string(f).ok().and_then(|t| t.trim().parse::<u32>().ok());
     let status: Option<serde_json::Value> = std::fs::read_to_string(state_dir.join("health").join(crate::health::STATUS)).ok().and_then(|t| serde_json::from_str(&t).ok());
     let mut pids: Vec<u32> = Vec::new();
@@ -87,8 +101,30 @@ pub fn legacy_holder_with(state_dir: &Path, alive: &dyn Fn(u32) -> bool, is_daem
     }
     pids.extend(num(&state_dir.join("daemon.pid")));
     ports.extend(num(&state_dir.join("daemon.port")).and_then(|p| u16::try_from(p).ok()));
-    let pid = pids.into_iter().filter(|p| *p != 0).find(|p| alive(*p))?;
-    ports.into_iter().filter(|p| *p != 0).any(|p| is_daemon(p)).then_some(pid)
+    for port in ports.into_iter().filter(|p| *p != 0) {
+        if !is_daemon(port) {
+            continue;
+        }
+        let Some(owner) = listener(port).filter(|p| alive(*p)) else { continue };
+        match folder_of(owner, port) {
+            Some(f) if norm(&f) == norm(state_dir) => return Some(Some(owner)),
+            Some(_) => {} // another folder's daemon: never blocks
+            None if pids.contains(&owner) => return Some(Some(owner)),
+            None => {} // a daemon answers, but nothing ties it to this folder: not a block
+        }
+    }
+    None
+}
+
+fn norm(p: &Path) -> String {
+    let s = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()).to_string_lossy().replace('\\', "/").trim_end_matches('/').to_lowercase();
+    s.strip_prefix("//?/").map(str::to_string).unwrap_or(s)
+}
+
+/// The state dir a daemon recorded in the machine registry (`<dir>/<pid>.json`), when that record is for this pid AND this port.
+fn registry_state_dir(dir: &Path, pid: u32, port: u16) -> Option<PathBuf> {
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(format!("{pid}.json"))).ok()?).ok()?;
+    (v["pid"].as_u64()? == pid as u64 && v["port"].as_u64()? == port as u64).then(|| PathBuf::from(v["stateDir"].as_str().unwrap_or_default())).filter(|p| !p.as_os_str().is_empty())
 }
 
 /// True when `127.0.0.1:port` answers `GET /health` as an Infantry AI daemon (`contract` and `buildId` in the JSON), or
@@ -269,5 +305,69 @@ mod tests {
         StateLock::acquire(d.path(), Duration::from_secs(5)).unwrap();
         assert!(started.elapsed() >= Duration::from_millis(250));
         t.join().unwrap();
+    }
+
+    fn no(_: u32, _: u16) -> Option<PathBuf> {
+        None
+    }
+
+    /// DAEMON-LOCK-4: a reused pid plus the port of ANOTHER folder's daemon never blocks, and no pid is named.
+    #[test]
+    fn another_folders_daemon_never_blocks() {
+        let d = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        old_daemon_files(d.path(), 4242, 5555); // 4242 is alive (reused by some program) but is not what listens on 5555
+        let other_path = other.path().to_path_buf();
+        // The listener of 5555 is 777, whose registry record names the OTHER folder.
+        let r = legacy_holder_with(d.path(), &|_| true, &|_| true, &|_| Some(777), &|pid, port| (pid == 777 && port == 5555).then(|| other_path.clone()));
+        assert_eq!(r, None);
+        // The same with no registry record: nothing ties 777 to this folder (the recorded pid 4242 is not the listener).
+        assert_eq!(legacy_holder_with(d.path(), &|_| true, &|_| true, &|_| Some(777), &no), None);
+    }
+
+    #[test]
+    fn a_recorded_pid_that_does_not_listen_is_never_named() {
+        let d = tempfile::tempdir().unwrap();
+        old_daemon_files(d.path(), 4242, 5555);
+        assert_eq!(legacy_holder_with(d.path(), &|_| true, &|_| true, &|_| None, &no), None);
+        assert_eq!(legacy_holder_with(d.path(), &|p| p != 777, &|_| true, &|_| Some(777), &no), None, "a listener that is not alive is not named");
+    }
+
+    #[test]
+    fn this_folders_daemon_is_named_by_its_listener_not_by_the_recorded_pid() {
+        let d = tempfile::tempdir().unwrap();
+        old_daemon_files(d.path(), 4242, 5555); // the recorded pid is stale; the registry shows the real daemon 777 is this folder's
+        let mine = d.path().to_path_buf();
+        let r = legacy_holder_with(d.path(), &|_| true, &|_| true, &|_| Some(777), &|pid, port| (pid == 777 && port == 5555).then(|| mine.clone()));
+        assert_eq!(r, Some(Some(777)));
+        // No registry record, but the listener IS the pid this folder recorded.
+        assert_eq!(legacy_holder_with(d.path(), &|_| true, &|_| true, &|_| Some(4242), &no), Some(Some(4242)));
+        // The port does not answer as a daemon: nothing.
+        assert_eq!(legacy_holder_with(d.path(), &|_| true, &|_| false, &|_| Some(4242), &no), None);
+    }
+
+    #[test]
+    fn the_os_names_the_process_listening_on_a_port() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        assert_eq!(crate::listen::listener_pid(port), Some(std::process::id()));
+        drop(l);
+        assert_eq!(crate::listen::listener_pid(port), None);
+    }
+
+    #[test]
+    fn registry_record_must_match_pid_and_port() {
+        let reg = tempfile::tempdir().unwrap();
+        std::fs::write(reg.path().join("9.json"), r#"{"pid":9,"port":100,"stateDir":"C:/x"}"#).unwrap();
+        assert_eq!(registry_state_dir(reg.path(), 9, 100), Some(PathBuf::from("C:/x")));
+        assert_eq!(registry_state_dir(reg.path(), 9, 101), None);
+        assert_eq!(registry_state_dir(reg.path(), 8, 100), None);
+    }
+
+    #[test]
+    fn an_uncertain_pid_is_not_named_in_the_text() {
+        let t = LockError::Held { state_dir: PathBuf::from("x"), pid: None }.to_string();
+        assert!(!t.contains("process") && !t.chars().any(|c| c.is_ascii_digit()) && !t.contains("unknown"), "{t}");
+        assert!(t.contains("Retry"));
     }
 }
