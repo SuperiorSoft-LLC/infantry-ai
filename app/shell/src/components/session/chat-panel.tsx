@@ -67,7 +67,10 @@ export function ChatPanel({ sessionId, variant = "full", windowId = "main", empt
   const requestHistory = useDaemon((s) => s.requestHistory);
   const busy = agent?.status === "working";
   const { minimized, expanded } = useChatView(windowId);
-  const waiting = !agent && !!sessionRequired;
+  // CHAT-GONE-1: an open chat whose session the daemon no longer has says so, and its composer must not spawn a new agent.
+  const gone = useDaemon((s) => (sessionId ? s.gone[sessionId] : undefined));
+  const goneId = !agent && gone ? sessionId : null;
+  const waiting = !agent && !goneId && !!sessionRequired;
 
   // A session opened in a view brings its history, if the burst did not already ask for it.
   useEffect(() => {
@@ -83,16 +86,16 @@ export function ChatPanel({ sessionId, variant = "full", windowId = "main", empt
           <div className="grid flex-1 place-items-center p-6">
             <EmptyState
               icon={<Unplug className="size-7" />}
-              title={empty?.title ?? (link === "open" ? "No session selected" : "Not connected to the daemon")}
-              hint={empty?.hint ?? (link === "open" ? "Send a prompt below to start a new session." : "The app reconnects on its own.")}
-              action={empty?.action}
+              title={goneId ? "This worker is gone" : (empty?.title ?? (link === "open" ? "No session selected" : "Not connected to the daemon"))}
+              hint={goneId ? "It has finished and was removed; messages to it are not sent. Start a new agent to go on." : (empty?.hint ?? (link === "open" ? "Send a prompt below to start a new session." : "The app reconnects on its own."))}
+              action={goneId ? undefined : empty?.action}
             />
           </div>
         )}
         {!waiting && <ActivityBox sessionId={agent?.id ?? null} floaters={<ComposerFloaters windowId={windowId} minimized={minimized} expanded={expanded} />} />}
       </div>
       {agent && variant !== "compact" && <BgJobsRow sessionId={agent.id} />}
-      {!waiting && !minimized && <Composer sessionId={agent?.id ?? null} busy={busy} windowId={windowId} />}
+      {!waiting && !minimized && <Composer sessionId={agent?.id ?? goneId} busy={busy && !gone} windowId={windowId} />}
     </div>
   );
 }

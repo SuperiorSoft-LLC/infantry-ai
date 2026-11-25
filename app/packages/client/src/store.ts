@@ -12,7 +12,7 @@ import { DaemonConnection, type LinkState, type TransportFactory } from "./conne
 import { applyFrames, type TranscriptItem } from "./transcript";
 import { timedHop } from "./hops";
 import {
-  CLIENT_SEND_PREFIX, Frame, RUN_IN_FLIGHT, STREAM_FRAMES, isRunning, json, parseReady,
+  CLIENT_SEND_PREFIX, Frame, RUN_IN_FLIGHT, SESSION_GONE, STREAM_FRAMES, isRunning, json, parseReady,
   type AgentProfile, type Envelope, type FileWrite, type ProjectSummary, type ReadyInfo, type ReplayGap, type RunUsage, type SessionRecord,
   type StatusPayload, type TicketSummary,
 } from "./wire";
@@ -40,6 +40,16 @@ export interface PendingSend {
   at: number;
   state: "sending" | "accepted" | "failed";
   reason?: string;
+}
+
+/**
+ * CHAT-GONE-1: a session this client knew (or sent to) that the daemon no longer has: "refused" = a send was refused
+ * with `session_gone` (ended, unknown after a restart), "removed" = it left the daemon's sessions list. [text] is the
+ * refused message, so the chat can put it back in the box (taken once with `takeGoneText`).
+ */
+export interface GoneSession {
+  reason: "refused" | "removed";
+  text?: string;
 }
 
 export interface ActivityEntry {
@@ -87,6 +97,8 @@ export interface DaemonState {
   tickets: Record<string, TicketSummary>;
   projects: ProjectSummary[];
   pending: Record<string, PendingSend>;
+  /** CHAT-GONE-1: sessions known to be gone, by id. */
+  gone: Record<string, GoneSession>;
   /** Frames applied in the last flush, and flushes so far (the stress overlay reads these). */
   stats: { lastBatch: number; flushes: number; frames: number };
 }
@@ -104,6 +116,8 @@ export interface DaemonActions {
   unqueue(sessionId: string, itemId: string): void;
   forceQueued(sessionId: string, itemId: string): void;
   retry(clientId: string): void;
+  /** CHAT-GONE-1: the refused text of a gone session, once (then cleared); undefined when there is none. */
+  takeGoneText(sessionId: string): string | undefined;
   requestHistory(sessionId: string): void;
   /** Feed frames as if the daemon sent them (stress mode, tests). */
   ingest(env: Envelope): void;
@@ -123,11 +137,13 @@ interface Internal {
   fallback: ReturnType<typeof setTimeout> | null;
   ackTimers: Map<string, ReturnType<typeof setTimeout>>;
   gapTimers: Map<string, ReturnType<typeof setTimeout>>;
+  /** The last text sent to each session (a `queue_add` has no requestId), for a `session_gone` refusal. */
+  lastText: Map<string, string>;
 }
 
 export function createDaemonStore(opts: { url: string; transport: TransportFactory; settings?: Partial<StoreSettings>; offline?: boolean }): DaemonStore {
   const cfg: StoreSettings = { ...DEFAULT_SETTINGS, ...opts.settings };
-  const io: Internal = { queue: [], held: new Map(), raf: null, fallback: null, ackTimers: new Map(), gapTimers: new Map() };
+  const io: Internal = { queue: [], held: new Map(), raf: null, fallback: null, ackTimers: new Map(), gapTimers: new Map(), lastText: new Map() };
   let conn: DaemonConnection | null = null;
   const taps = new Set<(env: Envelope) => void>();
 
@@ -185,7 +201,7 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
       const streams = new Map<string, Envelope[]>();
       /** Each session's cursor within this batch (frames collected but not yet applied count). */
       const cursors = new Map<string, number>();
-      let agents = s.agents, tickets = s.tickets, projects = s.projects, pending = s.pending, connection = s.connection;
+      let agents = s.agents, tickets = s.tickets, projects = s.projects, pending = s.pending, connection = s.connection, gone = s.gone;
       const writeSessions = () => {
         if (!touched) { sessions = { ...sessions }; touched = true; }
       };
@@ -206,6 +222,27 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
 
       for (const env of batch) {
         const sid = env.sessionId ?? undefined;
+        // CHAT-GONE-1: a send refused because the session is gone: drop its pending send, keep the text for the box,
+        // and stop showing the session as working (the daemon has no such session to run).
+        if (env.type === Frame.ERROR && env.data.startsWith(`${SESSION_GONE} `)) {
+          const id = sid ?? env.data.slice(SESSION_GONE.length + 1).split(":")[0];
+          const p = env.requestId ? pending[env.requestId] : undefined;
+          if (p) {
+            const { [p.clientId]: _, ...rest } = pending;
+            pending = rest;
+            const t = io.ackTimers.get(p.clientId);
+            if (t) clearTimeout(t);
+            io.ackTimers.delete(p.clientId);
+          }
+          gone = { ...gone, [id]: { reason: "refused", text: p?.text ?? io.lastText.get(id) } };
+          io.lastText.delete(id);
+          const v = sessions[id];
+          if (v) {
+            writeSessions();
+            sessions[id] = { ...v, record: { ...v.record, state: "EXITED", turnActive: false } };
+          }
+          continue;
+        }
         if (sid && STREAM_FRAMES.has(env.type) && env.sequence != null) {
           if (!sessions[sid] && env.type === Frame.SESSION) {
             const r = json<SessionRecord>(env.data);
@@ -249,6 +286,15 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
             const list = json<SessionRecord[]>(env.data) ?? [];
             writeSessions();
             const keep: Record<string, SessionView> = {};
+            // CHAT-GONE-1: a session that left the list is gone; one that is listed again is not.
+            const listed = new Set(list.map((r) => r.id));
+            const left = Object.keys(sessions).filter((id) => !listed.has(id) && !gone[id]);
+            const back = Object.keys(gone).filter((id) => listed.has(id) && gone[id].reason === "removed");
+            if (left.length || back.length) {
+              gone = { ...gone };
+              for (const id of left) gone[id] = { reason: "removed" };
+              for (const id of back) delete gone[id];
+            }
             const since = connection.ready?.since ?? 0;
             for (const r of list) {
               const prev = sessions[r.id];
@@ -338,7 +384,7 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
         }
         if (changed) pending = nextPending;
       }
-      return { sessions, agents, tickets, projects, pending, connection };
+      return { sessions, agents, tickets, projects, pending, connection, gone };
     };
 
     /** In-order delivery for one session: frames at or below the cursor are dropped, frames ahead are held. */
@@ -391,6 +437,7 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
       tickets: {},
       projects: [],
       pending: {},
+      gone: {},
       stats: { lastBatch: 0, flushes: 0, frames: 0 },
 
       connect() {
@@ -412,6 +459,7 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
       send(sessionId, text) {
         const t = text.trim();
         if (!t) return;
+        io.lastText.set(sessionId, t);
         const v = get().sessions[sessionId];
         if (v && isRunning(v.record)) {
           out({ type: Frame.QUEUE_ADD, data: t, sessionId });
@@ -441,6 +489,12 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
       retry(clientId) {
         const p = get().pending[clientId];
         if (p && p.state === "failed") transmit({ ...p, state: "sending", reason: undefined, at: Date.now() });
+      },
+      takeGoneText(sessionId) {
+        const g = get().gone[sessionId];
+        if (!g?.text) return undefined;
+        set({ gone: { ...get().gone, [sessionId]: { reason: g.reason } } });
+        return g.text;
       },
       requestHistory(sessionId) {
         const v = get().sessions[sessionId];

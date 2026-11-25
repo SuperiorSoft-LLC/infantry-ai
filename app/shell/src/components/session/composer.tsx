@@ -125,6 +125,9 @@ export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: st
   const agentCount = useAgentList().length;
   // RUST-MIGRATE-1: a session live in the other app is never run here too (the daemon refuses it as well).
   const heldBy = record?.heldBy ?? undefined;
+  // CHAT-GONE-1: the daemon no longer has this session (removed, ended, unknown after a restart): nothing can be sent.
+  const gone = useDaemon((s) => (sessionId ? s.gone[sessionId] : undefined));
+  const goneText = gone?.text;
   const { send, spawn, interrupt, unqueue, forceQueued, sendFrame } = useDaemon(
     useShallow((s) => ({ send: s.send, spawn: s.spawn, interrupt: s.interrupt, unqueue: s.unqueue, forceQueued: s.forceQueued, sendFrame: s.sendFrame })),
   );
@@ -191,7 +194,17 @@ export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: st
   const complete = (c: SlashCommand) => (setText(`/${c.name}${c.argument || c.values?.length ? " " : ""}`), setSlashAt(0));
 
   // ---- send ----
-  const canSend = online && !heldBy && uploading === 0 && text.trim().length > 0;
+  const canSend = online && !heldBy && !gone && uploading === 0 && text.trim().length > 0;
+  // A refused message comes back into the box (before anything typed since), so the words are never lost.
+  useEffect(() => {
+    if (!sessionId || !goneText) return;
+    const back = daemonStore().getState().takeGoneText(sessionId);
+    if (!back) return;
+    const cur = chatViewOf(windowId).draft;
+    if (!cur.includes(back)) patchChatView(windowId, { draft: cur.trim() ? `${back}
+
+${cur}` : back });
+  }, [sessionId, goneText, windowId]);
   const submit = () => {
     if (!canSend) return;
     const full = text.trim();
@@ -206,7 +219,9 @@ export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: st
   const dormant = !!record?.dormant;
   const bgPids = (record?.bgJobs ?? []).map((j) => Number(j.pid)).filter((p) => p > 0);
   const tools: Act[] = [{ label: "Attach file", icon: <Paperclip />, shortcut: "Ctrl+Shift+A", enabled: online && !heldBy, run: pick }];
-  if (sessionId) {
+  if (sessionId && gone) {
+    tools.push({ label: "New agent", icon: <UserPlus />, enabled: online, run: () => ui.set("dialog", "new-agent") });
+  } else if (sessionId) {
     tools.push(
       { label: "Switch agent", icon: <ArrowLeftRight />, enabled: online, run: () => openSessionDialog("swap", sessionId) },
       { label: "Max context", icon: <Gauge />, enabled: online, run: () => openSessionDialog("limit", sessionId) },
@@ -251,7 +266,9 @@ export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: st
   const active = focused || hovered;
   const ring = { "--ring-w": active ? "2px" : "1px", "--ring-c": active ? "var(--color-primary)" : "var(--color-border)" } as React.CSSProperties;
 
-  const placeholder = heldBy
+  const placeholder = gone
+    ? "This worker has finished and is gone: messages to it are not sent"
+    : heldBy
     ? `Live in ${heldBy}: resume it there, or stop it there first`
     : !sessionId
       ? "Task for a NEW agent. Enter to spawn, Shift+Enter for a new line"
@@ -259,6 +276,11 @@ export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: st
         ? "Agent is busy. Enter to queue: sent as its next turn when this one ends"
         : `Message ${record?.worktreeBranch ?? sessionId.slice(0, 8)}. Enter to send`;
   const hint = !online ? "Not connected: commands are disabled." : heldBy ? `This session is live in ${heldBy}.` : null;
+  const goneLine = gone
+    ? gone.reason === "refused"
+      ? "This worker has finished and is gone. Your message was not sent; it is back in the box."
+      : "This worker has finished and is gone. Messages to it are not sent."
+    : null;
 
   return (
     <div
@@ -330,8 +352,13 @@ export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: st
           ))}
         </ul>
       )}
+      {goneLine && (
+        <p role="alert" data-testid="composer-gone" className="mb-1 pl-1.5 text-[11px] text-danger">
+          {goneLine}
+        </p>
+      )}
       <div className="truncate pb-0.5 pl-1.5 text-[11px] text-muted-foreground" data-testid="composer-status">
-        {composerStatusLine(null, agentCount, record ? (busy ? "working" : String(record.state).toLowerCase()) : null)}
+        {composerStatusLine(null, agentCount, gone ? "gone" : record ? (busy ? "working" : String(record.state).toLowerCase()) : null)}
       </div>
       <div style={ring} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
         <div className="relative rounded-2xl bg-card" style={{ border: "var(--ring-w) solid var(--ring-c)", transition: "border-color 120ms" }}>
@@ -399,12 +426,12 @@ export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: st
             {overflow > 0 && <ComposerMore rest={tools.slice(inline)} />}
           </HangingGroup>
           <HangingGroup label="Send">
-            {sessionId && (
+            {sessionId && !gone && (
               <ComposerRound label="Stop turn" tone="danger" disabled={!busy || !online} onClick={() => interrupt(sessionId)}>
                 <Square className="fill-current" />
               </ComposerRound>
             )}
-            <ComposerRound label={!sessionId ? "Spawn" : busy ? "Queue" : "Send"} shortcut="Enter" tone="accent" disabled={!canSend} onClick={submit}>
+            <ComposerRound label={!sessionId ? "Spawn" : gone ? "Cannot send: this worker is gone" : busy ? "Queue" : "Send"} shortcut="Enter" tone="accent" disabled={!canSend} onClick={submit}>
               <SendHorizontal />
             </ComposerRound>
           </HangingGroup>

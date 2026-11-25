@@ -40,6 +40,8 @@ pub const QUEUE_REMOVE: &str = "queue_remove";
 pub const QUEUE_FORCE: &str = "queue_force";
 /// The typed refusal of a `prompt` into a session with a run in flight (contract 1.96.0): `run_in_flight <id>: <reason>`.
 pub const RUN_IN_FLIGHT: &str = "run_in_flight";
+/// CHAT-GONE-1: the typed refusal of a send into a session that is gone (removed, ended, unknown after a restart): `session_gone <id>: <reason>`.
+pub const SESSION_GONE: &str = "session_gone";
 /// The `requestId` prefix of a client message id (CHAT-SENDING-1, 1.151.0): only these are remembered for `prompt_ack`.
 pub const CLIENT_SEND_PREFIX: &str = "send:";
 

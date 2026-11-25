@@ -378,6 +378,14 @@ impl From<&str> for Refusal {
     }
 }
 
+/// CHAT-GONE-1: a send into a session that is gone, refused typed (`session_gone <id>: ...`) so a client can say so in
+/// words; one daemon log line per refusal (the session and the reason, never the message text).
+fn gone_refusal(verb: &str, sid: &str) -> String {
+    let reason = format!("{verb} refused: unknown session {sid}");
+    eprintln!("[infantry] send refused: session {sid} is gone ({reason})");
+    format!("{} {sid}: {reason}", wire::SESSION_GONE)
+}
+
 /// RR-8: how often and how long a restarted daemon tries to reach a remote runner to re-attach to a session of it.
 const REATTACH_TRIES: u32 = 40;
 const REATTACH_WAIT: Duration = Duration::from_secs(3);
@@ -1020,7 +1028,7 @@ impl Daemon {
     }
 
     fn prompt_into(self: &Arc<Self>, sid: &str, text: String) -> Result<(), Refusal> {
-        let entry = self.find(sid).ok_or("prompt refused: no such session")?;
+        let entry = self.find(sid).ok_or_else(|| gone_refusal("prompt", sid))?;
         let mut e = entry.lock().unwrap();
         if e.turn_active {
             // Kotlin's typed refusal (1.96.0): nothing ran; the client queues it (`queue_add`) or sends it again later.
@@ -1032,7 +1040,7 @@ impl Daemon {
 
     /// CHAT-QUEUE-1 `queue_add`: held at the end of `session.queued`; a session at rest takes it as a turn now.
     fn queue_add(self: &Arc<Self>, sid: &str, text: String) -> Result<(), String> {
-        let entry = self.find(sid).ok_or_else(|| format!("queue_add refused: unknown session {sid}"))?;
+        let entry = self.find(sid).ok_or_else(|| gone_refusal("queue_add", sid))?;
         let mut e = entry.lock().unwrap();
         if text.trim().is_empty() {
             return Err("queue_add refused: nothing to queue".into());

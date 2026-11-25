@@ -126,3 +126,22 @@ fn a_json_new_binds_a_session_at_rest_and_replay_rebuilds_its_stream() {
     c.close();
     c2.close();
 }
+
+/// CHAT-GONE-1: a send (`prompt` or `queue_add`) into a session that is gone is refused typed, `session_gone <id>: ...`,
+/// on the frame's session with its requestId echoed, so the client can say the worker is gone instead of "not sent".
+#[test]
+fn a_send_into_a_gone_session_is_refused_typed() {
+    let port = start();
+    let mut c = Client::connect(&format!("ws://127.0.0.1:{port}"), None).unwrap();
+    let t = Duration::from_secs(20);
+    c.wait_for(t, |e| e.r#type == "ready").unwrap();
+    for ty in ["prompt", "queue_add"] {
+        c.send(&frame(ty, "hello", "ghost-1", Some("send:g"))).unwrap();
+        let err = c.wait_for(t, |e| e.r#type == "error").unwrap();
+        assert!(err.data.starts_with("session_gone ghost-1: "), "{ty}: {}", err.data);
+        assert!(!err.data.contains("hello"), "the refusal never carries the message text");
+        assert_eq!(err.session_id.as_deref(), Some("ghost-1"));
+        assert_eq!(err.request_id.as_deref(), Some("send:g"));
+    }
+    c.close();
+}

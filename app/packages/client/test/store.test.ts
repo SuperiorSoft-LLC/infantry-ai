@@ -118,6 +118,43 @@ describe("daemon store", () => {
     expect(d.sent.find((e) => e.type === "queue_add")).toMatchObject({ sessionId: "s1", data: "racing" });
   });
 
+  it("CHAT-GONE-1: a send refused as session_gone marks the session gone, not working, and keeps the text", async () => {
+    const { d, s } = connected();
+    d.push({ type: "ready", data: "instance=i1 since=0" });
+    d.push({ type: "sessions", data: JSON.stringify([rec("idle"), rec("ghost", "BUSY")]) });
+    await tick();
+    s.getState().send("idle", "hello there");
+    const id = d.sent.find((e) => e.type === "prompt")!.requestId!;
+    d.push({ type: "error", data: "session_gone idle: prompt refused: unknown session idle", sessionId: "idle", requestId: id });
+    // a queue_add (busy ghost) has no requestId: the last text sent to it is kept
+    s.getState().send("ghost", "are you there");
+    d.push({ type: "error", data: "session_gone ghost: queue_add refused: unknown session ghost", sessionId: "ghost" });
+    await tick();
+    const st = s.getState();
+    expect(st.pending[id]).toBeUndefined();
+    expect(st.gone.idle).toEqual({ reason: "refused", text: "hello there" });
+    expect(st.gone.ghost).toEqual({ reason: "refused", text: "are you there" });
+    expect(st.sessions.ghost.record.state).toBe("EXITED");
+    expect(st.sessions.ghost.record.turnActive).toBe(false);
+    expect(st.takeGoneText("ghost")).toBe("are you there");
+    expect(s.getState().takeGoneText("ghost")).toBeUndefined();
+    expect(s.getState().gone.ghost).toEqual({ reason: "refused" });
+  });
+
+  it("CHAT-GONE-1: a session that leaves the list is gone, and not gone once listed again", async () => {
+    const { d, s } = connected();
+    d.push({ type: "ready", data: "instance=i1 since=0" });
+    d.push({ type: "sessions", data: JSON.stringify([rec("a"), rec("b")]) });
+    await tick();
+    expect(s.getState().gone).toEqual({});
+    d.push({ type: "sessions", data: JSON.stringify([rec("a")]) });
+    await tick();
+    expect(s.getState().gone).toEqual({ b: { reason: "removed" } });
+    d.push({ type: "sessions", data: JSON.stringify([rec("a"), rec("b")]) });
+    await tick();
+    expect(s.getState().gone).toEqual({});
+  });
+
   it("marks a send with no answer as failed after sendAckSeconds", async () => {
     const { d, s } = connected();
     d.push({ type: "ready", data: "instance=i1 since=0" });

@@ -63,6 +63,8 @@ export const Frame = {
 export const CLIENT_SEND_PREFIX = "send:";
 /** The typed refusal of a prompt into a session with a run in flight (1.96.0): `run_in_flight <sessionId>: <reason>`. */
 export const RUN_IN_FLIGHT = "run_in_flight";
+/** CHAT-GONE-1: the typed refusal of a send into a session that is gone: `session_gone <sessionId>: <reason>`. */
+export const SESSION_GONE = "session_gone";
 
 /** Frames that belong to one session's sequenced stream (each carries a per-session `sequence`). */
 export const STREAM_FRAMES: ReadonlySet<string> = new Set([

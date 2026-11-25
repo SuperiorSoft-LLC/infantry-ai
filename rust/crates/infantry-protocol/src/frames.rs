@@ -5,6 +5,8 @@
 
 pub const REQUEST_ID_CONTRACT: &str = "1.87.0";
 pub const RUN_IN_FLIGHT: &str = "run_in_flight";
+/// CHAT-GONE-1: the typed refusal of a send (`prompt`, `queue_add`) into a session that is gone: `session_gone <id>: <reason>`.
+pub const SESSION_GONE: &str = "session_gone";
 pub const READY: &str = "ready";
 pub const PROMPT: &str = "prompt";
 pub const STDOUT: &str = "stdout";
