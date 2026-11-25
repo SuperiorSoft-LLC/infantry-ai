@@ -3,6 +3,7 @@
 // Settings dialog body: a side nav of sections and bordered setting rows.
 import { useEffect, useState } from "react";
 import { host } from "@/host";
+import { isMobile } from "@/daemon/daemon";
 import { RemoteRow } from "@/components/connect/connect-screen";
 import { CliPathRow, PairingRows, UpdaterRows } from "@/components/settings/desktop-install";
 import { cn } from "@infantry/ui";
@@ -67,7 +68,7 @@ export function SettingsBody() {
               s === section && !searching ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {s}
+            {isMobile && s === "Daemon" ? "Connection" : s}
           </button>
         ))}
       </nav>
@@ -90,11 +91,11 @@ export function SettingsBody() {
             <PairingRows />
             <RunnerRow />
             <CliPathRow />
-            <SettingRow id="set-setup" title="Guided setup" hint="Install an agent tool, sign in and say hello. It opens by itself while nothing can answer.">
+            {!isMobile && <SettingRow id="set-setup" title="Guided setup" hint="Install an agent tool, sign in and say hello. It opens by itself while nothing can answer.">
               <Button size="sm" variant="outline" id="set-setup" onClick={() => ui.set("dialog", "setup")}>
                 Open guided setup
               </Button>
-            </SettingRow>
+            </SettingRow>}
           </>
         )}
         {!searching && section === "Secrets" && <SecretsPanel />}

@@ -9,7 +9,7 @@
 //            keystore. Unpaired (no URL yet), the app shows the connect screen instead of the shell.
 //   Stress:  INFANTRY_UI_STRESS=1 (Tauri) or `?stress=1` (browser): fake sessions, no daemon.
 import { useStore } from "zustand";
-import { createDaemonStore, enableHops, hop, startStress, type DaemonActions, type DaemonState, type DaemonStore, type HostEndpoint, type StressOptions } from "@infantry/client";
+import { createDaemonStore, decidePhoneStart, enableHops, hop, startStress, type ConnectWhy, type RemoteCheck, type DaemonActions, type DaemonState, type DaemonStore, type HostEndpoint, type StressOptions } from "@infantry/client";
 import { host } from "@/host";
 
 let store: DaemonStore | null = null;
@@ -34,10 +34,18 @@ export let isMobile = false;
 export let needsPairing = false;
 /** The paired daemon: its socket URL and display name (remote mode). */
 export let remote: { url: string; name: string | null } | null = null;
+/** PHONE-1: why a phone opened on the connect screen (null = it opened the app). `remote` is the saved PC, kept until Forget. */
+export let phoneStart: { why: ConnectWhy; detail: string | null } | null = null;
+/** PHONE-1: the in-app "Scan QR" asks for the connect screen once, without forgetting the saved PC. */
+export const ASK_CONNECT_KEY = "infantry.phone.connect";
 
 async function resolveEndpoint(): Promise<HostEndpoint> {
   const q = new URLSearchParams(location.search);
-  const e = await host.endpoint();
+  // A phone whose app command fails still opens the connect screen, never the desktop path.
+  const e = await host.endpoint().catch((err) => {
+    if (host.kind !== "phone") throw err;
+    return { url: "", token: null, stress: false, mode: "remote", error: err instanceof Error ? err.message : String(err) } as HostEndpoint;
+  });
   if (e) return { ...e, stress: e.stress || q.get("stress") === "1" };
   const sameOrigin = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
   const url = q.get("daemon") ?? (import.meta.env.VITE_INFANTRY_URL as string | undefined) ?? sameOrigin;
@@ -67,13 +75,23 @@ export async function initDaemon(): Promise<DaemonStore> {
     });
     hop("page.start");
   }
-  runnerMode = e.mode ?? (host.kind !== "browser" ? (localMode ? "embedded" : "connect") : "browser");
+  // A phone never runs a daemon: a missing mode on it is `remote`, not the desktop's `connect`.
+  runnerMode = e.mode ?? (host.kind === "phone" ? "remote" : host.kind !== "browser" ? (localMode ? "embedded" : "connect") : "browser");
   daemonError = e.error ?? null;
   daemonNote = e.note ?? null;
   if (daemonNote) console.warn(`[infantry] ${daemonNote}`);
   if (daemonError) console.error(`[infantry] ${runnerMode} mode: ${daemonError}`);
-  isMobile = runnerMode === "remote";
-  needsPairing = isMobile && !e.url;
+  isMobile = runnerMode === "remote" || host.kind === "phone";
+  if (isMobile) {
+    // PHONE-1: a saved PC that answers opens the app; anything else opens the connect screen (the pairing stays saved).
+    const asked = (() => { try { return sessionStorage.getItem(ASK_CONNECT_KEY) === "1"; } catch { return false; } })();
+    const canCheck = !!e.url && !e.error;
+    const check = canCheck && !asked ? await host.call<RemoteCheck>("remote_check").catch(() => null) : null;
+    const d = decidePhoneStart({ mode: e.mode, url: e.url, tokenError: e.error, check });
+    if (asked && e.url) phoneStart = { why: "asked", detail: null };
+    else if (d.open === "connect") phoneStart = { why: d.why, detail: e.error ?? null };
+  }
+  needsPairing = isMobile && phoneStart !== null;
   remote = isMobile && e.url ? { url: e.url, name: e.name ?? null } : null;
   link = localMode || e.stress || needsPairing ? null : { url: e.url, token: e.token };
   const transport = localMode && host.embedded ? host.embedded.transport() : host.transport(e.url, e.token);

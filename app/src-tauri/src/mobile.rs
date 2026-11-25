@@ -142,6 +142,16 @@ fn remote_save(app: AppHandle, url: String, token: Option<String>, name: Option<
     Ok(url)
 }
 
+/// Asks the saved PC (the address in `remote.json`, the token from the keystore) whether it answers and takes this phone's
+/// login. `ok` | `unreachable` | `refused`. Never throws: an unreadable token is the endpoint's `error`, not this.
+#[tauri::command]
+async fn remote_check(app: AppHandle) -> String {
+    let r = load(&app);
+    let Some(url) = r.url.filter(|u| !u.trim().is_empty()) else { return crate::remote_reach::Reach::Unreachable.word().into() };
+    let token = token_get(&app).unwrap_or(None);
+    tauri::async_runtime::spawn_blocking(move || crate::remote_reach::reach(&url, token.as_deref()).word().to_string()).await.unwrap_or_else(|_| crate::remote_reach::Reach::Unreachable.word().to_string())
+}
+
 /// Forgets the paired daemon: the address file and the keystore entry.
 #[tauri::command]
 fn remote_forget(app: AppHandle) -> Result<(), String> {
@@ -166,6 +176,7 @@ pub fn run() {
         endpoint,
         remote_save,
         remote_forget,
+        remote_check,
         crate::daemon_http::daemon_get,
         crate::android_update::update_settings_get,
         crate::android_update::update_settings_set,
@@ -174,7 +185,7 @@ pub fn run() {
         crate::android_update::update_progress
     ]);
     #[cfg(not(target_os = "android"))]
-    let builder = builder.invoke_handler(tauri::generate_handler![endpoint, remote_save, remote_forget, crate::daemon_http::daemon_get]);
+    let builder = builder.invoke_handler(tauri::generate_handler![endpoint, remote_save, remote_forget, remote_check, crate::daemon_http::daemon_get]);
     builder
         .setup(|app| {
             // The scanner's permission is granted here, not in capabilities/ (the desktop build has no scanner plugin).
@@ -184,3 +195,4 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+

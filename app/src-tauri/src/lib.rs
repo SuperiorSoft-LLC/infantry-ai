@@ -9,6 +9,7 @@
 //! Both read the daemon's web UI plugin files for the page (`daemon_http.rs`, WEBUI-1).
 
 mod daemon_http;
+mod remote_reach;
 mod feed;
 #[cfg(desktop)]
 mod daemon;

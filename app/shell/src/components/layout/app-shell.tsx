@@ -17,6 +17,7 @@ import { usePluginsLoaded } from "@/plugins/use-plugins";
 import { useShortcuts } from "./use-shortcuts";
 import { ToastHost } from "./toast-host";
 import { PopoutHost } from "@/components/session/popout-host";
+import { LostConnectionBanner } from "@/components/connect/lost-connection-banner";
 import { useAutoSetup } from "@/components/setup/setup-wizard";
 
 function Drawer({ side, onClose, children }: { side: "left" | "right"; onClose: () => void; children: ReactNode }) {
@@ -56,6 +57,7 @@ export function AppShell({ headerActions, statusLeading }: Pick<ShellProps, "hea
   return (
     <div className="flex h-full flex-col" data-layout={layout.kind}>
       <TitleBar headerActions={headerActions} />
+      <LostConnectionBanner />
       <div className="relative flex min-h-0 flex-1">
         {ui.leftOpen && !narrowLeft && <AgentSidebar />}
         <SessionView />

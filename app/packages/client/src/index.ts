@@ -35,6 +35,7 @@ export * from "./stores/panels";
 export * from "./stores/timeline";
 export * from "./layout";
 export * from "./pairing";
+export * from "./phone-start";
 export * from "./update";
 export * from "./markdown";
 export * from "./shortcuts";

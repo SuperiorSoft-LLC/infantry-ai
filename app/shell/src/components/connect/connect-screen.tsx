@@ -4,16 +4,37 @@
 // desktop shows, paste its `infantry://connect?...` link, or enter the address and token. The token goes to the
 // platform keystore through `remote_save` (mobile.rs), never to page storage. Pairing reloads the window into the shell.
 import { useEffect, useState } from "react";
-import { Link2, QrCode, Unplug } from "lucide-react";
-import { parsePairingLink, socketUrl, type Pairing } from "@infantry/client";
+import { Link2, QrCode, RefreshCw, Unplug } from "lucide-react";
+import { connectReasonText, parsePairingLink, socketUrl, type Pairing } from "@infantry/client";
 import { Button, Input, Label, PanelCard } from "@infantry/ui";
-import { isMobile, remote } from "@/daemon/daemon";
+import { ASK_CONNECT_KEY, isMobile, phoneStart, remote } from "@/daemon/daemon";
 import { host } from "@/host";
+
+/** The in-app "Scan QR": the next start shows the connect screen once; the saved PC stays until a new pairing or Forget. */
+export function askForConnectScreen(): void {
+  try {
+    sessionStorage.setItem(ASK_CONNECT_KEY, "1");
+  } catch {
+    /* no storage: the page reloads into the app, whose button is still there */
+  }
+  host.reload();
+}
+function clearAsk(): void {
+  try {
+    sessionStorage.removeItem(ASK_CONNECT_KEY);
+  } catch {
+    /* nothing to clear */
+  }
+}
 
 async function save(p: Pairing): Promise<void> {
   await host.call<string>("remote_save", { url: p.url, token: p.token, name: p.name });
+  clearAsk();
   host.reload();
 }
+
+/** Which PC the phone has saved: its name, else its address. */
+const pcLabel = () => remote?.name ?? remote?.url ?? null;
 
 /** Scans one QR code with the phone's camera (HC-1 host.scanner); null when cancelled. */
 async function scanQr(): Promise<string | null> {
@@ -78,6 +99,16 @@ export function ConnectScreen() {
     }
   };
 
+  const forgetPc = async () => {
+    try {
+      await host.call("remote_forget");
+      clearAsk();
+      host.reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const cancelScan = async () => {
     await host.scanner?.cancel();
   };
@@ -113,13 +144,35 @@ export function ConnectScreen() {
     <main className="flex h-full items-start justify-center overflow-y-auto bg-background p-4 text-foreground sm:items-center">
       <div className="w-full max-w-md space-y-4">
         <div>
-          <h1 className="text-lg font-semibold">Connect to your daemon</h1>
-          <p className="text-xs text-muted-foreground">This phone runs no agents. It connects to the Infantry daemon on your computer or server.</p>
+          <h1 className="text-lg font-semibold">{isMobile ? "Connect to your PC" : "Connect to your daemon"}</h1>
+          <p className="text-xs text-muted-foreground">
+            {isMobile ? "This phone shows the Infantry AI running on your PC. Scan the QR code the PC shows (Settings > Daemon > Let a phone connect)." : "This phone runs no agents. It connects to the Infantry daemon on your computer or server."}
+          </p>
         </div>
         {isMobile && (
-          <Button className="h-12 w-full" disabled={busy} onClick={() => void scan()}>
-            <QrCode /> Scan the pairing QR code
+          <Button className="h-14 w-full text-base" disabled={busy} onClick={() => void scan()}>
+            <QrCode className="size-5" /> Scan QR code
           </Button>
+        )}
+        {isMobile && phoneStart && (
+          <div className="space-y-2 rounded-lg border bg-card p-3" data-testid="phone-start-reason">
+            {remote && (
+              <p className="text-sm font-medium" data-testid="saved-pc">
+                {remote.name ?? "Saved PC"} <span className="font-mono text-xs font-normal text-muted-foreground">{remote.url}</span>
+              </p>
+            )}
+            <p role="status" className="text-[13px]">{connectReasonText(phoneStart.why, pcLabel())}</p>
+            {remote && (
+              <div className="flex gap-2">
+                <Button variant="outline" className="h-11 flex-1" onClick={() => (clearAsk(), host.reload())}>
+                  <RefreshCw /> {phoneStart.why === "asked" ? "Back to this PC" : "Retry"}
+                </Button>
+                <Button variant="outline" className="h-11 flex-1" onClick={() => void forgetPc()}>
+                  <Unplug /> Forget
+                </Button>
+              </div>
+            )}
+          </div>
         )}
         <PanelCard title="Paste a pairing link">
           <form
@@ -180,12 +233,15 @@ export function RemoteRow() {
     }
   };
   return (
-    <div className="flex items-center justify-between gap-4 rounded-lg border bg-card p-3">
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3">
       <div className="min-w-0">
-        <div className="text-sm font-medium">{remote.name ?? "Paired daemon"}</div>
+        <div className="text-sm font-medium">{remote.name ?? "Paired PC"}</div>
         <p className="truncate font-mono text-xs text-muted-foreground">{remote.url}</p>
         {error && <p className="text-xs text-danger">{error}</p>}
       </div>
+      <Button variant="outline" size="sm" onClick={() => (askForConnectScreen())}>
+        <QrCode /> Scan QR
+      </Button>
       <Button variant="outline" size="sm" onClick={() => void forget()}>
         <Unplug /> Forget
       </Button>

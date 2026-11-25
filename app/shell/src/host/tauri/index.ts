@@ -69,7 +69,8 @@ export function tauriHost(): Host {
     version: () => getVersion(),
     async endpoint() {
       const e = await invoke<HostEndpoint>("endpoint");
-      phone = e.mode === "remote";
+      // A missing mode never turns a phone into a desktop: only an answer that names another mode does.
+      phone = e.mode ? e.mode === "remote" : phone;
       setting = parseTransportSetting(e.transport);
       return e;
     },

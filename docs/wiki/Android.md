@@ -27,6 +27,12 @@ and no agents.** It connects to a daemon on another machine (your desktop, a ser
 The daemon has to be reachable from the phone (same network, or a private network such as Tailscale). Opening the port to
 the internet is your decision and outside this page.
 
+**What the phone opens on (PHONE-1, 0.8.1):** a saved pairing whose PC answers (about 5 seconds) opens the app. No pairing, a PC that does
+not answer, a refused token or a token the keystore cannot read opens the connect screen: which PC, why, Scan QR (first), paste link,
+Retry, Forget. The pairing is kept until Forget or a new pairing. The QR button in the top bar and on the lost-connection banner
+opens the same screen at any time. The phone never shows daemon or agent tool setup: that is the PC's. The check is `remote_check` in
+`app/src-tauri/src/remote_reach.rs`, the decision `decidePhoneStart` in `app/packages/client/src/phone-start.ts`.
+
 ## Build the APK
 
 The release workflow (`.github/workflows/rust-release.yml`) builds the arm64 APK. You can build one yourself from `app/`:

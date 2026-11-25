@@ -3,10 +3,11 @@
 // Custom title bar: brand, project, new/quick, avatars, attention, host, connection, window controls.
 // Empty areas carry data-tauri-drag-region so the window moves by dragging the bar.
 import type { ReactNode } from "react";
-import { BarChart3, Layers, LifeBuoy, PanelLeft, PanelRight, Plus, Wand2, Moon, Sun, Settings, Wrench } from "lucide-react";
+import { BarChart3, Layers, LifeBuoy, QrCode, PanelLeft, PanelRight, Plus, Wand2, Moon, Sun, Settings, Wrench } from "lucide-react";
 import { attentionCount, hostLabel } from "@infantry/client";
 import { useAttention } from "@/components/mail/use-mail";
-import { useDaemon } from "@/daemon/daemon";
+import { isMobile, useDaemon } from "@/daemon/daemon";
+import { askForConnectScreen } from "@/components/connect/connect-screen";
 import { ConnectionBadge } from "./connection-badge";
 import { useUi } from "@/state/ui-state";
 import { IconButton } from "@infantry/ui";
@@ -79,9 +80,16 @@ export function TitleBar({ headerActions }: { headerActions?: ReactNode } = {}) 
       <IconButton label="Stats" onClick={() => ui.set("dialog", "stats")}>
         <BarChart3 />
       </IconButton>
-      <IconButton label="Setup" onClick={() => ui.set("dialog", "setup")}>
-        <Wrench />
-      </IconButton>
+      {/* PHONE-1: the phone installs nothing (agent tools are the PC's); Scan QR is always one tap away instead. */}
+      {isMobile ? (
+        <IconButton label="Scan QR to connect to a PC" onClick={askForConnectScreen}>
+          <QrCode />
+        </IconButton>
+      ) : (
+        <IconButton label="Setup" onClick={() => ui.set("dialog", "setup")}>
+          <Wrench />
+        </IconButton>
+      )}
       <IconButton label="Settings" onClick={() => ui.set("dialog", "settings")}>
         <Settings />
       </IconButton>

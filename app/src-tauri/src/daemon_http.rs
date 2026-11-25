@@ -9,7 +9,7 @@
 use std::io::Read;
 
 /// `ws://host:port/ws` (or `http://host:port`) -> `http://host:port`: where the daemon serves its HTTP routes.
-fn http_base(url: &str) -> Result<String, String> {
+pub(crate) fn http_base(url: &str) -> Result<String, String> {
     let u = url.trim();
     let base = if let Some(rest) = u.strip_prefix("ws://") {
         format!("http://{rest}")

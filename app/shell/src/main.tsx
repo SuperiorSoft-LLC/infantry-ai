@@ -4,7 +4,7 @@ import "./zod-config"; // first: some modules build zod schemas as they load
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import { initDaemon, daemonStore, daemonError, needsPairing, perfScenario } from "./daemon/daemon";
+import { initDaemon, daemonStore, daemonError, isMobile, needsPairing, perfScenario } from "./daemon/daemon";
 import { ConnectScreen } from "./components/connect/connect-screen";
 import { runPerfScenario } from "./daemon/perf-scenario";
 import { PerfOverlay, perfOn } from "./components/layout/perf-overlay";
@@ -53,12 +53,13 @@ function followBoot(onReady: () => void): void {
   ask();
 }
 // A daemon that never answers must not leave the loader up forever without saying why.
-const splashTimer = setTimeout(() => splashMessage("Still connecting to the Infantry AI daemon..."), 8000);
+const splashTimer = setTimeout(() => splashMessage(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? "Still looking for your PC..." : "Still connecting to the Infantry AI daemon..."), 8000);
 
 // The daemon store exists before the first render, so every component can read it synchronously.
 void initDaemon().then(() => {
   clearTimeout(splashTimer);
-  if (daemonError) splashMessage(`The Infantry AI daemon did not start: ${daemonError}`);
+  // A phone starts no daemon: its faults are the connect screen's reason, never this line (PHONE-1).
+  if (daemonError && !isMobile) splashMessage(`The Infantry AI daemon did not start: ${daemonError}`);
   // An unpaired phone (RUST-MOBILE-1): the connect screen only; pairing reloads the window into the shell.
   if (needsPairing) {
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(<ConnectScreen />);
@@ -78,7 +79,7 @@ void initDaemon().then(() => {
   listenDaemonNotices();
   // With a daemon fault the shell still opens (it shows its own banner); the message stays readable for a moment.
   // Otherwise the splash stays until the daemon reports boot ready (a short fallback keeps a silent daemon from holding it).
-  if (daemonError) setTimeout(hideSplash, 2500);
+  if (daemonError && !isMobile) setTimeout(hideSplash, 2500);
   else {
     const fallback = setTimeout(hideSplash, 1500);
     followBoot(() => { clearTimeout(fallback); hideSplash(); });

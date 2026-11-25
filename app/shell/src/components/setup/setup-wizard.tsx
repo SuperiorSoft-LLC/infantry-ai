@@ -44,7 +44,7 @@ import {
 } from "@infantry/client";
 import { AppDialog, Button, cn, Input, ProgressLine } from "@infantry/ui";
 import { runnerRequest } from "@infantry/client";
-import { daemonStore, useDaemon } from "@/daemon/daemon";
+import { daemonStore, isMobile, useDaemon } from "@/daemon/daemon";
 import { runnerStores, type RunnerStores } from "@/daemon/runner-stores";
 import { useUi } from "@/state/ui-state";
 import { host } from "@/host";
@@ -80,8 +80,10 @@ export function useAutoSetup(): void {
   const ui = useUi();
   const { report, secrets, providers, catalog } = useSetupData();
   const before = useRef<boolean | null>(null);
-  const want = needed(report, secrets, providers, catalog);
+  // PHONE-1: a phone installs nothing; the tools and sign-ins are the PC's, set up on the PC.
+  const want = isMobile ? false : needed(report, secrets, providers, catalog);
   useEffect(() => {
+    if (isMobile) return;
     const store = typeof localStorage === "undefined" ? null : localStorage;
     // Everything is fine now, or the setup has been shown once: it never opens by itself again (Settings > Daemon still opens it).
     if (want === false) markSetupDone(store);
