@@ -24,6 +24,7 @@ pub mod phone;
 pub mod own_files;
 pub mod pods;
 pub mod held;
+pub mod loader_errors;
 pub mod run;
 pub mod server;
 pub mod sessions;
