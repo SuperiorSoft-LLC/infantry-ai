@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: Apache-2.0
+# CI-TESTS-1: runs the guards, the protocol golden tests and the crate tests that pass reliably, so a red test fails CI
+# (before this, "green" only meant it builds). No secrets, no signing, no release. Expected: ~25 min cold, ~8-12 min cached.
+#
+# Left out on purpose (need the environment):
+#   - infantry-plugin-host integration tests (tests/plugins.rs): build the wasm guest fixture (wasm32-wasip2 target;
+#     LNK1181 on some hosts). Only its --lib tests run here.
+#   - infantry-daemon integration tests: start real daemons/ports; only --lib runs here.
+# infantry-guards runs in its own cargo invocation: built together with infantry-cli, serde_json's preserve_order feature
+# is unified in and reference_docs_are_fresh sees a different key order (a guard bug, filed separately).
+name: rust-tests
+
+on:
+  push:
+    branches: [battalion-os, main]
+    paths: ['rust/**', 'docs/wiki/reference/**', '.github/workflows/rust-tests.yml']
+  pull_request:
+    paths: ['rust/**', 'docs/wiki/reference/**', '.github/workflows/rust-tests.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults: { run: { shell: bash, working-directory: rust } }
+    env: { CARGO_BUILD_JOBS: '4', CARGO_TERM_COLOR: always }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: rust, shared-key: rust-tests }
+      - name: Guards (layers, rules, reference docs, bundled plugins, catalog)
+        run: cargo test -p infantry-guards
+      - name: Protocol golden + crate tests
+        run: >-
+          cargo test --no-fail-fast -p infantry-protocol -p infantry-board -p infantry-vault -p infantry-runner-pool
+          -p infantry-scripting -p infantry-cli
+      - name: Plugin host + daemon (lib only)
+        run: cargo test --no-fail-fast -p infantry-plugin-host -p infantry-daemon --lib
