@@ -765,6 +765,8 @@ fn daemon_half(dir: &Path) -> Option<(String, Vec<String>)> {
 /// Starts the host and loads every installed daemon half; None when there is no plugins folder or the host failed.
 pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: tokio::runtime::Handle, disabled: Arc<Disabled>, install: InstallSeam) -> Option<Plugins> {
     let dir = dir.filter(|d| d.is_dir())?;
+    // The embedded daemon (desktop app) never runs the distribution main: set the loader error mode here too, before any helper spawns.
+    crate::loader_errors::fail_fast();
     // The bootstrap plugin is the way in while nothing else is installed: the owner's disabled mark does not apply then.
     if let Some(id) = install.config.bootstrap.as_deref().filter(|id| disabled.contains(id) && installer::bootstrap_active(&dir, id, install.config.ui_plugin.as_deref())) {
         if let Err(e) = disabled.set(id, false) {
