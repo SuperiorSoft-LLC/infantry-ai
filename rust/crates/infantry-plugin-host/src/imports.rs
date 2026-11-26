@@ -282,7 +282,8 @@ impl PluginImports {
     pub fn http_send(&self, request: HttpRequest) -> Result<HttpResponse, String> {
         self.check("http")?;
         let allowed = self.decl.endpoint_addresses();
-        let runtime = self.decl.http_runtime_hosts && request.url.get(..8).is_some_and(|p| p.eq_ignore_ascii_case("https://"));
+        // Self-declared, so honoured only above Community tier (as storage.adopt is): a community plugin cannot grant itself open egress.
+        let runtime = self.decl.http_runtime_hosts && self.tier != Tier::Community && request.url.get(..8).is_some_and(|p| p.eq_ignore_ascii_case("https://"));
         let ok = runtime || allowed.iter().any(|base| url_under(&request.url, base));
         if !ok {
             return Err(format!("http refused: {} is not one of {}'s daemon.endpoints", origin_of(&request.url), self.module_id));
@@ -596,5 +597,9 @@ mod runtime_hosts_tests {
         let i = cards_like(true);
         assert!(i.http_send(get(fav)).unwrap_err().contains("no network"));
         assert!(i.http_send(get("http://plain.example/x.png")).unwrap_err().contains("http refused"));
+        // A community plugin declaring the flag gets nothing (PM review: self-declared grant).
+        let decl: DaemonDecl = serde_json::from_str(r#"{"wants":["http"],"httpRuntimeHosts":true}"#).unwrap();
+        let c = PluginImports::new("Evil", Tier::Community, decl, Arc::new(MemoryServices::new()), ["http".to_string()].into(), BTreeSet::new());
+        assert!(c.http_send(get(fav)).unwrap_err().contains("http refused"));
     }
 }

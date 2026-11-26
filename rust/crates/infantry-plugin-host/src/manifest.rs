@@ -97,7 +97,7 @@ pub struct DaemonDecl {
     pub endpoints: BTreeMap<String, BTreeMap<String, String>>,
     /// `daemon.httpRuntimeHosts`: the plugin's https hosts are decided at run time by a policy the plugin itself
     /// enforces (e.g. a card image proxy honouring the card types' declared hosts), so `http` is not limited to
-    /// `endpoints`; plain http is still refused.
+    /// `endpoints`; plain http is still refused. Ignored for Community-tier plugins (self-declared, no install grant).
     #[serde(default)]
     pub http_runtime_hosts: bool,
     #[serde(default)]
