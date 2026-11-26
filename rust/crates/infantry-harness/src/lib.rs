@@ -167,6 +167,9 @@ pub struct LaunchRequest {
     /// The watched-runner launcher a harness hook rewrites shell commands to (Kotlin `HarnessHost.watchLauncher`);
     /// None = the watch is off for this session.
     pub watch_launcher: Option<String>,
+    /// The program the user chose for this CLI (a saved location); the driver spawns it in place of the one the harness
+    /// planned, with the same arguments. None = the harness's own choice.
+    pub program: Option<String>,
 }
 
 /// The name of the daemon's own MCP server (`infantry mcp`), the infantry entry of every [`McpPlan`].
@@ -272,6 +275,7 @@ impl LaunchRequest {
             hooks: None,
             mcp: McpPlan::default(),
             watch_launcher: None,
+            program: None,
         }
     }
 

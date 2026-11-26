@@ -278,7 +278,10 @@ impl HarnessDriver {
                 Err(e) => self.pending.push_back(HarnessEvent::Warning(format!("could not stage {}: {e}", asset.name))),
             }
         }
-        let plan = self.harness.launch(&req).map_err(DriverError::Launch)?;
+        let mut plan = self.harness.launch(&req).map_err(DriverError::Launch)?;
+        if let Some(p) = req.program.as_ref() {
+            plan.spec.program = p.clone();
+        }
         let pty = plan.spec.pty.is_some();
         let program = plan.spec.program.clone();
         let handle = self.runner.spawn(plan.spec).await.map_err(|e| DriverError::Runner(format!("{program}: {e}")))?;

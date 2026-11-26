@@ -471,6 +471,9 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         let _ = creds_cell.set(c.clone());
         let for_sessions = c.clone();
         daemon.set_provider_env(Arc::new(move |provider| for_sessions.session_env(provider)));
+        // HARNESS-OVERRIDE-USE-1: a session starts the CLI the owner saved with cli_location_set, when one is saved.
+        let overrides = cli_locations::DbOverrides(db.clone());
+        daemon.set_cli_override(Arc::new(move |id| overrides.get(id)));
         // The default context limit of a session with no pin: `limits.session.defaultContextTokens`, scoped role > project > app.
         let ctx_settings = settings::SettingsUnit { db: db.clone() };
         daemon.set_context_default(Arc::new(move |project, role| settings::default_context_limit(&ctx_settings, project, role)));

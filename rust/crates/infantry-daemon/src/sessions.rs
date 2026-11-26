@@ -212,6 +212,33 @@ pub fn unserved_refusal(ty: &str, provider: Option<&str>) -> String {
     }
 }
 
+/// HARNESS-OVERRIDE-USE-1: the program a session of harness `id` runs, from the owner's saved location `saved`: None = no
+/// override (the harness's own lookup); a saved path that is not an existing file is refused, naming it.
+pub(crate) fn saved_program(id: &str, saved: Option<String>) -> Result<Option<String>, String> {
+    match saved {
+        None => Ok(None),
+        Some(p) if std::path::Path::new(&p).is_file() => Ok(Some(p)),
+        Some(p) => Err(format!("the saved location for {id} doesn't exist: {p}; fix it in Settings")),
+    }
+}
+
+#[cfg(test)]
+mod saved_program_tests {
+    use super::saved_program;
+
+    #[test]
+    fn no_override_is_unchanged_a_good_one_is_used_and_a_missing_one_is_refused() {
+        assert_eq!(saved_program("claude", None), Ok(None));
+        let exe = std::env::temp_dir().join(format!("saved-cli-{}.exe", uuid::Uuid::new_v4()));
+        std::fs::write(&exe, b"x").unwrap();
+        let p = exe.to_string_lossy().into_owned();
+        assert_eq!(saved_program("claude", Some(p.clone())), Ok(Some(p)));
+        let _ = std::fs::remove_file(&exe);
+        let e = saved_program("claude", Some("/nope/claude.exe".into())).unwrap_err();
+        assert_eq!(e, "the saved location for claude doesn't exist: /nope/claude.exe; fix it in Settings");
+    }
+}
+
 #[cfg(test)]
 mod unserved_refusal_tests {
     use super::unserved_refusal;
@@ -353,6 +380,8 @@ pub struct Daemon {
     env_extra: std::sync::OnceLock<Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>>,
     /// The env one provider's sessions get on top (its stored key or subscription token, the API key variable blanked).
     provider_env: std::sync::OnceLock<Arc<dyn Fn(&str) -> Vec<(String, String)> + Send + Sync>>,
+    /// HARNESS-OVERRIDE-USE-1: the owner's saved CLI location for a harness id (`cli.executable.<id>`), None = not set.
+    cli_override: std::sync::OnceLock<Arc<dyn Fn(&str) -> Option<String> + Send + Sync>>,
     /// The default context limit for a session the spawn did not pin: `(project, role)` to `(tokens, source)`; 0 tokens = off.
     context_default: std::sync::OnceLock<ContextDefault>,
     /// RR-6: what a start on a REMOTE runner lends `(runner, provider, project)`; unset = nothing is lent.
@@ -487,6 +516,7 @@ impl Daemon {
             launch: Mutex::new(Default::default()),
             env_extra: std::sync::OnceLock::new(),
             provider_env: std::sync::OnceLock::new(),
+            cli_override: std::sync::OnceLock::new(),
             context_default: std::sync::OnceLock::new(),
             lender: std::sync::OnceLock::new(),
             remote_ws: std::sync::OnceLock::new(),
@@ -1472,6 +1502,11 @@ impl Daemon {
         let _ = self.context_default.set(f);
     }
 
+    /// Where the owner's saved CLI location of a harness is read from (HARNESS-OVERRIDE-USE-1).
+    pub fn set_cli_override(&self, f: Arc<dyn Fn(&str) -> Option<String> + Send + Sync>) {
+        let _ = self.cli_override.set(f);
+    }
+
     pub fn set_provider_env(&self, f: Arc<dyn Fn(&str) -> Vec<(String, String)> + Send + Sync>) {
         let _ = self.provider_env.set(f);
     }
@@ -1583,7 +1618,15 @@ impl Daemon {
         // On the main port a connection presenting it is that session's agent, never the owner (server.rs `agent_of`).
         let token = self.tunnel.mint(&e.rec.id);
         set_token(&mut env, &mut mcp, &token);
+        // HARNESS-OVERRIDE-USE-1: a saved location is a path on this machine, so it applies to the local runner only; a
+        // saved path that is gone refuses the start (never a silent fall back to the default lookup).
+        let program = if entry.kind == "remote" {
+            None
+        } else {
+            saved_program(&e.rec.provider, self.cli_override.get().and_then(|f| f(&e.rec.provider)))?
+        };
         let req = OpenRequest {
+            program,
             runner: entry.runner,
             runner_name: entry.name,
             session_id: e.rec.id.clone(),

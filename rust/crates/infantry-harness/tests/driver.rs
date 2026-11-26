@@ -200,6 +200,23 @@ async fn per_turn_harness_resumes_with_the_captured_token() {
 }
 
 #[tokio::test]
+async fn a_saved_program_replaces_the_planned_one_and_keeps_the_arguments() {
+    let runner = Arc::new(ScriptRunner::default());
+    runner.scripts.lock().unwrap().extend([(vec!["{\"t\":\"done\"}
+"], Some(0)), (vec!["{\"t\":\"done\"}
+"], Some(0))]);
+    let mut req = base();
+    req.program = Some("/opt/mine/toy-cli".into());
+    let mut d = HarnessDriver::new(Arc::new(ToyHarness { delivery: TurnDelivery::SpawnPerTurn }), runner.clone(), req);
+    d.run_turn("hi", Duration::from_secs(5), Duration::from_millis(20), |_| {}).await.unwrap();
+    let mut plain = HarnessDriver::new(Arc::new(ToyHarness { delivery: TurnDelivery::SpawnPerTurn }), runner.clone(), base());
+    plain.run_turn("hi", Duration::from_secs(5), Duration::from_millis(20), |_| {}).await.unwrap();
+    let specs = runner.spawned.lock().unwrap();
+    assert_eq!((specs[0].program.as_str(), specs[0].args.clone()), ("/opt/mine/toy-cli", vec!["run".to_string()]));
+    assert_ne!(specs[1].program, "/opt/mine/toy-cli");
+}
+
+#[tokio::test]
 async fn a_process_that_dies_mid_turn_ends_the_turn_failed() {
     let runner = Arc::new(ScriptRunner::default());
     runner.scripts.lock().unwrap().push((vec!["{\"t\":\"text\",\"v\":\"partial\"}\n"], Some(3)));

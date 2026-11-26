@@ -62,6 +62,9 @@ pub struct OpenRequest {
     pub runner: std::sync::Arc<dyn infantry_harness::Runner>,
     /// The name of that runner (`local`, or a paired runner's name).
     pub runner_name: String,
+    /// The owner's saved location of this harness's CLI (`cli.executable.<id>`), already checked to exist; None = the
+    /// harness's own lookup.
+    pub program: Option<String>,
 }
 
 impl std::fmt::Debug for OpenRequest {

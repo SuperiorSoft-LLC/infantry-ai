@@ -262,6 +262,7 @@ impl Worker {
         base.env_remove = ENV_REMOVE.map(String::from).to_vec();
         base.env = self.req.env.clone();
         base.mcp = self.req.mcp.clone();
+        base.program = self.req.program.clone();
         let runner = self.runner.clone();
         HarnessDriver::new(self.harness.clone(), runner, base)
     }
