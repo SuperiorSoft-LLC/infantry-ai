@@ -34,7 +34,13 @@ start)
   [ -n "$port" ] || { echo "test-daemon: no free port in 18900-18999" >&2; exit 2; }
   tmp="${TEMP:-/tmp}"; command -v cygpath >/dev/null && tmp="$(cygpath -u "$tmp")"; state="$(mktemp -d "$tmp/td-XXXXXX")"; [ -n "$plugins" ] || { plugins="$state/plugins-empty"; mkdir -p "$plugins"; }
   log="$state/daemon.log"
-  scrub=(); for v in $(env | sed -n 's/^\(\(INFANTRY\|AGENTHQ\|BATTALION\|CLAUDE\)[A-Za-z0-9_]*\)=.*/\1/p'); do scrub+=(-u "$v"); done
+  # TESTENV-1: a worker shell inside BattalionOS carries BATTALION_* (the ready/token/state/app paths of the owner's app);
+  # a daemon that keeps them runs in OS-app mode and takes the owner's run files. Removed case-blind (Windows env is), and
+  # the start is refused unless the child env is clean and the state dir (where every run/data file goes) is our temp dir.
+  scrub=(); for v in $(env | sed -n 's/^\(\(INFANTRY\|AGENTHQ\|BATTALION\|CLAUDE\)[A-Za-z0-9_]*\)=.*/\1/Ip'); do scrub+=(-u "$v"); done
+  left="$(env "${scrub[@]}" env | grep -i '^battalion' | cut -d= -f1 | tr '\n' ' ')"
+  [ -z "$left" ] || { echo "test-daemon: refused: OS-app variables survive the scrub: $left" >&2; rm -rf "$state"; exit 2; }
+  case "$state" in "$tmp"/td-*) ;; *) echo "test-daemon: refused: state dir $state is not inside $tmp" >&2; exit 2;; esac
   env "${scrub[@]}" INFANTRY_STATE_DIR="$(win "$state")" INFANTRY_PLUGINS_DIR="$(win "$plugins")" \
     nohup "$bin" --host 127.0.0.1 --port "$port" --state-dir "$(win "$state")" >"$log" 2>&1 </dev/null &
   bpid=$!; wpid="$(cat /proc/$bpid/winpid 2>/dev/null || echo $bpid)"

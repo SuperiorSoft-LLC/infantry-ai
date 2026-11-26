@@ -111,9 +111,21 @@ impl OsRuntime {
 
     /// Writes the ready file for a daemon listening on `bind_host:port`. The OS only accepts a loopback url.
     pub fn write_ready(&self, bind_host: &str, port: u16) -> Result<(), String> {
+        self.write_ready_as(bind_host, port, std::process::id(), &|p| crate::health::pid_alive(p as i64))
+    }
+
+    /// [OsRuntime::write_ready] with the pid and the liveness check given (tests).
+    fn write_ready_as(&self, bind_host: &str, port: u16, me: u32, alive: &dyn Fn(u32) -> bool) -> Result<(), String> {
         self.bound_port.store(port, std::sync::atomic::Ordering::Relaxed);
         let Some(path) = &self.env.ready_file else { return Ok(()) };
-        let body = ready_json(bind_host, port, std::process::id())?;
+        if let Some(other) = live_other_owner(path, me, alive) {
+            // TESTENV-1: an inherited BATTALION_READY_FILE (a test daemon started from a worker shell inside the OS) must
+            // not take the ready file of the app that owns it. Not fatal: this daemon still serves, it is just not announced.
+            // The contract gives no way to tell the OS launched us (no per-launch nonce), so the live-owner check is the guard.
+            eprintln!("[infantry] ready file {} names live process {other}, not this one ({me}): not overwritten (inherited BATTALION_* env?)", path.display());
+            return Ok(());
+        }
+        let body = ready_json(bind_host, port, me)?;
         write_atomic(path, body.as_bytes())
     }
 
@@ -127,6 +139,15 @@ impl OsRuntime {
             let _ = std::fs::remove_file(p);
         }
     }
+}
+
+/// TESTENV-1: the pid an existing ready file names when that process is alive and is not `me`; `None` when the file is
+/// missing, unreadable, names no pid, names this process or a dead one (a stale file left by a crash is replaced).
+pub fn live_other_owner(path: &Path, me: u32, alive: &dyn Fn(u32) -> bool) -> Option<u32> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let v: serde_json::Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).ok()?;
+    let pid = u32::try_from(v.get("pid")?.as_u64()?).ok()?;
+    (pid != me && pid != 0 && alive(pid)).then_some(pid)
 }
 
 /// The ready file text. A wildcard bind is reached on loopback; any other non-loopback bind cannot be an app's address.
@@ -330,6 +351,30 @@ mod tests {
         assert!(ready.is_file());
         rt.clear_ready();
         assert!(!ready.exists());
+    }
+
+    #[test]
+    fn a_ready_file_of_another_live_process_is_never_overwritten() {
+        let d = tempfile::tempdir().unwrap();
+        let ready = d.path().join("run").join("ready.json");
+        std::fs::create_dir_all(ready.parent().unwrap()).unwrap();
+        std::fs::write(&ready, r#"{"contract":1,"pid":4242,"url":"http://127.0.0.1:1"}"#).unwrap();
+        assert_eq!(live_other_owner(&ready, 7, &|_| true), Some(4242));
+        assert_eq!(live_other_owner(&ready, 7, &|_| false), None, "a dead owner's file is stale");
+        assert_eq!(live_other_owner(&ready, 4242, &|_| true), None, "our own file");
+        assert_eq!(live_other_owner(&d.path().join("none.json"), 7, &|_| true), None);
+        std::fs::write(&ready, "\u{feff}not json").unwrap();
+        assert_eq!(live_other_owner(&ready, 7, &|_| true), None);
+        // The write itself: a live owner keeps its file byte for byte; a dead one's is replaced.
+        let owner = r#"{"contract":1,"pid":26000,"url":"http://127.0.0.1:18990"}"#;
+        std::fs::write(&ready, owner).unwrap();
+        std::fs::write(d.path().join("token"), "x").unwrap();
+        let rt = OsRuntime::new(OsEnv { ready_file: Some(ready.clone()), token_file: d.path().join("token"), state_dir: None, app_dir: None, ui_origin: None }).unwrap();
+        rt.write_ready_as("127.0.0.1", 18903, 7, &|p| p == 26000).unwrap();
+        assert_eq!(std::fs::read_to_string(&ready).unwrap(), owner, "the owner's ready file is untouched");
+        rt.write_ready_as("127.0.0.1", 18903, 7, &|_| false).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&ready).unwrap()).unwrap();
+        assert_eq!((v["pid"].as_u64(), v["url"].as_str()), (Some(7), Some("http://127.0.0.1:18903")));
     }
 
     #[test]
