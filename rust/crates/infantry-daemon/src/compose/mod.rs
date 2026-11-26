@@ -516,9 +516,43 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
                 .read(|c| c.query_row("SELECT value FROM settings WHERE key = ?1", [k], |r| r.get::<_, String>(0)).map(Some).or_else(|e| match e { rusqlite::Error::QueryReturnedNoRows => Ok(None), e => Err(e) }))
                 .ok()
                 .flatten();
-            raw.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).and_then(|v| v.as_str().map(String::from))
+            // A text or a number (`account.cacheSeconds` may be stored as either).
+            raw.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).and_then(|v| v.as_str().map(String::from).or_else(|| v.as_f64().map(|n| n.to_string())))
         })
     };
+    // A refused refresh (invalid_grant) forgets the sign-in and says so: "Signed out of X" with a Sign in action.
+    let account = {
+        let hub = hub.clone();
+        account.with_notice(move |n| {
+            hub.post(
+                infantry_mail::notify::hub::Notification {
+                    title: n.title.clone(),
+                    body: n.body.clone(),
+                    level: infantry_mail::notify::hub::NotificationLevel::Warning,
+                    dedupe_key: Some(n.dedupe_key.clone()),
+                    actions: vec![infantry_mail::notify::hub::NotificationAction { id: n.action_id.clone(), label: "Sign in".into() }],
+                    ..Default::default()
+                },
+                "account",
+            );
+        })
+    };
+    {
+        // The notice's Sign in action starts a new device sign-in; the Account panel shows its code from account_status.
+        let (a, bus) = (account.clone(), bus.clone());
+        hub.on_action("account", move |e| {
+            let Some(provider) = e.action_id.strip_prefix("account.sign_in.") else { return };
+            let done_bus = bus.clone();
+            match crate::account::Account::sign_in_and_poll(&a, Some(provider), move |s| { done_bus.publish(Envelope::new(crate::account::frames::STATUS, s.to_string())); }) {
+                Ok(_) => {
+                    if let Ok(s) = a.status(Some(provider), false) {
+                        bus.publish(Envelope::new(crate::account::frames::STATUS, s.to_string()));
+                    }
+                }
+                Err(why) => log_line(&format!("account: the Sign in action failed: {why}")),
+            }
+        });
+    }
 
     // ---- pods: DAGs of unattended sessions; open pods from the last run are INTERRUPTED -------------------
     let pods = crate::pods::Pods::new(db.clone(), Arc::new(adapters::PodSessions { daemon: daemon.clone(), bus: bus.clone() }));
