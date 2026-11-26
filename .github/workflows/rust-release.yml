@@ -107,6 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           bash src-tauri/scripts/stage-bundle.sh
+          bash ../scripts/check-staged-endpoints.sh src-tauri/bundle-stage/plugins   # DOCS-ENV-1
           pnpm tauri build --bundles msi --config src-tauri/bundle-stage/tauri.bundle.conf.json \
             --config "{\"version\":\"$VERSION\",\"bundle\":{\"createUpdaterArtifacts\":true}}" \
             --config "$RUNNER_TEMP/key.json"
@@ -225,6 +226,7 @@ jobs:
         run: |
           set -euo pipefail
           bash src-tauri/scripts/stage-bundle.sh
+          bash ../scripts/check-staged-endpoints.sh src-tauri/bundle-stage/plugins   # DOCS-ENV-1
           pnpm tauri build --bundles appimage --config src-tauri/bundle-stage/tauri.bundle.conf.json \
             --config "{\"version\":\"$VERSION\",\"bundle\":{\"createUpdaterArtifacts\":true}}" \
             --config "$RUNNER_TEMP/key.json"
@@ -273,6 +275,7 @@ jobs:
         run: |
           set -euo pipefail
           bash src-tauri/scripts/stage-bundle.sh
+          bash ../scripts/check-staged-endpoints.sh src-tauri/bundle-stage/plugins   # DOCS-ENV-1
           pnpm tauri build --bundles app --config src-tauri/bundle-stage/tauri.bundle.conf.json \
             --config "{\"version\":\"$VERSION\",\"bundle\":{\"createUpdaterArtifacts\":true}}" \
             --config "$RUNNER_TEMP/key.json"

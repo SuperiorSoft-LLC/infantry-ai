@@ -79,10 +79,8 @@ jobs:
       - name: Stage the plugins
         run: bash rust/plugins/stage.sh "$RUNNER_TEMP/plugins" release
       - name: The staged plugins carry no local or staging endpoint
-        run: |
-          set -euo pipefail
-          bad="$(grep -rlE '127\.0\.0\.1|localhost|\(staging\)' --include=module.json "$RUNNER_TEMP/plugins" || true)"
-          if [ -n "$bad" ]; then echo "::error::staged module.json with a local or staging endpoint:"; echo "$bad"; exit 1; fi
+        # DOCS-ENV-1: every staged text file (module.json, ui js/css/html, md), not module.json only.
+        run: bash scripts/check-staged-endpoints.sh "$RUNNER_TEMP/plugins"
       - name: Check the VC++ runtime (a clean Windows has none)
         run: |
           set -euo pipefail

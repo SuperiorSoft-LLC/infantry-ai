@@ -131,10 +131,48 @@ fn the_stage_step_check_catches_a_step_without_prod() {
     assert!(stage_steps_without_prod(step_level).is_empty(), "step-level prod is enough");
 }
 
+/// DOCS-ENV-1: every step that stages plugins in a release workflow is followed by check-staged-endpoints.sh, which
+/// reads every staged text file. It replaced a grep over module.json only (SITES-ENV-1), which let ui js/css/html and
+/// md files through, so the old assertion on `--include=module.json` is gone with it.
 #[test]
-fn the_os_app_workflow_checks_the_staged_plugins_for_local_endpoints() {
-    let w = std::fs::read_to_string(repo_root().join(".github/workflows/os-app-release.yml")).unwrap();
-    let stage = w.find("rust/plugins/stage.sh").expect("os-app stages the plugins");
-    let check = w.find(r"127\.0\.0\.1|localhost|\(staging\)").expect("a package check for local or staging endpoints");
-    assert!(check > stage && w[check..].contains("--include=module.json"), "the check runs after staging, over every module.json");
+fn every_release_stage_is_followed_by_the_staged_endpoint_check() {
+    const CHECK: &str = "scripts/check-staged-endpoints.sh";
+    for (wf, stage) in [("os-app-release.yml", "rust/plugins/stage.sh"), ("rust-release.yml", "bash src-tauri/scripts/stage-bundle.sh")] {
+        let w = std::fs::read_to_string(repo_root().join(".github/workflows").join(wf)).unwrap();
+        let stages: Vec<usize> = w.match_indices(stage).map(|(i, _)| i).collect();
+        assert!(!stages.is_empty(), "{wf} stages plugins");
+        for (n, &at) in stages.iter().enumerate() {
+            let end = stages.get(n + 1).copied().unwrap_or(w.len());
+            assert!(w[at..end].contains(CHECK), "{wf}: the stage at byte {at} is not followed by {CHECK}");
+        }
+    }
+}
+
+fn check_dir(tag: &str, files: &[(&str, &[u8])]) -> bool {
+    let dir = std::env::temp_dir().join(format!("docs-env-1-{}-{tag}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for (rel, body) in files {
+        let p = dir.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, body).unwrap();
+    }
+    let git_bash = Path::new("C:/Program Files/Git/bin/bash.exe"); // not WSL's bash (see run)
+    let ok = Command::new(if git_bash.is_file() { git_bash } else { Path::new("bash") }).current_dir(repo_root()).arg("scripts/check-staged-endpoints.sh").arg(&dir).output().expect("bash").status.success();
+    let _ = std::fs::remove_dir_all(&dir);
+    ok
+}
+
+#[test]
+fn the_staged_endpoint_check_reads_every_text_file_and_skips_binaries() {
+    assert!(check_dir("clean", &[("official/A/module.json", br#"{"daemon":{"endpoints":{"api":"https://api.example.com"}}}"#)]), "a prod staging passes");
+    assert!(
+        !check_dir("js", &[("official/A/module.json", b"{}"), ("official/A/ui/index.js", b"fetch('http://localhost:5173/x')")]),
+        "a ui js with localhost fails (the module.json-only grep let it through)"
+    );
+    assert!(!check_dir("md", &[("official/A/README.md", b"see http://127.0.0.1:18953/v1")]), "any text file is read");
+    assert!(!check_dir("staging", &[("official/A/module.json", br#"{"title":"Sites (staging)"}"#)]), "a staging label fails");
+    assert!(
+        check_dir("bin", &[("official/Infantry_Docs/daemon.component", b"\0asm\x01\0\0\0 curl http://127.0.0.1:18990/health \0\xff")]),
+        "a binary is skipped (the Docs component embeds wiki prose that documents local addresses)"
+    );
 }
