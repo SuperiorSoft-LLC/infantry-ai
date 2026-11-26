@@ -33,23 +33,29 @@ markdown_extensions:
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
 nav:
-  - Wiki index: index.md
-  - Home: Home.md
+  - Home: index.md
+  - Getting started:
+      - Install the desktop app: install-desktop.md
+      - Install in BattalionOS: install-battalionos.md
+      - First project and agent: first-project.md
+      - Board and tickets: board-and-tickets.md
+      - Providers and models: providers-and-models.md
+  - User guide:
+      - Mail and decisions: mail-and-decisions.md
+      - Knowledge, scripting, settings, secrets: knowledge-scripting-settings.md
+      - Phone app: phone.md
+      - Services and Hosting: services-and-hosting.md
+      - Remote runners: remote-runners.md
+      - Runner in Docker: self-host-docker.md
   - Architecture: Architecture.md
-  - Getting started: Plugins.md
+  - Plugins: Plugins.md
   - Make a plugin: make-a-plugin.md
   - Plugin API: plugin-api.md
   - Daemon plugin API: daemon-plugin-api.md
-  - Scripting and hooks: Scripting.md
-  - Harnesses and providers: Harnesses.md
-  - Settings: Settings.md
   - Licensing (draft): licensing.md
   - Recipes:
       - Overview: recipes/README.md
       - Add a UI panel plugin: recipes/add-ui-panel-plugin.md
       - Split into a child plugin: recipes/split-into-child-plugin.md
       - Add a daemon tool: recipes/add-daemon-tool.md
-      - Add a setting with scopes: recipes/add-setting-with-scopes.md
-      - Add a Lua hook: recipes/add-lua-hook.md
       - Add a CLI harness: recipes/add-cli-harness.md
-      - Add a provider: recipes/add-provider.md

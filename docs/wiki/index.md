@@ -1,61 +1,51 @@
-# Infantry AI wiki index
+# Infantry AI
 
-<!-- shared:pitch -->Infantry AI is a command post for coding agents: a ticket board, agents on their own git branches, mail, shared project knowledge, Lua scripts that automate your process, and plugins that build the app itself.<!-- /shared:pitch -->
+<!-- shared:tagline -->Run a whole team of coding agents from one ticket board.<!-- /shared:tagline -->
 
-> **Beta.** <!-- shared:beta_line -->Infantry AI is in Beta. It works and we use it every day, but not every part is fully tested yet: you are an early tester. Please report anything that breaks on GitHub.<!-- /shared:beta_line -->  
-> [Report a problem](https://github.com/SuperiorSoft-LLC/infantry-ai/issues)
+Infantry AI is a command post for coding agents. You write tickets on a board. Each agent takes a ticket and works on
+its own git branch, in its own folder. You review the work and decide what gets merged.
 
-Every page of this wiki is listed here, one line each. The pages are written from the Rust code on `main`. Where a page
-and the code disagree, the code wins. Pages that describe the Kotlin app carry a `legacy-java` banner and keep their old
-text under a legacy heading.
+It runs on your own machine. There is no third-party cloud between you and your agents.
 
-## Start here
+## What is in it
 
-- [Architecture](Architecture.md): the Rust framework: the daemon, the layers, the wire, plugins, scripting, clients.
-- [Mini AI OS](Mini-AI-OS.md): the identity: a mini AI operating system, the boot chain, plugins as apps, the rule for every design.
-- [Install](Install.md): the Windows installer, the headless daemon, the `infantry` command on PATH, building from source.
-- [Android](Android.md): the Android app, pairing a phone to a daemon, building the APK.
-- [Updates](Updates.md): the update channels, the feed, the signing keys, the release pipeline.
-- [Command line](CommandLine.md): the native `infantry` command and what it hands to the Kotlin launcher.
-- [Build speed](Build-speed.md): the dev build settings, what they measured, and how to measure again.
-- [Home](Home.md): the wiki front page, the support and reporting pages.
+- **A ticket board** with the lanes To Do, In Progress, Pending and Done.
+- **Agents** that run the coding CLIs you already use: Claude Code, Codex, opencode and pi.
+- **Mail** between you and your agents, and decision cards when an agent needs your choice.
+- **Shared knowledge**: notes, roles and skills that every agent of a project can read.
+- **Lua scripts and hooks** that automate your own process, with no model and no tokens.
+- **Plugins** that add tabs, panels and tools. Most of the app itself is plugins.
 
-## Build plugins
+## Infantry AI and BattalionOS
 
-- [Plugins](Plugins.md): `module.json`, the daemon half (WASM or sidecar), grants, the official plugins, building with `stage.sh`.
-- [Make a plugin](make-a-plugin.md): step by step, from an official plugin to a built daemon half.
-- [Web UI plugins](Web-UI-plugins.md): a plugin's own tabs, panels and cards, served by the daemon and loaded live by the app.
-- [Daemon plugin API](daemon-plugin-api.md): the WIT world: exports, imports, tools, frames, routes, hooks, events.
-- [Plugin knowledge](plugin-knowledge.md): module.json `knowledge` and the PLUGIN TOOLS briefing.
-- [Plugin lifecycle](Plugin-lifecycle.md): install, update, enable, disable and remove a plugin.
-- [Publish a plugin](publish-a-plugin.md): package a plugin from its own repo.
-- [UI plugin API](plugin-api.md): the Kotlin UI plugin API (legacy-java).
-- [Compatibility and deprecation](compatibility.md): the ABI promise for daemon plugins, and the Kotlin policy.
-- [Recipes](recipes/README.md): worked how-to-add-X guides, one per page: daemon tool, UI panel, child plugin, setting, Lua hook, harness, provider, avatar style, service.
+**BattalionOS** is the core and shell: the daemon, the protocol, the runner and the desktop window. It is licensed
+MPL-2.0. **Infantry AI** is an app that runs on BattalionOS. Apps and plugins are Apache-2.0.
 
-## Run and automate
+You can install Infantry AI as its own desktop app, or install BattalionOS and add Infantry AI from the Armory.
 
-- [Harnesses](Harnesses.md): the harness contract and the four harness crates (Claude Code, Codex, opencode, pi).
-- [Runners](runner-quickstart.md): local and linked remote runners, placement, setup, troubleshooting.
-- [Run a remote environment](run-a-remote-environment.md): a runner-only daemon (`--mode runner`) and pairing it.
-- [Scripting](Scripting.md): the sandboxed Lua API, hooks, the process bridge, settings that govern scripts.
-- [Script Arsenal](script-arsenal.md): the global scripts, resolution order and the bundled set.
-- [Board](Board.md): tickets, lanes and epics.
-- [Notifications](Notifications.md): the notification bus, attention items and the presenters.
-- [Health](Health.md): the daemon health and environment report.
-- [Settings](Settings.md): scopes (app, project, role, session) and the cost-saving defaults.
-- [Secrets](Secrets.md): render text with saved secrets (`{{secret:NAME}}`).
-- [Vault](Vault.md): the master key, Reveal and Copy after Windows Hello, the encrypted backup.
-- [Usage](Usage.md): live plan meters, pacing and overrides.
-- [Waiting](Waiting.md), [Memory](Memory.md), [Login](Login.md), [Progress](Progress.md), [Bridges](Bridges.md), [Browser](Browser.md): smaller features, each checked against its Rust crate.
+## How it fits together
 
-## Design records and Kotlin-era pages
+- The **daemon** is a small background program. It keeps the board, the mail, the agents and the plugins.
+- The **apps** (desktop, phone, command line) talk to the daemon. Closing the window does not stop your agents.
+- A **runner** is where agents run. Your own PC is the local runner. You can add remote runners.
 
-- [Licensing](licensing.md): MPL-2.0 for the core, Apache-2.0 for the SDKs, apps and plugins.
-- [Kotlin notes](kotlin-notes.md): the Kotlin UI core, its toolchain and build flags (legacy-java).
-- [UI driver](UI-driver.md), [UI verify design](UI-verify-design.md): driving and checking the UI (Kotlin era, legacy-java).
-- [App preview of a branch](app-preview.md), [Variant builds](Variant-builds.md): Gradle-era branch builds (legacy-java).
-- [Agent avatar mascot design](Agent-avatar-mascot-design.md), [Runner pairing design](RunnerPairing-design.md): design records (Kotlin era).
+## Getting started
 
-The design records under `docs/rust-port/` (plan, layers, migration, parity, move-over bar) are listed in
-[docs/README.md](../README.md).
+1. [Install the desktop app](install-desktop.md), or [install BattalionOS](install-battalionos.md).
+2. [Create your first project and agent](first-project.md).
+3. [Use the board and tickets](board-and-tickets.md).
+4. [Choose providers and models](providers-and-models.md).
+
+## User guide
+
+- [Mail and decisions](mail-and-decisions.md)
+- [Knowledge, scripting, settings and secrets](knowledge-scripting-settings.md)
+- [Use the phone app](phone.md)
+- [Services and Hosting](services-and-hosting.md)
+- [Remote runners](remote-runners.md)
+- [Run a runner in Docker](self-host-docker.md)
+
+## Status
+
+Infantry AI is in Beta. It works and we use it every day, but not every part is fully tested yet. Please report
+anything that breaks on [GitHub](https://github.com/SuperiorSoft-LLC/infantry-ai/issues).
