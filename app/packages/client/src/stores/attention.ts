@@ -102,6 +102,25 @@ export function openQuestions(qs: Record<string, OwnerQuestion>): OwnerQuestion[
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
+/** How long an answered decision stays in the Mail inbox (showing "answered: <choice>"). */
+export const DECIDED_SHOWN_MS = 7 * 86_400_000;
+
+/** The answer a resolved question shows: the picked option, else the owner's own words. */
+export function decisionAnswer(q: OwnerQuestion): string | null {
+  return q.answer ?? q.otherText ?? null;
+}
+
+/**
+ * MAIL-OWNER-1: the decisions the Mail inbox shows at its top: every open question (oldest first: it has waited
+ * longest), then the ones resolved in the last [DECIDED_SHOWN_MS] (newest first).
+ */
+export function inboxDecisions(qs: Record<string, OwnerQuestion>, now = Date.now()): OwnerQuestion[] {
+  const decided = Object.values(qs)
+    .filter((q) => q.state !== "open" && (q.resolvedAt ?? q.createdAt) > now - DECIDED_SHOWN_MS)
+    .sort((a, b) => (b.resolvedAt ?? b.createdAt) - (a.resolvedAt ?? a.createdAt));
+  return [...openQuestions(qs), ...decided];
+}
+
 /** The badge count: open items plus open questions. */
 export function attentionCount(s: Pick<AttentionState, "items" | "questions">): number {
   return openItems(s.items).length + openQuestions(s.questions).length;

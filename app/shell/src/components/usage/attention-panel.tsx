@@ -3,9 +3,10 @@
 // Attention tab: what needs the owner, live from the daemon. Owner questions first (answer with one click on an
 // option, or write your own in the one modal), then attention items (acknowledge), then the notification bus feed.
 import { useEffect, useState } from "react";
-import { AlertOctagon, Bell, CheckCircle2, HelpCircle, Sparkles, X } from "lucide-react";
+import { AlertOctagon, Bell, CheckCircle2, X } from "lucide-react";
 import { openItems, openQuestions, type OwnerQuestion } from "@infantry/client";
-import { AppDialog, Button, Chip, EmptyState, SectionLabel, Textarea, cn } from "@infantry/ui";
+import { Button, Chip, EmptyState, SectionLabel, cn } from "@infantry/ui";
+import { DecisionCard, OwnAnswerDialog } from "@/components/mail/decision-card";
 import { useAttention } from "@/components/mail/use-mail";
 
 function ago(at: number): string {
@@ -13,51 +14,13 @@ function ago(at: number): string {
   return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`;
 }
 
-function QuestionCard({ q, onOther }: { q: OwnerQuestion; onOther: (q: OwnerQuestion) => void }) {
-  const answer = useAttention((s) => s.answer);
-  return (
-    <li className="rounded-lg border border-warn/50 bg-card p-3">
-      <div className="flex items-start gap-2">
-        <HelpCircle className="mt-0.5 size-4 shrink-0 text-warn" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-medium">{q.question}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {q.agentId ?? q.role ?? q.sessionId.slice(0, 8)} · {ago(q.createdAt)}
-            {q.defaultAfterMin ? ` · auto-picks in ${q.defaultAfterMin}m` : ""}
-          </p>
-          {q.reason && <p className="mt-1 text-xs italic text-muted-foreground">{q.reason}</p>}
-        </div>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {q.options.map((o) => (
-          <Button
-            key={o.label}
-            size="xs"
-            variant={o.label === q.recommended ? "default" : "outline"}
-            title={o.description}
-            onClick={() => answer(q.id, o.label)}
-          >
-            {o.label === q.recommended && <Sparkles />} {o.label}
-          </Button>
-        ))}
-        {q.allowOther && (
-          <Button size="xs" variant="ghost" onClick={() => onOther(q)}>
-            Other…
-          </Button>
-        )}
-      </div>
-    </li>
-  );
-}
-
 export function AttentionPanel() {
   const items = useAttention((s) => s.items);
   const questions = useAttention((s) => s.questions);
   const notes = useAttention((s) => s.notifications);
   const refusal = useAttention((s) => s.refusal);
-  const { ensureLoaded, ack, answer, dismiss, act, clearRefusal } = useAttention((s) => s);
+  const { ensureLoaded, ack, dismiss, act, clearRefusal } = useAttention((s) => s);
   const [other, setOther] = useState<OwnerQuestion | null>(null);
-  const [text, setText] = useState("");
 
   useEffect(() => ensureLoaded(), [ensureLoaded]);
   const qs = openQuestions(questions);
@@ -81,7 +44,7 @@ export function AttentionPanel() {
           <SectionLabel>Questions ({qs.length})</SectionLabel>
           <ul className="mt-2 space-y-2">
             {qs.map((q) => (
-              <QuestionCard key={q.id} q={q} onOther={(x) => (setOther(x), setText(""))} />
+              <DecisionCard key={q.id} q={q} onOther={setOther} />
             ))}
           </ul>
         </section>
@@ -144,21 +107,7 @@ export function AttentionPanel() {
           </ul>
         </section>
       )}
-      <AppDialog
-        open={other !== null}
-        onOpenChange={(o) => !o && setOther(null)}
-        title="Your own answer"
-        description={other?.question}
-        footer={
-          <Button size="sm" disabled={!text.trim()} onClick={() => other && answer(other.id, null, text) && setOther(null)}>
-            Answer
-          </Button>
-        }
-      >
-        <div className="p-4">
-          <Textarea rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder="Write the answer the agent gets" />
-        </div>
-      </AppDialog>
+      <OwnAnswerDialog question={other} onClose={() => setOther(null)} />
     </div>
   );
 }

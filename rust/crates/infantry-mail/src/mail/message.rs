@@ -50,6 +50,13 @@ impl Checkpoint {
     }
 }
 
+/// The human user's addresses: mail to one of them is the owner's, whatever project the sender is in.
+pub const OWNER_ADDRESSES: [&str; 3] = ["human", "owner", "user"];
+
+pub fn is_owner_address(to: &str) -> bool {
+    OWNER_ADDRESSES.iter().any(|h| to.trim().eq_ignore_ascii_case(h))
+}
+
 /// One mailbox message. `seq` is monotonic within `thread_id`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -79,6 +86,10 @@ pub struct Message {
     pub answered_at: Option<i64>,
     #[serde(default)]
     pub failure_reason: Option<String>,
+    /// MAIL-OWNER-1: the owner filed it away with "Archive read" (out of the Inbox; still in All mail). Never set by
+    /// itself. Absent on the wire when unset, so a Kotlin-era `mailbox.json` row reads and writes back unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archived_at: Option<i64>,
 }
 
 impl Message {
@@ -90,6 +101,10 @@ impl Message {
     }
     pub fn answered(&self) -> bool {
         self.state == MessageState::Answered
+    }
+    /// Mail to the human user ("owner", "human", "user"): it reaches the owner in every project.
+    pub fn to_owner(&self) -> bool {
+        is_owner_address(&self.to)
     }
     pub fn failed(&self) -> bool {
         self.state == MessageState::Undeliverable

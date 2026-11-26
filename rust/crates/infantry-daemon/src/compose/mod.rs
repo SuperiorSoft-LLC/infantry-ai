@@ -507,6 +507,8 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             wake_gate: env.wake_gate(),
             settings: settings::SettingsUnit { db: db.clone() },
             prompts: prompts.clone(),
+            questions: questions.clone(),
+            asker_of: asker_of.clone(),
         }));
     }
     tools.set_knowledge(knowledge.clone());

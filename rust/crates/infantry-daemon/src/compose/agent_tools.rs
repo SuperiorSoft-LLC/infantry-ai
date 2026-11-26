@@ -43,6 +43,9 @@ pub struct AgentTools {
     pub settings: super::settings::SettingsUnit,
     /// NEEDS-INPUT-1: the open question and approval cards `infantry_prompt_answer` answers.
     pub prompts: Arc<infantry_mail::notify::prompts::PendingPrompts>,
+    /// MAIL-OWNER-1: `infantry_ask` raises an owner question (a decision mail in the owner's Inbox).
+    pub questions: Arc<infantry_mail::notify::questions::OwnerQuestions>,
+    pub asker_of: infantry_mail::notify::units::AskerOf,
 }
 
 fn infos(raw: &str) -> Vec<ToolInfo> {
@@ -526,6 +529,32 @@ impl AgentTools {
                 self.daemon.restart(&r.id, flag(a, "force"))?;
                 Ok(format!("restarted {}: its next turn starts a fresh conversation", r.id))
             })(),
+            "infantry_ask" => (|| {
+                let session = inv.active_session.clone().or_else(|| inv.session_id.clone()).ok_or("infantry_ask is for an agent session (the answer is mailed to it)")?;
+                let options: Vec<infantry_protocol::prompts::PromptOption> = a
+                    .get("options")
+                    .and_then(Value::as_array)
+                    .ok_or("needs options (2 to 8 answers)")?
+                    .iter()
+                    .map(|o| match o {
+                        Value::String(l) => infantry_protocol::prompts::PromptOption { label: l.clone(), description: String::new() },
+                        o => infantry_protocol::prompts::PromptOption {
+                            label: o["label"].as_str().unwrap_or_default().to_string(),
+                            description: o["description"].as_str().unwrap_or_default().to_string(),
+                        },
+                    })
+                    .collect();
+                let req = infantry_protocol::prompts::QuestionAsk {
+                    question: s(a, "question").unwrap_or_default(),
+                    options,
+                    recommended: s(a, "recommended").unwrap_or_default(),
+                    reason: s(a, "reason").unwrap_or_default(),
+                    allow_other: true,
+                    default_after_min: n(a, "defaultAfterMin").map(|m| m.clamp(i32::MIN as i64, i32::MAX as i64) as i32),
+                };
+                let q = self.questions.ask(&(self.asker_of)(&session), &req)?;
+                Ok(json!({ "questionId": q.id, "thread": infantry_mail::notify::questions::thread_of(&q.id), "note": infantry_protocol::prompts::QuestionAsked::NON_BLOCKING_NOTE }).to_string())
+            })(),
             "infantry_attention_raise" => (|| {
                 let need = |k: &str| s(a, k).ok_or(format!("needs a {k}"));
                 let r = infantry_mail::notify::attention::AttentionRaise {
@@ -605,7 +634,7 @@ mod catalog_guard_tests {
     #[test]
     fn parity_tools_are_declared() {
         let cat = agent_catalog();
-        for (name, ro) in [("infantry_waiting", false), ("infantry_pod_state", true), ("infantry_session_restart", false), ("infantry_capability_list", true), ("infantry_attention_raise", false)] {
+        for (name, ro) in [("infantry_waiting", false), ("infantry_pod_state", true), ("infantry_session_restart", false), ("infantry_capability_list", true), ("infantry_attention_raise", false), ("infantry_ask", false)] {
             let t = cat.iter().find(|t| t.name == name).unwrap_or_else(|| panic!("{name} must be declared"));
             assert_eq!(t.read_only, ro, "{name}");
         }
@@ -633,6 +662,23 @@ mod wake_route_tests {
         let inv = ToolInvoker::automation(None, "script:test");
         let a = json!({"to": pm, "body": format!("{kind} {key}"), "subject": kind, "kind": kind, "key": key});
         c.tools.invoke("infantry_message", a.as_object().unwrap(), &inv).text
+    }
+
+    /// MAIL-OWNER-1: an agent raises an owner decision with `infantry_ask`; the owner's Inbox shows it.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn infantry_ask_raises_an_owner_question_for_the_calling_session() {
+        let (dir, _daemon, c, pm) = setup();
+        let inv = ToolInvoker::agent(&pm, "pm", None, "agent");
+        let ask = |a: Value| c.tools.invoke("infantry_ask", a.as_object().unwrap(), &inv);
+        let ok = ask(json!({"question": "Ship tonight?", "options": ["Ship", {"label": "Wait", "description": "for the phone build"}], "recommended": "Ship", "reason": "tests green"}));
+        assert!(!ok.is_error, "{}", ok.text);
+        let v: Value = serde_json::from_str(&ok.text).unwrap();
+        assert!(v["thread"].as_str().unwrap().starts_with("question:"), "{v}");
+        let one = ask(json!({"question": "?", "options": ["Only"], "recommended": "Only", "reason": "r"}));
+        assert!(one.is_error && one.text.contains("at least two options"), "{}", one.text);
+        let owner = c.tools.invoke("infantry_ask", json!({"question": "?", "options": ["a", "b"], "recommended": "a", "reason": "r"}).as_object().unwrap(), &ToolInvoker::automation(None, "script:t"));
+        assert!(owner.is_error, "only an agent session asks: {}", owner.text);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test(flavor = "multi_thread")]

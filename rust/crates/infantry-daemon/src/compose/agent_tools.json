@@ -527,5 +527,62 @@
    },
    "additionalProperties": false
   }
+ },
+ {
+  "name": "infantry_ask",
+  "readOnly": false,
+  "description": "Ask the owner ONE decision: the question in plain words, 2 to 8 answer options (2 to 4 reads best), the recommended option and a one-line reason. It shows as a decision mail at the top of the owner's Mail inbox (desktop and phone) with one button per option and a free-text answer. Non-blocking: carry on; the owner's answer arrives in your session as mail on thread question:<id>. Rate-limited per agent (3 open, 6 an hour).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "question": {
+     "type": "string",
+     "description": "The decision, in plain words (max 2000 characters)."
+    },
+    "options": {
+     "type": "array",
+     "description": "2 to 8 answers: plain labels, or {label, description}.",
+     "items": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "object",
+        "properties": {
+         "label": {
+          "type": "string"
+         },
+         "description": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "label"
+        ]
+       }
+      ]
+     }
+    },
+    "recommended": {
+     "type": "string",
+     "description": "The label of the option you recommend."
+    },
+    "reason": {
+     "type": "string",
+     "description": "Why you recommend it, one line (max 200 characters)."
+    },
+    "defaultAfterMin": {
+     "type": "integer",
+     "description": "Optional: auto-pick the recommended option after this many minutes (1-1440) if the owner has not answered."
+    }
+   },
+   "required": [
+    "question",
+    "options",
+    "recommended",
+    "reason"
+   ]
+  }
  }
 ]

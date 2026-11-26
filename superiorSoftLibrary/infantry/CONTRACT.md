@@ -2829,6 +2829,7 @@ event.
 | `mail_inbox` / `mail_outbox` | `"<sessionId>"`, blank = this connection's active session | client → daemon |
 | `mail_thread` | `"<threadId>"` | client → daemon |
 | `mail_threads`, `mail_waiting` | — | client → daemon |
+| `mail_archive` | JSON array of message ids; owner only: each read message to the owner leaves the Inbox (`archivedAt`), each change answered as `mail` | client → daemon |
 | `mail` | one `Message` (JSON) | daemon → client |
 | `mails` | list of `Message` | daemon → client |
 | `mail_threads` | list of `ThreadSummary` | daemon → client |

@@ -175,6 +175,7 @@ mod tests {
             read_at: None,
             answered_at: None,
             failure_reason: None,
+            archived_at: None,
         }
     }
 

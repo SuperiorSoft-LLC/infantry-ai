@@ -175,7 +175,14 @@ impl Mailbox {
         let mut g = self.inner.lock().unwrap();
         let mut sorted = loaded;
         sorted.sort_by(|a, b| a.sent_at.cmp(&b.sent_at).then(a.seq.cmp(&b.seq)));
-        for m in sorted {
+        for mut m in sorted {
+            // MAIL-OWNER-1: mail to the human user is never undeliverable (it reaches the owner in every project). A
+            // Kotlin-era row that failed with "no owner agent in this project" is the owner's delivered mail.
+            if m.to_owner() && m.state == MessageState::Undeliverable {
+                m.state = MessageState::Delivered;
+                m.delivered_at = m.delivered_at.or(Some(m.sent_at));
+                m.failure_reason = None;
+            }
             let cur = g.seq_by_thread.get(&m.thread_id).copied().unwrap_or(0);
             if m.seq > cur {
                 g.seq_by_thread.insert(m.thread_id.clone(), m.seq);
@@ -423,6 +430,7 @@ impl Mailbox {
             read_at: None,
             answered_at: None,
             failure_reason: None,
+            archived_at: None,
         };
         g.insert(message.clone());
         if let Some(o) = original {
@@ -525,6 +533,7 @@ impl Mailbox {
                 read_at: None,
                 answered_at: None,
                 failure_reason: None,
+                archived_at: None,
             };
             g.insert(m.clone());
             created.push(m);
@@ -580,6 +589,20 @@ impl Mailbox {
         })
     }
 
+    /// MAIL-OWNER-1: the owner's "Archive read": each given message to the owner that is read (or answered) leaves the
+    /// Inbox. Unread mail, and mail not to the owner, is left as it is. Answers the messages that changed.
+    pub fn archive_by_owner(&self, ids: &[String]) -> Vec<Message> {
+        ids.iter()
+            .filter_map(|id| {
+                let before = self.message(id)?;
+                let after = self.transition(id, |m, now| {
+                    (m.to_owner() && m.archived_at.is_none() && m.read()).then(|| Message { archived_at: Some(now), ..m.clone() })
+                })?;
+                (after != before).then_some(after)
+            })
+            .collect()
+    }
+
     /// Ids a pre-delivery hook is still deciding: no pump may deliver or fold them meanwhile.
     pub fn hold(&self, id: &str) {
         self.held.lock().unwrap().insert(id.to_string());
@@ -628,6 +651,8 @@ impl Mailbox {
         if cur.state != MessageState::Queued {
             return vec![];
         }
+        // MAIL-OWNER-1: mail to the human user never fails; it is in the owner's inbox, so it is delivered.
+        let (state, reason) = if state == MessageState::Undeliverable && cur.to_owner() { (MessageState::Delivered, None) } else { (state, reason) };
         let next = match state {
             MessageState::Delivered => Message { state, delivered_at: Some((self.clock)()), ..cur },
             _ => Message { state, failure_reason: reason, ..cur },
@@ -718,6 +743,45 @@ pub(crate) mod tests {
 
     fn req(from: &str, to: &str, body: &str) -> MailSendRequest {
         MailSendRequest { from: from.into(), to: to.into(), body: body.into(), ..Default::default() }
+    }
+
+    #[test]
+    fn mail_to_the_owner_never_fails_and_old_failed_rows_load_as_delivered() {
+        let store = Arc::new(MemoryMailStore::default());
+        let old = Message {
+            id: "k1".into(), thread_id: "pair:owner|w".into(), seq: 1, from: "w".into(), to: "owner".into(), subject: "s".into(), body: "b".into(),
+            sent_at: 5, state: MessageState::Undeliverable, reply_to: None, checkpoint: None, needs_input: false, delivered_at: None, read_at: None,
+            answered_at: None, failure_reason: Some("no owner agent in this project".into()), archived_at: None,
+        };
+        let other = Message { id: "k2".into(), to: "pm".into(), ..old.clone() };
+        store.save_all(&[old, other]).unwrap();
+        let mb = Mailbox::new(store);
+        mb.load();
+        let k1 = mb.message("k1").unwrap();
+        assert_eq!((k1.state, k1.failure_reason, k1.delivered_at), (MessageState::Delivered, None, Some(5)));
+        assert_eq!(mb.message("k2").unwrap().state, MessageState::Undeliverable, "only the owner's mail is mended");
+
+        let (mb, _) = mailbox(MailLimits::default());
+        mb.send(&req("w", "owner", "hi"), false);
+        mb.deliver_queued("owner", &Fake(Default::default(), "gone"));
+        assert_eq!(mb.message("m1").unwrap().state, MessageState::Delivered);
+        assert_eq!(mb.drop_queued("pair:owner|w", "owner", "x", |_| true), 0, "nothing queued is left to fail");
+    }
+
+    #[test]
+    fn archive_by_owner_takes_only_read_owner_mail() {
+        let (mb, _) = mailbox(MailLimits::default());
+        mb.send(&req("w", "owner", "read one"), false);
+        mb.send(&req("w", "owner", "unread one"), false);
+        mb.send(&req("owner", "w", "mine"), false);
+        mb.mark_read_by_owner("m1");
+        let changed = mb.archive_by_owner(&["m1".into(), "m2".into(), "m3".into(), "nope".into()]);
+        assert_eq!(changed.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), ["m1"]);
+        assert!(mb.message("m1").unwrap().archived_at.is_some());
+        assert!(mb.message("m2").unwrap().archived_at.is_none());
+        assert!(mb.archive_by_owner(&["m1".into()]).is_empty(), "archiving twice changes nothing");
+        let wire = serde_json::to_string(&mb.message("m2").unwrap()).unwrap();
+        assert!(!wire.contains("archivedAt"), "unset stays off the wire: {wire}");
     }
 
     #[test]

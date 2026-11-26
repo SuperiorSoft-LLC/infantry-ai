@@ -28,6 +28,7 @@ pub static COMMANDS: &[&Command] = &[
     &super::cmd_sessions::SESSION,
     &super::cmd_sessions::KILL,
     &super::cmd_prompt::PROMPT,
+    &super::cmd_ask::ASK,
     // -- health / usage / settings / scripts / secrets / run / install --
     &super::tools_cmds::SCRIPT,
     &super::tools_cmds::SECRET,
@@ -49,4 +50,9 @@ pub static COMMANDS: &[&Command] = &[
 
 pub fn find(name: &str) -> Option<&'static Command> {
     COMMANDS.iter().copied().find(|c| c.name == name)
+}
+
+/// [find], for these words: a command only partly native leaves its other forms to the launcher.
+pub fn find_for(name: &str, p: &super::args::Parsed) -> Option<&'static Command> {
+    find(name).filter(|_| name != "ask" || super::cmd_ask::is_native(p))
 }

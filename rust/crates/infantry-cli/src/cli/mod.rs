@@ -15,6 +15,7 @@ pub mod cmd_sessions;
 pub mod cmd_runner;
 pub mod cmd_board;
 mod cmd_harness;
+mod cmd_ask;
 mod cmd_prompt;
 pub mod cmd_ticket;
 pub mod plugin_tools;
@@ -362,7 +363,7 @@ pub fn run(argv: &[String], io: &mut dyn Io, getenv: Getenv, delegate: Option<&d
         io.err(usage::USAGE);
         return 2;
     }
-    let Some(cmd) = registry::find(&command) else {
+    let Some(cmd) = registry::find_for(&command, &parsed) else {
         if let Some(code) = delegate.and_then(|d| d(argv)) {
             return code;
         }

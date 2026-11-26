@@ -79,7 +79,7 @@ impl FrameUnit for MailUnit {
     }
 
     fn frames(&self) -> &'static [&'static str] {
-        &[f::MAIL_SEND, f::MAIL_READ, f::MAIL_INBOX, f::MAIL_OUTBOX, f::MAIL_THREAD, f::MAIL_THREADS, f::MAIL_WAITING]
+        &[f::MAIL_SEND, f::MAIL_READ, f::MAIL_INBOX, f::MAIL_OUTBOX, f::MAIL_THREAD, f::MAIL_THREADS, f::MAIL_WAITING, f::MAIL_ARCHIVE]
     }
 
     fn handle(&self, env: &Envelope, ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
@@ -112,6 +112,13 @@ impl FrameUnit for MailUnit {
                     Some(m) => Ok(vec![reply(env, f::MAIL, json(&m))]),
                     None => Ok(vec![reply(env, f::ERROR, format!("unknown or unreadable message '{id}'"))]),
                 }
+            }
+            f::MAIL_ARCHIVE => {
+                if !ctx.owner || env.session_id.is_some() {
+                    return Err(Refusal::new(f::MAIL_ARCHIVE, "only the owner archives the owner's mail"));
+                }
+                let ids: Vec<String> = serde_json::from_str(env.data.trim()).map_err(|_| Refusal::new(f::MAIL_ARCHIVE, "data must be a JSON array of message ids"))?;
+                Ok(mb.archive_by_owner(&ids).iter().map(|m| reply(env, f::MAIL, json(m))).collect())
             }
             f::MAIL_INBOX | f::MAIL_OUTBOX => {
                 let who = Self::subject(env, ctx);

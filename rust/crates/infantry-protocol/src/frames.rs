@@ -74,6 +74,8 @@ pub const MAIL: &str = "mail";
 pub const MAILS: &str = "mails";
 pub const MAIL_THREADS: &str = "mail_threads";
 pub const MAIL_WAITING: &str = "mail_waiting";
+/// MAIL-OWNER-1: the owner files read mail away (data: a JSON array of message ids); each changed message comes back as `mail`.
+pub const MAIL_ARCHIVE: &str = "mail_archive";
 pub const BG_JOB: &str = "bg_job";
 pub const PROGRESS: &str = "progress";
 pub const WAITING: &str = "waiting";
@@ -402,6 +404,7 @@ pub const ALL: &[&str] = &[
     MAILS,
     MAIL_THREADS,
     MAIL_WAITING,
+    MAIL_ARCHIVE,
     BG_JOB,
     PROGRESS,
     WAITING,
