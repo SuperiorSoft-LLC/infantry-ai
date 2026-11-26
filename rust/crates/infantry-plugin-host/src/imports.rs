@@ -652,6 +652,9 @@ mod secrets_tests {
         assert!(undeclared_secret("Acme", &declared, "plugin_secret_clear", "{}").is_some(), "no field is not a declared field");
         assert_eq!(undeclared_secret("Acme", &[], "plugin_secret_get", r#"{"field":"ANY"}"#), None, "an empty list leaves the field free");
         assert_eq!(undeclared_secret("Acme", &declared, "ticket_list", "{}"), None, "other frames are not touched");
+    }
+}
+
 #[cfg(test)]
 mod runtime_hosts_tests {
     use super::*;
