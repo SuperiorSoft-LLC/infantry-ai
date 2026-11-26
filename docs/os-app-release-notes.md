@@ -1,4 +1,7 @@
-Infantry AI 0.8.6 as a BattalionOS app.
+Infantry AI 0.8.7 as a BattalionOS app.
 
 What changed for you:
-- Infantry AI Hosting sign-in now reaches the real service. 0.8.4 and 0.8.5 shipped the hosting plugin pointed at a local test address (127.0.0.1:18953), so Sign in failed with "Connection Failed". Sign in again after updating.
+- Sessions waiting on a tool approval or a question now count under "Needs input", so you see every session that is waiting on you.
+- The CLI: `ticket create` refuses a project that does not exist, `ticket comment` takes `--kind` and `--state`, and `ticket move/show/get` accept a short ticket id.
+- Chat images and notes reach sessions that have no project.
+- The CLI and the daemon read one shared contract version.
