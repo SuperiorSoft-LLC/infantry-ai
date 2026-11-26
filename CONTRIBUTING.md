@@ -67,7 +67,8 @@ and crash. More detail: [QUICKSTART.md](superiorSoftLibrary/infantry/docs/QUICKS
 - The body says **why**, and anything a reviewer cannot see from the diff (what you tested, what you did not).
 - Never commit secrets: keys, keystores, tokens and passwords belong in `secrets.local.properties` (gitignored) or
   environment variables. `./gradlew verifySecretsNotTracked` fails if one is tracked.
-- Wire-protocol changes update `CONTRACT.md` and its version in the same commit.
+- Wire-protocol changes update `rust/crates/infantry-protocol/CONTRACT.md` and its version in the same commit, then
+  regenerate the reference pages with `scripts/docs-gen-reference.sh`.
 
 ## Pull requests
 

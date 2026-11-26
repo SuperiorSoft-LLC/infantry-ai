@@ -46,7 +46,7 @@ The Kotlin/Gradle version is kept on the `legacy-java` branch. Every section bel
 | `rust/` | The Cargo workspace. `rust/crates/*` holds the core crates; `rust/plugins/official/*` holds the official plugins. |
 | `rust/crates/infantry-daemon` | The daemon: tokio and axum, serves `/ws` (v1 WebSocket) and `/health`. Composition root. |
 | `rust/crates/infantry-distribution` | The `infantry-daemon` binary (`main.rs`): links the daemon library and the concrete harnesses. |
-| `rust/crates/infantry-cli` | The native `infantry` binary: serves `infantry mcp serve` and most other commands itself. A command it does not have is handed to the Kotlin launcher (see [Command line](docs/wiki/CommandLine.md)). |
+| `rust/crates/infantry-cli` | The native `infantry` binary: serves `infantry mcp serve` and most other commands itself. A command it does not have is handed to the Kotlin launcher (see the [CLI reference](docs/wiki/reference/cli.md)). |
 | `rust/crates/infantry-protocol` | The wire contract: `Envelope`, DTOs and frame names. |
 | `rust/crates/infantry-core` | Platform core: the `FrameUnit` registry, event bus, db handle, settings. |
 | `rust/crates/infantry-plugin-wit`, `infantry-plugin-host`, `infantry-plugin-sdk` | The plugin ABI (WIT), the host (wasmtime components and native sidecars) and the SDK a plugin builds with. |
@@ -161,6 +161,7 @@ Rust guards, run with `cargo test -p infantry-guards` (and each crate's own test
 | `every_workspace_crate_respects_the_layer_map` | Dependencies point down only; every crate is in the layer map (`layers.rs`). |
 | `core_names_no_plugin_id` | Core crates name no plugin id. |
 | `no_spawn_bypasses_the_windowless_helper` | Every child process goes through `infantry-proc`. |
+| `reference_docs_are_fresh` | `docs/wiki/reference/*.md` match the code; regenerate with `scripts/docs-gen-reference.sh`. |
 
 Port guards in tests: no test binds 8787, 8788, 8797 or 8798 (rule 6).
 

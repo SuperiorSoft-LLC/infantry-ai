@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 //! `infantry` (native): serves `infantry mcp serve` itself, with the Kotlin command's arguments, environment, output and
 //! exit codes, and hands every other command to the JVM launcher unchanged. Swapping the binary a session's MCP entry runs
-//! is the only change (docs/rust-port/MCP-BRIDGE.md).
+//! is the only change (docs/wiki/reference/mcp-tools.md).
 
 mod cli;
 mod config;

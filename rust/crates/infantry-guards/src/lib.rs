@@ -10,3 +10,4 @@ pub mod check;
 pub mod features;
 pub mod layers;
 pub mod licences;
+pub mod reference_docs;

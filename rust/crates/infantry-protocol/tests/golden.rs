@@ -147,11 +147,11 @@ fn frame_table() {
     assert_eq!(frames::CORRELATED_REQUESTS.len(), 12);
 }
 
-/// Every frame named in the Kotlin CONTRACT.md has a constant, and every constant is documented there
+/// Every frame named in CONTRACT.md (this crate's wire contract text) has a constant, and every constant is documented there
 /// (the Kotlin `ContractFrameDocTest` has the same short allow-list of undocumented frames).
 #[test]
 fn contract_md_and_constants_agree() {
-    let doc = include_str!("../../../../superiorSoftLibrary/infantry/CONTRACT.md");
+    let doc = include_str!("../CONTRACT.md");
     const UNDOCUMENTED: [&str; 5] = ["session_mcp_reconnect", "mcp_declare", "waiting", "health", "secret_login"];
     for f in frames::ALL {
         if UNDOCUMENTED.contains(f) {
