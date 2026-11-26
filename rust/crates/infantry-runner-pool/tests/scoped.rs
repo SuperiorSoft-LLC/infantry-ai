@@ -183,3 +183,23 @@ fn only_the_owner_may_ask() {
     assert!(unit.handle(&env, &FrameCtx { conn_id: 7, owner: false, bus: infantry_core::frames::EventBus::new(16) }).is_err());
     let _ = std::fs::remove_dir_all(t);
 }
+
+/// BUG 3ac8e2e9: an older runner (its link offers no `runner_link_frame`) passed Check green, then refused `providers`, so
+/// no agent could start on it. Check now says it is too old to list its tools and names Update runner.
+#[test]
+fn check_flags_a_runner_too_old_to_answer_providers() {
+    let t = tmp("old");
+    let local = Fake::new("/orch/harness-tools");
+    let inner = ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default()));
+    let rs = RunnerServe::start(&t.join("runner"), Box::new(inner), opts()).unwrap();
+    let (pool, _unit) = orchestrator(&t, &local);
+    pair(&pool, &rs);
+    let admin = infantry_runner_pool::AdminUnit { pool: pool.clone(), lend: None };
+    let env = Envelope::new(infantry_runner_pool::ADMIN_FRAME, serde_json::json!({"op": "check", "name": "box"}).to_string());
+    let a = admin.handle(&env, &FrameCtx { conn_id: 7, owner: true, bus: infantry_core::frames::EventBus::new(16) }).unwrap().remove(0);
+    let v: serde_json::Value = serde_json::from_str(&a.data).unwrap();
+    let tools = v["rows"].as_array().unwrap().iter().find(|r| r["id"] == "tools").unwrap_or_else(|| panic!("no tools row: {v}"));
+    assert_eq!(tools["ok"], false, "{v}");
+    assert!(tools["detail"].as_str().unwrap().contains("too old") && tools["fix"].as_str().unwrap().contains("Update runner"), "{v}");
+    let _ = std::fs::remove_dir_all(t);
+}

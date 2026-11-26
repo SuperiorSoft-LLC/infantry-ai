@@ -127,6 +127,15 @@ impl AdminUnit {
         };
         let mut rows = rows;
         if matches!(state, RunnerState::Online { .. }) {
+            // BUG 3ac8e2e9: an older runner speaks the contract but offers no `runner_link_frame`, so it cannot list its
+            // tools and no agent can start on it. Check says so instead of passing green.
+            if let Some(entry) = infantry_runner_source::RunnerSource::entry(self.pool.as_ref(), name) {
+                if let Err(e) = entry.scope.request("providers", "{}") {
+                    if e.contains(infantry_runner_link::wire::NOT_OFFERED) {
+                        rows.push(row("tools", false, format!("this runner is too old to list its tools, so no agent can start on it ({e})"), Some("Update runner")));
+                    }
+                }
+            }
             rows.extend(self.credential_rows(name, d, ping_harnesses));
         }
         for r in &rows {
