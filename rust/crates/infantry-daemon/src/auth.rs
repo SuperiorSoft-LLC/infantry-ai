@@ -95,13 +95,15 @@ pub fn is_loopback_host(h: &str) -> bool {
     h == "localhost" || h == "::1" || h.starts_with("127.")
 }
 
-/// An `http(s)://` origin whose host is the loopback address (`127.x`, `localhost`, `[::1]`).
+/// An `http(s)://` origin whose host is the loopback address (`127.x`, `localhost`, `[::1]`) or a `*.localhost` name (RFC 6761: always
+/// loopback; a browser never gives a site elsewhere such an origin). AND-3b: BattalionOS on a phone serves an app's page at
+/// `http://<app-id>.bos.localhost` (request interception, no port), so that is the phone page's origin now.
 fn is_loopback_origin(origin: &str) -> bool {
     let o = origin.trim().to_ascii_lowercase();
     let rest = o.strip_prefix("http://").or_else(|| o.strip_prefix("https://"));
     rest.is_some_and(|r| {
         let h = host_name(r);
-        !r.contains('/') && (h == "localhost" || h.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback()))
+        !r.contains('/') && (h == "localhost" || (h.ends_with(".localhost") && h.len() > ".localhost".len()) || h.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback()))
     })
 }
 
@@ -281,6 +283,12 @@ mod tests {
         assert_eq!(p.check("/health", Some("192.168.1.20:18990"), phone, None, Some(&proto)).map(|r| r.status), Some(403));
         assert_eq!(p.check("/ws", Some("192.168.1.20:18990"), Some("http://evil.example"), None, Some(&proto)).map(|r| r.status), Some(403));
         assert_eq!(p.check("/ws", Some("192.168.1.20:18990"), Some("http://127.0.0.1.evil.example"), None, Some(&proto)).map(|r| r.status), Some(403));
+        // AND-3b: the phone's page at its own `<app-id>.bos.localhost` origin is admitted the same way; a look-alike is not
+        let bos = Some("http://infantry-ai.bos.localhost");
+        assert_eq!(p.check("/ws", Some("192.168.1.20:18990"), bos, None, Some(&proto)), None);
+        assert_eq!(p.check("/ws", Some("192.168.1.20:18990"), bos, None, None).map(|r| r.status), Some(401));
+        assert_eq!(p.check("/ws", Some("192.168.1.20:18990"), Some("http://bos.localhost.evil.example"), None, Some(&proto)).map(|r| r.status), Some(403));
+        assert_eq!(p.check("/ws", Some("192.168.1.20:18990"), Some("http://evil.example/x.localhost"), None, Some(&proto)).map(|r| r.status), Some(403));
         // without a token nothing changes: a loopback page from elsewhere is not admitted
         let open = AccessPolicy::new("127.0.0.1", None).unwrap();
         assert_eq!(open.check("/ws", Some("10.0.2.2:18990"), phone, None, None).map(|r| r.status), Some(403));
