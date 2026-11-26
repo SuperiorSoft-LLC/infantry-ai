@@ -80,6 +80,11 @@ pub struct DaemonDecl {
     /// are refused. Official and core modules only: a community module that declares any is refused at load.
     #[serde(default)]
     pub owner_frames: Vec<String>,
+    /// Frame types this plugin may push to every connected client (`daemon.pushFrames`, through `events.broadcast`).
+    /// A type not listed here is refused; a core type (sessions, tickets, auth, ...) is refused whatever is listed
+    /// (see [`crate::imports::reserved_push_type`]). A community module needs the `daemon.frame.push` grant to list any.
+    #[serde(default)]
+    pub push_frames: Vec<String>,
     #[serde(default)]
     pub hooks: Vec<String>,
     #[serde(default)]

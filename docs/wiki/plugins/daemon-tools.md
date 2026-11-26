@@ -68,7 +68,7 @@ whose `needs` cannot be granted does not load; a refused `wants` entry fails eac
 | `config` | `module-id`, `tier`, `api-version`, `environment`, `get(key)`, `endpoint(name)` | [Configure](configure.md), [Endpoints](endpoints.md) |
 | `settings` | `get`, `set`, `remove` | stored as `<Module>.<key>` |
 | `storage` | `kv-get`, `kv-set`, `kv-delete`, `kv-keys(prefix)`, `execute(sql, params)`, `query(sql, params)` | SQL may name only tables prefixed `<module id in lower case>_` (plus `storage.adopt` tables) |
-| `events` | `publish(name, payload, cause-id)`, `subscribe(glob)`, `unsubscribe(id)`, `broadcast(type, data)` | subscribed events arrive at `on-event`; `broadcast` pushes a frame to every client |
+| `events` | `publish(name, payload, cause-id)`, `subscribe(glob)`, `unsubscribe(id)`, `broadcast(type, data)` | subscribed events arrive at `on-event`; `broadcast` pushes a frame to every client, only of a type listed in `daemon.pushFrames`; core types (session*, ticket*, auth*, agent*, prompt*, vault, plugin*, ...) are refused for every tier, and a community module may push no core protocol name at all. The envelope carries `origin: {type:"system", kind:"plugin:<id>"}` |
 | `http` | `send(request)` | only to `daemon.endpoints` addresses |
 | `frames` | `request(type, data, session-id, timeout-ms)` | a frame into the daemon, as a non-owner unless the type is in `ownerFrames`; also the way to [secrets](secrets.md) |
 

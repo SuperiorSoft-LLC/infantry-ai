@@ -389,6 +389,9 @@ fn refusal(tier: Tier, d: &DaemonDecl, allow: &BTreeSet<String>) -> Result<(), S
     if let Some(f) = d.frames.iter().find(|f| CORE_FRAMES.contains(&f.r#type.as_str())) {
         return Err(format!("frame '{}' is core's", f.r#type));
     }
+    if let Some(f) = d.push_frames.iter().find(|f| crate::imports::reserved_push_type(tier, f)) {
+        return Err(format!("daemon.pushFrames: '{f}' is a core frame type (no plugin may push it)"));
+    }
     for (name, envs) in &d.endpoints {
         for (env, url) in envs {
             let lower = url.to_lowercase();
@@ -427,6 +430,10 @@ fn refusal(tier: Tier, d: &DaemonDecl, allow: &BTreeSet<String>) -> Result<(), S
     }
     if !d.frames.is_empty() {
         needed.push("daemon.frame".to_string());
+    }
+    // PLUGIN-BROADCAST-1: pushing frames to every client is its own grant, shown at install.
+    if !d.push_frames.is_empty() {
+        needed.push("daemon.frame.push".to_string());
     }
     needed.extend(d.hooks.iter().map(|h| format!("daemon.hook.{h}")));
     if let Some(g) = needed.iter().find(|g| !allow.contains(*g)) {
@@ -486,6 +493,16 @@ mod tests {
         assert!(refusal(Tier::Official, &bad, &none).unwrap_err().contains("https"));
         let newer: DaemonDecl = serde_json::from_str(r#"{"apiAtLeast":"0.9.0"}"#).unwrap();
         assert!(refusal(Tier::Official, &newer, &none).is_err());
+        // PLUGIN-BROADCAST-1: a core push type refuses the module; community pushing needs daemon.frame.push.
+        let core: DaemonDecl = serde_json::from_str(r#"{"pushFrames":["ticket_list"]}"#).unwrap();
+        assert!(refusal(Tier::Official, &core, &none).unwrap_err().contains("core frame type"));
+        let push: DaemonDecl = serde_json::from_str(r#"{"pushFrames":["acme_x_item"]}"#).unwrap();
+        assert!(refusal(Tier::Official, &push, &none).is_ok());
+        let code: BTreeSet<String> = ["daemon.code".to_string()].into();
+        assert!(refusal(Tier::Community, &push, &code).unwrap_err().contains("daemon.frame.push"));
+        let mut code_push = code.clone();
+        code_push.insert("daemon.frame.push".into());
+        assert!(refusal(Tier::Community, &push, &code_push).is_ok());
         let kotlin: DaemonDecl = serde_json::from_str(r#"{"apiAtLeast":"1.48.0"}"#).unwrap();
         assert!(refusal(Tier::Official, &kotlin, &none).is_ok());
     }

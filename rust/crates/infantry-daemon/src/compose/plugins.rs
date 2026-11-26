@@ -690,8 +690,11 @@ impl HostServices for DaemonServices {
         self.bus.emit(name, v);
         Ok(NamedEvent { name: name.into(), payload: payload.into(), source: module.into(), id, cause_id: cause_id.unwrap_or_default().into(), ..Default::default() })
     }
-    fn broadcast(&self, _module: &str, r#type: &str, data: &str) {
-        self.bus.publish(Envelope::new(r#type, data));
+    fn broadcast(&self, module: &str, r#type: &str, data: &str) {
+        // PLUGIN-BROADCAST-1: the host already scoped the type; the envelope names the module that pushed it.
+        let mut env = Envelope::new(r#type, data);
+        env.origin = Some(infantry_protocol::MessageOrigin::System { kind: format!("plugin:{module}") });
+        self.bus.publish(env);
     }
     fn http_send(&self, _module: &str, req: HttpRequest) -> Result<HttpResponse, String> {
         let timeout = req.timeout_ms.map(u64::from).unwrap_or(HTTP_TIMEOUT_MS);

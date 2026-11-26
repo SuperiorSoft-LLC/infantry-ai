@@ -62,6 +62,7 @@ points `wit_bindgen::generate!` at `../../../crates/infantry-plugin-wit/wit` ins
 | `tools` | `[{name, action, kind, description, inputSchema, timeoutMs}]`. `name` must match `^[a-z][a-z0-9_]{2,63}$`; `kind` is `read` (the default), `write` or `destructive`. |
 | `frames` | `[{type, action, kind, ownerOnly, timeoutMs}]`: WebSocket frame types it answers. |
 | `ownerFrames` | Frame types it may send into the daemon with the owner's authority (official and core modules only). |
+| `pushFrames` | Frame types it may push to every client with `events.broadcast`. Core types are refused at load. A community module needs the `daemon.frame.push` grant (shown at install; not given by default). |
 | `hooks` | Hook kinds it answers: `frameGate`, `connected`, `httpGate`, `admission`, `mailGate`, `incomingMail`, `spawnGate`, `ready`, `turns`, `sessions`, `policyProvider`, `orchestratorBinding`, `runnerBinding`, `usageReading`, `runnerLinkTransport`, `seats`, `approvalRules`, `status`. |
 | `routes`, `publicRoutes` | HTTP routes it serves (`publicRoutes` need no daemon token). |
 | `config` | Settings it declares: see [Configure](configure.md). |

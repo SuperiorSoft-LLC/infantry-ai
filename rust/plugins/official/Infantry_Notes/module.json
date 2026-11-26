@@ -18,6 +18,7 @@
   "daemon": {
     "component": "daemon.component",
     "needs": ["storage", "frames", "events"],
+    "pushFrames": ["decision_item", "issue_item"],
     "wants": ["settings"],
     "apiAtLeast": "1.59.0",
     "storage": { "adopt": ["decisions", "issues", "issue_events", "memory_notes"] },

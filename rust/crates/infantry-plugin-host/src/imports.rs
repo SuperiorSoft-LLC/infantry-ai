@@ -255,8 +255,16 @@ impl PluginImports {
     pub fn unsubscribe(&self, id: u64) {
         self.subscriptions.lock().unwrap().retain(|(i, _)| *i != id);
     }
+    /// PLUGIN-BROADCAST-1: pushes a frame to every client, only of a type this module declared in `daemon.pushFrames`
+    /// and never a core type (the daemon stamps the source module on the envelope).
     pub fn broadcast(&self, r#type: &str, data: &str) -> Result<(), String> {
         self.check("events")?;
+        if reserved_push_type(self.tier, r#type) {
+            return Err(format!("broadcast refused: '{}' is a core frame type; {} may not push it", r#type, self.module_id));
+        }
+        if !self.decl.push_frames.iter().any(|f| f == r#type) {
+            return Err(format!("broadcast refused: '{}' is not in {}'s daemon.pushFrames", r#type, self.module_id));
+        }
         self.services.broadcast(&self.module_id, r#type, data);
         Ok(())
     }
@@ -432,10 +440,54 @@ pub fn glob(pattern: &str, name: &str) -> bool {
     true
 }
 
+/// Frame-type families that only core may push to clients: sessions and their output, tickets, auth and pairing,
+/// agents, prompts, the vault, plugin admin, settings. No plugin of any tier may push them.
+const CORE_PUSH_PREFIXES: &[&str] = &[
+    "session", "ticket", "auth", "token", "pair", "hello", "ready", "error", "stdout", "stderr", "exit", "prompt", "assistant",
+    "turn", "agent", "queue", "run", "vault", "secret", "plugin", "mcp", "settings", "project", "account", "update", "installer",
+];
+
+/// Whether a plugin of `tier` may never push frame type `t` (PLUGIN-BROADCAST-1). Core families are refused for every
+/// tier; a community module may in addition push no name of the core protocol at all (`infantry_protocol::frames::ALL`).
+pub fn reserved_push_type(tier: Tier, t: &str) -> bool {
+    let t = t.trim().to_ascii_lowercase();
+    if t.is_empty() || CORE_PUSH_PREFIXES.iter().any(|p| t.starts_with(p)) || crate::host::CORE_FRAMES.contains(&t.as_str()) {
+        return true;
+    }
+    tier == Tier::Community && infantry_protocol::frames::ALL.contains(&t.as_str())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::services::MemoryServices;
+
+    fn pusher(tier: Tier, grants: &[&str], push: &[&str]) -> (PluginImports, Arc<MemoryServices>) {
+        let decl = DaemonDecl { push_frames: push.iter().map(|s| s.to_string()).collect(), ..Default::default() };
+        let svc = Arc::new(MemoryServices::new());
+        (PluginImports::new("Acme_X", tier, decl, svc.clone(), grants.iter().map(|s| s.to_string()).collect(), BTreeSet::new()), svc)
+    }
+
+    #[test]
+    fn broadcast_is_scoped_to_declared_non_core_types() {
+        let (i, svc) = pusher(Tier::Official, &["events"], &["acme_x_item", "ticket_list", "sessions"]);
+        i.broadcast("acme_x_item", "{}").unwrap();
+        // Core types are refused even when declared.
+        for t in ["ticket_list", "sessions", "session_state", "auth_ok", "ready", "error", "plugin_tools", "SESSIONS"] {
+            assert!(i.broadcast(t, "{}").unwrap_err().contains("core frame type"), "{t}");
+        }
+        assert!(i.broadcast("acme_x_other", "{}").unwrap_err().contains("daemon.pushFrames"));
+        assert_eq!(svc.broadcasts.lock().unwrap().len(), 1);
+        // Without the events grant: refused.
+        let (i, svc) = pusher(Tier::Official, &[], &["acme_x_item"]);
+        assert!(i.broadcast("acme_x_item", "{}").unwrap_err().contains("not granted"));
+        assert!(svc.broadcasts.lock().unwrap().is_empty());
+        // Community: no core-protocol name at all, even one an official plugin may push.
+        let (i, _) = pusher(Tier::Community, &["events"], &["trigger", "acme_x_item"]);
+        assert!(i.broadcast("trigger", "{}").unwrap_err().contains("core frame type"));
+        i.broadcast("acme_x_item", "{}").unwrap();
+        assert!(!reserved_push_type(Tier::Official, "trigger") && !reserved_push_type(Tier::Official, "decision_item"));
+    }
 
     fn imports(grants: &[&str]) -> PluginImports {
         let decl = DaemonDecl { endpoints: [("api".to_string(), [("prod".to_string(), "https://api.example/v1".to_string())].into())].into(), ..Default::default() };
