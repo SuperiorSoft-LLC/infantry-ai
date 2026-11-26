@@ -201,6 +201,8 @@ export function parseUsageFit(text: string | null | undefined): UsageFitView | n
 
 export const PACE_TREND_WORD: Record<PaceTrend, string> = { RISING: "Rising", FLAT: "Flat", FALLING: "Falling", UNKNOWN: "Not enough data" };
 const TREND_ARROW: Record<PaceTrend, string> = { RISING: "▲", FLAT: "▬", FALLING: "▼", UNKNOWN: "•" };
+/** Trend chip colour (owner 11-19): rising = ahead of pace = red, falling = under pace = green. */
+export const PACE_TREND_TONE = { RISING: "red", FALLING: "green", FLAT: "neutral", UNKNOWN: "neutral" } as const satisfies Record<PaceTrend, string>;
 
 /** Arrow plus word, never colour alone. */
 export function paceTrendLabel(t: PaceTrend): string {

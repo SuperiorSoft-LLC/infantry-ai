@@ -6,7 +6,7 @@
 import { useMemo, useState } from "react";
 import { TrendingUp } from "lucide-react";
 import {
-  PACE_METRIC_LABEL, PACE_METRIC_TOGGLE, PACE_RANGES, paceCaption, paceScalePresets, paceShowsForecast, paceSpec, paceTrendLabel, parsePaceScale, ruleLine,
+  PACE_METRIC_LABEL, PACE_METRIC_TOGGLE, PACE_RANGES, paceCaption, paceScalePresets, paceShowsForecast, PACE_TREND_TONE, paceSpec, paceTrendLabel, parsePaceScale, ruleLine,
   type PaceMetric, type PaceRange, type PaceScale, type PaceSeries,
 } from "@infantry/client";
 import { Button, Chip, EmptyState, Input, PanelCard, ToggleGroup, ToggleGroupItem } from "@infantry/ui";
@@ -16,7 +16,6 @@ import { PaceChart, PaceLegend } from "./pace-chart";
 import { UsageFitSection } from "./usage-fit";
 import { useKeepPaceFresh, usePace } from "./use-pace";
 
-const TREND_TONE = { RISING: "red", FALLING: "green", FLAT: "neutral", UNKNOWN: "neutral" } as const;
 
 function Segmented<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { id: T; label: string }[]; onChange: (v: T) => void }) {
   return (
@@ -46,7 +45,7 @@ function PaceCard({ s, now }: { s: PaceSeries; now: number }) {
   return (
     <PanelCard
       title={`${s.provider} · ${s.window}`}
-      action={<Chip tone={TREND_TONE[s.trend]}>{paceTrendLabel(s.trend)}</Chip>}
+      action={<Chip tone={PACE_TREND_TONE[s.trend]}>{paceTrendLabel(s.trend)}</Chip>}
       className="min-w-0"
     >
       <p className="-mt-1 mb-2 text-xs text-muted-foreground">{paceCaption(s)}</p>
