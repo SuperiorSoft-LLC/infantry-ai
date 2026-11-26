@@ -89,7 +89,6 @@ pub const LAYERS: &[(&str, Layer, u8)] = &[
     // The board (tickets on infantry.db, lane rules, ticket_* unit, LocalOrchestrator); a wasm plugin once the WIT storage SQL exists.
     ("infantry-board", Layer::Orchestration, 1),
     ("infantry-board-daemon", Layer::Plugin, 0),
-    ("infantry-news-daemon", Layer::Plugin, 0),
     ("infantry-health-daemon", Layer::Plugin, 0),
     ("infantry-daemon", Layer::Top, 0),
     ("infantry-distribution", Layer::Top, 0),

@@ -15,13 +15,6 @@ Declared by the official plugins (`module.json` `daemon.config`); the Settings t
 | `cards.images.allow` | text | `` | daemon | Infantry_Cards / Chat cards | Extra image hosts for every card type (comma separated; example.com exact, *.example.com any subdomain) |
 | `limits.cards.imageBytes` | number | `2097152` | daemon | Infantry_Cards / Chat cards | Largest card image fetched (bytes) |
 | `cards.specMaxBytes` | number | `16384` | daemon | Infantry_Cards / Chat cards | Largest spec returned by cards.show (bytes) |
-| `news.items` | number | `6` | daemon | Infantry_News / News | Headlines per answer (when the agent does not say) |
-| `news.language` | text | `en-US` | daemon | Infantry_News / News | Language (Google News hl, e.g. en-US, en-GB, de) |
-| `news.country` | text | `US` | daemon | Infantry_News / News | Country edition (Google News gl, e.g. US, GB, DE) |
-| `news.sourceIcons` | checkbox | `true` | daemon | Infantry_News / News | Show each source's site icon when a headline has no thumbnail (one cached image fetch per source) |
-| `limits.news.maxItems` | number | `20` | daemon | Infantry_News / News | Most headlines one call returns |
-| `limits.news.cacheMinutes` | number | `5` | daemon | Infantry_News / News | Reuse a fetched feed for (minutes, 0 = always fetch) |
-| `limits.news.feedBytes` | number | `2097152` | daemon | Infantry_News / News | Largest feed read (bytes) |
 | `knowledge.globalWriteRoles` | text | `pm` | daemon | Infantry_Notes / Knowledge | Roles that may write global notes. Comma-separated role ids. The owner (no session) may always write. Every agent may read. |
 | `sites.refreshSeconds` | number | `30` | app | Infantry_Sites / Sites | Re-read the server list every (seconds, 0 = off) |
 | `triggers.at.maxLateMs` | number | `900000` | daemon | Infantry_Triggers / Triggers | A one-shot found this many milliseconds late still fires; later is recorded missed |

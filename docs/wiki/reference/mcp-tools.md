@@ -253,12 +253,6 @@ are described in the tool's description. `kind` is what the call does (`read` or
 |---|---|---|---|
 | `infantry_mcp` | read | `mcp.read` | MCP servers. op list: every server. op status: one server (name). op my_tools: the servers THIS session was handed and why. op grants: who was granted what. add/remove/enable/disable/grant/revoke are refused to agents (ask the PM or owner). |
 
-### Infantry_News
-
-| Tool | Kind | Action | What it does |
-|---|---|---|---|
-| `news_headlines` | read | `news.read` | Current news headlines from Google News (capability news.headlines): args query, topic, source, max. |
-
 ### Infantry_Notes
 
 | Tool | Kind | Action | What it does |

@@ -14,7 +14,6 @@ built as a component, "sidecar" a native program, "UI" a web UI half. Truth: eac
 | Infantry_Installer | WASM, UI | Installs, enables and removes plugins from the bundled folder and the sources; the plugin the daemon starts with when nothing else is installed. |
 | Infantry_JobFeed | WASM | The Job Feed box: two pull routes over a session's watched jobs. |
 | Infantry_Mcp | WASM | `infantry_mcp`: the agent's view of the MCP registry (list, status, my tools, grants; changes refused to agents). |
-| Infantry_News | WASM | The `news.headlines` capability (Google News RSS, no key), the `card:news` chat card and the News Agent role. |
 | Infantry_Notes | WASM | Project knowledge: memory notes, the decisions log and the issues log. |
 | Infantry_Plugins | WASM | Agent tools over the plugin manager: list, search, show, status, list import, an owner-approved install request, `plugins_status`. |
 | Infantry_Roles | data | The built-in role catalog (architect, backend, frontend, pm, qa and the rest) and each role's starting text. |
@@ -26,5 +25,5 @@ built as a component, "sidecar" a native program, "UI" a web UI half. Truth: eac
 
 Test-only: `rust/plugins/test/Acme_UiFault` (staged only with `INFANTRY_STAGE_TEST=1`, never in a build that ships).
 
-Plugins in the infantry-plugins catalog (installed from a source, not bundled) are listed in that repository's
+Plugins in the infantry-plugins catalog (installed from a source, not bundled; for example Infantry_News, the News Agent and its `card:news` card) are listed in that repository's
 `official/` and `community/` folders.

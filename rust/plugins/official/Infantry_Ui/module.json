@@ -25,7 +25,6 @@
       "Infantry_Triggers"
     ],
     "optional": [
-      "Infantry_News",
       "Infantry_Sites"
     ]
   },

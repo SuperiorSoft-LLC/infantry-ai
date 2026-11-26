@@ -71,8 +71,10 @@ daemon setting `limits.plugins.maxDeclaredTimeoutMs`. With none declared, the ho
 
 ## Default plugin sources
 
-`rust/plugins/default-sources.json` names the sources a host starts with (today the official repo,
-https://github.com/SuperiorSoft-LLC/infantry-plugins, labelled `Official`). `stage.sh` copies it into the staged plugins
+`rust/plugins/default-sources.json` names the sources a host starts with (today the official catalog,
+https://raw.githubusercontent.com/SuperiorSoft-LLC/infantry-plugins/dist/catalog.json, labelled `Official`: the built
+modules that the infantry-plugins `dist` workflow publishes on every push to its main branch, so an Install gives a module
+that runs; the repository itself holds only sources). `stage.sh` copies it into the staged plugins
 folder; at start the daemon adds each location once, off the boot path (`INFANTRY_DEFAULT_SOURCES` names another file).
 The seeded locations are kept in `plugin-sources-seeded.json`, so a default the user removed is not added back; one that
 could not be added (offline) is tried again at the next start. The Sources tab shows the label as a badge and asks before
