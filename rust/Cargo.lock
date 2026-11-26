@@ -1156,7 +1156,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-board"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "chrono",
  "infantry-core",
@@ -1194,7 +1194,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-cli"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "base64",
  "chrono",
@@ -1211,7 +1211,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-conformance"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "infantry-protocol",
  "serde_json",
@@ -1220,7 +1220,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-core"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "infantry-protocol",
  "rusqlite",
@@ -1231,7 +1231,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-daemon"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "axum",
  "base64",
@@ -1279,7 +1279,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-distribution"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "infantry-daemon",
  "infantry-harness",
@@ -1320,14 +1320,14 @@ dependencies = [
 
 [[package]]
 name = "infantry-guards"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "infantry-harness"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "infantry-runner-api",
  "serde_json",
@@ -1336,7 +1336,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-harness-claude"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "infantry-harness",
  "infantry-runner-local",
@@ -1348,7 +1348,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-harness-codex"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "infantry-harness",
  "infantry-runner-local",
@@ -1358,7 +1358,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-harness-opencode"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "base64",
  "getrandom 0.2.17",
@@ -1371,7 +1371,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-harness-pi"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "infantry-harness",
  "infantry-runner-local",
@@ -1407,7 +1407,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-knowledge"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "axum",
  "base64",
@@ -1422,7 +1422,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-mail"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "axum",
  "base64",
@@ -1451,7 +1451,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-migrate"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "infantry-proc",
  "infantry-protocol",
@@ -1473,7 +1473,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-orchestrator-api"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "serde",
  "serde_json",
@@ -1481,7 +1481,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-plugin-host"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "anyhow",
  "infantry-core",
@@ -1497,7 +1497,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-plugin-sdk"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "infantry-plugin-wit",
  "serde",
@@ -1507,7 +1507,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-plugin-wit"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "base64",
  "serde",
@@ -1527,11 +1527,11 @@ dependencies = [
 
 [[package]]
 name = "infantry-proc"
-version = "0.8.7"
+version = "0.8.8"
 
 [[package]]
 name = "infantry-projects"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "infantry-core",
  "infantry-proc",
@@ -1544,7 +1544,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-protocol"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "serde",
  "serde_json",
@@ -1553,7 +1553,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-runner"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "libc",
  "portable-pty",
@@ -1565,7 +1565,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-runner-api"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "base64",
  "serde",
@@ -1575,7 +1575,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-runner-link"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "base64",
  "getrandom 0.2.17",
@@ -1595,7 +1595,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-runner-local"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "infantry-proc",
  "infantry-runner",
@@ -1610,7 +1610,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-runner-pool"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "infantry-core",
  "infantry-proc",
@@ -1627,7 +1627,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-runner-source"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "infantry-runner-api",
  "serde_json",
@@ -1636,7 +1636,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-scripting"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "base64",
  "infantry-core",
@@ -1676,7 +1676,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-usage"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "chrono",
  "infantry-core",
@@ -1690,7 +1690,7 @@ dependencies = [
 
 [[package]]
 name = "infantry-vault"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "base64",
  "chrono",

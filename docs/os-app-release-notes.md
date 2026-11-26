@@ -1,7 +1,7 @@
-Infantry AI 0.8.7 as a BattalionOS app.
+Infantry AI 0.8.8 as a BattalionOS app.
 
 What changed for you:
-- Sessions waiting on a tool approval or a question now count under "Needs input", so you see every session that is waiting on you.
-- The CLI: `ticket create` refuses a project that does not exist, `ticket comment` takes `--kind` and `--state`, and `ticket move/show/get` accept a short ticket id.
-- Chat images and notes reach sessions that have no project.
-- The CLI and the daemon read one shared contract version.
+- The Official plugin source appears again.
+- Scan QR code works inside BattalionOS on phones (needs BattalionOS Android 0.1.3).
+- Updates no longer need a manual restart once BattalionOS is also updated.
+- Agents resume after an update.
