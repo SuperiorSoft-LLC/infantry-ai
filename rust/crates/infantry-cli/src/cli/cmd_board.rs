@@ -198,8 +198,13 @@ pub fn prefix_report(prefix: &str, board: &[Value], matches: &[&Value]) -> Vec<S
 
 /// `resolveTicket`: the ONE ticket [prefix] names on the board; None after printing why (the caller exits 1).
 pub fn resolve_ticket(ctx: &mut Ctx, prefix: &str, project: &str) -> Result<Option<Value>, String> {
-    let board = fetch_board(ctx, project, None)?;
-    let matches = match_prefix(prefix, &board);
+    let mut board = fetch_board(ctx, project, None)?;
+    let mut matches = match_prefix(prefix, &board);
+    // Not on this project's board: the id may name a ticket of another project; look across every project.
+    if matches.is_empty() && !project.trim().is_empty() {
+        board = fetch_board(ctx, "", None)?;
+        matches = match_prefix(prefix, &board);
+    }
     if matches.len() == 1 {
         return Ok(Some(matches[0].clone()));
     }

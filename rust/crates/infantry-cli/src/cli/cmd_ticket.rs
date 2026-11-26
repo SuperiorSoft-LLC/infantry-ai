@@ -43,8 +43,9 @@ const FILES_TIMEOUT_MS: u64 = 45_000;
 /// `ArchiveCli.request`.
 const ARCHIVE_TIMEOUT_MS: u64 = 120_000;
 
-pub const COMMENT_USAGE: &str = "infantry ticket comment <id> [done|issue|note] <text...> | infantry ticket comment resolve <commentId> | infantry ticket comment list <id> [latestOpen|latest|first|all] [done|issue|note]";
+pub const COMMENT_USAGE: &str = "infantry ticket comment <id> [--kind done|issue|note|handoff] [--state open|resolved] <text...> | infantry ticket comment <id> [done|issue|note] <text...> | infantry ticket comment resolve <commentId> | infantry ticket comment list <id> [latestOpen|latest|first|all] [done|issue|note]";
 const COMMENT_KINDS: [&str; 4] = ["done", "issue", "note", "handoff"];
+const COMMENT_STATES: [&str; 2] = ["open", "resolved"];
 pub const EPIC_USAGE: &str = "infantry ticket epic <id|prefix>... <epic id|epic name|none> [--force]";
 const EPIC_TOOL: &str = "infantry_ticket_epic";
 pub const FILES_USAGE: &str = "usage: infantry ticket files <id> [--related] [--limit <n>] | infantry ticket files --path <glob> [--path <glob>...] [--limit <n>] | infantry ticket files --backfill [--all]";
@@ -92,6 +93,17 @@ pub fn comment_usage_error(args: &[String]) -> Option<String> {
     bad.then(|| COMMENT_USAGE.to_string())
 }
 
+/// The `--kind` / `--state` flags of `ticket comment <id> ...`: a refusal for a value the board does not take.
+pub fn comment_flags_error(kind: Option<&str>, state: Option<&str>) -> Option<String> {
+    if let Some(k) = kind.map(str::trim).filter(|k| !COMMENT_KINDS.contains(k)) {
+        return Some(format!("--kind '{k}' is not a comment kind; expected one of {}", COMMENT_KINDS.join(", ")));
+    }
+    if let Some(st) = state.map(str::trim).filter(|st| !COMMENT_STATES.contains(st)) {
+        return Some(format!("--state '{st}' is not a comment state; expected one of {}", COMMENT_STATES.join(", ")));
+    }
+    None
+}
+
 /// `TicketEpicCli.usageError`.
 pub fn epic_usage_error(args: &[String]) -> Option<String> {
     (args.len() < 2 || args.iter().any(|a| a.trim().is_empty())).then(|| EPIC_USAGE.to_string())
@@ -135,7 +147,11 @@ pub fn usage_error(p: &Parsed) -> Option<String> {
     let sub = args.first().map(String::as_str);
     match sub {
         Some("related") => blank(1).then(|| "ticket related requires a ticket id: infantry ticket related <id|prefix> [--suggest]".into()),
-        Some("comment") => comment_usage_error(&args[1..]),
+        Some("comment") => comment_flags_error(p.val("kind"), p.val("state")).or_else(|| {
+            let words = &args[1..];
+            let flagged = p.val("kind").is_some() && !matches!(words.first().map(String::as_str), Some("resolve" | "list"));
+            if flagged { (words.len() < 2).then(|| COMMENT_USAGE.to_string()) } else { comment_usage_error(words) }
+        }),
         Some("epic") => epic_usage_error(&args[1..]),
         Some(a @ ("archive" | "restore")) => archive_usage_error(Some(a), &args[1..], p.val("epic"), p.val("filter")),
         Some("files") => {
@@ -238,7 +254,7 @@ pub fn run(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
         Some("link") => link(ctx, p),
         Some("files") => files(ctx, p),
         Some("archive") | Some("restore") => archive_command(ctx, p),
-        Some("comment") => comment(ctx, &args_from(p, 1)),
+        Some("comment") => comment(ctx, &args_from(p, 1), p.val("kind"), p.val("state")),
         Some("epic") => epic(ctx, &args_from(p, 1), p.flag("force")),
         Some("related") => related(ctx, p),
         _ => show(ctx, p),
@@ -939,12 +955,35 @@ fn move_ticket(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
     } else {
         None
     };
+    if status.as_deref().map(str::to_lowercase).as_deref() == Some("done") && s(&ticket, "status").as_deref() != Some("done") {
+        if let Some(w) = done_comment_warning(ctx, &full) {
+            ctx.err(w);
+        }
+    }
     let req = json!({"id": full, "status": status, "position": position, "wontFix": null});
     let env = Envelope::new("ticket_move", req.to_string()).with_session(session);
     let answer = ctx.stream().request(&env, "ticket", "ticket_move", false)?;
     let moved = decode_ticket(&answer.data)?;
     ctx.out(format!("moved {full} -> {}", s(&moved, "status").unwrap_or_default()));
     Ok(0)
+}
+
+/// A warning when [id] has no done comment yet (a move to done should follow one); None when it has one or the
+/// board cannot say (the move goes ahead either way).
+fn done_comment_warning(ctx: &mut Ctx, id: &str) -> Option<String> {
+    let mut a = Map::new();
+    a.insert("ticketId".into(), Value::String(id.to_string()));
+    a.insert("kind".into(), Value::String("done".into()));
+    a.insert("which".into(), Value::String("latest".into()));
+    let (text, is_error) = plugin_tool_call(ctx, "infantry_ticket_comments", a).ok()?;
+    let short = short_id(id);
+    no_done_comment(&text, is_error)
+        .then(|| format!("warning: {short} has no done comment yet: done comment first (infantry ticket comment {short} --kind done \"<summary>\")"))
+}
+
+/// True when the comments answer says there is no done comment.
+pub fn no_done_comment(text: &str, is_error: bool) -> bool {
+    !is_error && text.trim() == "no comments"
 }
 
 // ---- TicketStarter ----
@@ -1486,7 +1525,25 @@ pub fn plugin_tool_call(ctx: &mut Ctx, name: &str, arguments: Map<String, Value>
 }
 
 /// `TicketCommentCli.run`.
-fn comment(ctx: &mut Ctx, args: &[String]) -> CmdResult {
+fn comment(ctx: &mut Ctx, args: &[String], kind_flag: Option<&str>, state_flag: Option<&str>) -> CmdResult {
+    let (tool, a) = comment_tool(args, kind_flag, state_flag);
+    let (text, is_error) = plugin_tool_call(ctx, tool, a)?;
+    if text.starts_with("Unknown tool:") {
+        ctx.err("error: this daemon has no ticket comment tools (Infantry_Board's daemon half is not loaded)");
+        return Ok(1);
+    }
+    if is_error {
+        ctx.err(text);
+        Ok(1)
+    } else {
+        ctx.out(text);
+        Ok(0)
+    }
+}
+
+/// The tool and arguments `ticket comment ...` sends: the same call as MCP infantry_ticket_comment(s).
+/// `--kind` / `--state` set the kind and state; without `--kind` a leading done|issue|note|handoff word is the kind.
+pub fn comment_tool(args: &[String], kind_flag: Option<&str>, state_flag: Option<&str>) -> (&'static str, Map<String, Value>) {
     let str_v = |v: &str| Value::String(v.to_string());
     let mut a = Map::new();
     let tool = match args[0].as_str() {
@@ -1502,27 +1559,20 @@ fn comment(ctx: &mut Ctx, args: &[String]) -> CmdResult {
             "infantry_ticket_comments"
         }
         _ => {
-            let kind = Some(args[1].as_str()).filter(|k| COMMENT_KINDS.contains(k));
+            let kind = kind_flag.map(str::trim).or_else(|| Some(args[1].as_str()).filter(|k| COMMENT_KINDS.contains(k)));
             a.insert("ticketId".into(), str_v(&args[0]));
             if let Some(k) = kind {
                 a.insert("kind".into(), str_v(k));
             }
-            a.insert("body".into(), str_v(&args[if kind.is_some() { 2 } else { 1 }..].join(" ")));
+            let body_from = if kind.is_some() && kind_flag.is_none() { 2 } else { 1 };
+            a.insert("body".into(), str_v(&args[body_from..].join(" ")));
+            if let Some(st) = state_flag.map(str::trim) {
+                a.insert("state".into(), str_v(st));
+            }
             "infantry_ticket_comment"
         }
     };
-    let (text, is_error) = plugin_tool_call(ctx, tool, a)?;
-    if text.starts_with("Unknown tool:") {
-        ctx.err("error: this daemon has no ticket comment tools (Infantry_Board's daemon half is not loaded)");
-        return Ok(1);
-    }
-    if is_error {
-        ctx.err(text);
-        Ok(1)
-    } else {
-        ctx.out(text);
-        Ok(0)
-    }
+    (tool, a)
 }
 
 /// `TicketEpicCli.run`.
@@ -1556,6 +1606,42 @@ mod tests {
 
     fn parsed(words: &[&str]) -> Parsed {
         parse(&words.iter().map(|w| w.to_string()).collect::<Vec<_>>()).expect("parses")
+    }
+
+    fn words(ws: &[&str]) -> Vec<String> {
+        ws.iter().map(|w| w.to_string()).collect()
+    }
+
+    #[test]
+    fn comment_kind_and_state_flags_map_to_the_mcp_tool_arguments() {
+        let p = parsed(&["ticket", "comment", "d3efb233", "--kind", "done", "--state", "resolved", "all", "green"]);
+        assert!(usage_error(&p).is_none());
+        let (tool, a) = comment_tool(&args_from(&p, 1), p.val("kind"), p.val("state"));
+        assert_eq!(tool, "infantry_ticket_comment");
+        assert_eq!(a["ticketId"], "d3efb233");
+        assert_eq!(a["kind"], "done");
+        assert_eq!(a["state"], "resolved");
+        assert_eq!(a["body"], "all green");
+        // --kind wins and a body starting with a kind word stays whole.
+        let (_, a) = comment_tool(&words(&["x", "note", "this"]), Some("issue"), None);
+        assert_eq!((a["kind"].as_str(), a["body"].as_str()), (Some("issue"), Some("note this")));
+        // The positional form still works.
+        let (_, a) = comment_tool(&words(&["x", "done", "ok"]), None, None);
+        assert_eq!((a["kind"].as_str(), a["body"].as_str(), a.get("state")), (Some("done"), Some("ok"), None));
+    }
+
+    #[test]
+    fn comment_flags_refuse_unknown_values_and_a_missing_body() {
+        assert!(usage_error(&parsed(&["ticket", "comment", "x", "--kind", "bogus", "b"])).unwrap().contains("not a comment kind"));
+        assert!(usage_error(&parsed(&["ticket", "comment", "x", "--kind", "note", "--state", "closed", "b"])).unwrap().contains("not a comment state"));
+        assert_eq!(usage_error(&parsed(&["ticket", "comment", "x", "--kind", "done"])).unwrap(), COMMENT_USAGE);
+    }
+
+    #[test]
+    fn a_done_move_warns_only_when_no_done_comment_exists() {
+        assert!(no_done_comment("no comments", false));
+        assert!(!no_done_comment("ab12cd34 done/open by x 10:00: shipped", false));
+        assert!(!no_done_comment("no comments", true));
     }
 
     #[test]
