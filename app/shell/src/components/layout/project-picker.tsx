@@ -68,7 +68,7 @@ export function ProjectPicker() {
     <>
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="max-w-48 font-semibold">
+          <Button variant="outline" size="sm" className="min-w-0 max-w-48 shrink font-semibold">
             <span className="truncate">{label}</span>
             <ChevronDown className="text-muted-foreground" />
           </Button>

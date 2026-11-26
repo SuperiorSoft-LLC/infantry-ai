@@ -22,7 +22,7 @@ export function TitleBar({ headerActions }: { headerActions?: ReactNode } = {}) 
   const attention = useAttention(attentionCount);
   const host = useDaemon((s) => hostLabel(s.connection.url));
   return (
-    <header data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-1 border-b bg-background pl-2 select-none sm:gap-2">
+    <header data-tauri-drag-region className="flex h-10 min-w-0 shrink-0 items-center gap-1 overflow-hidden border-b bg-background pl-2 select-none sm:gap-2">
       <IconButton label={ui.leftOpen ? "Hide agents" : "Show agents"} onClick={() => ui.toggle("leftOpen")}>
         <PanelLeft />
       </IconButton>
