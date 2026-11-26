@@ -120,3 +120,47 @@ fn an_outdated_hello_refuses_a_start_with_the_update_text() {
     assert_eq!(call(&unit, true, json!({"op": "update", "name": "local"})).unwrap()["ok"], false);
     serving.close();
 }
+
+/// Ticket 5b9a882c: a Docker runner whose new image tag is missing. Update must not stay silent on "starting": the card
+/// status gets the steps (container found + plan, pulling, failed) and the plain error, and the state leaves "running".
+#[test]
+fn an_update_to_a_missing_image_reports_its_steps_and_fails_plainly() {
+    use infantry_runner_pool::update::Docker;
+    struct MissingImage(u16);
+    impl Docker for MissingImage {
+        fn run(&self, args: &[String]) -> Result<String, String> {
+            match args[0].as_str() {
+                "ps" => Ok("abc".into()),
+                "inspect" => Ok(json!([{"Name": "/testbox", "Config": {"Image": "infantry-runner-rust:e2e", "Cmd": [], "Env": []}, "Mounts": [],
+                    "HostConfig": {"PortBindings": {"18950/tcp": [{"HostIp": "127.0.0.1", "HostPort": self.0.to_string()}]}}}]).to_string()),
+                "pull" => Err("pull access denied for infantry-runner-rust".into()),
+                "image" => Err("No such image".into()),
+                other => panic!("the runner was touched: docker {other}"),
+            }
+        }
+    }
+    let (rdir, state) = (temp("runner-upd"), temp("state-upd"));
+    let (serving, bearer) = runner(&rdir);
+    let url = format!("ws://127.0.0.1:{}", serving.port);
+    let pool = RunnerPool::open(&state);
+    pool.set_allow_plain(Arc::new(|| true));
+    pool.set_docker(Arc::new(MissingImage(serving.port)));
+    let unit = AdminUnit { pool: pool.clone(), lend: None };
+    assert_eq!(call(&unit, true, json!({"op": "add", "endpoint": url, "bearer": bearer})).unwrap()["ok"], true);
+
+    pool.update("test-box").unwrap();
+    let end = Instant::now() + Duration::from_secs(10);
+    let u = loop {
+        let u = pool.update_status("test-box").expect("an update status");
+        if u.state != "running" {
+            break u;
+        }
+        assert!(Instant::now() < end, "stuck on running: {:?}", u.steps);
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(u.state, "failed");
+    assert!(u.steps[0].contains("plan: image infantry-runner-rust:"), "{:?}", u.steps);
+    assert!(u.steps.iter().any(|s| s.starts_with("pulling ")), "{:?}", u.steps);
+    assert!(u.detail.contains("could not be pulled and is not on this machine"), "{}", u.detail);
+    assert!(pool.step_log("test-box").iter().any(|e| e["step"] == "update"), "Details > Setup log has the update steps");
+}

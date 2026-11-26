@@ -317,6 +317,13 @@ impl RunnerPool {
             u.steps.push(s.to_string());
         }
         drop(all);
+        // daemon.log is the daemon's stderr: every update step and its result land there too.
+        match (step, detail.is_empty()) {
+            (Some(s), true) => eprintln!("[infantry] runner '{name}' update: {s}"),
+            (Some(s), false) => eprintln!("[infantry] runner '{name}' update: {s}: {detail}"),
+            (None, false) => eprintln!("[infantry] runner '{name}' update: {detail}"),
+            (None, true) => {}
+        }
         if let Some(s) = step {
             self.log_step(name, "update", "update runner", s, None, if state == "failed" { detail } else { "" });
         }
@@ -338,18 +345,27 @@ impl RunnerPool {
         let (host, port) = host_port.rsplit_once(':').map(|(h, p)| (h.trim_matches(|c| c == '[' || c == ']'), p.parse::<u16>().ok())).unwrap_or((host_port, None));
         let local = matches!(host, "127.0.0.1" | "localhost" | "::1");
         let docker = self.docker.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        eprintln!("[infantry] runner '{name}' update: finding the Docker container for {}", r.url);
         let found = match (local, port) {
-            (true, Some(p)) => update::find_container(&*docker, p).map_err(|e| format!("docker: {e}"))?,
+            (true, Some(p)) => update::find_container(&*docker, p).map_err(|e| {
+                eprintln!("[infantry] runner '{name}' update: failed: docker: {e}");
+                format!("docker: {e}")
+            })?,
             _ => None,
         };
         let Some(inspect) = found else {
+            eprintln!("[infantry] runner '{name}' update: no local Docker container found; answered with the manual command");
             return Ok(format!(
                 "runner '{name}' is not a Docker container on this machine. On the machine it runs on, pull the app's image and recreate the container with the same name, volumes, ports and env: `docker pull <image>:{v}` then `docker rm -f <container>` and the same `docker run ... <image>:{v}`.",
                 v = self.app_version
             ));
         };
-        let plan = update::plan_from_inspect(&inspect, &self.app_version)?;
+        let plan = update::plan_from_inspect(&inspect, &self.app_version).map_err(|e| {
+            eprintln!("[infantry] runner '{name}' update: failed: no plan: {e}");
+            e
+        })?;
         self.updates.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), UpdateStatus { state: "running", steps: vec![], detail: String::new() });
+        self.note(name, "running", Some(&format!("container '{}' found; plan: image {}", plan.name, plan.image)), "");
         let image = plan.image.clone();
         let (pool, name, dir) = (self.clone(), name.to_string(), self.store_dir());
         let _ = std::thread::Builder::new().name("runner-update".into()).spawn(move || {
