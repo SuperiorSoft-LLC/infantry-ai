@@ -23,7 +23,7 @@ permissions:
 
 concurrency:
   group: rust-tests-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false  # a ~25 min test run is never cancelled by a newer push; queued runs still collapse to the newest
 
 jobs:
   test:
