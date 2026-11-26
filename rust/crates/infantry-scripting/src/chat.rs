@@ -13,6 +13,11 @@
 //! outside it unless `scripting.chat.imageProjectOnly` is on; secret places are always refused, see [`secret_place`]),
 //! `data` (base64 bytes) or `url` (an https image the daemon fetches through [`Fetch`]). `sessionId: "starter"` names the
 //! session that started the caller (a ticket worker's PM).
+//!
+//! CHAT-IMG-4: a live session with no project (the owner's starter chat, a project-less agent) is a valid target too.
+//! The caller may post to it when it is the caller itself, the caller's starter, or the caller has owner rights; its
+//! images are stored under the daemon state's uploads (`with_projectless`), never in a project. A relative `path`
+//! needs a project; an absolute one keeps every check (secret places, the daemon's state, `imageProjectOnly`).
 use crate::host::{ToolInfo, ToolInvoker, ToolResult};
 use crate::runlog::ScriptRunLog;
 use base64::Engine;
@@ -62,6 +67,10 @@ pub struct ChatTools {
     fetch: Option<Fetch>,
     /// Extra places no image is read from (the daemon's own state and secret dirs).
     denied: Vec<PathBuf>,
+    /// A live session that exists but has no project (CHAT-IMG-4). None = only project sessions are targets.
+    known: Option<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
+    /// Where a project-less session's images are stored (the daemon state's `uploads` dir).
+    state_uploads: Option<PathBuf>,
     seq: AtomicU64,
     recent: Mutex<HashMap<String, VecDeque<u64>>>,
 }
@@ -91,7 +100,7 @@ pub fn sniff(b: &[u8]) -> Option<(&'static str, &'static str)> {
 
 impl ChatTools {
     pub fn new(run_log: Arc<ScriptRunLog>, project_of: ProjectOf, project_dir: ProjectDir, wake: Wake, config: Config, clock: Arc<dyn Fn() -> u64 + Send + Sync>) -> Self {
-        ChatTools { run_log, project_of, project_dir, wake, config, clock, starter_of: None, fetch: None, denied: Vec::new(), seq: AtomicU64::new(0), recent: Mutex::new(HashMap::new()) }
+        ChatTools { run_log, project_of, project_dir, wake, config, clock, starter_of: None, fetch: None, denied: Vec::new(), known: None, state_uploads: None, seq: AtomicU64::new(0), recent: Mutex::new(HashMap::new()) }
     }
 
     pub fn with_starter_of(mut self, f: ProjectOf) -> Self {
@@ -100,6 +109,13 @@ impl ChatTools {
     }
     pub fn with_fetch(mut self, f: Fetch) -> Self {
         self.fetch = Some(f);
+        self
+    }
+    /// CHAT-IMG-4: `known(id)` is true for a live session with no project; its images go to `uploads` (the daemon's
+    /// state uploads dir, e.g. `<state>/uploads`).
+    pub fn with_projectless(mut self, known: Arc<dyn Fn(&str) -> bool + Send + Sync>, uploads: PathBuf) -> Self {
+        self.known = Some(known);
+        self.state_uploads = Some(uploads);
         self
     }
     pub fn with_denied(mut self, dirs: Vec<PathBuf>) -> Self {
@@ -117,14 +133,14 @@ impl ChatTools {
             ToolInfo {
                 name: NOTE.into(),
                 description: format!(
-                    "Post a status line into a session's chat as an automation card (cog icon, time, coloured by level), stored in its history. No turn, no inbox entry, no mail unless wake=true (then the agent also gets the text as a short prompt, as its next turn when it is busy: use it for real exceptions only). Same project only, rate limited, text capped at {DEFAULT_MAX_CHARS} characters. Script: ih.chat_note{{sessionId=..., text=..., level='ok'}}."
+                    "Post a status line into a session's chat as an automation card (cog icon, time, coloured by level), stored in its history. No turn, no inbox entry, no mail unless wake=true (then the agent also gets the text as a short prompt, as its next turn when it is busy: use it for real exceptions only). Targets: a session of your project, or a session with no project when it is you, your starter (sessionId \"starter\") or you are the owner. Rate limited, text capped at {DEFAULT_MAX_CHARS} characters. Script: ih.chat_note{{sessionId=..., text=..., level='ok'}}."
                 ),
-                input_schema: schema(r#"{"type":"object","properties":{"sessionId":{"type":"string","description":"target session (default: the caller's own)"},"text":{"type":"string","description":"the status line"},"level":{"type":"string","description":"info (default) | ok | warn (yellow WARNING, not an error) | fail"},"wake":{"type":"boolean","description":"also prompt the agent with the text (default false)"},"image":{"type":"string","description":"a file inside the project (or uploaded image id) shown inline with the line"}},"required":["text"]}"#),
+                input_schema: schema(r#"{"type":"object","properties":{"sessionId":{"type":"string","description":"target session (default: the caller's own)"},"text":{"type":"string","description":"the status line"},"level":{"type":"string","description":"info (default) | ok | warn (yellow WARNING, not an error) | fail"},"wake":{"type":"boolean","description":"also prompt the agent with the text (default false)"},"image":{"type":"string","description":"an image shown inline with the line: a file (absolute, or relative to the project), or an uploaded image id; same checks as infantry_chat_image"}},"required":["text"]}"#),
                 read_only: false,
             },
             ToolInfo {
                 name: IMAGE.into(),
-                description: "Show an image inline in a session's chat (desktop, web, Android), with a caption. Give ONE of: path (a file in or outside the project, e.g. your screenshot folder; secret places like .ssh, key stores, browser profiles and the daemon's state are refused; or an uploaded image id), data (base64 bytes) or url (an https image the daemon fetches). Only png/jpeg/gif/webp (checked by content), at most 10 MB. Stored under the project's uploads. sessionId: default your own session; \"starter\" = the session that started you (a ticket worker shows its screenshots to its PM this way). After taking screenshots, show the key ones to your starter with a one-line caption. Script: ih.chat_image{path=..., caption=..., sessionId=...}. Plugins: the chat_image frame, same fields.".into(),
+                description: "Show an image inline in a session's chat (desktop, web, Android), with a caption. Give ONE of: path (a file in or outside the project, e.g. your screenshot folder; secret places like .ssh, key stores, browser profiles and the daemon's state are refused; or an uploaded image id), data (base64 bytes) or url (an https image the daemon fetches). Only png/jpeg/gif/webp (checked by content), at most 10 MB. Stored under the project's uploads (a session with no project: the daemon state's uploads). sessionId: default your own session; \"starter\" = the session that started you (a ticket worker shows its screenshots to its PM this way); a session with no project (the owner's starter chat) takes images from itself, the sessions it started, or the owner. After taking screenshots, show the key ones to your starter with a one-line caption. Script: ih.chat_image{path=..., caption=..., sessionId=...}. Plugins: the chat_image frame, same fields.".into(),
                 input_schema: schema(r#"{"type":"object","properties":{"sessionId":{"type":"string","description":"target session (default: the caller's own)"},"path":{"type":"string","description":"a file (absolute, or relative to the project), or an uploaded image id"},"data":{"type":"string","description":"the image bytes, base64"},"url":{"type":"string","description":"an https image URL the daemon fetches"},"caption":{"type":"string","description":"text shown with the image"},"level":{"type":"string","description":"info (default) | ok | warn | fail"}}}"#),
                 read_only: false,
             },
@@ -139,19 +155,33 @@ impl ChatTools {
         }
     }
 
-    /// The target session and its project; refuses an unknown session or one of another project.
-    fn target(&self, tool: &str, a: &Map<String, Value>, inv: &ToolInvoker) -> Result<(String, String), ToolResult> {
+    /// The target session and its project (`None` = a project-less session); refuses an unknown session, one of
+    /// another project, or a project-less one the caller may not post to.
+    fn target(&self, tool: &str, a: &Map<String, Value>, inv: &ToolInvoker) -> Result<(String, Option<String>), ToolResult> {
         let mut target = arg(a, "sessionId").or_else(|| inv.session_id.clone()).ok_or_else(|| refuse(tool, "needs sessionId"))?;
+        let starter = inv.session_id.as_deref().and_then(|me| self.starter_of.as_ref().and_then(|f| f(me)));
         if target.eq_ignore_ascii_case("starter") {
             let me = inv.session_id.clone().ok_or_else(|| refuse(tool, "sessionId \"starter\" needs a calling session"))?;
-            target = self.starter_of.as_ref().and_then(|f| f(&me)).ok_or_else(|| refuse(tool, format!("session {me} has no starter")))?;
+            target = starter.clone().ok_or_else(|| refuse(tool, format!("session {me} has no starter")))?;
         }
-        let project = (self.project_of)(&target).ok_or_else(|| refuse(tool, format!("unknown session {target}")))?;
-        let caller = inv.project_id.clone().or_else(|| inv.session_id.as_deref().and_then(|s| (self.project_of)(s))).ok_or_else(|| refuse(tool, "needs a project context"))?;
-        if caller != project {
-            return Err(refuse(tool, format!("session {target} is in another project")));
+        let caller = inv.project_id.clone().or_else(|| inv.session_id.as_deref().and_then(|s| (self.project_of)(s)));
+        match (self.project_of)(&target) {
+            Some(project) => {
+                let caller = caller.ok_or_else(|| refuse(tool, "needs a project context"))?;
+                if caller != project {
+                    return Err(refuse(tool, format!("session {target} is in another project")));
+                }
+                Ok((target, Some(project)))
+            }
+            None if self.known.as_ref().is_some_and(|k| k(&target)) => {
+                let mine = inv.session_id.as_deref() == Some(target.as_str()) || starter.as_deref() == Some(target.as_str());
+                if !(mine || inv.owner) {
+                    return Err(refuse(tool, format!("session {target} has no project; only itself, a session it started, or the owner may post to it")));
+                }
+                Ok((target, None))
+            }
+            None => Err(refuse(tool, format!("unknown session {target}"))),
         }
-        Ok((target, project))
     }
 
     fn note(&self, a: &Map<String, Value>, inv: &ToolInvoker) -> ToolResult {
@@ -177,16 +207,17 @@ impl ChatTools {
             return refuse(NOTE, format!("level must be info, ok, warn or fail (got '{level}')"));
         }
         let wake = a.get("wake").and_then(Value::as_bool) == Some(true);
-        self.post(&target, &project, &text, &level, wake, Map::new())
+        self.post(&target, project.as_deref(), &text, &level, wake, Map::new())
     }
 
     /// Rate-limits, builds the card, stores and pushes it, wakes when asked.
-    fn post(&self, target: &str, project: &str, text: &str, level: &str, wake: bool, meta_extra: Map<String, Value>) -> ToolResult {
+    fn post(&self, target: &str, project: Option<&str>, text: &str, level: &str, wake: bool, meta_extra: Map<String, Value>) -> ToolResult {
         let now = (self.clock)();
         {
             let per_minute = self.num("scripting.chat.perMinute", DEFAULT_PER_MINUTE);
             let mut recent = self.recent.lock().unwrap();
-            let q = recent.entry(project.to_string()).or_default();
+            let key = project.map(str::to_string).unwrap_or_else(|| format!("session:{target}"));
+            let q = recent.entry(key).or_default();
             while q.front().is_some_and(|t| now.saturating_sub(*t) > WINDOW_MS) {
                 q.pop_front();
             }
@@ -205,7 +236,7 @@ impl ChatTools {
         meta.insert("level".into(), json!(level));
         meta.extend(meta_extra);
         let item = json!({
-            "id": format!("note-{project}-{now}-{}", self.seq.fetch_add(1, Ordering::Relaxed) + 1), "sessionId": target, "at": now, "source": "automation",
+            "id": format!("note-{}-{now}-{}", project.unwrap_or(target), self.seq.fetch_add(1, Ordering::Relaxed) + 1), "sessionId": target, "at": now, "source": "automation",
             "label": "AUTOMATION · note", "text": format!("AUTOMATION · {shown}{suffix}"), "ok": level != "fail", "meta": Value::Object(meta),
         });
         self.run_log.post_note(item);
@@ -230,11 +261,25 @@ impl ChatTools {
         if !LEVELS.contains(&level.as_str()) {
             return refuse(IMAGE, format!("level must be info, ok, warn or fail (got '{level}')"));
         }
-        let Some(dir) = (self.project_dir)(&project) else { return refuse(IMAGE, "the project has no directory") };
+        // Where relative paths and upload ids resolve, and where the image is stored: the project's `.infantry/uploads`,
+        // or the daemon state's uploads for a project-less session.
+        let (dir, uploads) = match &project {
+            Some(p) => match (self.project_dir)(p) {
+                Some(d) => {
+                    let u = d.join(".infantry").join("uploads");
+                    (Some(d), u)
+                }
+                None => return refuse(IMAGE, "the project has no directory"),
+            },
+            None => match &self.state_uploads {
+                Some(u) => (None, u.clone()),
+                None => return refuse(IMAGE, "this daemon has no uploads dir for a session without a project"),
+            },
+        };
         let max = self.num("scripting.chat.imageMaxBytes", DEFAULT_IMAGE_MAX_BYTES);
         let got = if let Some(path) = path {
             let project_only = (self.config)(PROJECT_ONLY_KEY).map(|v| v.trim().eq_ignore_ascii_case("true")).unwrap_or(false);
-            read_image(&dir, &path, max, project_only, &self.denied)
+            read_image(dir.as_deref(), &uploads, &path, max, project_only, &self.denied)
         } else if let Some(d) = data {
             base64::engine::general_purpose::STANDARD
                 .decode(d.trim())
@@ -256,7 +301,6 @@ impl ChatTools {
         };
         let Some((ext, _)) = sniff(&bytes) else { return refuse(IMAGE, "not a png, jpeg, gif or webp image (its first bytes match none of them)") };
         let sha: String = Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect();
-        let uploads = dir.join(".infantry").join("uploads");
         let chat = uploads.join("chat");
         let stored = chat.join(format!("{sha}.{ext}"));
         let wrote = std::fs::create_dir_all(&chat)
@@ -271,7 +315,7 @@ impl ChatTools {
         if bytes.len() <= self.num("scripting.chat.inlineMaxBytes", DEFAULT_INLINE_MAX_BYTES) {
             meta.insert("imageData".into(), json!(base64::engine::general_purpose::STANDARD.encode(&bytes)));
         }
-        let r = self.post(&target, &project, &caption, &level, false, meta);
+        let r = self.post(&target, project.as_deref(), &caption, &level, false, meta);
         if r.is_error {
             return ToolResult::err(r.text.replacen(NOTE, IMAGE, 1));
         }
@@ -295,25 +339,33 @@ pub fn secret_place(p: &Path) -> bool {
         || p.extension().and_then(|e| e.to_str()).map(|e| KEY_EXT.contains(&e.to_lowercase().as_str())).unwrap_or(false)
 }
 
-/// The bytes of `path` (a file in or outside the project dir, or an uploaded image id), after every check.
-fn read_image(dir: &Path, path: &str, max: usize, project_only: bool, denied: &[PathBuf]) -> Result<Vec<u8>, String> {
-    let root = dir.canonicalize().map_err(|_| "the project has no directory".to_string())?;
+/// The bytes of `path` (a file in or outside the project dir, or an uploaded image id in `uploads`), after every check.
+/// `dir` is the project dir; `None` (a project-less session) takes only absolute paths, and with `project_only` none.
+fn read_image(dir: Option<&Path>, uploads: &Path, path: &str, max: usize, project_only: bool, denied: &[PathBuf]) -> Result<Vec<u8>, String> {
+    let root = match dir {
+        Some(d) => Some(d.canonicalize().map_err(|_| "the project has no directory".to_string())?),
+        None => None,
+    };
     let file = if is_upload_id(path) {
         let stem = path.to_lowercase();
         let stem = stem.split('.').next().unwrap_or("").to_string();
         ["chat", "ticket"]
             .iter()
-            .filter_map(|p| std::fs::read_dir(root.join(".infantry").join("uploads").join(p)).ok())
+            .filter_map(|p| std::fs::read_dir(uploads.join(p)).ok())
             .flatten()
             .flatten()
             .map(|e| e.path())
             .find(|p| p.file_name().and_then(|n| n.to_str()).map(|n| n.split('.').next() == Some(stem.as_str())).unwrap_or(false))
-            .ok_or_else(|| format!("no uploaded image '{path}' in this project"))?
+            .ok_or_else(|| format!("no uploaded image '{path}' here"))?
     } else {
         let p = Path::new(path);
-        let joined = if p.is_absolute() { p.to_path_buf() } else { root.join(p) };
+        let joined = match (&root, p.is_absolute()) {
+            (_, true) => p.to_path_buf(),
+            (Some(r), false) => r.join(p),
+            (None, false) => return Err("this session has no project: give an absolute path, data or url".into()),
+        };
         let f = joined.canonicalize().map_err(|_| format!("no such file: {}", path.chars().take(120).collect::<String>()))?;
-        if !f.starts_with(&root) {
+        if !root.as_ref().is_some_and(|r| f.starts_with(r)) {
             if project_only {
                 return Err(format!("path is outside the project directory ({PROJECT_ONLY_KEY} is on)"));
             }
@@ -503,6 +555,62 @@ mod tests {
         );
         let r = t.handle(IMAGE, &args(json!({"sessionId": "s1", "path": out.path().join("a.png").to_string_lossy()})), &pm()).unwrap();
         assert!(r.text.contains("outside the project"), "{}", r.text);
+    }
+
+    #[test]
+    fn chat_img_4_projectless_sessions_take_notes_and_images() {
+        let proj = tempfile::tempdir().unwrap();
+        let state = tempfile::tempdir().unwrap();
+        let out = tempfile::tempdir().unwrap();
+        let shot = out.path().join("shot.png");
+        std::fs::write(&shot, PNG).unwrap();
+        std::fs::write(state.path().join("x.png"), PNG).unwrap();
+        let uploads = state.path().join("uploads");
+        let (t, pushed) = tools(Some(proj.path().to_path_buf()), Default::default());
+        // "lead" and "other" are live sessions without a project; s1 (project p1) was started by "lead".
+        let t = t
+            .with_denied(vec![state.path().to_path_buf()])
+            .with_starter_of(Arc::new(|s: &str| matches!(s, "s1" | "lead2").then(|| "lead".to_string())))
+            .with_projectless(Arc::new(|s: &str| matches!(s, "lead" | "other" | "lead2")), uploads.clone());
+        let as_s = |sid: &str| ToolInvoker { session_id: Some(sid.into()), project_id: None, owner: false, ..pm() };
+        let png64 = base64::engine::general_purpose::STANDARD.encode(PNG);
+        // a project worker shows its screenshot to its project-less starter
+        let r = t.handle(IMAGE, &args(json!({"sessionId": "starter", "path": shot.to_string_lossy()})), &as_s("s1")).unwrap();
+        assert!(r.text.contains("shown in lead"), "{}", r.text);
+        let stored = pushed.lock().unwrap().last().unwrap()["meta"]["image"].as_str().unwrap().to_string();
+        assert!(Path::new(&stored).is_file() && Path::new(&stored).canonicalize().unwrap().starts_with(uploads.canonicalize().unwrap()), "{stored}");
+        assert!(!proj.path().join(".infantry").exists(), "nothing stored in a project");
+        assert!(uploads.join(".gitignore").is_file());
+        // a project-less session posts to itself (note and image, by data and by upload id)
+        assert!(!t.handle(NOTE, &args(json!({"text": "hello"})), &as_s("lead")).unwrap().is_error);
+        assert!(!t.handle(IMAGE, &args(json!({"data": png64})), &as_s("lead")).unwrap().is_error);
+        let id = Path::new(&stored).file_name().unwrap().to_str().unwrap().to_string();
+        assert!(!t.handle(IMAGE, &args(json!({"path": id})), &as_s("lead")).unwrap().is_error);
+        // a project-less worker shows to its project-less starter
+        assert!(t.handle(NOTE, &args(json!({"sessionId": "starter", "text": "x"})), &as_s("lead2")).unwrap().text.contains("noted in lead"));
+        // the owner may post to any project-less session
+        assert!(!t.handle(NOTE, &args(json!({"sessionId": "other", "text": "x"})), &ToolInvoker { owner: true, ..pm() }).unwrap().is_error);
+        // refusals: a stranger, a relative path, the daemon's state, an unknown session
+        assert!(t.handle(NOTE, &args(json!({"sessionId": "other", "text": "x"})), &as_s("s1")).unwrap().text.contains("has no project"));
+        assert!(t.handle(NOTE, &args(json!({"sessionId": "other", "text": "x"})), &ToolInvoker { owner: false, agent: true, ..pm() }).unwrap().text.contains("has no project"));
+        assert!(t.handle(IMAGE, &args(json!({"path": "shot.png"})), &as_s("lead")).unwrap().text.contains("absolute path"));
+        assert!(t.handle(IMAGE, &args(json!({"path": state.path().join("x.png").to_string_lossy()})), &as_s("lead")).unwrap().text.contains("secrets"));
+        assert!(t.handle(NOTE, &args(json!({"sessionId": "ghost", "text": "x"})), &as_s("lead")).unwrap().text.contains("unknown session ghost"));
+    }
+
+    #[test]
+    fn chat_img_4_project_only_refuses_projectless_files() {
+        let state = tempfile::tempdir().unwrap();
+        let out = tempfile::tempdir().unwrap();
+        std::fs::write(out.path().join("a.png"), PNG).unwrap();
+        let log = Arc::new(ScriptRunLog::new(Arc::new(|| 50), Arc::new(|| 1_000), None));
+        let t = ChatTools::new(log, Arc::new(|_: &str| None), Arc::new(|_: &str| None), Arc::new(|_: &str, _: &str| Ok(())), Arc::new(|k: &str| (k == PROJECT_ONLY_KEY).then(|| "true".to_string())), Arc::new(|| 1_000))
+            .with_projectless(Arc::new(|s: &str| s == "lead"), state.path().join("uploads"));
+        let inv = ToolInvoker { session_id: Some("lead".into()), ..Default::default() };
+        let r = t.handle(IMAGE, &args(json!({"path": out.path().join("a.png").to_string_lossy()})), &inv).unwrap();
+        assert!(r.text.contains("outside the project"), "{}", r.text);
+        let r = t.handle(IMAGE, &args(json!({"data": base64::engine::general_purpose::STANDARD.encode(PNG)})), &inv).unwrap();
+        assert!(!r.is_error, "{}", r.text);
     }
 
     #[test]

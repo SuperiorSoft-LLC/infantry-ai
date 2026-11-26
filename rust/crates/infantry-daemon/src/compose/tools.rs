@@ -232,9 +232,12 @@ impl FrameUnit for ToolsUnit {
                 let v: Value = serde_json::from_str(&env.data).map_err(|e| Refusal::new(CHAT_IMAGE, format!("bad payload ({e})")))?;
                 let mut args = v.as_object().cloned().ok_or_else(|| Refusal::new(CHAT_IMAGE, "the payload is not an object"))?;
                 let session = args.get("sessionId").and_then(Value::as_str).map(str::to_string).or_else(|| env.session_id.clone()).ok_or_else(|| Refusal::new(CHAT_IMAGE, "needs sessionId"))?;
-                let project = self.tools.session_project(&session).ok_or_else(|| Refusal::new(CHAT_IMAGE, format!("unknown session {session}")))?;
+                // CHAT-IMG-4: "starter" and project-less sessions resolve in the chat tool itself. The frame acts as the
+                // calling session (the envelope's), else as the target session; the project is the target's (as before), else the caller's.
+                let caller = env.session_id.clone().filter(|s| !s.trim().is_empty()).or_else(|| (!session.eq_ignore_ascii_case("starter")).then(|| session.clone()));
+                let project = self.tools.session_project(&session).or_else(|| caller.as_deref().and_then(|c| self.tools.session_project(c)));
                 args.insert("sessionId".into(), json!(session));
-                let inv = ToolInvoker { project_id: Some(project), label: format!("frame:{CHAT_IMAGE}"), ..Default::default() };
+                let inv = ToolInvoker { project_id: project, session_id: caller, label: format!("frame:{CHAT_IMAGE}"), ..Default::default() };
                 let r = self.tools.invoke(infantry_scripting::chat::IMAGE, &args, &inv);
                 Ok(vec![reply(env, CHAT_IMAGE_RESULT, json!({"text": r.text, "isError": r.is_error}).to_string())])
             }

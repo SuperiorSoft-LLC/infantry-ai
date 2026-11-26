@@ -639,9 +639,21 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             Arc::new(|| now_ms() as u64),
         )
         .with_starter_of({
-            let d = daemon.clone();
-            Arc::new(move |s: &str| d.record(s)?.spawner_session_id)
+            // CHAT-IMG-4: the session that spawned the caller, else the session that started its ticket (a board start).
+            let (d, b) = (daemon.clone(), board.clone());
+            Arc::new(move |s: &str| {
+                let rec = d.record(s)?;
+                let blank = |x: Option<String>| x.filter(|v| !v.trim().is_empty() && v != "owner");
+                blank(rec.spawner_session_id).or_else(|| blank(b.started_by_of(rec.ticket_id.as_deref()?)))
+            })
         })
+        .with_projectless(
+            {
+                let d = daemon.clone();
+                Arc::new(move |s: &str| d.record(s).is_some_and(|r| r.project_id.as_deref().is_none_or(|p| p.trim().is_empty())))
+            },
+            state_dir.join("uploads"),
+        )
         .with_fetch(Arc::new(fetch_image))
         .with_denied(vec![state_dir.to_path_buf()])
     };
