@@ -1,10 +1,10 @@
 {
   "name": "Infantry_News",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "apiVersion": 2,
   "author": "Infantry AI",
   "license": "Apache-2.0",
-  "description": "News headlines for every agent: the news.headlines capability (Google News RSS, no key: top stories, a topic, a search or one source), the card:news chat card (headline cards with source, time, thumbnail or source icon, and a link) and the News Agent role. Nothing is saved. Any agent may use the capability and the card while this plugin is loaded; without it a card:news block shows as code.",
+  "description": "News headlines for every agent: the news.headlines capability (Google News RSS, no key: top stories, a topic, a search or one source), the card:news chat card (headline cards with source, time, thumbnail or source icon, and a link, drawn by its web UI half) and the News Agent role. Nothing is saved. Any agent may use the capability and the card while this plugin is loaded; without it a card:news block shows as code.",
   "tier": "official",
   "sequence": [],
   "entry": "com.superiorsoftllc.infantry.plugins.official.news.NewsPlugin",
@@ -33,6 +33,12 @@
       "tools": ["news.headlines"]
     }
   ],
+  "ui": {
+    "apiVersion": 1,
+    "entry": "ui/dist/index.js",
+    "styles": ["ui/dist/index.css"],
+    "contributes": [{ "slot": "chat.card", "id": "infantry.news.card", "card": "news" }]
+  },
   "capabilities": [
     {
       "id": "news.headlines",

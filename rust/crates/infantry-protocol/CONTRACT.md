@@ -3433,3 +3433,28 @@ ADDITIVE, no contract version bump. The `client` object of `plugin_tool_call` ma
 ### Addendum (CHAT-IMG-2, ticket-b3acb48d) — `chat_image` frame: one image capability for agents, scripts and plugins
 
 ADDITIVE, no contract version bump. `chat_image` (`{sessionId, path | data | url, caption?, level?}`; `sessionId` may also be the envelope's) is answered by `chat_image_result` (`{text, isError}`) with the request's `requestId`. It runs the same code as the `infantry_chat_image` tool and Lua `ih.chat_image`, in the target session's project: exactly one source, `path` (a file inside the project, or outside it unless the setting `scripting.chat.imageProjectOnly` is `true`; secret places are always refused: `.ssh`, `.gnupg`, `.infantry-keys`, cloud credential dirs, key stores by extension, browser profiles, the daemon's state dir, symlinks into any of them), `data` (base64 bytes) or `url` (https only, fetched by the daemon). png/jpeg/gif/webp checked by content, at most `scripting.chat.imageMaxBytes` (10 MB), stored under `<project>/.infantry/uploads/chat/`, posted as an automation `timeline_item` whose `meta.image` (and `meta.imageData` when small) carries the picture. A daemon plugin sends it with the `frames` grant (`frames.request("chat_image", ...)`); no plugin is special-cased. The tool (called from a session) accepts `sessionId: "starter"`: the session that started the caller (a ticket worker posts its screenshots to its PM).
+
+### Addendum (PLUGIN-AGENTS-1, ticket-c2186a55) — plugins bring their own agents and their own chat layouts
+
+ADDITIVE, no contract version bump: no frame is added or changes meaning; old clients ignore what they do not know.
+
+- **Plugin agents (module.json `roles[]`).** Each entry: `id`, `name`, `persona` (the text, or a `.md`/`.txt` file inside the
+  module folder), optional `color`, `icon`, `description`, preferred `cards[]` and `tools[]`, and NEW optional `provider`,
+  `model`, `effort` (the role's default binding, seeded only while the role has no binding; a binding the owner set wins).
+  The daemon seeds the roles of every installed, ENABLED official/core module at start and again after every
+  `modules.changed` (enable, disable, install, uninstall). A role whose module is gone or disabled reads `disabled: true`
+  (it leaves New agent and the role filter; the Roles tab still lists it as disabled). Core names no plugin.
+- **`roles` and `role_bindings` are also PUSHED** (unsolicited, no `requestId`) to every client after such a sync, in the
+  same shape `role_list` / `role_binding_list` answer, so a plugin's agents appear and vanish live.
+- **Plugin chat layouts.** A message (or a capability result pasted into one) carries a layout as a fenced block
+  ```` ```card:<type> [id=..] [op=set|append|replace] ```` whose body is ONE JSON object (the existing chat card format;
+  the `<type>` is the layout id). A module declares the type in module.json `cards[]` (`type`, `summary`, `spec`,
+  `images.hosts`) and draws it with its web UI half: `ui.contributes[]` entry `{"slot": "chat.card", "id": "<view id>",
+  "card": "<type>"}` (UI API 1, additive slot). The view gets `{card: {type, id, op, body}}` and draws in every chat:
+  desktop, browser and phone. Fallback: while the module is not loaded (loading, disabled, removed) the app draws the
+  generic card, which shows the body's `fallback` (else `text` / `summary`), its title, links and lists, plus a JSON toggle.
+  A layout's https images go through the existing `card_image` proxy (only the hosts the type declares); a whole image
+  posted into the chat is CHAT-IMG-2's `chat_image`.
+- **UI API (`@infantry/ui-plugin-api`), additive:** slot `chat.card` and `ChatCardProps`; `useCardImage(link, type, url)`
+  (a data: URL through `card_image`); `openExternal(url)` (HostApi `openExternal`, optional: the system browser on
+  desktop, a new tab elsewhere).

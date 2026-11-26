@@ -18,7 +18,6 @@
       "Infantry_Health",
       "Infantry_JobFeed",
       "Infantry_Mcp",
-      "Infantry_News",
       "Infantry_Notes",
       "Infantry_Plugins",
       "Infantry_Roles",
@@ -26,6 +25,7 @@
       "Infantry_Triggers"
     ],
     "optional": [
+      "Infantry_News",
       "Infantry_Sites"
     ]
   },

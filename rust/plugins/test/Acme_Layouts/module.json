@@ -1,0 +1,34 @@
+{
+  "name": "Acme_Layouts",
+  "version": "0.1.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "license": "Apache-2.0",
+  "description": "Test plugin, never shipped (PLUGIN-AGENTS-1): brings its own agent (Weather Agent) and its own chat layout (card:acme-weather, a 5-day forecast drawn by its web UI half), with fake data. Removing it removes the agent; old messages show the generic card.",
+  "tier": "official",
+  "cards": [
+    {
+      "type": "acme-weather",
+      "summary": "A 5-day weather forecast: one tile per day (icon, high/low, short text)",
+      "spec": "Weather card (Acme_Layouts): its own fenced block, info string `card:acme-weather`, body ONE JSON object:\n\n```card:acme-weather\n{\"place\": \"Springfield\", \"unit\": \"°F\", \"fallback\": \"Springfield, 5 days: sunny, then rain from Wednesday.\", \"days\": [{\"day\": \"Mon\", \"icon\": \"sun\", \"high\": 71, \"low\": 54, \"text\": \"Sunny\"}]}\n```\n\nFields: `place`; `unit` (shown after each number); `fallback` (one plain sentence, shown where the plugin is not installed); `days[]` with `day`, `icon` (sun, partly, cloud, rain, storm, snow), `high`, `low`, `text`."
+    }
+  ],
+  "roles": [
+    {
+      "id": "weather-agent",
+      "name": "Weather Agent",
+      "color": "#f59e0b",
+      "icon": "wb-sunny",
+      "description": "Test agent of the Acme_Layouts plugin: answers with a 5-day forecast card (fake data).",
+      "persona": "You are the Weather Agent, a TEST role brought by the Acme_Layouts plugin. You have no real weather data. For any weather question answer with ONE plain sentence, then this block exactly as written:\n\n```card:acme-weather\n{\"place\": \"Springfield\", \"unit\": \"°F\", \"fallback\": \"Springfield, 5 days: sunny, then rain from Wednesday.\", \"days\": [{\"day\": \"Mon\", \"icon\": \"sun\", \"high\": 71, \"low\": 54, \"text\": \"Sunny\"}, {\"day\": \"Tue\", \"icon\": \"partly\", \"high\": 68, \"low\": 52, \"text\": \"Partly cloudy\"}, {\"day\": \"Wed\", \"icon\": \"rain\", \"high\": 61, \"low\": 49, \"text\": \"Showers\"}, {\"day\": \"Thu\", \"icon\": \"storm\", \"high\": 58, \"low\": 47, \"text\": \"Thunderstorms\"}, {\"day\": \"Fri\", \"icon\": \"cloud\", \"high\": 63, \"low\": 50, \"text\": \"Cloudy\"}]}\n```",
+      "cards": ["acme-weather"],
+      "tools": []
+    }
+  ],
+  "ui": {
+    "apiVersion": 1,
+    "entry": "ui/dist/index.js",
+    "styles": ["ui/dist/index.css"],
+    "contributes": [{ "slot": "chat.card", "id": "acme.layouts.weather", "card": "acme-weather" }]
+  }
+}

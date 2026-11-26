@@ -35,7 +35,7 @@ fn tool(name: &str, desc: &str, read_only: bool, destructive: bool, props: &[(&s
 const ID: (&str, &str) = ("id", "The role id, e.g. automation.");
 const PERSONA: (&str, &str) = ("persona", "The role notes: the instructions every NEW session of this role receives at start. Replaces the stored text.");
 const DESCRIPTION: (&str, &str) = ("description", "One line describing the role (at most 200 characters); shown in the role editor, never sent to a session.");
-const CARDS: (&str, &str) = ("cards", "Preferred card types, comma separated (e.g. news). Empty string clears. Named at session start while loaded.");
+const CARDS: (&str, &str) = ("cards", "Preferred card types, comma separated (e.g. acme-weather). Empty string clears. Named at session start while loaded.");
 const TOOLS: (&str, &str) = ("tools", "Preferred tool or capability names, comma separated. Empty string clears. Named at session start while loaded.");
 const MCP: (&str, &str) = ("mcp", "MCP server names this role's sessions are granted, comma separated (non-agent caller only; walled when empty). Needs mcpPurpose. Empty string clears.");
 const MCP_PURPOSE: (&str, &str) = ("mcpPurpose", "Why the role needs those MCP servers (non-agent caller only).");

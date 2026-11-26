@@ -33,8 +33,11 @@ export const SCOPE_ATTRIBUTE: string = host.scopeAttribute;
  * - `layout`: a whole-window layout (DESK-2). When the user picks it (the `layout` preference), the shell draws this view INSTEAD
  *   of its own window and hands it today's shell as `Shell`, so the layout may wrap, shrink or hide the orchestrator.
  *   A layout contribution may carry `"defaultLayout": true`: it is then the layout of a device that has never chosen one.
+ * - `chat.card` (PLUGIN-AGENTS-1): draws one chat card type in every chat (desktop, browser, phone). The contribution names
+ *   the type it draws, `"card": "<type>"` (the type the module declares in module.json `cards`); its view gets the card
+ *   as [ChatCardProps]. While the plugin is not loaded, or its view fails, the chat draws the generic card instead.
  */
-export const SLOTS = ["tab", "panel", "settings.card", "plugin.config", "card.badge", "layout"] as const;
+export const SLOTS = ["tab", "panel", "settings.card", "plugin.config", "card.badge", "layout", "chat.card"] as const;
 export type Slot = (typeof SLOTS)[number];
 
 /** The modules the app lends: a plugin's imports of these are the app's own copy (one React, one UI kit). */
@@ -63,6 +66,15 @@ export interface SlotProps {
   "plugin.config": { plugin: string };
   "card.badge": { ticket: { id: string; title: string; status: string; [k: string]: unknown } };
   layout: LayoutViewProps;
+  "chat.card": ChatCardProps;
+}
+
+/**
+ * One chat card as a `chat.card` view gets it: the fenced block ```card:<type> [id=..] [op=..]``` with a body of one JSON
+ * object. Later blocks with the same id are already folded in (`op` set merges keys, append concatenates, replace swaps).
+ */
+export interface ChatCardProps {
+  card: { type: string; id: string; op: "set" | "append" | "replace"; body: Record<string, unknown> };
 }
 
 /**
@@ -172,6 +184,11 @@ export interface HostApi {
   osApp?(): string | null;
   /** RR-14: opens the app's setup wizard aimed at the runner [runner] (`local` = this machine): tools, sign-in, keys and models there. */
   openRunnerSetup(runner: string): void;
+  /**
+   * PLUGIN-AGENTS-1: opens [url] outside the app (the system browser on desktop, a new tab in a browser or on a phone);
+   * `target="_blank"` does nothing inside the desktop webview. Optional: an older app lends none.
+   */
+  openExternal?(url: string): Promise<void>;
 }
 
 /** One busy agent, as a taskbar shows it. */

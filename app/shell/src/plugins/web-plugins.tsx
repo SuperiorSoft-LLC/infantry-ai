@@ -43,7 +43,7 @@ function installHost(): void {
     apiVersion: UI_API_VERSION,
     modules: { react: React, "react/jsx-runtime": JsxRuntime, "react-dom": ReactDom, "@infantry/ui": Kit },
     api: { useLinkState: () => useDaemon((s) => s.connection.state), usePreference, useAgentActivity, AgentAvatar: HostAgentAvatar, windowFrame: () => host.window, shellUpdater: () => shellUpdater(host), osApp: () => host.os?.appId ?? null,
-      openRunnerSetup: (runner) => window.dispatchEvent(new CustomEvent(OPEN_RUNNER_SETUP_EVENT, { detail: { runner } })) },
+      openRunnerSetup: (runner) => window.dispatchEvent(new CustomEvent(OPEN_RUNNER_SETUP_EVENT, { detail: { runner } })), openExternal: (url) => host.openExternal(url) },
   };
   (globalThis as Record<string, unknown>)[HOST_GLOBAL] = Object.freeze(lent);
 }

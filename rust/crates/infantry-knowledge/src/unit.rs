@@ -112,6 +112,26 @@ impl Knowledge {
         Self::with_roles(db, roles_dir(state_dir), state_dir.join("avatars"), daemon, bundle)
     }
 
+    /// PLUGIN-AGENTS-1: seeds the roles the enabled modules declare (module.json `roles`), marks the roles of every other
+    /// module disabled, and gives a declared role its default binding (`provider`, `model`, `effort`) while it has none.
+    /// Answers (role ids written, problems).
+    pub fn sync_module_roles(&self, modules: &[crate::roles::ModuleRoles]) -> (Vec<String>, Vec<String>) {
+        let (written, mut problems) = crate::roles::sync_plugin_roles(&self.roles, modules);
+        for m in modules {
+            for d in m.roles.iter().filter(|d| [&d.provider, &d.model, &d.effort].iter().any(|v| v.as_deref().is_some_and(|x| !x.trim().is_empty()))) {
+                let unbound = self.library.role_binding_get(&d.id).map(|b| b.provider.is_none() && b.model.is_none() && b.effort.is_none()).unwrap_or(false);
+                if !unbound {
+                    continue;
+                }
+                let save = crate::library::RoleBindingSave { role_id: d.id.clone(), provider: d.provider.clone(), model: d.model.clone(), effort: d.effort.clone() };
+                if let Err(e) = self.library.role_binding_set(&save) {
+                    problems.push(format!("{} role '{}' default binding: {}", m.id, crate::roles::take(&d.id, 40), e.render("role_binding_set")));
+                }
+            }
+        }
+        (written, problems)
+    }
+
     /// One role with its avatar reference filled in.
     pub fn with_avatar(&self, mut r: Role) -> Role {
         r.avatar = Some(self.avatars.resolve(&r.id, None));
@@ -429,6 +449,27 @@ impl FrameUnit for LibraryUnit {
 mod tests {
     use super::*;
     use infantry_core::bus::EventBus;
+
+    #[test]
+    fn module_roles_seed_a_default_binding_once_and_leave_with_the_module() {
+        use crate::roles::{ModuleRoles, RoleDeclaration};
+        let dir = tempfile::tempdir().unwrap();
+        let db = Db::open(dir.path().join("infantry.db")).unwrap();
+        db.write(|c| c.execute_batch(crate::library::SCHEMA)).unwrap();
+        let k = Knowledge::open(Arc::new(db), dir.path(), Arc::new(NoPorts));
+        let decl = RoleDeclaration { id: "forecast-agent".into(), name: "Forecast Agent".into(), persona: "Forecast.".into(), cards: vec!["forecast".into()], model: Some("m-1".into()), ..Default::default() };
+        let m = ModuleRoles { id: "Acme_Layouts".into(), dir: None, roles: vec![decl] };
+        let (w, p) = k.sync_module_roles(std::slice::from_ref(&m));
+        assert_eq!((w, p), (vec!["forecast-agent".to_string()], vec![]));
+        assert_eq!(k.library.role_binding_get("forecast-agent").unwrap().model.as_deref(), Some("m-1"));
+        let mine = crate::library::RoleBindingSave { role_id: "forecast-agent".into(), model: Some("mine".into()), ..Default::default() };
+        k.library.role_binding_set(&mine).unwrap();
+        k.sync_module_roles(std::slice::from_ref(&m));
+        assert_eq!(k.library.role_binding_get("forecast-agent").unwrap().model.as_deref(), Some("mine"), "the owner's binding wins");
+        assert!(!k.roles.role("forecast-agent").unwrap().disabled);
+        k.sync_module_roles(&[]);
+        assert!(k.roles.role("forecast-agent").unwrap().disabled, "a removed module's role reads disabled");
+    }
 
     #[test]
     fn frames_round_trip() {

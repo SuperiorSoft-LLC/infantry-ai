@@ -3,11 +3,15 @@
 // Chat cards (CARD-2, after the Kotlin ChatCards.kt `chat.cards` registry): a `card:<type>` fence draws with the renderer
 // registered for its type. A type with no renderer draws as the generic card (title, text, link, fields, item list) with
 // a "JSON" toggle for the raw body, instead of a bare code block. A renderer that throws falls back to the generic card.
+// PLUGIN-AGENTS-1: a web UI plugin draws its own card types through the `chat.card` slot (`{"slot": "chat.card", "id": ..,
+// "card": "<type>"}`); that view wins over an in-app renderer. While the plugin is loading, disabled or removed, the card
+// draws generic, so an old message of a removed plugin still reads.
 import { Component, useState, type ComponentType, type ReactNode } from "react";
 import { Braces, ExternalLink as ExternalLinkIcon, RefreshCw } from "lucide-react";
 import { ExternalLink } from "@/components/external-link";
 import type { ChatCard } from "@infantry/client";
 import { cn } from "@infantry/ui";
+import { PluginView, useSlotFills } from "@/plugins/web-plugins";
 
 export type ChatCardRenderer = ComponentType<{ card: ChatCard }>;
 const renderers = new Map<string, ChatCardRenderer>();
@@ -27,7 +31,7 @@ const safeUrl = (v: unknown) => {
   return s && /^(https?:|mailto:)/i.test(s) ? s : undefined;
 };
 const TITLE = ["title", "name", "headline", "label"];
-const TEXT = ["text", "summary", "description", "body", "message"];
+const TEXT = ["fallback", "text", "summary", "description", "body", "message"];
 const LINK = ["url", "link", "href"];
 const SHOWN = new Set([...TITLE, ...TEXT, ...LINK]);
 
@@ -117,6 +121,8 @@ class Guard extends Component<{ fallback: ReactNode; children: ReactNode }, { fa
 }
 
 export function ChatCardView({ card }: { card: ChatCard }) {
+  const fill = useSlotFills("chat.card").find((f) => f.contribution.card === card.type && f.entry.state === "ready" && f.entry.views[f.contribution.id]);
+  if (fill) return <PluginView plugin={fill.plugin} id={fill.contribution.id} props={{ card }} frame="card" />;
   const R = renderers.get(card.type);
   if (!R) return <GenericCard card={card} />;
   return (

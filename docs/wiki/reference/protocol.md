@@ -121,17 +121,17 @@ name the frame and gives the newest one.
 | `finished` | `FINISHED` |  |  | 17: CHAT-QUEUE-1 |
 | `reasoning` | `REASONING` |  |  | 5: What changed in 1.23.0 |
 | `turn` | `TURN` |  |  | 9: CHAT-SENDING-1 |
-| `role_list` | `ROLE_LIST` |  |  | 4: What changed in 1.90.0 |
+| `role_list` | `ROLE_LIST` |  |  | 5: What changed in 1.90.0 |
 | `role_save` | `ROLE_SAVE` |  |  | 6: ROLE-PLUGIN-1 |
 | `role` | `ROLE` |  |  | 20: MCP-REGISTRY-1 |
-| `roles` | `ROLES` |  |  | 5: ROLE-PLUGIN-1 |
+| `roles` | `ROLES` |  |  | 6: ROLE-PLUGIN-1 |
 | `role_delete` | `ROLE_DELETE` |  |  | 3: What changed in 1.108.0 |
 | `role_removed` | `ROLE_REMOVED` |  |  | 2: What changed in 1.108.0 |
-| `role_binding_list` | `ROLE_BINDING_LIST` |  |  | 2: What changed in 1.40.0 |
+| `role_binding_list` | `ROLE_BINDING_LIST` |  |  | 3: What changed in 1.40.0 |
 | `role_binding_get` | `ROLE_BINDING_GET` |  |  | 2: What changed in 1.40.0 |
 | `role_binding_set` | `ROLE_BINDING_SET` |  |  | 4: What changed in 1.47.0 |
 | `role_binding` | `ROLE_BINDING` |  |  | 2: What changed in 1.40.0 |
-| `role_bindings` | `ROLE_BINDINGS` |  |  | 2: What changed in 1.40.0 |
+| `role_bindings` | `ROLE_BINDINGS` |  |  | 3: What changed in 1.40.0 |
 | `prompt_save` | `PROMPT_SAVE` |  |  | 2: What changed in 1.44.0 |
 | `prompt_list` | `PROMPT_LIST` |  |  | 2: What changed in 1.44.0 |
 | `prompt_get` | `PROMPT_GET` |  |  | 2: What changed in 1.44.0 |

@@ -711,6 +711,11 @@ pub struct RoleDeclaration {
     pub persona: String,
     pub cards: Vec<String>,
     pub tools: Vec<String>,
+    /// PLUGIN-AGENTS-1: the role's default binding (harness provider, model, effort), seeded only while the role has
+    /// none; a binding the owner set always wins. All optional.
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub effort: Option<String>,
 }
 
 /// A loaded module as the seeding needs it: its id, folder and declared roles.
@@ -843,15 +848,15 @@ mod tests {
     fn plugin_role_seeded_disabled_and_removed_mark() {
         let dir = tempfile::tempdir().unwrap();
         let s = RoleService::new(dir.path());
-        let m = ModuleRoles { id: "Infantry_News".into(), dir: None, roles: vec![RoleDeclaration { id: "news-agent".into(), name: "News Agent".into(), persona: "Fetch news.".into(), tools: vec!["news.headlines".into()], ..Default::default() }] };
+        let m = ModuleRoles { id: "Acme_Weather".into(), dir: None, roles: vec![RoleDeclaration { id: "weather-agent".into(), name: "Weather Agent".into(), persona: "Forecast.".into(), tools: vec!["weather.forecast".into()], ..Default::default() }] };
         let (w, p) = sync_plugin_roles(&s, std::slice::from_ref(&m));
-        assert_eq!((w, p.len()), (vec!["news-agent".to_string()], 0));
+        assert_eq!((w, p.len()), (vec!["weather-agent".to_string()], 0));
         assert_eq!(sync_plugin_roles(&s, std::slice::from_ref(&m)).0.len(), 0);
         s.set_loaded_modules(Some(HashSet::new()));
-        assert!(s.role("news-agent").unwrap().disabled);
-        assert!(s.delete("news-agent", &HashSet::new()).unwrap().is_none());
+        assert!(s.role("weather-agent").unwrap().disabled);
+        assert!(s.delete("weather-agent", &HashSet::new()).unwrap().is_none());
         assert_eq!(sync_plugin_roles(&s, &[m]).0.len(), 0, "an owner-removed plugin role is never re-seeded");
-        let r = Role { tools: vec!["news.headlines".into()], ..Role::bare("x", RoleSource::Custom) };
-        assert!(briefing(&r, &["news.headlines".to_string()].into(), &HashSet::new()).contains("- tools: news.headlines"));
+        let r = Role { tools: vec!["weather.forecast".into()], ..Role::bare("x", RoleSource::Custom) };
+        assert!(briefing(&r, &["weather.forecast".to_string()].into(), &HashSet::new()).contains("- tools: weather.forecast"));
     }
 }

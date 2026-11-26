@@ -32,7 +32,7 @@ pub struct CapabilityDecl {
 }
 
 /// The tool name a capability id maps to when no tool shares its `action`: dots and dashes become `_`
-/// (`news.headlines` -> `news_headlines`).
+/// (`weather.forecast` -> `weather_forecast`).
 pub fn capability_tool_name(capability_id: &str) -> String {
     capability_id.chars().map(|c| if c == '.' || c == '-' { '_' } else { c.to_ascii_lowercase() }).collect()
 }
@@ -261,19 +261,19 @@ mod tests {
     #[test]
     fn grouped_kotlin_config_and_capability_to_tool_mapping() {
         let m: ModuleManifest = serde_json::from_str(
-            r#"{"name":"Infantry_News","capabilities":[{"id":"news.headlines","runs":"daemon","action":"news.read"},
-            {"id":"news.other","runs":"daemon"},{"id":"news.app","runs":"app","action":"news.read"}],
-            "daemon":{"tools":[{"name":"news_headlines","action":"news.read"},{"name":"news_other"}],
-            "config":[{"node":"Infantry_News.headlines","fields":[{"key":"news.items","scope":"daemon","default":6},
-            {"key":"news.ui","scope":"app","default":"x"}]}]}}"#,
+            r#"{"name":"Acme_Weather","capabilities":[{"id":"weather.forecast","runs":"daemon","action":"weather.read"},
+            {"id":"weather.other","runs":"daemon"},{"id":"weather.app","runs":"app","action":"weather.read"}],
+            "daemon":{"tools":[{"name":"weather_forecast","action":"weather.read"},{"name":"weather_other"}],
+            "config":[{"node":"Acme_Weather.headlines","fields":[{"key":"weather.items","scope":"daemon","default":6},
+            {"key":"weather.ui","scope":"app","default":"x"}]}]}}"#,
         )
         .unwrap();
         let d = m.daemon.as_ref().unwrap();
-        assert_eq!(d.config_default("news.items").as_deref(), Some("6"));
-        assert_eq!(d.config_default("news.ui"), None);
-        assert_eq!(m.capability_tool("news.headlines").map(|t| t.name.as_str()), Some("news_headlines"));
-        assert_eq!(m.capability_tool("news.other").map(|t| t.name.as_str()), Some("news_other"));
-        assert!(m.capability_tool("news.app").is_none());
-        assert_eq!(capability_tool_name("acme.news-feed"), "acme_news_feed");
+        assert_eq!(d.config_default("weather.items").as_deref(), Some("6"));
+        assert_eq!(d.config_default("weather.ui"), None);
+        assert_eq!(m.capability_tool("weather.forecast").map(|t| t.name.as_str()), Some("weather_forecast"));
+        assert_eq!(m.capability_tool("weather.other").map(|t| t.name.as_str()), Some("weather_other"));
+        assert!(m.capability_tool("weather.app").is_none());
+        assert_eq!(capability_tool_name("acme.weather-feed"), "acme_weather_feed");
     }
 }

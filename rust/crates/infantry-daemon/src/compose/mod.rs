@@ -144,6 +144,36 @@ fn plugins_dir() -> Option<PathBuf> {
     crate::own_files::package_dir().map(|p| p.join("plugins"))
 }
 
+/// PLUGIN-AGENTS-1: the module.json `roles` of every installed, enabled module (any half, official or core tier).
+fn module_roles(plugins_dir: &Option<PathBuf>, disabled: &plugins::Disabled) -> Vec<infantry_knowledge::roles::ModuleRoles> {
+    host_frames::scan_modules(plugins_dir)
+        .into_iter()
+        .filter(|m| plugins::TIERS.contains(&m.tier.as_str()) && !disabled.contains(&m.id))
+        .map(|m| {
+            let roles = m.manifest.get("roles").cloned().and_then(|r| serde_json::from_value(r).ok()).unwrap_or_default();
+            infantry_knowledge::roles::ModuleRoles { id: m.id, dir: Some(m.dir), roles }
+        })
+        .collect()
+}
+
+/// Seeds and marks the module roles; with [bus], every client then gets the new role list and bindings (the same `roles` and
+/// `role_bindings` frames `role_list` / `role_binding_list` answer), so New agent shows or drops a plugin's agents live.
+fn sync_module_roles(knowledge: &infantry_knowledge::Knowledge, plugins_dir: &Option<PathBuf>, disabled: &plugins::Disabled, bus: Option<&EventBus>) {
+    let (written, problems) = knowledge.sync_module_roles(&module_roles(plugins_dir, disabled));
+    if !written.is_empty() {
+        log_line(&format!("plugin roles seeded: {}", written.join(", ")));
+    }
+    for p in problems {
+        log_line(&format!("plugin role skipped: {p}"));
+    }
+    if let Some(bus) = bus {
+        bus.publish(Envelope::new(infantry_protocol::frames::ROLES, serde_json::to_string(&knowledge.roles_with_avatars()).unwrap_or_default()));
+        if let Ok(b) = knowledge.library.role_binding_list() {
+            bus.publish(Envelope::new(infantry_protocol::frames::ROLE_BINDINGS, serde_json::to_string(&b).unwrap_or_default()));
+        }
+    }
+}
+
 /// PM-ROLE-1: the role catalog file of every module that declares one (`module.json` `roleCatalog`, a path inside the
 /// module folder), in tier precedence order.
 fn role_catalogs(plugins_dir: &Option<PathBuf>) -> Vec<PathBuf> {
@@ -689,6 +719,24 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     }
     let plugin_set = plugins::start(state_dir, plugins_dir(), bus.clone(), handle.clone(), disabled.clone(), plugins::InstallSeam { config: install_config, boot: boot.clone(), late: late.clone(), sources: plugin_sources.clone(), signers: Arc::new(sources::Signers::load(state_dir)) });
     let plugin_host = plugin_set.as_ref().map(|p| p.host.clone());
+    // PLUGIN-AGENTS-1: the roles the enabled modules declare become agents now, and again after every enable, disable,
+    // install or uninstall (`modules.changed`); a removed module's roles read disabled and leave New agent.
+    sync_module_roles(&knowledge, &plugins_dir(), &disabled, None);
+    {
+        let (k, d, b, mut rx) = (knowledge.clone(), disabled.clone(), bus.clone(), bus.subscribe_events());
+        tokio::spawn(async move {
+            loop {
+                match rx.recv().await {
+                    Ok(e) if e.name == plugins::MODULES_CHANGED => {
+                        let (k, d, b) = (k.clone(), d.clone(), b.clone());
+                        let _ = tokio::task::spawn_blocking(move || sync_module_roles(&k, &plugins_dir(), &d, Some(&b))).await;
+                    }
+                    Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(_) => break,
+                }
+            }
+        });
+    }
     let bundles = Arc::new(ui_bundles::UiBundles { plugins_dir: plugins_dir(), plugins: plugin_host.clone(), disabled });
     tools.set_plugins(plugin_host.clone());
     // The core steps are done; the installer step is done once the bootstrap plugin is (plugins::start loaded it, or
