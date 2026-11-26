@@ -180,6 +180,11 @@ mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
         assert!(owner_card_open(&prompts, &sid));
+        // The card enters the snapshot just before the observer sets the hold: wait for the state (bounded), not one look.
+        for _ in 0..100 {
+            if state(&daemon) == SessionState::WaitingInput { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
         assert_eq!(state(&daemon), SessionState::WaitingInput, "an open card = needs input");
 
         let id = prompts.snapshot()[0].prompt_id.clone();

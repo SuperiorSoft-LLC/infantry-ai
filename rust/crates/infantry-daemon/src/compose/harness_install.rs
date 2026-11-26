@@ -667,15 +667,17 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("inf-hi-live-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let fake = if cfg!(windows) { dir.join("npm.cmd") } else { dir.join("bin/npm") };
+        // The app's own tool folder (`<state>/harness-tools`) is where the install looks once PATH is empty.
+        let prefix = dir.join("harness-tools");
+        let fake = if cfg!(windows) { prefix.join("npm.cmd") } else { prefix.join("bin/npm") };
         std::fs::create_dir_all(fake.parent().unwrap()).unwrap();
         let body = if cfg!(windows) { "@echo off
 echo npm http fetch GET 200 https://registry.npmjs.org/x 12ms 1>&2
-ping -n 4 127.0.0.1 >nul
+%SystemRoot%\\System32\\ping.exe -n 4 127.0.0.1 >nul
 exit /b 1
 " } else { "#!/bin/sh
 echo npm http fetch GET 200 https://registry.npmjs.org/x 12ms >&2
-sleep 3
+/bin/sleep 3
 exit 1
 " };
         std::fs::write(&fake, body).unwrap();
@@ -685,6 +687,10 @@ exit 1
             std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
         let u = HarnessInstall::new(&dir, Arc::new(|| {}), Arc::new(|| {}));
+        // `new` (and each report) merges the registry PATH back in, which would bring the machine's real npm (CI runners have
+        // Node.js) ahead of the fake one. Clear PATH again after `new` and arm the refresh throttle with no dirs.
+        std::env::set_var("PATH", "");
+        infantry_proc::user_path::refresh_with(Vec::new, true);
         let ctx = FrameCtx { conn_id: 1, owner: true, bus: infantry_core::bus::EventBus::default() };
         let ack = u.handle(&Envelope::new(pf::HARNESS_INSTALL, json!({"ids":["claude"],"update":true}).to_string()), &ctx).unwrap();
         assert_eq!(ack[0].r#type, pf::HARNESS_INSTALL_RESULT);
