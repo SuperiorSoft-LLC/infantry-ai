@@ -152,6 +152,13 @@ fn git(args: &[&str], cwd: Option<&Path>) -> Result<String, String> {
     }
 }
 
+/// CI-TESTS-RED-1: two spellings of one folder (an 8.3 short name, a junction, a trailing separator) are the same
+/// location. A folder source is stored canonical while the defaults file and the seeded list keep the text as written.
+fn same_location(a: &str, b: &str) -> bool {
+    let canon = |p: &str| std::fs::canonicalize(p).ok().map(|c| installer::plain(&c).display().to_string());
+    a == b || matches!((canon(a), canon(b)), (Some(x), Some(y)) if x == y)
+}
+
 impl SourceStore {
     pub fn load(state_dir: &Path) -> SourceStore {
         let file = state_dir.join(SOURCES_FILE);
@@ -309,10 +316,10 @@ impl SourceStore {
         let mut lines = Vec::new();
         for old in entry["replaces"].as_array().cloned().unwrap_or_default() {
             let Some(old) = old.as_str().map(str::trim).filter(|o| !o.is_empty()) else { continue };
-            if !seeded.iter().any(|s| s == old) {
+            if !seeded.iter().any(|s| same_location(s, old)) {
                 continue;
             }
-            let id = self.items.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|s| s.location == old && s.label.is_some()).map(|s| s.id.clone());
+            let id = self.items.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|s| same_location(&s.location, old) && s.label.is_some()).map(|s| s.id.clone());
             if let Some(id) = id {
                 match self.remove(&id) {
                     Ok(_) => lines.push(format!("{old}: replaced by the new default")),
