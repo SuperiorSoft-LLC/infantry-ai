@@ -103,12 +103,15 @@ jobs:
           set -euo pipefail
           gh release create "android-v$VERSION" "dist/InfantryAI_${VERSION}_arm64.apk" "dist/InfantryAI_${VERSION}_arm64.apk.sha256" \
             --prerelease --latest=false --title "Infantry AI $VERSION for Android" --notes-file docs/android-release-notes.md
+      # ubuntu-24.04's system python refuses pip install (PEP 668): a setup-python interpreter takes it.
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
       - name: The phone feed (android.json on android-stable; never latest.json)
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
           set -euo pipefail
           pip install cryptography
-          python3 scripts/android-feed.py --apk "dist/InfantryAI_${VERSION}_arm64.apk" --repo "$GITHUB_REPOSITORY"             --out dist/android.json --tauri-sign
+          python scripts/android-feed.py --apk "dist/InfantryAI_${VERSION}_arm64.apk" --repo "$GITHUB_REPOSITORY"             --out dist/android.json --tauri-sign
           gh release upload "android-v$VERSION" "dist/InfantryAI_${VERSION}_arm64.apk.sig"
           gh release view android-stable >/dev/null 2>&1 || gh release create android-stable --prerelease --latest=false             --title "Infantry AI for Android: update feed" --notes "The phone app's update feed (android.json); every android-v* tag replaces it."
           gh release upload android-stable dist/android.json --clobber
