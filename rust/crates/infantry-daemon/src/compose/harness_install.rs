@@ -729,6 +729,13 @@ exit 1
         assert!(t0.elapsed() < Duration::from_secs(2), "a status while busy must not probe CLIs: {:?}", t0.elapsed());
         assert_eq!(r0["busy"], true, "busy straight after the ack");
         let deadline = Instant::now() + Duration::from_secs(10);
+        // PATH is process-wide: once the install has picked its npm (the "[claude] npm install" line), give it back at once
+        // so tests running alongside that start git or other CLIs still find them.
+        while !u.report()["log"].as_array().unwrap().iter().any(|l| l.as_str().is_some_and(|l| l.starts_with("[claude] npm install"))) {
+            assert!(Instant::now() < deadline, "the install never reached npm: {:?}", u.report()["log"]);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        restore_path(before.clone());
         loop {
             let r = u.report();
             let log: Vec<String> = r["log"].as_array().unwrap().iter().filter_map(|v| v.as_str().map(String::from)).collect();
