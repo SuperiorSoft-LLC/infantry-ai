@@ -41,6 +41,7 @@ uses when the key is unset, where it sits next to the key; otherwise read the co
 | `limits.mail.windowMinutes` |  | `rust/crates/infantry-mail/src/mail/mailbox.rs` |
 | `limits.mcp.bodyChars` | `0` | `rust/crates/infantry-cli/src/env.rs` |
 | `limits.mcp.defaultDetail` | `0` | `rust/crates/infantry-cli/src/env.rs` |
+| `limits.mcp.maxConcurrentCalls` | `8` | `rust/crates/infantry-cli/src/env.rs` |
 | `limits.mcp.maxResultChars` | `8000` | `rust/crates/infantry-cli/src/env.rs` |
 | `limits.mcp.toolsWatchSeconds` | `5` | `rust/crates/infantry-cli/src/env.rs` |
 | `limits.plugins.maxDeclaredTimeoutMs` |  | `rust/crates/infantry-daemon/src/compose/plugins.rs` |
