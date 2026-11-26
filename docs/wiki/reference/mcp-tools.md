@@ -12,7 +12,7 @@ from the environment the harness inherits (`INFANTRY_URL`, `INFANTRY_SESSION_ID`
 the token; the old `AGENTHQ_*` names are read as fallbacks) and `.infantry/mcp.json` in the working folder. Results longer
 than the setting `limits.mcp.maxResultChars` are cut; a tool takes `detail` and `maxChars` to ask for more.
 
-## Core tools (24)
+## Core tools (26)
 
 From `rust/crates/infantry-daemon/src/compose/agent_tools.json`.
 
@@ -195,6 +195,28 @@ Ask the owner ONE decision: the question in plain words, 2 to 8 answer options (
 - `question` (string, required): The decision, in plain words (max 2000 characters).
 - `reason` (string, required): Why you recommend it, one line (max 200 characters).
 - `recommended` (string, required): The label of the option you recommend.
+
+### `infantry_notify`
+
+Post a notice to the owner (in-app toast and OS notification) through the notification hub. For scripts and agents reporting something the owner must see now.
+
+- `body` (string): 
+- `dedupeKey` (string): 
+- `level` (string): info | success (or milestone) | warning | error | urgent
+- `projectId` (string): 
+- `sessionId` (string): 
+- `sound` (string): Accepted for script compatibility; the presenter picks the sound.
+- `sticky` (boolean): 
+- `ticketId` (string): 
+- `title` (string, required): 
+
+### `infantry_session_act`
+
+Act on another session (pm, owner or script only): queue_add holds text as the session's next turn (a turn now when it is at rest); deliver_urgent puts it into the running turn when the harness takes input mid-turn.
+
+- `action` (string, required): 
+- `sessionId` (string, required): 
+- `text` (string, required): 
 
 ## Plugin tools
 

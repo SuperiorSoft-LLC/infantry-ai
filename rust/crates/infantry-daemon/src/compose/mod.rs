@@ -554,6 +554,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             prompts: prompts.clone(),
             questions: questions.clone(),
             asker_of: asker_of.clone(),
+            hub: hub.clone(),
         }));
     }
     tools.set_knowledge(knowledge.clone());

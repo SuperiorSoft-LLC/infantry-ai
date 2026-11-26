@@ -46,6 +46,8 @@ pub struct AgentTools {
     /// MAIL-OWNER-1: `infantry_ask` raises an owner question (a decision mail in the owner's Inbox).
     pub questions: Arc<infantry_mail::notify::questions::OwnerQuestions>,
     pub asker_of: infantry_mail::notify::units::AskerOf,
+    /// SCRIPT-TOOLS-MISSING-1: `infantry_notify` posts the owner's notice here (in-app toast + OS presenters).
+    pub hub: Arc<infantry_mail::notify::hub::NotificationHub>,
 }
 
 fn infos(raw: &str) -> Vec<ToolInfo> {
@@ -612,6 +614,37 @@ impl AgentTools {
                 }
                 Ok(out.to_string())
             })(),
+            "infantry_notify" => (|| {
+                use infantry_mail::notify::hub::{Notification, NotificationLevel};
+                let title = s(a, "title").ok_or("needs a title")?;
+                let n = Notification {
+                    title,
+                    body: s(a, "body").unwrap_or_default(),
+                    level: NotificationLevel::of(&s(a, "level").unwrap_or_default()),
+                    sticky: flag(a, "sticky"),
+                    dedupe_key: s(a, "dedupeKey"),
+                    ticket_id: s(a, "ticketId"),
+                    session_id: s(a, "sessionId"),
+                    project_id: s(a, "projectId").or_else(|| inv.project_id.clone()),
+                    ..Default::default()
+                };
+                let id = self.hub.post(n, &inv.label);
+                Ok(json!({ "id": id }).to_string())
+            })(),
+            "infantry_session_act" => (|| {
+                if !pm(inv) {
+                    return Err("only the pm, the owner or a script may act on another session".to_string());
+                }
+                let r = self.find(&s(a, "sessionId").unwrap_or_default())?;
+                let action = s(a, "action").ok_or("needs an action (queue_add | deliver_urgent)")?;
+                let text = s(a, "text").ok_or("needs text")?;
+                let how = match action.as_str() {
+                    "queue_add" => self.daemon.deliver(&r.id, &text).map(|_| "queued"),
+                    "deliver_urgent" => self.daemon.deliver_urgent(&r.id, &text),
+                    other => return Err(format!("unknown action '{other}' (queue_add | deliver_urgent)")),
+                }?;
+                Ok(json!({ "sessionId": r.id, "action": action, "delivered": how }).to_string())
+            })(),
             "infantry_pace" => Ok(serde_json::to_string(&self.usage.pace_report(&Value::Object(a.clone()).to_string())).unwrap_or_default()),
             _ => return None,
         };
@@ -670,6 +703,68 @@ mod wake_route_tests {
         let inv = ToolInvoker::automation(None, "script:test");
         let a = json!({"to": pm, "body": format!("{kind} {key}"), "subject": kind, "kind": kind, "key": key});
         c.tools.invoke("infantry_message", a.as_object().unwrap(), &inv).text
+    }
+
+    /// SCRIPT-TOOLS-MISSING-1: every tool a shipped alias or a global script names is served by the composed daemon, so
+    /// no script can queue a call the daemon would refuse as unknown (the smoke tests mock the host, this does not).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn every_tool_scripts_name_is_served() {
+        let (dir, _daemon, c, _pm) = setup();
+        let mut served: std::collections::BTreeSet<String> = c.tools.catalog().into_iter().map(|t| t.name).collect();
+        // The official plugins load in production (none load here): their declared daemon tools count as served.
+        let official = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/official");
+        for e in std::fs::read_dir(&official).unwrap().flatten() {
+            let Ok(raw) = std::fs::read_to_string(e.path().join("module.json")) else { continue };
+            let m: Value = serde_json::from_str(&raw).unwrap_or_default();
+            for t in m["daemon"]["tools"].as_array().into_iter().flatten() {
+                if let Some(n) = t["name"].as_str() {
+                    served.insert(n.to_string());
+                }
+            }
+        }
+        // Handled by the dispatcher itself, never by a host tool.
+        let dispatcher_own = [infantry_scripting::dispatcher::PROGRESS, infantry_scripting::dispatcher::CAPABILITY_CALL];
+        let mut named: Vec<(String, String)> = infantry_scripting::dispatcher::BUILTIN_ALIASES
+            .iter()
+            .chain(infantry_scripting::dispatcher::DEFAULT_ALIASES)
+            .map(|(k, v)| (format!("alias {k}"), v.to_string()))
+            .collect();
+        let scripts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../infantry-scripting/global-scripts");
+        for e in std::fs::read_dir(&scripts).unwrap().flatten() {
+            let text = std::fs::read_to_string(e.path()).unwrap_or_default();
+            for start in ["ih.call(\"", "ih.call('", "ih."] {
+                for (i, _) in text.match_indices(start) {
+                    let rest = &text[i + start.len()..];
+                    let tool: String = rest.chars().take_while(|c| c.is_ascii_lowercase() || *c == '_').collect();
+                    if tool.starts_with("infantry_") {
+                        named.push((e.file_name().to_string_lossy().into_owned(), tool));
+                    }
+                }
+            }
+        }
+        let missing: Vec<String> = named.iter().filter(|(_, t)| !served.contains(t) && !dispatcher_own.contains(&t.as_str())).map(|(w, t)| format!("{w}: {t}")).collect();
+        assert!(missing.is_empty(), "named by scripts but served by no daemon tool: {missing:?}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn notify_posts_an_owner_notice_and_session_act_queues_a_turn() {
+        let (dir, _daemon, c, pm) = setup();
+        let inv = ToolInvoker::automation(None, "script:needs-owner-alert");
+        let r = c.tools.invoke("infantry_notify", json!({"title": "Infantry needs you", "body": "x: needs owner", "level": "milestone", "sound": "bell", "ticketId": "ticket-x"}).as_object().unwrap(), &inv);
+        assert!(!r.is_error, "{}", r.text);
+        let n = c.hub.history().into_iter().find(|n| n.title == "Infantry needs you").expect("notice posted");
+        assert_eq!(n.ticket_id.as_deref(), Some("ticket-x"));
+        assert!(c.tools.invoke("infantry_notify", json!({"body": "no title"}).as_object().unwrap(), &inv).is_error);
+        let act = |a: Value, i: &ToolInvoker| c.tools.invoke("infantry_session_act", a.as_object().unwrap(), i);
+        let r = act(json!({"sessionId": pm, "action": "queue_add", "text": "nudge: your ticket waits"}), &inv);
+        assert!(!r.is_error, "{}", r.text);
+        assert!(r.text.contains("queued"), "{}", r.text);
+        assert!(act(json!({"sessionId": pm, "action": "explode", "text": "x"}), &inv).text.contains("unknown action"));
+        assert!(act(json!({"sessionId": "ghost", "action": "queue_add", "text": "x"}), &inv).is_error);
+        let worker = ToolInvoker::agent("w1", "backend", None, "agent");
+        assert!(act(json!({"sessionId": pm, "action": "queue_add", "text": "x"}), &worker).text.contains("only the pm"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     /// MAIL-OWNER-1: an agent raises an owner decision with `infantry_ask`; the owner's Inbox shows it.

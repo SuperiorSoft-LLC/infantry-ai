@@ -33,9 +33,7 @@ pub const BUILTIN_ALIASES: &[(&str, &str)] = &[
     ("progress", "infantry_progress"),
     ("chat_note", "infantry_chat_note"),
     ("chat_image", "infantry_chat_image"),
-    ("session_read", "infantry_session_read"),
     ("session_act", "infantry_session_act"),
-    ("notice_suppress", "infantry_notice_suppress"),
     ("notify", "infantry_notify"),
     ("spawn", "infantry_spawn"),
     ("prompt_answer", "infantry_prompt_answer"),
@@ -56,7 +54,6 @@ pub const DEFAULT_ALIASES: &[(&str, &str)] = &[
     ("ticket_update", "infantry_ticket_update"),
     ("ticket_create", "infantry_ticket_create"),
     ("board", "infantry_board"),
-    ("emit", "infantry_event_emit"),
     ("secret_render", "infantry_secret_render"),
 ];
 

@@ -40,9 +40,7 @@ setting `scripting.aliases` is unset (a stored JSON object replaces it).
 | `progress` | `infantry_progress` | built in |
 | `chat_note` | `infantry_chat_note` | built in |
 | `chat_image` | `infantry_chat_image` | built in |
-| `session_read` | `infantry_session_read` | built in |
 | `session_act` | `infantry_session_act` | built in |
-| `notice_suppress` | `infantry_notice_suppress` | built in |
 | `notify` | `infantry_notify` | built in |
 | `spawn` | `infantry_spawn` | built in |
 | `prompt_answer` | `infantry_prompt_answer` | built in |
@@ -58,7 +56,6 @@ setting `scripting.aliases` is unset (a stored JSON object replaces it).
 | `ticket_update` | `infantry_ticket_update` | default |
 | `ticket_create` | `infantry_ticket_create` | default |
 | `board` | `infantry_board` | default |
-| `emit` | `infantry_event_emit` | default |
 | `secret_render` | `infantry_secret_render` | default |
 
 ## Hooks

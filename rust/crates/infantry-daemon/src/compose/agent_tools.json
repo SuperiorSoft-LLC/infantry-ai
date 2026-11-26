@@ -584,5 +584,77 @@
     "reason"
    ]
   }
+ },
+ {
+  "name": "infantry_notify",
+  "readOnly": false,
+  "description": "Post a notice to the owner (in-app toast and OS notification) through the notification hub. For scripts and agents reporting something the owner must see now.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "title": {
+     "type": "string"
+    },
+    "body": {
+     "type": "string"
+    },
+    "level": {
+     "type": "string",
+     "description": "info | success (or milestone) | warning | error | urgent"
+    },
+    "sound": {
+     "type": "string",
+     "description": "Accepted for script compatibility; the presenter picks the sound."
+    },
+    "sticky": {
+     "type": "boolean"
+    },
+    "dedupeKey": {
+     "type": "string"
+    },
+    "ticketId": {
+     "type": "string"
+    },
+    "sessionId": {
+     "type": "string"
+    },
+    "projectId": {
+     "type": "string"
+    }
+   },
+   "additionalProperties": false,
+   "required": [
+    "title"
+   ]
+  }
+ },
+ {
+  "name": "infantry_session_act",
+  "readOnly": false,
+  "description": "Act on another session (pm, owner or script only): queue_add holds text as the session's next turn (a turn now when it is at rest); deliver_urgent puts it into the running turn when the harness takes input mid-turn.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "sessionId": {
+     "type": "string"
+    },
+    "action": {
+     "type": "string",
+     "enum": [
+      "queue_add",
+      "deliver_urgent"
+     ]
+    },
+    "text": {
+     "type": "string"
+    }
+   },
+   "additionalProperties": false,
+   "required": [
+    "sessionId",
+    "action",
+    "text"
+   ]
+  }
  }
 ]
