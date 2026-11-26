@@ -18,6 +18,11 @@ pub const PLUGIN_TOOL_RESULT: &str = "plugin_tool_result";
 /// declares without knowing which module it is (a trigger's plugin action kind, for one).
 pub const CAPABILITY_CALL: &str = "capability_call";
 pub const CAPABILITY_RESULT: &str = "capability_result";
+/// CHAT-IMG-2: an image (or a card with an image) into a session's chat, for plugins and clients:
+/// `{sessionId, path | data | url, caption?, level?}` -> `chat_image_result` `{text, isError}`. The same capability as the
+/// `infantry_chat_image` tool and `ih.chat_image`, with the same checks; the post is in the target session's project.
+pub const CHAT_IMAGE: &str = "chat_image";
+pub const CHAT_IMAGE_RESULT: &str = "chat_image_result";
 
 pub struct Tools {
     daemon: Arc<Daemon>,
@@ -218,11 +223,21 @@ impl FrameUnit for ToolsUnit {
         "tools"
     }
     fn frames(&self) -> &'static [&'static str] {
-        &[PLUGIN_TOOLS, PLUGIN_TOOL_CALL, CAPABILITY_CALL]
+        &[PLUGIN_TOOLS, PLUGIN_TOOL_CALL, CAPABILITY_CALL, CHAT_IMAGE]
     }
     fn handle(&self, env: &Envelope, ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
         match env.r#type.as_str() {
             PLUGIN_TOOLS => Ok(vec![reply(env, PLUGIN_TOOLS, Value::Array(self.tools.descriptors()).to_string())]),
+            CHAT_IMAGE => {
+                let v: Value = serde_json::from_str(&env.data).map_err(|e| Refusal::new(CHAT_IMAGE, format!("bad payload ({e})")))?;
+                let mut args = v.as_object().cloned().ok_or_else(|| Refusal::new(CHAT_IMAGE, "the payload is not an object"))?;
+                let session = args.get("sessionId").and_then(Value::as_str).map(str::to_string).or_else(|| env.session_id.clone()).ok_or_else(|| Refusal::new(CHAT_IMAGE, "needs sessionId"))?;
+                let project = self.tools.session_project(&session).ok_or_else(|| Refusal::new(CHAT_IMAGE, format!("unknown session {session}")))?;
+                args.insert("sessionId".into(), json!(session));
+                let inv = ToolInvoker { project_id: Some(project), label: format!("frame:{CHAT_IMAGE}"), ..Default::default() };
+                let r = self.tools.invoke(infantry_scripting::chat::IMAGE, &args, &inv);
+                Ok(vec![reply(env, CHAT_IMAGE_RESULT, json!({"text": r.text, "isError": r.is_error}).to_string())])
+            }
             CAPABILITY_CALL => {
                 let v: Value = serde_json::from_str(&env.data).map_err(|e| Refusal::new(CAPABILITY_CALL, format!("bad payload ({e})")))?;
                 let id = v.get("id").and_then(Value::as_str).ok_or_else(|| Refusal::new(CAPABILITY_CALL, "no capability id"))?;

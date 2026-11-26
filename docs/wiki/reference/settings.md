@@ -84,6 +84,7 @@ uses when the key is unset, where it sits next to the key; otherwise read the co
 | `limits.tools.listLimit` | `50` | `rust/crates/infantry-daemon/src/compose/agent_tools.rs` |
 | `limits.tools.sessionTailLines` | `5` | `rust/crates/infantry-daemon/src/compose/agent_tools.rs` |
 | `limits.ws.frameDetachMs` |  | `rust/crates/infantry-daemon/src/sessions.rs` |
+| `scripting.chat.imageProjectOnly` |  | `rust/crates/infantry-scripting/src/chat.rs` |
 | `scripting.exec.defaultTimeoutSec` |  | `rust/crates/infantry-scripting/src/exec.rs` |
 | `scripting.exec.enabled` |  | `rust/crates/infantry-scripting/src/exec.rs` |
 | `scripting.global.writeRoles` |  | `rust/crates/infantry-scripting/src/tools.rs` |

@@ -257,7 +257,7 @@ name the frame and gives the newest one.
 | `attention_list` | `ATTENTION_LIST` |  |  | 4: What changed in 1.9.0 |
 | `attention_items` | `ATTENTION_ITEMS` |  |  | 2: What changed in 1.9.0 |
 | `attention_ack` | `ATTENTION_ACK` |  |  | 2: What changed in 1.9.0 |
-| `timeline_item` | `TIMELINE_ITEM` |  |  | 1: 2.2 Session and worktree frames |
+| `timeline_item` | `TIMELINE_ITEM` |  |  | 2: 2.2 Session and worktree frames |
 | `timeline_list` | `TIMELINE_LIST` |  |  | 1: 2.2 Session and worktree frames |
 | `timeline_items` | `TIMELINE_ITEMS` |  |  | 1: 2.2 Session and worktree frames |
 | `project_save` | `PROJECT_SAVE` |  |  | 4: What changed in 1.81.0 |

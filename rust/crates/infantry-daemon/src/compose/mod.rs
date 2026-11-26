@@ -174,6 +174,19 @@ fn role_policy_files(plugins_dir: &Option<PathBuf>) -> Vec<PathBuf> {
 }
 
 /// Builds every unit over `daemon` and attaches them to it. Call inside the tokio runtime.
+/// CHAT-IMG-2: an https image for the chat, at most `max` bytes, with a bounded wait.
+fn fetch_image(url: &str, max: usize) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let agent = ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(20)).redirects(3).build();
+    let r = agent.get(url).call().map_err(|e| e.to_string())?;
+    let mut b = Vec::new();
+    r.into_reader().take(max as u64 + 1).read_to_end(&mut b).map_err(|e| e.to_string())?;
+    if b.len() > max {
+        return Err(format!("over the {} MB limit", max / (1024 * 1024)));
+    }
+    Ok(b)
+}
+
 pub fn build(daemon: &Arc<Daemon>, state_dir: &Path) -> Result<Arc<Composed>, String> {
     build_with_mode(daemon, state_dir, crate::mode::Mode::Both)
 }
@@ -595,6 +608,12 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             script_config.clone(),
             Arc::new(|| now_ms() as u64),
         )
+        .with_starter_of({
+            let d = daemon.clone();
+            Arc::new(move |s: &str| d.record(s)?.spawner_session_id)
+        })
+        .with_fetch(Arc::new(fetch_image))
+        .with_denied(vec![state_dir.to_path_buf()])
     };
     let manager = Arc::new(infantry_scripting::manage::ScriptManager {
         library: library.clone(),
