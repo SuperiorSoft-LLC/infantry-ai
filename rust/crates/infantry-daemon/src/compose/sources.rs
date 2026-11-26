@@ -34,6 +34,12 @@ pub const DEFAULTS_ENV: &str = "INFANTRY_DEFAULT_SOURCES";
 /// The locations already seeded from the defaults file (kept so a removed default stays removed).
 pub const SEEDED_FILE: &str = "plugin-sources-seeded.json";
 
+/// The defaults file to seed from: the one `INFANTRY_DEFAULT_SOURCES` names, else the first of `dirs` that holds
+/// [`DEFAULTS_FILE`] (the plugins dir, then the bundled folder: OS-app mode keeps only modules in the plugins dir).
+pub fn defaults_file(named: Option<PathBuf>, dirs: &[Option<PathBuf>]) -> Option<PathBuf> {
+    named.or_else(|| dirs.iter().flatten().map(|d| d.join(DEFAULTS_FILE)).find(|f| f.is_file()))
+}
+
 pub struct SourceStore {
     file: PathBuf,
     cache: PathBuf,
@@ -476,6 +482,25 @@ pub fn vet(dir: &Path, trusted: &std::collections::BTreeMap<String, String>) -> 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn defaults_file_falls_back_to_the_bundled_folder_in_os_app_mode() {
+        let root = std::env::temp_dir().join(format!("src-seed-1-{}", std::process::id()));
+        let installed = root.join("plugins-installed");
+        let bundled = root.join("package-plugins");
+        std::fs::create_dir_all(&installed).unwrap();
+        std::fs::create_dir_all(&bundled).unwrap();
+        // OS-app mode: the installed dir holds modules only; the bundled folder holds the defaults file.
+        std::fs::write(bundled.join(DEFAULTS_FILE), "{}").unwrap();
+        assert_eq!(defaults_file(None, &[Some(installed.clone()), Some(bundled.clone())]), Some(bundled.join(DEFAULTS_FILE)));
+        // Standalone: the plugins dir has it and wins.
+        std::fs::write(installed.join(DEFAULTS_FILE), "{}").unwrap();
+        assert_eq!(defaults_file(None, &[Some(installed.clone()), Some(bundled.clone())]), Some(installed.join(DEFAULTS_FILE)));
+        // The env-named file always wins; no file anywhere gives none.
+        assert_eq!(defaults_file(Some(root.join("x.json")), &[Some(installed.clone())]), Some(root.join("x.json")));
+        assert_eq!(defaults_file(None, &[None, Some(root.join("missing"))]), None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     use super::*;
 
     fn tmp(name: &str) -> PathBuf {
