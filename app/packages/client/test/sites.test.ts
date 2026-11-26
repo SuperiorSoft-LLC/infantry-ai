@@ -3,7 +3,8 @@
 import { describe, expect, it } from "vitest";
 import { createStore } from "zustand/vanilla";
 import type { QueryStore } from "../src";
-import { accountState, manageUrl, serverStatus, shownAnswer, siteDate, startAutoRefresh } from "../src/sites";
+import { accountState, manageUrl, serverStatus, shownAnswer, siteDate, sitesSignIn, startAutoRefresh } from "../src/sites";
+import { SEPARATE_SIGN_IN_TEXT } from "../src/account";
 
 describe("server status chips", () => {
   it.each([
@@ -25,7 +26,7 @@ describe("account states", () => {
     expect(accountState(null)).toBeNull();
   });
   it.each([
-    ["signed_out", "Sign in to Infantry AI Hosting first."],
+    ["signed_out", SEPARATE_SIGN_IN_TEXT],
     ["not_entitled", "Your plan does not include hosting yet."],
     ["limit", "You're at your plan's server limit."],
     ["email_unverified", "Verify your email address to create a server."],
@@ -128,3 +129,21 @@ describe("the outage text has one full stop", () => {
   });
 });
 it("a refusal ending in s keeps its s", () => expect(shownAnswer(null, "no access", { state: "ok" }).error).toBe("no access"));
+
+describe("the Sites page sign-in line: the Services card's four states", () => {
+  it("signed in with a good list: no line", () => expect(sitesSignIn("signed_in", { state: "ready" }, null)).toBeNull());
+  it("expired: Sign-in expired, Sign in, the separate line", () =>
+    expect(sitesSignIn("expired", { state: "signed_out" }, null)).toEqual({ label: "Sign-in expired", tone: "amber", text: SEPARATE_SIGN_IN_TEXT, action: "sign_in" }));
+  it("not signed in: Not signed in, Sign in", () => expect(sitesSignIn("signed_out", null, null)).toMatchObject({ label: "Not signed in", action: "sign_in", text: SEPARATE_SIGN_IN_TEXT }));
+  it("a refused token while the daemon holds the sign-in: its text and Retry, never a second state", () =>
+    expect(sitesSignIn("signed_in", { state: "signed_out", message: "session ended" }, null)).toMatchObject({ label: "Service unreachable", action: "retry", text: "session ended" }));
+  it("ready is the normal list", () => expect(accountState({ state: "ready" })).toBeNull());
+  it("unreachable: the reason and Retry, never 'sign in'", () => {
+    const v = sitesSignIn("unreachable", { state: "unavailable", message: "Infantry AI Hosting could not be reached: timed out" }, null);
+    expect(v).toEqual({ label: "Service unreachable", tone: "amber", text: "Infantry AI Hosting could not be reached: timed out", action: "retry" });
+    expect(JSON.stringify(v)).not.toMatch(/sign in/i);
+  });
+  it("unreachable wins over a plugin signed_out", () => expect(sitesSignIn("unreachable", { state: "signed_out" }, null)?.action).toBe("retry"));
+  it("a refusal is the reason", () => expect(sitesSignIn("signed_in", null, "boom")).toMatchObject({ action: "retry", text: "boom" }));
+  it("no provider known: follows the plugin's answer", () => expect(sitesSignIn(null, { state: "signed_out" }, null)?.label).toBe("Not signed in"));
+});

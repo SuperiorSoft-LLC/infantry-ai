@@ -3,6 +3,7 @@
 // The Sites tab's model: how a `sites_list` answer reads (state chips, messages, dates, the Manage link) and the refresh
 // loop that keeps it current. Pure and DOM-free so the panel stays a view. Texts follow the legacy SitesModel.kt.
 import type { QueryStore } from "./stores/query";
+import { SEPARATE_SIGN_IN_TEXT, type SignInState } from "./account";
 
 export type SiteTone = "neutral" | "red" | "green" | "blue" | "amber";
 export type SiteRec = Record<string, unknown>;
@@ -34,10 +35,11 @@ export function accountState(data: SiteRec | null): StateView | null {
   switch (state) {
     case null:
     case "ok":
+    case "ready":
     case "active":
       return null;
     case "signed_out":
-      return { label: "signed out", tone: "amber", text: "Sign in to Infantry AI Hosting first." };
+      return { label: "Not signed in", tone: "neutral", text: SEPARATE_SIGN_IN_TEXT };
     case "not_entitled":
       return { label: "not included", tone: "amber", text: entitlementText(s(data, "planStatus")) };
     case "limit":
@@ -51,6 +53,28 @@ export function accountState(data: SiteRec | null): StateView | null {
     default:
       return { label: state, tone: "neutral", text: s(data, "message") }; // unknown: its raw text, never a break
   }
+}
+
+/** What the Sites page offers for its sign-in: Sign in (expired or not signed in), Retry (unreachable), or nothing. */
+export interface SitesSignInView extends StateView {
+  action: "sign_in" | "retry" | null;
+}
+
+/**
+ * The Sites page's sign-in line, the same four states and words as the Services card. The daemon's provider state
+ * (`signIn`) is the truth, so the page never shows a second state next to the card's: a plugin `signed_out` while the
+ * daemon holds a sign-in reads as a failed read (its text and Retry). The plugin's answer decides only when no provider
+ * is known. Null when signed in and the list reads fine.
+ */
+export function sitesSignIn(signIn: SignInState | null, data: SiteRec | null, refusal: string | null): SitesSignInView | null {
+  const state = s(data, "state");
+  if (signIn === "expired") return { label: "Sign-in expired", tone: "amber", text: SEPARATE_SIGN_IN_TEXT, action: "sign_in" };
+  if (signIn === "signed_out" || (signIn === null && state === "signed_out")) return { label: "Not signed in", tone: "neutral", text: SEPARATE_SIGN_IN_TEXT, action: "sign_in" };
+  if (signIn === "unreachable" || state === "unavailable" || state === "signed_out" || refusal) {
+    const why = refusal ?? s(data, "message") ?? "Infantry AI Hosting could not be reached.";
+    return { label: "Service unreachable", tone: "amber", text: why, action: "retry" };
+  }
+  return null;
 }
 
 /** A server's status as a chip; an unknown status shows its raw text. */

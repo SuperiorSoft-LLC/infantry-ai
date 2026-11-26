@@ -8,7 +8,7 @@
 //   Sites    `sites_list` (Infantry_Sites' `infantry_sites_list`): hosting servers, read-only
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, Globe, GitPullRequest, Plug, Server } from "lucide-react";
-import { accountProviders, accountState, cardChip, SEPARATE_SIGN_IN_TEXT, flowView, hubView, NO_PROVIDERS_TEXT, servicePages, shouldOpenApproval, signOutConfirm, type ServicePage, manageUrl, serverStatus, settingKey, shownAnswer, siteDate, SITES_REFRESH_DEFAULT, SITES_REFRESH_KEY, SITES_REFRESH_NODE, startAutoRefresh, reviewQueue, signInBody, signInTracker, signInUri, signOutBody, type AccountProvider, type McpServerView } from "@infantry/client";
+import { accountProviders, accountState, cardChip, SEPARATE_SIGN_IN_TEXT, flowView, hubView, NO_PROVIDERS_TEXT, servicePages, shouldOpenApproval, signOutConfirm, type ServicePage, manageUrl, serverStatus, settingKey, shownAnswer, siteDate, sitesSignIn, SITES_REFRESH_DEFAULT, SITES_REFRESH_KEY, SITES_REFRESH_NODE, startAutoRefresh, reviewQueue, signInBody, signInTracker, signInUri, signOutBody, type AccountProvider, type McpServerView } from "@infantry/client";
 import { AppDialog, Button, Chip, EmptyState, PanelCard, Switch } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { TabPage } from "@/components/tabs/tab-page";
@@ -136,8 +136,9 @@ function useRefreshSeconds(): number {
   return typeof v === "number" && v >= 0 ? v : SITES_REFRESH_DEFAULT;
 }
 
-/** Hosting servers: follows the server's state on its own (no create, start, stop or delete here: those are on the website). */
-export function SitesPanel() {
+/** Hosting servers: follows the server's state on its own (no create, start, stop or delete here: those are on the website).
+ * [p] is the provider this page belongs to: its sign-in state is the truth the page shows (the same words as the card). */
+export function SitesPanel({ p }: { p?: AccountProvider }) {
   const store = probeStore("sites_list");
   useQueryOnOpen(store);
   const live = useQuery(store, (s) => s.data);
@@ -162,7 +163,9 @@ export function SitesPanel() {
   }, [store, seconds]);
   const { data, error, stale } = shownAnswer(live, refusal, good?.data ?? null);
   const servers = list(data, "servers");
-  const account = accountState(data);
+  const signIn = sitesSignIn(p?.signIn ?? null, live, refusal);
+  // The sign-in line replaces the plugin's own signed_out / unavailable chip: one state, never two.
+  const account = signIn ? null : accountState(data);
   const url = manageUrl(data);
   const reclaim = siteDate(data?.reclaimableUntil);
   return (
@@ -178,7 +181,29 @@ export function SitesPanel() {
           <RefreshButton store={store} />
         </span>
       </div>
-      {stale && error && (
+      {signIn && (
+        <div className="space-y-1.5 text-[13px]" role="status" aria-label="Sign-in state">
+          <div className="flex items-center gap-2">
+            <Chip tone={signIn.tone}>{signIn.label}</Chip>
+            {signIn.action === "retry" && (
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => {
+                  accountStore().getState().refresh();
+                  store.getState().refresh();
+                }}
+              >
+                Retry
+              </Button>
+            )}
+          </div>
+          {signIn.text && <p className="text-xs text-muted-foreground">{signIn.text}</p>}
+          {/* The page asks for a sign-in: the card's device flow, even when the daemon still lists one (a refused token). */}
+          {signIn.action === "sign_in" && p && <SignIn p={{ ...p, signedIn: false }} />}
+        </div>
+      )}
+      {stale && error && !signIn && (
         <p role="status" className="rounded-lg border border-destructive/40 p-2 text-xs text-destructive">
           Could not refresh: {error}. Showing the list from {good ? ago(good.at) : "earlier"}.
         </p>
@@ -196,7 +221,7 @@ export function SitesPanel() {
             )}
             {reclaim && <p className="text-xs text-muted-foreground">Reclaimable until {reclaim}</p>}
             {servers.length === 0 ? (
-              !account && <EmptyState icon={<Globe className="size-6" />} title={str(data, "message") ?? "No servers"} />
+              !account && !signIn && <EmptyState icon={<Globe className="size-6" />} title={str(data, "message") ?? "No servers"} />
             ) : (
               <ul className="space-y-2">
                 {servers.map((sv, i) => {
@@ -324,8 +349,8 @@ function ProviderCard({ p, onOpen }: { p: AccountProvider; onOpen: () => void })
 }
 
 /** What a dashboard page (a service's `section`) draws. The one place the app names a section. */
-const SECTION_VIEWS: Record<string, () => ReactNode> = {
-  "infantry.sites": () => <SitesPanel />,
+const SECTION_VIEWS: Record<string, (p: AccountProvider) => ReactNode> = {
+  "infantry.sites": (p) => <SitesPanel p={p} />,
 };
 
 /** A connected service's dashboard inside the Services tab: back, name, chip, plan notice, Sign out, a left menu (hidden with one page) and the page. */
@@ -337,7 +362,7 @@ function ServiceDashboard({ p, pages, onBack }: { p: AccountProvider; pages: Ser
   const chip = cardChip(p);
   const confirm = signOutConfirm(p.name);
   const notice = p.plan && /past_due|canceled/i.test(p.plan) ? `Your plan is ${p.plan.replace("_", " ")}.` : null;
-  const body = shown ? (SECTION_VIEWS[shown.section]?.() ?? <EmptyState icon={<Server className="size-6" />} title={`${shown.name} has no page in this app`} />) : <EmptyState icon={<Server className="size-6" />} title="This service has no pages yet" />;
+  const body = shown ? (SECTION_VIEWS[shown.section]?.(p) ?? <EmptyState icon={<Server className="size-6" />} title={`${shown.name} has no page in this app`} />) : <EmptyState icon={<Server className="size-6" />} title="This service has no pages yet" />;
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -347,9 +372,11 @@ function ServiceDashboard({ p, pages, onBack }: { p: AccountProvider; pages: Ser
         <span className="text-sm font-semibold">{p.name}</span>
         <Chip tone={chip.tone}>{chip.label}</Chip>
         {p.plan && <Chip mono>{p.plan}</Chip>}
-        <Button className="ml-auto" size="sm" variant="outline" onClick={() => setConfirming(true)}>
-          Sign out
-        </Button>
+        {p.signedIn && (
+          <Button className="ml-auto" size="sm" variant="outline" onClick={() => setConfirming(true)}>
+            Sign out
+          </Button>
+        )}
       </div>
       {notice && (
         <p role="status" className="rounded-lg border p-2 text-xs">
