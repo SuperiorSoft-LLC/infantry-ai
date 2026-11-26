@@ -20,8 +20,21 @@ pub struct SettingsUnit {
 }
 
 /// RUNNER-SETTINGS-OWNER-1 (Kotlin `FrameGate.OWNER_ONLY_SETTING_KEYS`): keys (exact, or a prefix ending in `.`) only an
-/// owner connection may WRITE, through `settings_set` or `config_set`; a read stays open. The runner's trust keys.
-pub const OWNER_ONLY_SETTING_KEYS: &[&str] = &["runner.", "limits.runners.", "runners.enabled", "runners.advertiseHosts", "runners.fingerprint"];
+/// owner connection may WRITE, through `settings_set` or `config_set`; a read stays open. The runner's trust keys, plus
+/// (SETTINGS-OWNER-2) where plugin code comes from, the safety-script off switch, the owner-alert wake policy and the
+/// plugin wall/CPU budgets.
+pub const OWNER_ONLY_SETTING_KEYS: &[&str] = &[
+    "runner.",
+    "limits.runners.",
+    "runners.enabled",
+    "runners.advertiseHosts",
+    "runners.fingerprint",
+    "plugins.sources",
+    "plugins.bootstrap",
+    "scripting.builtins.off",
+    "notify.wake.kinds",
+    "limits.plugins.",
+];
 
 pub fn is_owner_only_setting(key: &str) -> bool {
     let k = key.trim().to_lowercase();
@@ -231,6 +244,16 @@ mod owner_key_tests {
         assert!(owner_refusal("runner.grants", false).is_some());
         assert!(owner_refusal("runner.grants", true).is_none());
         assert!(owner_refusal("sites.refreshSeconds", false).is_none());
+    }
+
+    #[test]
+    fn settings_owner_2_keys_refuse_agents_and_allow_the_owner() {
+        for k in ["plugins.sources", "plugins.bootstrap", "scripting.builtins.off", "notify.wake.kinds", "limits.plugins.toolTimeoutMs", "limits.plugins.maxDeclaredTimeoutMs"] {
+            assert!(owner_refusal(k, false).is_some(), "{k} must refuse an agent");
+            assert!(owner_refusal(k, true).is_none(), "{k} must allow the owner");
+        }
+        assert!(!is_owner_only_setting("plugins.sourcesExtra"));
+        assert!(!is_owner_only_setting("limits.pluginsX"));
     }
 
     #[test]
