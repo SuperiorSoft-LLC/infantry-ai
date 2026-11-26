@@ -179,3 +179,49 @@ fn project_delete_refuses_while_live_unless_forced() {
     assert_eq!(body(&ask(&reg, "project_list", Value::String(String::new()))).as_array().unwrap().len(), 0);
     assert_eq!(ask(&reg, "project_delete", json!({"projectId": id})).r#type, "error");
 }
+
+#[test]
+fn ticket_start_adopts_a_leftover_branch_with_no_commits_and_refuses_unknown_commits() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = tmp.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let g = git();
+    sh(&g, &repo, &["init", "-q", "-b", "main"]);
+    std::fs::write(repo.join("a.txt"), "one\n").unwrap();
+    sh(&g, &repo, &["add", "."]);
+    sh(&g, &repo, &["commit", "-q", "-m", "first"]);
+    let shared: Arc<dyn GitCli> = Arc::new(g.clone());
+    let p = Projects::new(shared, None, GitViewConfig::default()).unwrap();
+    let req = |id: &str| TicketBranchRequest {
+        ticket_id: id.into(),
+        title: "Leftover".into(),
+        repo: repo.clone(),
+        base_branch: "main".into(),
+        recorded_branch: None,
+        recorded_base: None,
+    };
+    // A lane queue left `ticket/aaaa1111-leftover` at an older base commit: zero commits of its own, no worktree.
+    sh(&g, &repo, &["branch", "ticket/aaaa1111-leftover"]);
+    std::fs::write(repo.join("a.txt"), "two\n").unwrap();
+    sh(&g, &repo, &["commit", "-q", "-am", "second"]);
+    match p.branches.ensure(&req("ticket-aaaa1111")) {
+        TicketBranchOutcome::Ready { worktree, .. } => {
+            assert_eq!(worktree.branch, "ticket/aaaa1111-leftover");
+            assert!(Path::new(&worktree.path).join(".git").exists());
+            // Re-cut at today's base, not the stale commit it was left at.
+            assert_eq!(p.branches.tip(&repo, &worktree.branch).as_deref(), Some(worktree.base.as_str()));
+            assert_eq!(p.branches.resolve_base(&repo, "main").as_deref(), Some(worktree.base.as_str()));
+        }
+        other => panic!("leftover branch with no commits should be adopted: {other:?}"),
+    }
+    // A leftover branch that holds its own commit is still refused.
+    sh(&g, &repo, &["checkout", "-q", "-b", "ticket/bbbb2222-leftover"]);
+    std::fs::write(repo.join("b.txt"), "mine\n").unwrap();
+    sh(&g, &repo, &["add", "."]);
+    sh(&g, &repo, &["commit", "-q", "-m", "unknown work"]);
+    sh(&g, &repo, &["checkout", "-q", "main"]);
+    match p.branches.ensure(&req("ticket-bbbb2222")) {
+        TicketBranchOutcome::Refused(why) => assert!(why.contains("commit"), "{why}"),
+        other => panic!("a branch with unknown commits must be refused: {other:?}"),
+    }
+}

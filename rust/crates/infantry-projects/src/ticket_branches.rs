@@ -7,8 +7,9 @@
 //!   never matters and never refuses a start.
 //! - A ticket that already holds a branch REUSES it (re-attaching the worktree when its directory is gone); it never
 //!   cuts a second branch.
-//! - A base that does not resolve is refused; an existing branch under the ticket's name with no record on the
-//!   ticket is refused rather than adopted (its base is unknown).
+//! - A base that does not resolve is refused. An existing branch under the ticket's name with no record on the
+//!   ticket is adopted (re-cut at the base) only when it holds no commits beyond the base and no worktree has it;
+//!   one with commits of its own is refused (its base is unknown).
 //!
 //! Nothing here pushes or merges. The orchestrator calls into this; this never calls the orchestrator.
 use crate::git::{self, SharedGit};
@@ -87,6 +88,12 @@ impl TicketBranches {
         git::run(&*self.git, root, &["rev-parse", "--verify", "--quiet", &r]).ok()
     }
 
+    /// True when any worktree (main or linked) has `full_ref` checked out.
+    fn checked_out(&self, root: &Path, full_ref: &str) -> bool {
+        let r = git::run(&*self.git, root, &["worktree", "list", "--porcelain"]);
+        r.out().lines().any(|l| l.strip_prefix("branch ").map(str::trim) == Some(full_ref))
+    }
+
     pub fn ensure(&self, req: &TicketBranchRequest) -> TicketBranchOutcome {
         let root = self.main_root(&req.repo);
         if !git::is_repo(&*self.git, &root) {
@@ -99,17 +106,30 @@ impl TicketBranches {
             return TicketBranchOutcome::Refused(format!("base branch '{}' does not resolve to a commit in {}", req.base_branch, root.display()));
         };
         let branch = branch_for(&req.ticket_id, &req.title);
-        if self.branch_exists(&root, &branch) {
-            return TicketBranchOutcome::Refused(format!(
-                "branch '{branch}' already exists but the ticket has no record of it; not adopting a branch of unknown base"
-            ));
-        }
         let path = self.path_for(&root, &branch);
+        // A leftover branch with no record (e.g. a queue that cut it earlier) is adopted only when it holds no
+        // commits of its own (an ancestor of the base) and no worktree has it checked out: it is re-cut at the base.
+        let leftover = self.branch_exists(&root, &branch);
+        if leftover {
+            let r = format!("refs/heads/{branch}");
+            let ancestor = git::run(&*self.git, &root, &["merge-base", "--is-ancestor", &r, &base]).ok();
+            if !ancestor {
+                return TicketBranchOutcome::Refused(format!(
+                    "branch '{branch}' already exists with commits not in {} and the ticket has no record of it; not adopting a branch of unknown base",
+                    req.base_branch
+                ));
+            }
+            if self.checked_out(&root, &r) {
+                return TicketBranchOutcome::Refused(format!("branch '{branch}' already exists and is checked out in a worktree the ticket has no record of"));
+            }
+        }
         if self.git.path_exists(&path) {
             return TicketBranchOutcome::Refused(format!("worktree path already exists: {}", path.display()));
         }
         let p = path.to_string_lossy().into_owned();
-        let added = git::run(&*self.git, &root, &["worktree", "add", "-b", &branch, &p, &base]);
+        // `-B` resets the adopted leftover to the base; `-b` for a fresh cut.
+        let flag = if leftover { "-B" } else { "-b" };
+        let added = git::run(&*self.git, &root, &["worktree", "add", flag, &branch, &p, &base]);
         if !added.ok() {
             return TicketBranchOutcome::Refused(format!("git worktree add failed: {}", added.err()));
         }
