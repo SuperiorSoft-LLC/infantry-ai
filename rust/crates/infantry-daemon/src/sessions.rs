@@ -198,6 +198,37 @@ pub trait McpSelector: Send + Sync {
     fn select(&self, rec: &SessionRecord, plan: &mut infantry_harness::McpPlan);
 }
 
+/// FRAME-REFUSAL-WORDING-1: the user-facing refusal for a frame nothing serves: it names the plugin that would serve
+/// it when the catalog knows one, else says the feature is missing from this version.
+pub fn unserved_refusal(ty: &str, provider: Option<&str>) -> String {
+    match provider.map(str::trim).filter(|p| !p.is_empty()) {
+        Some(p) => {
+            let words = ty.replace(['_', '.', '-'], " ");
+            let mut c = words.trim().chars();
+            let feature = c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_else(|| "This feature".into());
+            format!("{feature} needs the {p} plugin. Turn it on in Plugins.")
+        }
+        None => "This feature isn't available on this PC's Infantry AI version.".into(),
+    }
+}
+
+#[cfg(test)]
+mod unserved_refusal_tests {
+    use super::unserved_refusal;
+
+    #[test]
+    fn names_the_plugin_when_known() {
+        assert_eq!(unserved_refusal("image_upload", Some("Infantry Chat")), "Image upload needs the Infantry Chat plugin. Turn it on in Plugins.");
+    }
+
+    #[test]
+    fn says_unavailable_when_no_plugin_serves_it() {
+        let m = unserved_refusal("assistant", None);
+        assert_eq!(m, "This feature isn't available on this PC's Infantry AI version.");
+        assert!(!m.contains("does not serve") && !m.contains("refused"));
+    }
+}
+
 pub trait FrameUnits: Send + Sync {
     fn owns(&self, ty: &str) -> bool;
     /// One frame from a client (`owner` = it holds the owner credential); the encoded replies for that client.
@@ -209,6 +240,11 @@ pub trait FrameUnits: Send + Sync {
     fn http(&self) -> Option<axum::Router>;
     /// A route a plugin declares (`daemon.routes` / `daemon.publicRoutes`): Some(public) when one matches.
     fn route(&self, _method: &str, _path: &str) -> Option<bool> {
+        None
+    }
+    /// FRAME-REFUSAL-WORDING-1: the display name of the plugin whose manifest declares frame `ty` (it is off or not
+    /// loaded when nothing serves the frame), if any plugin in the catalog does.
+    fn frame_provider(&self, _ty: &str) -> Option<String> {
         None
     }
     /// Serves a declared plugin route: (status, headers, body). Blocking: call it on the blocking pool.
@@ -950,7 +986,7 @@ impl Daemon {
                     Err(m) => encode_req(wire::ERROR, m, None, None, req.as_deref()),
                 }];
             }
-            other => Err(format!("{other} refused: this daemon does not serve that frame yet").into()),
+            other => Err(unserved_refusal(other, self.units.get().and_then(|u| u.frame_provider(other)).as_deref()).into()),
         };
         match r {
             Ok(()) => match send_key {

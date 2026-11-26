@@ -55,10 +55,10 @@ describe("the Assistant ask", () => {
     const s = createAssistantAskStore(l);
     s.getState().ask();
     l.push({ type: "error", data: "role_save refused: nope", requestId: "roles:x-1" });
-    l.push({ type: "error", data: "assistant refused: this daemon does not serve that frame yet" });
+    l.push({ type: "error", data: "This feature isn't available on this PC's Infantry AI version." });
     expect(s.getState().refusal).toBeNull();
-    l.push({ type: "error", data: "assistant refused: this daemon does not serve that frame yet", requestId: l.sent[0].requestId });
-    expect(s.getState().refusal).toBe("assistant refused: this daemon does not serve that frame yet");
+    l.push({ type: "error", data: "This feature isn't available on this PC's Infantry AI version.", requestId: l.sent[0].requestId });
+    expect(s.getState().refusal).toBe("This feature isn't available on this PC's Infantry AI version.");
   });
 
   it("clears the refusal on a new ask, with a new request id", () => {

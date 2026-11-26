@@ -89,6 +89,28 @@ pub(super) fn scan_modules(plugins_dir: &Option<PathBuf>) -> Vec<Module> {
 }
 
 
+/// FRAME-REFUSAL-WORDING-1: the display name (else the id) of the module whose `daemon.frames` declares `ty`.
+pub(super) fn frame_provider(plugins_dir: &Option<PathBuf>, ty: &str) -> Option<String> {
+    scan_modules(plugins_dir).into_iter().find_map(|m| {
+        let declares = m.manifest.get("daemon").and_then(|d| d.get("frames")).and_then(Value::as_array).is_some_and(|a| a.iter().any(|f| s(f, "type") == ty));
+        declares.then(|| Some(s(&m.manifest, "displayName").to_string()).filter(|n| !n.is_empty()).unwrap_or(m.id))
+    })
+}
+
+#[cfg(test)]
+mod frame_provider_tests {
+    #[test]
+    fn finds_the_module_declaring_the_frame() {
+        let root = std::env::temp_dir().join(format!("fp-{}", std::process::id()));
+        let dir = root.join(super::TIERS[0]).join("Chat");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("module.json"), r#"{"name":"Infantry_Chat","displayName":"Chat","daemon":{"frames":[{"type":"image_upload"}]}}"#).unwrap();
+        let d = Some(root.clone());
+        assert_eq!(super::frame_provider(&d, "image_upload").as_deref(), Some("Chat"));
+        assert_eq!(super::frame_provider(&d, "nope"), None);
+        let _ = std::fs::remove_dir_all(root);
+    }
+}
 
 pub(super) fn s<'a>(v: &'a Value, k: &str) -> &'a str {
     v.get(k).and_then(Value::as_str).map(str::trim).unwrap_or("")

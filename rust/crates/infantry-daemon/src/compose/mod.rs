@@ -1076,6 +1076,10 @@ impl FrameUnits for Composed {
         self.registry.owner(ty).is_some() || self.late.owner(ty).is_some()
     }
 
+    fn frame_provider(&self, ty: &str) -> Option<String> {
+        host_frames::frame_provider(&plugins_dir(), ty)
+    }
+
     fn handle(&self, env: Envelope, owner: bool) -> Vec<String> {
         let id = self.next_conn.fetch_add(1, Ordering::Relaxed);
         self.dispatch(&env, id, owner).unwrap_or_default()
