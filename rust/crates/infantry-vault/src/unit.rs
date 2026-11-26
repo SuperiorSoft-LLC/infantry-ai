@@ -167,6 +167,12 @@ impl VaultUnit {
         if OWNER_ONLY.contains(&t) && !ctx.owner {
             return Err(VaultError::invalid("owner only"));
         }
+        // SVC-SEC-1: a plugin's secret is read only by the plugin host, in process (conn 0, the module pinned by
+        // `own_secret_request`). A WebSocket client (the app, the CLI, `infantry mcp serve`, an agent) never reads it,
+        // even holding the owner token; the owner sets and clears it, never sees it.
+        if t == f::PLUGIN_SECRET_GET && ctx.conn_id != 0 {
+            return Err(VaultError::invalid(template::PLUGIN_SECRET_REFUSAL));
+        }
         if let Some(a) = self.handler.answer(t, &env.data) {
             let a = a?;
             if a.push {
@@ -302,4 +308,46 @@ mod tests {
         assert_eq!(unit.mask().mask("x fake-pass-0123456789 y"), "x •••• y");
         let _ = std::fs::remove_dir_all(&d);
     }
+
+    /// SVC-SEC-1: a plugin's secret is refused to every render, find and list, and to `plugin_secret_get` from any
+    /// WebSocket client (even an owner token: the CLI, `infantry mcp serve`, an agent). Only the in-process plugin host
+    /// (conn 0) reads it; a user's secret still renders.
+    #[test]
+    fn plugin_secrets_reach_only_their_plugin() {
+        let d = std::env::temp_dir().join(format!("infantry-vault-svcsec1-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let ks = Arc::new(Keystore::with(d.join("ks"), Arc::new(|_| None), None, Limits::default()));
+        ks.set_field("plugin.acme_x", "KEY", "fake-plugin-key-42", None).unwrap();
+        ks.set_field("db", "PASS", "fake-user-pass-7", None).unwrap();
+        let vault = Arc::new(SecretVault::with(ks.clone(), Box::new(Fixed(Verification::unavailable("no Hello"))), d.join("a.jsonl"), Limits::default(), Arc::new(|| 0)));
+        let root = d.clone();
+        let unit = VaultUnit::with(ks, vault, Limits::default(), HandlerDeps::default(), Arc::new(move |_| Some(root.clone())));
+        let client = FrameCtx { conn_id: 7, owner: true, bus: EventBus::new(8) };
+        let host = FrameCtx { conn_id: 0, owner: true, bus: EventBus::new(8) };
+        std::fs::write(d.join("t.env"), "K={{secret:plugin.acme_x#KEY}}
+").unwrap();
+        let r = Envelope::new(SECRET_RENDER, r#"{"template":"t.env","out":"o.env"}"#);
+        let e = unit.handle(&r, &client).unwrap_err().0;
+        assert!(e.contains("plugin secrets are only for their plugin"), "{e}");
+        assert!(!d.join("o.env").exists() && !e.contains("fake-plugin"));
+        std::fs::write(d.join("t.env"), "K={{secret:plugin.acme_x}}
+").unwrap();
+        assert!(unit.handle(&r, &client).unwrap_err().0.contains("only for their plugin"));
+        for q in ["acme", "plugin", "KEY"] {
+            let out = unit.handle(&Envelope::new(SECRET_FIND, format!(r#"{{"q":"{q}"}}"#)), &client).unwrap();
+            assert!(!out[0].data.contains("plugin.acme_x"), "{}", out[0].data);
+        }
+        assert!(!unit.handle(&Envelope::new(RUN_SECRETS, ""), &client).unwrap()[0].data.contains("plugin."));
+        let get = Envelope::new(f::PLUGIN_SECRET_GET, r#"{"module":"acme_x","field":"KEY"}"#);
+        assert_eq!(unit.handle(&get, &client).unwrap_err().0, "plugin_secret_get refused: plugin secrets are only for their plugin");
+        assert!(unit.handle(&get, &host).unwrap()[0].data.contains("fake-plugin-key-42"));
+        std::fs::write(d.join("t.env"), "P={{secret:db#PASS}}
+").unwrap();
+        unit.handle(&r, &client).unwrap();
+        assert_eq!(std::fs::read_to_string(d.join("o.env")).unwrap(), "P=fake-user-pass-7
+");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
 }

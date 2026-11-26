@@ -179,9 +179,18 @@ pub fn find(q: &str, names: &BTreeMap<String, String>, fields_of: &mut dyn FnMut
     s
 }
 
+/// The refusal for any run, render or find of a plugin's own secret.
+pub const PLUGIN_SECRET_REFUSAL: &str = "plugin secrets are only for their plugin";
+
+/// A plugin's own keystore entry (`plugin.<module>`, [`crate::handler::plugin_secret_name`]), any case.
+pub fn is_plugin_secret(name: &str) -> bool {
+    name.get(..7).is_some_and(|p| p.eq_ignore_ascii_case("plugin."))
+}
+
 pub type BuiltinFn = Arc<dyn Fn(&str) -> bool + Send + Sync>;
 
-/// The secrets a run, a render or an agent tool may use: the user's, never a built-in (`is_builtin`) nor `harness.*`.
+/// The secrets a run, a render or an agent tool may use: the user's, never a built-in (`is_builtin`), `harness.*` nor
+/// `plugin.*` (SVC-SEC-1: a plugin's secret reaches only its plugin, through `plugin_secret_get` from the plugin host).
 #[derive(Clone)]
 pub struct RunSecrets {
     keystore: Arc<Keystore>,
@@ -194,7 +203,7 @@ impl RunSecrets {
     }
 
     pub fn is_run_secret(&self, name: &str) -> bool {
-        !(self.is_builtin)(name) && !name.starts_with("harness.")
+        !(self.is_builtin)(name) && !name.starts_with("harness.") && !is_plugin_secret(name)
     }
 
     /// name -> scope (`app`, overridden by `project` where the project has its own).
@@ -217,6 +226,9 @@ impl RunSecrets {
 
     /// The fields of `name` for a run of `project` (project first, then app). A built-in is refused with its reason.
     pub fn fields(&self, name: &str, project: Option<&str>) -> Result<Option<BTreeMap<String, String>>, VaultError> {
+        if is_plugin_secret(name) {
+            return Err(VaultError::invalid(PLUGIN_SECRET_REFUSAL));
+        }
         if !self.is_run_secret(name) {
             return Err(VaultError::invalid(format!("secret '{name}' is built in (a harness key or the update token) and never goes to a run or a render")));
         }
