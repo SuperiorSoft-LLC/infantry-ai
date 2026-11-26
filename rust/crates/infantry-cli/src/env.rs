@@ -87,6 +87,9 @@ impl Limit {
 
 pub const MCP_TOOLS_WATCH_SECONDS: Limit =
     Limit { key: "limits.mcp.toolsWatchSeconds", default: 5, min: 0, max: Some(86_400), legacy_env: &[] };
+/// How many `tools/call` requests one bridge runs at once; a call past it is answered at once with a busy error.
+pub const MCP_MAX_CONCURRENT_CALLS: Limit =
+    Limit { key: "limits.mcp.maxConcurrentCalls", default: 8, min: 1, max: Some(256), legacy_env: &[] };
 pub const MCP_MAX_RESULT_CHARS: Limit =
     Limit { key: "limits.mcp.maxResultChars", default: 8000, min: 0, max: Some(10_000_000), legacy_env: &[] };
 pub const MCP_DEFAULT_DETAIL: Limit =

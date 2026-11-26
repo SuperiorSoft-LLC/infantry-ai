@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 //! The daemon connection: a port of the parts of the Kotlin `FrameStream` the MCP bridge uses (open with the bearer and
 //! session headers, one retry on a stall, `request` with the error grace window, reconnect with backoff, and the refusal
-//! of a non-idempotent re-send). Blocking I/O on one socket: the bridge handles one request at a time, as Kotlin does.
+//! of a non-idempotent re-send). Blocking I/O on one socket per call: the bridge opens one stream per tool call, so calls run side by side.
 
 use crate::target::Target;
 use serde_json::{Map, Value};
@@ -374,6 +374,14 @@ impl FrameStream {
     }
 
     /// Sends a normal close ("bye"), best effort.
+    /// A clone of the plain TCP socket under this stream (None over TLS): shutting it down ends a pending request.
+    pub fn abort_handle(&self) -> Option<std::net::TcpStream> {
+        match self.link.socket.get_ref() {
+            MaybeTlsStream::Plain(s) => s.try_clone().ok(),
+            _ => None,
+        }
+    }
+
     pub fn close(mut self) {
         let _ = self.link.socket.close(Some(CloseFrame { code: CloseCode::Normal, reason: "bye".into() }));
         let _ = self.link.socket.flush();

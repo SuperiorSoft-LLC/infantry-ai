@@ -182,6 +182,7 @@ pub struct Narrowing {
     pub client_key: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct Tools {
     target: Target,
     err: fn(&str),
@@ -301,8 +302,16 @@ impl Tools {
 
     /// `McpTools.call`: connects first (an unreachable daemon is a tool error), then runs the tool.
     pub fn call(&mut self, name: &str, arguments: Map<String, Value>) -> ToolResult {
+        self.call_with(name, arguments, &|_| {})
+    }
+
+    /// [call], handing `opened` a clone of the call's socket once it is open so another thread can cut the call short.
+    pub fn call_with(&mut self, name: &str, arguments: Map<String, Value>, opened: &dyn Fn(Option<std::net::TcpStream>)) -> ToolResult {
         let mut stream = match self.connect() {
-            Ok(s) => s,
+            Ok(s) => {
+                opened(s.abort_handle());
+                s
+            }
             Err(FrameError::AuthRefused(m)) => return ToolResult::error(m),
             Err(_) => return ToolResult::error(DAEMON_UNREACHABLE),
         };
