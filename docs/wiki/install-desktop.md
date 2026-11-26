@@ -1,5 +1,8 @@
 # Install the desktop app
 
+**The default is BattalionOS.** Install BattalionOS and Infantry AI comes with it: see
+[Install Infantry AI in BattalionOS](install-battalionos.md). The rest of this page is the standalone app.
+
 ## Download
 
 Get the newest release from the
@@ -41,6 +44,19 @@ There are two channels:
 | `nightly` | The newest pre-release. Newer, less tested. |
 
 Change the channel in the app's update settings.
+
+## Standalone: build from source
+
+Infantry AI still builds as its own app, without BattalionOS. New versions ship with BattalionOS; for the standalone
+app, build it from source (Rust, Node.js 22 and pnpm). From `app/`:
+
+```
+pnpm install --frozen-lockfile
+pnpm installer
+```
+
+The build prints where it wrote the installer. The `standalone-build` CI job checks on every change that the
+standalone app still compiles.
 
 ## Next
 

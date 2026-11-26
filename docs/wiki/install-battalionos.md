@@ -11,7 +11,11 @@ them back and removes them.
 3. On the **Install apps** page, leave **Infantry AI** checked.
 
 The first time BattalionOS opens, it installs Infantry AI from the app catalog in the background, on the `stable`
-channel.
+channel. A line on the desktop says so: "Infantry AI is installed with BattalionOS. You can remove it in the Armory."
+
+On a phone, BattalionOS does the same on its first open (the phone gets the app's page-only package).
+
+This happens once. If you remove Infantry AI in the Armory, BattalionOS does not put it back on a later start.
 
 For a silent install without Infantry AI:
 

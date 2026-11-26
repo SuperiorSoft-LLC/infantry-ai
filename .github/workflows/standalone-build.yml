@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: Apache-2.0
+# BOS-DEFAULT-INF: Infantry AI ships with BattalionOS by default; this job keeps the STANDALONE desktop app buildable from source.
+# It compiles the app (UI + Tauri host, debug, no installer) and the daemon. No signing, no bundle, no release, no tag.
+name: standalone-build
+
+on:
+  push:
+    branches: [battalion-os]
+    paths: ['app/**', 'rust/**', '.github/workflows/standalone-build.yml']
+  pull_request:
+    paths: ['app/**', 'rust/**', '.github/workflows/standalone-build.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: standalone-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults: { run: { shell: bash } }
+    env: { CARGO_BUILD_JOBS: '4' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: app/package.json }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: pnpm, cache-dependency-path: app/pnpm-lock.yaml }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            rust
+            app/src-tauri
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+      - name: The standalone app compiles (UI + Tauri host, no installer)
+        working-directory: app
+        run: pnpm tauri build --debug --no-bundle
+      - name: The daemon compiles
+        working-directory: rust
+        run: cargo build -p infantry-distribution
