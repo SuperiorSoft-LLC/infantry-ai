@@ -34,6 +34,8 @@ pub const OWNER_ONLY_SETTING_KEYS: &[&str] = &[
     "scripting.builtins.off",
     "notify.wake.kinds",
     "limits.plugins.",
+    // Which binary each harness CLI runs from (cli_location_set): an agent must not point it at its own program.
+    "cli.executable.",
 ];
 
 pub fn is_owner_only_setting(key: &str) -> bool {

@@ -117,7 +117,7 @@ impl FrameUnit for CliLocations {
         &[f::CLI_LOCATIONS, f::CLI_LOCATION_SET]
     }
 
-    fn handle(&self, env: &Envelope, _ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
+    fn handle(&self, env: &Envelope, ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
         let ty = env.r#type.as_str();
         let body = match ty {
             f::CLI_LOCATIONS => self.locations(),
@@ -128,6 +128,9 @@ impl FrameUnit for CliLocations {
                     serde_json::from_str(&env.data).map_err(|e| Refusal::new(ty, format!("the payload is not valid JSON ({e})")))?
                 };
                 let id = d["id"].as_str().ok_or_else(|| Refusal::new(ty, "an id is required"))?;
+                if let Some(why) = super::settings::owner_refusal(&format!("{KEY_PREFIX}{id}"), ctx.owner) {
+                    return Err(Refusal::new(ty, why));
+                }
                 self.set(id, d["path"].as_str()).map_err(|e| Refusal::new(ty, e))?
             }
         };
@@ -143,7 +146,11 @@ mod tests {
     use super::*;
 
     fn ask(u: &CliLocations, ty: &str, data: &str) -> Result<Vec<Envelope>, Refusal> {
-        u.handle(&Envelope::new(ty, data), &FrameCtx { conn_id: 1, owner: true, bus: infantry_core::bus::EventBus::new(4) })
+        ask_as(u, ty, data, true)
+    }
+
+    fn ask_as(u: &CliLocations, ty: &str, data: &str, owner: bool) -> Result<Vec<Envelope>, Refusal> {
+        u.handle(&Envelope::new(ty, data), &FrameCtx { conn_id: 1, owner, bus: infantry_core::bus::EventBus::new(4) })
     }
 
     #[test]
@@ -170,6 +177,12 @@ mod tests {
         assert!(ask(&u, "cli_location_set", &json!({"id": "bogus", "path": exe}).to_string()).unwrap_err().0.contains("unknown CLI 'bogus'"));
         assert!(ask(&u, "cli_location_set", r#"{"path":"x"}"#).unwrap_err().0.contains("an id is required"));
         assert!(DbOverrides(db.clone()).get(first).is_none());
+
+        // Only the owner may set it (OWNER_ONLY_SETTING_KEYS `cli.executable.`); reading stays open.
+        let e = ask_as(&u, "cli_location_set", &json!({"id": first, "path": exe}).to_string(), false).unwrap_err();
+        assert!(e.0.contains("needs the owner credential"), "{}", e.0);
+        assert!(DbOverrides(db.clone()).get(first).is_none());
+        assert!(ask_as(&u, "cli_locations", "", false).is_ok());
 
         // A good path is stored for that harness only; a fresh unit over the same db reads it back.
         let out = ask(&u, "cli_location_set", &json!({"id": first, "path": exe}).to_string()).unwrap();
