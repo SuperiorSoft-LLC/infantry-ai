@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { createQueryStore, type Envelope } from "../src";
 import type { FrameLink } from "../src/stores/link";
-import { accountQuerySpec, accountProviders, flowView, signInBody, createSignInTracker, signInUri, signOutBody } from "../src/account";
+import { accountQuerySpec, accountProviders, flowView, signInBody, createSignInTracker, signInUri, signOutBody, planNotice } from "../src/account";
 
 const one = (extra: Record<string, unknown>) => accountProviders({ providers: [{ id: "ss", name: "SuperiorSoft", ...extra }] })[0];
 
@@ -74,5 +74,22 @@ describe("sign-in answer per provider card", () => {
     expect(t.owns("a")).toBe(false);
     expect(t.owns("b")).toBe(true);
     expect(t.owns("a", { provider: "a" })).toBe(true);
+  });
+});
+
+describe("plan notice (ticket ffb0b44b)", () => {
+  it("a signed-in account with no plan says so and carries the plans page", () => {
+    const p = one({ signedIn: true, signIn: "signed_in", billingUrl: "https://x.test/plans" });
+    expect(planNotice(p)).toBe("This account has no active plan.");
+    expect(p.billingUrl).toBe("https://x.test/plans");
+  });
+  it("an active plan has no notice; canceled and past due do", () => {
+    expect(planNotice(one({ signedIn: true, plan: { name: "Basic", status: "active" } }))).toBeNull();
+    expect(planNotice(one({ signedIn: true, plan: { name: "Basic" } }))).toBeNull();
+    expect(planNotice(one({ signedIn: true, plan: { status: "past_due" } }))).toBe("Your plan is past due.");
+  });
+  it("signed out or unreachable: no notice", () => {
+    expect(planNotice(one({ signedIn: false }))).toBeNull();
+    expect(planNotice(one({ signedIn: true, signIn: "unreachable" }))).toBeNull();
   });
 });

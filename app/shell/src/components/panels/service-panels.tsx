@@ -8,7 +8,7 @@
 //   Sites    `sites_list` (Infantry_Sites' `infantry_sites_list`): hosting servers, read-only
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, Globe, GitPullRequest, Plug, Server } from "lucide-react";
-import { accountProviders, accountState, cardChip, SEPARATE_SIGN_IN_TEXT, flowView, hubView, NO_PROVIDERS_TEXT, servicePages, shouldOpenApproval, signOutConfirm, type ServicePage, manageUrl, serverStatus, settingKey, shownAnswer, siteDate, sitesSignIn, SITES_REFRESH_DEFAULT, SITES_REFRESH_KEY, SITES_REFRESH_NODE, startAutoRefresh, reviewQueue, signInBody, signInTracker, signInUri, signOutBody, type AccountProvider, type McpServerView } from "@infantry/client";
+import { accountProviders, accountState, cardChip, SEPARATE_SIGN_IN_TEXT, flowView, hubView, NO_PROVIDERS_TEXT, servicePages, shouldOpenApproval, signOutConfirm, planNotice, type ServicePage, manageUrl, serverStatus, settingKey, shownAnswer, siteDate, sitesSignIn, SITES_REFRESH_DEFAULT, SITES_REFRESH_KEY, SITES_REFRESH_NODE, startAutoRefresh, reviewQueue, signInBody, signInTracker, signInUri, signOutBody, type AccountProvider, type McpServerView } from "@infantry/client";
 import { AppDialog, Button, Chip, EmptyState, PanelCard, Switch } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { TabPage } from "@/components/tabs/tab-page";
@@ -294,12 +294,33 @@ function SignIn({ p }: { p: AccountProvider }) {
           <Chip tone={flow.tone}>{flow.label}</Chip>
           {flow.detail && <p className="text-xs text-muted-foreground">{flow.detail}</p>}
           {flow.code && <p className="font-mono text-base font-semibold tracking-widest">{flow.code}</p>}
+          {flow.pending && p.flow?.verificationUri && (
+            <Button variant="link" size="sm" className="h-auto p-0" onClick={() => void host.openExternal(p.flow!.verificationUri!).catch(() => undefined)}>
+              Open the approval page again
+            </Button>
+          )}
         </div>
       )}
       <Button size="sm" disabled={!!flow?.pending} onClick={start}>
         {flow && !flow.pending ? "Try again" : "Sign in"}
       </Button>
     </div>
+  );
+}
+
+/** A signed-in account without an active plan: says so and links to the provider's plans page. */
+function PlanNotice({ p, boxed }: { p: AccountProvider; boxed?: boolean }) {
+  const notice = planNotice(p);
+  if (!notice) return null;
+  return (
+    <p role="status" className={boxed ? "rounded-lg border p-2 text-xs" : "text-xs text-muted-foreground"}>
+      {notice}{" "}
+      {p.billingUrl && (
+        <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => void host.openExternal(p.billingUrl!).catch(() => undefined)}>
+          See the plans
+        </Button>
+      )}
+    </p>
   );
 }
 
@@ -334,6 +355,7 @@ function ProviderCard({ p, onOpen }: { p: AccountProvider; onOpen: () => void })
           <Chip mono>{p.plan}</Chip>
         </p>
       )}
+      <PlanNotice p={p} />
       {p.error && <p className="text-xs text-destructive">{p.error}</p>}
       {!p.signedIn && p.signIn === "expired" && <p className="text-xs text-muted-foreground">{SEPARATE_SIGN_IN_TEXT}</p>}
       {p.signedIn ? (
@@ -361,8 +383,8 @@ function ServiceDashboard({ p, pages, onBack }: { p: AccountProvider; pages: Ser
   const shown = pages.find((x) => x.id === page) ?? pages[0];
   const chip = cardChip(p);
   const confirm = signOutConfirm(p.name);
-  const notice = p.plan && /past_due|canceled/i.test(p.plan) ? `Your plan is ${p.plan.replace("_", " ")}.` : null;
-  const body = shown ? (SECTION_VIEWS[shown.section]?.(p) ?? <EmptyState icon={<Server className="size-6" />} title={`${shown.name} has no page in this app`} />) : <EmptyState icon={<Server className="size-6" />} title="This service has no pages yet" />;
+  const notice = planNotice(p);
+  const body = notice ? <EmptyState icon={<Server className="size-6" />} title={notice} /> : shown ? (SECTION_VIEWS[shown.section]?.(p) ?? <EmptyState icon={<Server className="size-6" />} title={`${shown.name} has no page in this app`} />) : <EmptyState icon={<Server className="size-6" />} title="This service has no pages yet" />;
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -378,11 +400,7 @@ function ServiceDashboard({ p, pages, onBack }: { p: AccountProvider; pages: Ser
           </Button>
         )}
       </div>
-      {notice && (
-        <p role="status" className="rounded-lg border p-2 text-xs">
-          {notice}
-        </p>
-      )}
+      {notice && <PlanNotice p={p} boxed />}
       <div className="flex gap-4">
         {pages.length > 1 && (
           <nav aria-label={`${p.name} pages`} className="w-40 shrink-0 space-y-1">

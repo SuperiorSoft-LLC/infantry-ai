@@ -496,10 +496,12 @@ impl Account {
         let plan_active = doc.pointer("/plan/status").and_then(Value::as_str).map_or(true, |st| st == "active");
         let entitled: Vec<String> = if signed_in && plan_active { doc.get("permissions").and_then(Value::as_array).into_iter().flatten().filter_map(|x| x.as_str().map(String::from)).collect() } else { Vec::new() };
         o.insert("permissions".into(), doc.get("permissions").cloned().unwrap_or(json!([])));
+        // A signed-in account whose document names no active plan reads `no_plan`, not `signed_in`.
+        let has_plan = doc.get("plan").is_some_and(|x| !x.is_null()) && plan_active;
         let services: Vec<Value> = p
             .services
             .iter()
-            .map(|sv| json!({ "id": sv.id, "name": sv.name, "section": sv.section, "entitled": entitled.contains(&sv.entitlement), "state": if signed_in { "signed_in" } else { "signed_out" } }))
+            .map(|sv| json!({ "id": sv.id, "name": sv.name, "section": sv.section, "entitled": entitled.contains(&sv.entitlement), "state": service_state(signed_in, has_plan) }))
             .collect();
         o.insert("services".into(), json!(services));
         if let Some(f) = self.state.lock().unwrap().flows.get(&p.id) {
@@ -736,6 +738,15 @@ impl AccountHttp for UreqHttp {
     }
 }
 
+/// The state of one service row: signed out, signed in with no active plan, or signed in.
+fn service_state(signed_in: bool, has_plan: bool) -> &'static str {
+    match (signed_in, has_plan) {
+        (false, _) => "signed_out",
+        (true, false) => "no_plan",
+        (true, true) => "signed_in",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -845,6 +856,23 @@ mod tests {
         let a = Account::new(vec![provider()], http, tokens);
         a.state.lock().unwrap().access.insert("acme".into(), ("at".into(), i64::MAX));
         a.status(None, true).unwrap()["services"][0]["entitled"].clone()
+    }
+
+    #[test]
+    fn a_signed_in_account_without_an_active_plan_reads_no_plan() {
+        let state = |doc: Value| {
+            let http = Arc::new(FakeHttp::default());
+            *http.doc.lock().unwrap() = Some(doc);
+            let tokens = Arc::new(MemTokens::default());
+            tokens.set("acct_acme_refresh", "rt").unwrap();
+            let a = Account::new(vec![provider()], http, tokens);
+            a.state.lock().unwrap().access.insert("acme".into(), ("at".into(), i64::MAX));
+            a.status(None, true).unwrap()["services"][0]["state"].clone()
+        };
+        assert_eq!(state(json!({"plan": {"name": "Basic", "status": "active"}})), "signed_in");
+        assert_eq!(state(json!({"plan": null})), "no_plan");
+        assert_eq!(state(json!({"email": "a@example.com"})), "no_plan");
+        assert_eq!(state(json!({"plan": {"name": "Basic", "status": "canceled"}})), "no_plan");
     }
 
     #[test]

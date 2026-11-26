@@ -27,6 +27,10 @@ export interface AccountProvider {
   /** Masked by the daemon. */
   email: string | null;
   plan: string | null;
+  /** True when the account document names a plan whose status is active (no status counts as active). */
+  planActive: boolean;
+  /** The provider's plans/billing page, when it names one. */
+  billingUrl: string | null;
   /** The account document could not be read. */
   error: string | null;
   flow: AccountFlow | null;
@@ -56,6 +60,8 @@ export function accountProviders(data: Obj | null): AccountProvider[] {
         signIn: SIGN_IN_STATES.includes(p.signIn as SignInState) ? (p.signIn as SignInState) : p.signedIn === true ? "signed_in" : "signed_out",
         email: text(obj(p.user), "email"),
         plan: plan ? (text(plan, "name") ?? text(plan, "status")) : text(p, "plan"),
+        planActive: plan ? (text(plan, "status") ?? "active") === "active" : !!text(p, "plan"),
+        billingUrl: text(p, "billingUrl"),
         error: text(p, "error"),
         flow: f && state ? { state: state as FlowState, userCode: text(f, "userCode"), verificationUri: text(f, "verificationUri"), error: text(f, "error") } : null,
       },
@@ -135,6 +141,13 @@ export function cardChip(p: AccountProvider): { label: string; tone: CardTone } 
   if (p.flow?.state === "pending") return { label: "Waiting for approval", tone: "amber" };
   if (p.signIn === "expired") return { label: "Sign-in expired", tone: "amber" };
   return { label: "Not signed in", tone: "neutral" };
+}
+
+/** The plan line of a signed-in account without an active plan (none, past due, canceled), else null. */
+export function planNotice(p: AccountProvider): string | null {
+  if (!p.signedIn || p.signIn === "unreachable" || p.error) return null;
+  if (!p.plan) return "This account has no active plan.";
+  return p.planActive ? null : `Your plan is ${p.plan.replace("_", " ")}.`;
 }
 
 /** One short line under a card that is not signed in: the app holds its own sign-in, apart from the website's. */
