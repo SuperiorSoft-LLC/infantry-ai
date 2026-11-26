@@ -658,6 +658,16 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     let bundled_dir = install_config.bundled.clone();
     let plugin_sources = Arc::new(sources::SourceStore::load(state_dir));
     plugin_sources.set_max_bytes(sources::limit_of(settings::SettingsUnit { db: db.clone() }.app(sources::MAX_FILE_BYTES_KEY)));
+    // PLUGIN-SRC-1: the sources a host starts with come from a data file the release stages beside the plugins
+    // (core names none). A clone can take a while, so it runs off the boot path; the list shows it once added.
+    if let Some(defaults) = std::env::var_os(sources::DEFAULTS_ENV).map(PathBuf::from).or_else(|| plugins_dir().map(|d| d.join(sources::DEFAULTS_FILE))) {
+        let store = plugin_sources.clone();
+        std::thread::spawn(move || {
+            for line in store.seed_defaults(&defaults) {
+                log_line(&format!("default plugin source {line}"));
+            }
+        });
+    }
     let plugin_set = plugins::start(state_dir, plugins_dir(), bus.clone(), handle.clone(), disabled.clone(), plugins::InstallSeam { config: install_config, boot: boot.clone(), late: late.clone(), sources: plugin_sources.clone(), signers: Arc::new(sources::Signers::load(state_dir)) });
     let plugin_host = plugin_set.as_ref().map(|p| p.host.clone());
     let bundles = Arc::new(ui_bundles::UiBundles { plugins_dir: plugins_dir(), plugins: plugin_host.clone(), disabled });

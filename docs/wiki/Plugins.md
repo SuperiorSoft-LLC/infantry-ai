@@ -99,6 +99,13 @@ folder comes first (`plugins.bundled` or `INFANTRY_BUNDLED_PLUGINS_DIR`, else `p
 the folders in `plugins.sources`. A module installs at the tier of the folder it sits in, never by its manifest. Signing
 and verification are not here yet (the marketplace, MARKET-1).
 
+**Default sources (PLUGIN-SRC-1).** `rust/plugins/default-sources.json` names the sources a host starts with (today the
+official repo, https://github.com/SuperiorSoft-LLC/infantry-plugins, labelled `Official`). `stage.sh` copies it into
+the staged plugins folder; at start the daemon adds each location once, off the boot path (`INFANTRY_DEFAULT_SOURCES`
+names another file). The seeded locations are kept in `plugin-sources-seeded.json`, so a default the user removed is
+not added back; one that could not be added (offline) is tried again at the next start. The Sources tab shows the label
+as a badge and asks before removing a labelled source. Add a default source in that file, not in code.
+
 The **bootstrap plugin** is named by data: `INFANTRY_BOOTSTRAP_PLUGIN`, else the `plugins.bootstrap` setting, else the first
 module whose manifest says `"bootstrap": true`. A daemon with nothing installed copies it from the bundled folder and
 reports bootstrap mode in `boot_progress` (`bootstrap: {plugin, active, error}`). `active` is true while nothing but that

@@ -75,3 +75,5 @@ for mj in "${manifests[@]}"; do
   echo "staged $mod -> $dest/$component"
 done
 bash "$here/stage-external.sh" "$out" "$profile"
+# PLUGIN-SRC-1: the default plugin sources (data) go beside the staged plugins; the daemon seeds them once.
+mkdir -p "$out"; cp "$here/default-sources.json" "$out/default-sources.json"

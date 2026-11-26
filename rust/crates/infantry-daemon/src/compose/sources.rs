@@ -22,7 +22,17 @@ pub struct Source {
     pub kind: String,
     /// The folder path, or the git URL.
     pub location: String,
+    /// A badge the client shows (e.g. `Official`), set when the source came from the default-sources list.
+    pub label: Option<String>,
 }
+
+/// The file in the plugins folder that names the sources a host starts with (data the release stages, never code):
+/// `{ "sources": [ { "location": "<git url or folder>", "label": "Official" } ] }`. `INFANTRY_DEFAULT_SOURCES` names
+/// another file. Each location is added once; one the user removed is not added again.
+pub const DEFAULTS_FILE: &str = "default-sources.json";
+pub const DEFAULTS_ENV: &str = "INFANTRY_DEFAULT_SOURCES";
+/// The locations already seeded from the defaults file (kept so a removed default stays removed).
+pub const SEEDED_FILE: &str = "plugin-sources-seeded.json";
 
 pub struct SourceStore {
     file: PathBuf,
@@ -145,7 +155,7 @@ impl SourceStore {
             .and_then(|v| v.as_array().cloned())
             .unwrap_or_default()
             .iter()
-            .filter_map(|s| Some(Source { id: s["id"].as_str()?.into(), kind: s["kind"].as_str()?.into(), location: plain_location(s["kind"].as_str()?, s["location"].as_str()?) }))
+            .filter_map(|s| Some(Source { id: s["id"].as_str()?.into(), kind: s["kind"].as_str()?.into(), location: plain_location(s["kind"].as_str()?, s["location"].as_str()?), label: s["label"].as_str().map(str::to_string) }))
             .collect();
         SourceStore { file, cache: state_dir.join(CACHE_DIR), items: Mutex::new(items), max_bytes: std::sync::atomic::AtomicU64::new(DEFAULT_MAX_FILE_BYTES) }
     }
@@ -159,7 +169,13 @@ impl SourceStore {
     }
 
     fn save(&self, items: &[Source]) -> Result<(), String> {
-        let v: Vec<Value> = items.iter().map(|s| json!({ "id": s.id, "kind": s.kind, "location": s.location })).collect();
+        let v: Vec<Value> = items.iter().map(|s| {
+            let mut v = json!({ "id": s.id, "kind": s.kind, "location": s.location });
+            if let Some(l) = &s.label {
+                v["label"] = json!(l);
+            }
+            v
+        }).collect();
         super::host_frames::write_json(&self.file, &Value::Array(v))
     }
 
@@ -185,13 +201,17 @@ impl SourceStore {
             .map(|s| {
                 let dir = self.dir_of(s);
                 let offers = if dir.is_dir() { installer::catalog(&[dir.clone()]).len() as i64 } else { -1 };
-                json!({ "id": s.id, "kind": s.kind, "location": s.location, "dir": dir.display().to_string(), "offers": offers })
+                json!({ "id": s.id, "kind": s.kind, "location": s.location, "label": s.label, "dir": dir.display().to_string(), "offers": offers })
             })
             .collect()
     }
 
     /// Adds a local folder or a git repository. Refused when it is already listed, cannot be read or offers no module.
     pub fn add(&self, location: &str) -> Result<Source, String> {
+        self.add_labelled(location, None)
+    }
+
+    fn add_labelled(&self, location: &str, label: Option<String>) -> Result<Source, String> {
         let location = location.trim().strip_prefix("file://").filter(|l| Path::new(l).is_dir()).unwrap_or(location.trim()).to_string();
         if location.is_empty() {
             return Err("usage: source-add <folder or git url>".into());
@@ -207,7 +227,7 @@ impl SourceStore {
         } else {
             return Err(format!("{location} is neither a folder on this machine nor a git url"));
         };
-        let src = Source { id: slug(&location), kind: kind.into(), location };
+        let src = Source { id: slug(&location), kind: kind.into(), location, label };
         if items.iter().any(|s| s.id == src.id) {
             return Err(format!("{} is already a source", src.location));
         }
@@ -233,6 +253,44 @@ impl SourceStore {
             return Err(e);
         }
         Ok(src)
+    }
+
+    /// Adds each source the defaults file names that was never seeded on this host. One already listed (the user
+    /// added it by hand) is only marked seeded; one that fails (offline) stays unseeded and is tried at the next start.
+    /// Returns one line per source tried. A missing or unreadable defaults file seeds nothing.
+    pub fn seed_defaults(&self, defaults: &Path) -> Vec<String> {
+        let Some(list) = std::fs::read_to_string(defaults).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else { return Vec::new() };
+        let seeded_file = self.file.with_file_name(SEEDED_FILE);
+        let mut seeded: Vec<String> = std::fs::read_to_string(&seeded_file).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        let mut lines = Vec::new();
+        for d in list["sources"].as_array().cloned().unwrap_or_default() {
+            let Some(loc) = d["location"].as_str().map(str::trim).filter(|l| !l.is_empty()) else { continue };
+            if seeded.iter().any(|s| s == loc) {
+                continue;
+            }
+            let label = d["label"].as_str().map(str::to_string);
+            let listed = self.items.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|s| s.location == loc || s.id == slug(loc));
+            let ok = if listed {
+                lines.push(format!("{loc}: already a source"));
+                true
+            } else {
+                match self.add_labelled(loc, label) {
+                    Ok(s) => {
+                        lines.push(format!("{loc}: added as {}", s.id));
+                        true
+                    }
+                    Err(e) => {
+                        lines.push(format!("{loc}: not added yet ({e})"));
+                        false
+                    }
+                }
+            };
+            if ok {
+                seeded.push(loc.to_string());
+                let _ = super::host_frames::write_json(&seeded_file, &json!(seeded));
+            }
+        }
+        lines
     }
 
     /// Drops a source by id or location. A cloned repository is deleted; a local folder is never touched.
@@ -431,6 +489,35 @@ mod tests {
         assert!(src.join("official/Ps_One").is_dir(), "a local folder is never deleted");
         assert!(SourceStore::load(&state).list().is_empty());
         for d in [state, src] {
+            let _ = std::fs::remove_dir_all(d);
+        }
+    }
+
+    #[test]
+    fn a_default_source_is_seeded_once_labelled_and_stays_removed() {
+        let (state, src, cfg) = (tmp("seed"), tmp("seedsrc"), tmp("seedcfg"));
+        module(&src, "Ps_Seed", "1.2.0");
+        let defaults = cfg.join(DEFAULTS_FILE);
+        let missing = cfg.join("gone");
+        std::fs::write(&defaults, json!({ "sources": [ { "location": src.display().to_string(), "label": "Official" }, { "location": missing.display().to_string() } ] }).to_string()).unwrap();
+        let store = SourceStore::load(&state);
+        let lines = store.seed_defaults(&defaults);
+        assert!(lines[0].contains("added"), "{lines:?}");
+        assert!(lines[1].contains("not added yet"), "{lines:?}");
+        assert_eq!(store.list()[0]["label"], "Official");
+        // A restart keeps the label and does not add it twice.
+        let again = SourceStore::load(&state);
+        assert_eq!(again.list()[0]["label"], "Official");
+        assert!(again.seed_defaults(&defaults).iter().all(|l| !l.contains("added as")));
+        assert_eq!(again.list().len(), 1);
+        // Removed on purpose: never re-added.
+        let id = again.list()[0]["id"].as_str().unwrap().to_string();
+        again.remove(&id).unwrap();
+        SourceStore::load(&state).seed_defaults(&defaults);
+        assert!(SourceStore::load(&state).list().is_empty());
+        // No defaults file: nothing happens.
+        assert!(SourceStore::load(&state).seed_defaults(&cfg.join("none.json")).is_empty());
+        for d in [state, src, cfg] {
             let _ = std::fs::remove_dir_all(d);
         }
     }

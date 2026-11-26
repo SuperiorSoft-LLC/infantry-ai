@@ -95,6 +95,8 @@ export interface PluginSource {
   location: string;
   /** How many plugins it offers; -1 when its folder is missing. */
   offers: number;
+  /** A badge (e.g. "Official") on a source the host started with; such a source asks before it is removed. */
+  label?: string;
 }
 
 /** One plugin any source offers or that is installed (`plugin_admin available`), with what the approval dialog shows. */
@@ -204,7 +206,7 @@ export function parseSources(out: string): PluginSource[] {
   if (!Array.isArray(rows)) return [];
   return rows
     .filter((r) => r && typeof r.id === "string" && typeof r.location === "string")
-    .map((r) => ({ id: r.id as string, kind: typeof r.kind === "string" ? r.kind : "folder", location: r.location as string, offers: typeof r.offers === "number" ? r.offers : 0 }));
+    .map((r) => ({ id: r.id as string, kind: typeof r.kind === "string" ? r.kind : "folder", location: r.location as string, offers: typeof r.offers === "number" ? r.offers : 0, ...(typeof r.label === "string" && r.label ? { label: r.label } : {}) }));
 }
 
 export function parseUpdates(out: string): PluginUpdate[] {
