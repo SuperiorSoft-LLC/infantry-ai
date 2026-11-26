@@ -82,8 +82,22 @@ function useShellOutlet(Shell: ComponentType<ShellProps>): ComponentType<ShellPr
   );
 }
 
+/**
+ * One root component per layout key, made once. The root is a component TYPE: a new one for the same layout would make React
+ * remount the whole layout (and lose its state, e.g. the desktop's open windows) each time the plugin list changes, as it does
+ * when any plugin is installed or uninstalled.
+ */
+const roots = new Map<string, LayoutRoot<ComponentType<ShellProps>, ReactNode>>();
+
 /** The root of plugin layout [plugin]/[id]: its `layout` view, or today's shell when that plugin's UI has failed. */
-function pluginRoot(plugin: string, id: string): LayoutRoot<ComponentType<ShellProps>, ReactNode> {
+export function pluginRoot(plugin: string, id: string): LayoutRoot<ComponentType<ShellProps>, ReactNode> {
+  const key = `${plugin}/${id}`;
+  let root = roots.get(key);
+  if (!root) roots.set(key, (root = makePluginRoot(plugin, id)));
+  return root;
+}
+
+function makePluginRoot(plugin: string, id: string): LayoutRoot<ComponentType<ShellProps>, ReactNode> {
   return function PluginLayoutRoot({ Shell }) {
     const failed = useUiPlugins((s) => s.entries[plugin]?.state === "failed" || !!s.entries[plugin]?.fault);
     const Outlet = useShellOutlet(Shell);
@@ -111,16 +125,20 @@ function useChosenLayout(): { ready: boolean; Root: LayoutRoot<ComponentType<She
     const t = window.setTimeout(() => setGaveUp(true), START_WAIT_MS);
     return () => window.clearTimeout(t);
   }, [unset, loaded]);
+  // Keyed by the picked layout's name, not the fill object: the fills are rebuilt whenever the plugin list changes.
   const wanted = useMemo(() => {
     if (choice === DEFAULT_LAYOUT_CHOICE) return undefined;
     // BOS-8: under the OS the OS is the desktop, so no inner desktop starts here (an explicit choice still wins).
-    if (unset) return host.os ? undefined : fills.find((f) => f.contribution.defaultLayout === true);
-    return fills.find((f) => `${f.plugin}/${f.contribution.id}` === choice);
+    const f = unset
+      ? (host.os ? undefined : fills.find((f) => f.contribution.defaultLayout === true))
+      : fills.find((f) => `${f.plugin}/${f.contribution.id}` === choice);
+    return f ? `${f.plugin}/${f.contribution.id}` : undefined;
   }, [choice, unset, fills]);
-  const provider = useMemo(
-    () => createLayoutProvider(DEFAULT_LAYOUT, wanted ? { root: pluginRoot(wanted.plugin, wanted.contribution.id) as LayoutRoot } : {}),
-    [wanted],
-  );
+  const provider = useMemo(() => {
+    if (!wanted) return createLayoutProvider(DEFAULT_LAYOUT, {});
+    const at = wanted.indexOf("/");
+    return createLayoutProvider(DEFAULT_LAYOUT, { root: pluginRoot(wanted.slice(0, at), wanted.slice(at + 1)) as LayoutRoot });
+  }, [wanted]);
   useEffect(() => setLayoutProvider(provider), [provider]);
   return { ready: choice === DEFAULT_LAYOUT_CHOICE || loaded || gaveUp, Root: provider.root as LayoutRoot<ComponentType<ShellProps>, ReactNode> | undefined };
 }
