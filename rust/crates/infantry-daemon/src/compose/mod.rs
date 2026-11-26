@@ -28,7 +28,6 @@ pub mod plugins;
 pub mod ui_bundles;
 mod needs_input;
 mod notify_kinds;
-mod owner_mail;
 mod prompter;
 mod config;
 mod settings;
@@ -898,19 +897,19 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     // ---- MAIL-OWNER-2: the owner's work-block summary and alert mails ---------------------------------------------
     {
         let (b, b2, d, d2, sdb, dir) = (board.clone(), board.clone(), daemon.clone(), daemon.clone(), db.clone(), state_dir.to_path_buf());
-        let om = owner_mail::OwnerMail::new(owner_mail::Ports {
+        let sdb2 = db.clone();
+        let om = infantry_board::owner_mail::OwnerMail::new(infantry_board::owner_mail::Ports {
             mail: mail.clone(),
-            settings: settings::SettingsUnit { db: db.clone() },
+            settings: Arc::new(move |k: &str| settings::SettingsUnit { db: sdb2.clone() }.app(k)),
+            stalled_event: watch::SESSION_STALLED,
+            disk_setting: crate::health::MIN_DISK_SETTING,
             tickets: Arc::new(move || b.list(None, None).unwrap_or_default()),
-            done_comment: Arc::new(move |id: &str| {
-                let q = infantry_orchestrator_api::dto::CommentQuery { ticket_id: id.into(), which: None, kind: Some("done".into()), limit: None };
-                b2.comments(q).ok()?.into_iter().max_by_key(|c| c.created_at).map(|c| c.body)
-            }),
+            done_comment: Arc::new(move |id: &str| infantry_board::owner_mail::done_comment(&b2, id)),
             workers: Arc::new(move || {
                 d.records()
                     .into_iter()
                     .filter(|r| !adapters::ended(r))
-                    .filter_map(|r| Some(owner_mail::WorkerRow { ticket_id: r.ticket_id.clone()?, project_id: r.project_id.clone()? }))
+                    .filter_map(|r| Some(infantry_board::owner_mail::WorkerRow { ticket_id: r.ticket_id.clone()?, project_id: r.project_id.clone()? }))
                     .collect()
             }),
             session_seen: Arc::new(move |sid: &str| d2.record(sid).map(|r| (adapters::ended(&r), r.last_event_at.unwrap_or(r.last_heartbeat)))),
@@ -921,7 +920,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             now: now_ms,
             minute_of_day: adapters::minute_of_day,
         });
-        owner_mail::spawn(om, &bus);
+        infantry_board::owner_mail::spawn(om, &bus);
     }
 
     // ---- background: bus -> clients, hooks, timers, usage, mail tick, exec ticker -------------------------

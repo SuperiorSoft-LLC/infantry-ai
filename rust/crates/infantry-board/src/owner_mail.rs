@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 //! MAIL-OWNER-2: mail to the owner at the end of a work block, and alert mails only for what matters.
 //!
@@ -17,7 +17,7 @@
 use infantry_core::bus::EventBus;
 use infantry_mail::mail::message::{MailSendRequest, SYSTEM};
 use infantry_mail::mail::router::MailRouter;
-use infantry_orchestrator_api::dto::{status, Ticket};
+use infantry_orchestrator_api::dto::{status, CommentQuery, Ticket};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
@@ -199,7 +199,12 @@ struct ProjectState {
 /// What the owner-mail loop reads; the composition root wires it.
 pub struct Ports {
     pub mail: Arc<MailRouter>,
-    pub settings: super::settings::SettingsUnit,
+    /// An app setting by key.
+    pub settings: Arc<dyn Fn(&str) -> Option<serde_json::Value> + Send + Sync>,
+    /// The bus event the session watchdog emits for a stuck worker.
+    pub stalled_event: &'static str,
+    /// The setting that holds the free-disk threshold (named in the alert).
+    pub disk_setting: &'static str,
     /// Every ticket on the board.
     pub tickets: Arc<dyn Fn() -> Vec<Ticket> + Send + Sync>,
     /// The body of a ticket's latest done comment.
@@ -236,12 +241,12 @@ impl OwnerMail {
     }
 
     fn alerts_on(&self) -> bool {
-        !matches!(self.ports.settings.app(ALERTS_SETTING), Some(serde_json::Value::Bool(false)))
-            && !matches!(self.ports.settings.app(ALERTS_SETTING).as_ref().and_then(|v| v.as_str()), Some("off" | "false"))
+        !matches!((self.ports.settings)(ALERTS_SETTING), Some(serde_json::Value::Bool(false)))
+            && !matches!((self.ports.settings)(ALERTS_SETTING).as_ref().and_then(|v| v.as_str()), Some("off" | "false"))
     }
 
     fn alert_kinds(&self) -> Vec<String> {
-        match self.ports.settings.app(ALERT_KINDS_SETTING) {
+        match (self.ports.settings)(ALERT_KINDS_SETTING) {
             Some(serde_json::Value::Array(a)) => a.iter().filter_map(|v| v.as_str().map(|s| s.trim().to_string())).filter(|s| !s.is_empty()).collect(),
             Some(serde_json::Value::String(s)) => s.split(',').map(|x| x.trim().to_string()).filter(|s| !s.is_empty()).collect(),
             _ => DEFAULT_ALERT_KINDS.iter().map(|s| s.to_string()).collect(),
@@ -249,7 +254,7 @@ impl OwnerMail {
     }
 
     pub fn tick_secs(&self) -> u64 {
-        self.ports.settings.app(TICK_SETTING).and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))).filter(|n| *n > 0).unwrap_or(DEFAULT_TICK_SECS)
+        (self.ports.settings)(TICK_SETTING).and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))).filter(|n| *n > 0).unwrap_or(DEFAULT_TICK_SECS)
     }
 
     /// The one owner mail path. True when the mail was accepted.
@@ -280,7 +285,7 @@ impl OwnerMail {
     pub fn on_event(&self, name: &str, p: &serde_json::Value) {
         let s = |k: &str| p.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
         match name {
-            super::watch::SESSION_STALLED => {
+            n if n == self.ports.stalled_event => {
                 let sid = s("sessionId");
                 if sid.is_empty() {
                     return;
@@ -314,7 +319,7 @@ impl OwnerMail {
         }
         match (self.ports.disk)() {
             Some((free, min)) if free < min => {
-                self.alert("disk", &format!("low disk: {free} MB free"), &format!("Free disk is {free} MB, under {min} MB (setting {}). Delete build output (target folders).", crate::health::MIN_DISK_SETTING));
+                self.alert("disk", &format!("low disk: {free} MB free"), &format!("Free disk is {free} MB, under {min} MB (setting {}). Delete build output (target folders).", self.ports.disk_setting));
             }
             Some(_) => self.alerts.clear("disk"),
             None => {}
@@ -323,7 +328,7 @@ impl OwnerMail {
     }
 
     fn summaries(&self, now: i64) {
-        let mode = summary_mode(self.ports.settings.app(SUMMARY_SETTING).as_ref());
+        let mode = summary_mode((self.ports.settings)(SUMMARY_SETTING).as_ref());
         let workers = (self.ports.workers)();
         let tickets = (self.ports.tickets)();
         let mut live_by_project: HashMap<String, HashSet<String>> = HashMap::new();
@@ -361,15 +366,22 @@ impl OwnerMail {
     }
 }
 
+/// The body of a ticket's latest done comment (the `done_comment` port, read from the board).
+pub fn done_comment(board: &crate::Board, ticket_id: &str) -> Option<String> {
+    let q = CommentQuery { ticket_id: ticket_id.into(), which: None, kind: Some("done".into()), limit: None };
+    board.comments(q).ok()?.into_iter().max_by_key(|c| c.created_at).map(|c| c.body)
+}
+
 /// Starts the loop: bus events for alerts, a tick for the summary, the disk and clearing.
 pub fn spawn(om: Arc<OwnerMail>, bus: &EventBus) {
     {
         let mut rx = bus.subscribe_events();
+        let stalled = om.ports.stalled_event;
         let om = om.clone();
         tokio::spawn(async move {
             loop {
                 match rx.recv().await {
-                    Ok(e) if e.name == super::watch::SESSION_STALLED || e.name == MAIL_NOTICE => {
+                    Ok(e) if e.name == stalled || e.name == MAIL_NOTICE => {
                         let om = om.clone();
                         let _ = tokio::task::spawn_blocking(move || om.on_event(&e.name, &e.payload)).await;
                     }

@@ -338,7 +338,7 @@ impl AgentTools {
                 if let Some(kind) = s(a, "kind") {
                     let key = s(a, "key").unwrap_or_default();
                     // MAIL-OWNER-2: every notice with a kind is a generic bus event (the owner's alert mail listens).
-                    self.bus.emit(super::owner_mail::MAIL_NOTICE, serde_json::json!({ "kind": kind, "key": key, "from": from, "to": req.to, "subject": req.subject, "body": req.body }));
+                    self.bus.emit(infantry_board::owner_mail::MAIL_NOTICE, serde_json::json!({ "kind": kind, "key": key, "from": from, "to": req.to, "subject": req.subject, "body": req.body }));
                     let to = self.mail.resolve(&from, &req.to, true).unwrap_or_else(|_| req.to.clone());
                     let role = self.daemon.record(&to).and_then(|r| r.role);
                     match super::adapters::decide_wake(&self.settings, &self.wake_gate, role.as_deref(), &to, &kind, &key) {
