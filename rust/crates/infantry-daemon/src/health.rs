@@ -572,7 +572,7 @@ fn free_memory_mb() -> Option<u64> {
 }
 
 #[cfg(windows)]
-fn free_disk_mb(dir: &Path) -> Option<u64> {
+pub(crate) fn free_disk_mb(dir: &Path) -> Option<u64> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
     let w: Vec<u16> = dir.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
@@ -581,7 +581,7 @@ fn free_disk_mb(dir: &Path) -> Option<u64> {
 }
 
 #[cfg(not(windows))]
-fn free_disk_mb(_dir: &Path) -> Option<u64> {
+pub(crate) fn free_disk_mb(_dir: &Path) -> Option<u64> {
     None
 }
 

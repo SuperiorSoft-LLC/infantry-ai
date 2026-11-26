@@ -28,6 +28,7 @@ pub mod plugins;
 pub mod ui_bundles;
 mod needs_input;
 mod notify_kinds;
+mod owner_mail;
 mod prompter;
 mod config;
 mod settings;
@@ -893,6 +894,35 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
     // ---- RUST-SESS-2: the watchdog (never fails a session) and the done-worker reaper -----------------------
     daemon.start_watchdog(Arc::new(watch::Ports { daemon: daemon.clone(), mail: mail.clone(), attention: attention.clone(), settings: settings::SettingsUnit { db: db.clone() }, prompts: prompts.clone(), bus: bus.clone(), ticket_status: Some({ let b = board.clone(); Arc::new(move |t: &str| b.get(t).ok().map(|t| t.status)) }) }), crate::sessions::WatchConfig::default());
     watch::spawn_reaper(daemon.clone(), c.projects.clone(), board.clone(), settings::SettingsUnit { db: db.clone() }, &bus);
+
+    // ---- MAIL-OWNER-2: the owner's work-block summary and alert mails ---------------------------------------------
+    {
+        let (b, b2, d, d2, sdb, dir) = (board.clone(), board.clone(), daemon.clone(), daemon.clone(), db.clone(), state_dir.to_path_buf());
+        let om = owner_mail::OwnerMail::new(owner_mail::Ports {
+            mail: mail.clone(),
+            settings: settings::SettingsUnit { db: db.clone() },
+            tickets: Arc::new(move || b.list(None, None).unwrap_or_default()),
+            done_comment: Arc::new(move |id: &str| {
+                let q = infantry_orchestrator_api::dto::CommentQuery { ticket_id: id.into(), which: None, kind: Some("done".into()), limit: None };
+                b2.comments(q).ok()?.into_iter().max_by_key(|c| c.created_at).map(|c| c.body)
+            }),
+            workers: Arc::new(move || {
+                d.records()
+                    .into_iter()
+                    .filter(|r| !adapters::ended(r))
+                    .filter_map(|r| Some(owner_mail::WorkerRow { ticket_id: r.ticket_id.clone()?, project_id: r.project_id.clone()? }))
+                    .collect()
+            }),
+            session_seen: Arc::new(move |sid: &str| d2.record(sid).map(|r| (adapters::ended(&r), r.last_event_at.unwrap_or(r.last_heartbeat)))),
+            disk: Arc::new(move || {
+                let min = settings::SettingsUnit { db: sdb.clone() }.app(crate::health::MIN_DISK_SETTING).and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))).unwrap_or(crate::health::DEFAULT_MIN_DISK_MB);
+                crate::health::free_disk_mb(&dir).map(|f| (f, min))
+            }),
+            now: now_ms,
+            minute_of_day: adapters::minute_of_day,
+        });
+        owner_mail::spawn(om, &bus);
+    }
 
     // ---- background: bus -> clients, hooks, timers, usage, mail tick, exec ticker -------------------------
     {
