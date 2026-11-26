@@ -129,6 +129,60 @@ class Package(unittest.TestCase):
             self.assertIn("library not found", r.stderr)
 
 
+class PageOnly(unittest.TestCase):
+    """AND-10: the phone package: same app.json, the page only, listed under android-aarch64."""
+
+    def test_page_only_package_holds_no_native_part_and_same_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dist = Path(tmp) / "dist"
+            dist.mkdir()
+            (dist / "index.html").write_text("<html></html>")
+            out = Path(tmp) / "out"
+            r = subprocess.run([sys.executable, str(SCRIPT), "--page-only", "--dist", str(dist), "--version", "9.8.7", "--out", str(out)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            pkg = out / "infantry-ai-9.8.7-android-aarch64.bosapp"
+            with zipfile.ZipFile(pkg) as z:
+                names = z.namelist()
+                m = json.loads(z.read("app.json"))
+            self.assertFalse([n for n in names if n.startswith(("lib/", "bin/", "plugins/"))], names)
+            self.assertIn("shell/dist/index.html", names)
+            base = json.loads((REPO / "packaging/app.json").read_text(encoding="utf-8"))
+            for k in ("id", "name", "publisher", "contract", "permissions", "process", "state"):
+                self.assertEqual(m[k], base[k], k)
+            for c in ("ws:", "wss:", "http:", "https:"):
+                self.assertIn(c, m["ui"]["connect"])
+            feed = json.loads((out / "feed.json").read_text())
+            self.assertEqual(list(feed["platforms"]), ["android-aarch64"])
+            self.assertEqual(feed["platforms"]["android-aarch64"]["sha256"], hashlib.sha256(pkg.read_bytes()).hexdigest())
+
+    def test_windows_and_phone_packages_share_one_feed_that_bos_feed_checks(self):
+        feedmod = load("bos-feed")
+        with tempfile.TemporaryDirectory() as tmp:
+            r, out = run_packager(tmp)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            base = "https://github.com/o/r/releases/download/os-app-v9.8.7/"
+            r = subprocess.run([sys.executable, str(SCRIPT), "--page-only", "--dist", str(Path(tmp) / "in/dist"), "--version", "9.8.7", "--out", str(out), "--base-url", base], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            d = json.loads((out / "feed.json").read_text())
+            self.assertEqual(sorted(d["platforms"]), ["android-aarch64", "windows-x86_64"])
+            d["platforms"]["windows-x86_64"]["url"] = base + "infantry-ai-9.8.7-windows-x86_64.bosapp"
+            (out / "feed.json").write_text(json.dumps(d))
+            self.assertEqual(feedmod.build_feed(out, "o/r", (out / "public.key").read_text())["version"], "9.8.7")
+            d["platforms"]["android-aarch64"]["size"] = 1
+            (out / "feed.json").write_text(json.dumps(d))
+            with self.assertRaises(SystemExit):
+                feedmod.build_feed(out, "o/r")
+
+    def test_page_only_refuses_native_inputs_and_other_platforms(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dist = Path(tmp) / "dist"
+            dist.mkdir()
+            (dist / "index.html").write_text("x")
+            for extra in (["--cli", "c.exe"], ["--platform", "windows-x86_64"]):
+                r = subprocess.run([sys.executable, str(SCRIPT), "--page-only", "--dist", str(dist), "--out", str(Path(tmp) / "o"), *extra], capture_output=True, text=True)
+                self.assertNotEqual(r.returncode, 0, extra)
+
+
 class Workflows(unittest.TestCase):
     def test_every_workflow_file_parses(self):
         files = sorted(WF.glob("*.yml"))

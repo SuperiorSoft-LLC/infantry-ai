@@ -4,7 +4,8 @@
 # cdylib; the package holds no daemon program), the CLI, the staged plugins and the shell, packs them with
 # scripts/bos-package.py, checks that no native file imports the dynamic VC++ runtime (scripts/bos-crt-check.py), signs
 # the package, and makes the GitHub release os-app-v<version> holding the .bosapp, its .sig, feed.json,
-# catalog-entry.json and public.key.
+# catalog-entry.json and public.key. AND-10: the same run also packs the page-only phone package (android-aarch64) into
+# the same feed.json.
 #
 # Rules that keep the standalone app's updater safe (a workflow-text test pins them):
 #   1. The release is a PRERELEASE and never latest (`gh release create --prerelease --latest=false`): this repo's "latest"
@@ -108,6 +109,13 @@ jobs:
             notes="$notes SIGNED WITH A THROWAWAY KEY: not trusted by a real install."
           fi
           python scripts/bos-package.py "${args[@]}" --notes "$notes"
+          # AND-10: the phone package (android-aarch64): the SAME app.json, id and key, the page only (no lib/, no bin/), its shell
+          # built to pair with the PC's daemon. It joins the same feed.json (one entry per platform), signed the same way.
+          (cd app && VITE_INFANTRY_BOS_REMOTE=1 pnpm --filter ./shell exec vite build --outDir "$RUNNER_TEMP/shell-remote" --emptyOutDir)
+          page=(--page-only --dist "$RUNNER_TEMP/shell-remote" --version "$VERSION" --out dist-bosapp
+                --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/os-app-v${VERSION}/")
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then page+=(--tauri-sign); fi
+          python scripts/bos-package.py "${page[@]}" --notes "$notes"
           rm -f dist-bosapp/throwaway.key.json
           # the release's own assets must agree with the feed (sha256, size, signature, url) and verify against the key
           python scripts/bos-feed.py --assets dist-bosapp --repo "$GITHUB_REPOSITORY" --out "$RUNNER_TEMP/feed.check.json" --pubkey "$(cat dist-bosapp/public.key)"

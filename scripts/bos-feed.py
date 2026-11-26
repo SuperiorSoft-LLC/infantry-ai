@@ -29,34 +29,38 @@ def load_packager():
 
 
 def build_feed(assets, repo, pubkey=None):
+    """Every platform of feed.json is checked against its own package (AND-10: windows-x86_64 and the page-only android-aarch64)."""
     assets = Path(assets)
-    pk = sorted(assets.glob("*.bosapp"))
-    if len(pk) != 1:
-        fail(f"{assets} must hold exactly one .bosapp, found {len(pk)}")
-    pkg = pk[0]
-    sigf = Path(str(pkg) + ".sig")
-    if not sigf.is_file() or not (assets / "feed.json").is_file():
-        fail("the release assets need the .sig and feed.json beside the .bosapp")
+    if not (assets / "feed.json").is_file():
+        fail("the release assets need the feed.json beside the .bosapp")
     src = json.loads((assets / "feed.json").read_text(encoding="utf-8"))
-    data, sig = pkg.read_bytes(), sigf.read_text()
     version = src.get("version", "")
     plat = src.get("platforms", {})
-    if len(plat) != 1:
-        fail("feed.json must hold exactly one platform")
-    (name, p), = plat.items()
-    want = f"https://github.com/{repo}/releases/download/os-app-v{version}/{pkg.name}"
-    checks = [(p.get("sha256") == hashlib.sha256(data).hexdigest(), "sha256 differs from the package"),
-              (p.get("size") == len(data), "size differs from the package"),
-              (p.get("signature", "").strip() == sig.strip(), "signature differs from the .sig"),
-              (p.get("url") == want, f"url is {p.get('url')}, want {want}"),
-              (pkg.name == f"infantry-ai-{version}-{name}.bosapp", "package name does not match version and platform")]
-    for ok, why in checks:
-        if not ok:
-            fail(why)
-    if pubkey:
-        bad = load_packager().verify_minisig(pubkey.strip(), sig, data)
-        if bad:
-            fail(bad)
+    pk = sorted(assets.glob("*.bosapp"))
+    if not plat:
+        fail("feed.json holds no platform")
+    if len(pk) != len(plat):
+        fail(f"{assets} must hold one .bosapp per feed platform ({len(plat)}), found {len(pk)}")
+    for name, p in plat.items():
+        pkg = assets / f"infantry-ai-{version}-{name}.bosapp"
+        if not pkg.is_file():
+            fail(f"package name does not match version and platform: no {pkg.name}")
+        sigf = Path(str(pkg) + ".sig")
+        if not sigf.is_file():
+            fail("the release assets need the .sig and feed.json beside the .bosapp")
+        data, sig = pkg.read_bytes(), sigf.read_text()
+        want = f"https://github.com/{repo}/releases/download/os-app-v{version}/{pkg.name}"
+        checks = [(p.get("sha256") == hashlib.sha256(data).hexdigest(), f"{name}: sha256 differs from the package"),
+                  (p.get("size") == len(data), f"{name}: size differs from the package"),
+                  (p.get("signature", "").strip() == sig.strip(), f"{name}: signature differs from the .sig"),
+                  (p.get("url") == want, f"{name}: url is {p.get('url')}, want {want}")]
+        for ok, why in checks:
+            if not ok:
+                fail(why)
+        if pubkey:
+            bad = load_packager().verify_minisig(pubkey.strip(), sig, data)
+            if bad:
+                fail(f"{name}: {bad}")
     return src
 
 

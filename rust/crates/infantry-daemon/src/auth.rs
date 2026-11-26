@@ -95,6 +95,16 @@ pub fn is_loopback_host(h: &str) -> bool {
     h == "localhost" || h == "::1" || h.starts_with("127.")
 }
 
+/// An `http(s)://` origin whose host is the loopback address (`127.x`, `localhost`, `[::1]`).
+fn is_loopback_origin(origin: &str) -> bool {
+    let o = origin.trim().to_ascii_lowercase();
+    let rest = o.strip_prefix("http://").or_else(|| o.strip_prefix("https://"));
+    rest.is_some_and(|r| {
+        let h = host_name(r);
+        !r.contains('/') && (h == "localhost" || h.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback()))
+    })
+}
+
 /// The host name of a Host header (port and IPv6 brackets dropped).
 fn host_name(header: &str) -> String {
     let h = header.trim();
@@ -184,6 +194,12 @@ impl AccessPolicy {
             if path == "/ws" && self.is_app_origin(o) {
                 return self.check_app(host, authorization, protocols);
             }
+            // AND-10: a BattalionOS page on ANOTHER device (Infantry AI's page-only app on a phone) is served by that device's own
+            // loopback page server, so its socket carries `Origin: http://127.0.0.1:<port>` of the phone. With a token set, such a
+            // socket is admitted on the bearer alone (the token is the gate; a page without it gets 401). Without a token nothing changes.
+            if path == "/ws" && self.digest.is_some() && is_loopback_origin(o) {
+                return self.check_app(host, authorization, protocols);
+            }
             if path != "/ws" {
                 return Some(Refusal { status: 403, reason: "requests carrying an Origin header are refused: this daemon is not a browser API", challenge_bearer: false });
             }
@@ -252,6 +268,23 @@ impl AccessPolicy {
 mod tests {
     use super::*;
     const T: &str = "0123456789abcdef0123456789abcdef";
+
+    #[test]
+    fn a_phone_os_page_is_admitted_on_its_bearer_only() {
+        let p = AccessPolicy::new("0.0.0.0", Some(T)).unwrap();
+        let phone = Some("http://127.0.0.1:41234");
+        let proto = format!("infantry, {}{}", BEARER_PROTOCOL_PREFIX, base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(T));
+        assert_eq!(p.check("/ws", Some("192.168.1.20:18990"), phone, None, Some(&proto)), None);
+        assert_eq!(p.check("/ws", Some("192.168.1.20:18990"), phone, None, None).map(|r| r.status), Some(401));
+        assert_eq!(p.check("/ws", Some("192.168.1.20:18990"), phone, None, Some("infantry, infantry.bearer.d3Jvbmc")).map(|r| r.status), Some(401));
+        // other routes with an Origin stay refused, and a foreign site is still a cross-site browser
+        assert_eq!(p.check("/health", Some("192.168.1.20:18990"), phone, None, Some(&proto)).map(|r| r.status), Some(403));
+        assert_eq!(p.check("/ws", Some("192.168.1.20:18990"), Some("http://evil.example"), None, Some(&proto)).map(|r| r.status), Some(403));
+        assert_eq!(p.check("/ws", Some("192.168.1.20:18990"), Some("http://127.0.0.1.evil.example"), None, Some(&proto)).map(|r| r.status), Some(403));
+        // without a token nothing changes: a loopback page from elsewhere is not admitted
+        let open = AccessPolicy::new("127.0.0.1", None).unwrap();
+        assert_eq!(open.check("/ws", Some("10.0.2.2:18990"), phone, None, None).map(|r| r.status), Some(403));
+    }
 
     #[test]
     fn the_os_page_skips_the_token_only_from_this_computer() {

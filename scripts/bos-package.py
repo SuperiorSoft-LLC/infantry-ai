@@ -6,6 +6,13 @@
   scripts/bos-package --library L --cli C --plugins P --dist S [--version V] [--out DIR] [--base-url URL]
                       [--tauri-sign | --minisign-key FILE] [--notes TEXT] [--platform windows-x86_64]
 
+  scripts/bos-package --page-only --dist S [--platform android-aarch64] ...   (AND-10: the phone package)
+
+--page-only packs the SAME app.json (same id, version, key) with the page only: no lib/, no bin/, no plugins/. It is the
+package listed under `android-aarch64`: on a phone Infantry AI is its page talking to the daemon on the PC (paired as the
+phone app is), so --dist must be the shell built for that (`VITE_INFANTRY_BOS_REMOTE=1 pnpm build`). Its `ui.connect`
+also admits ws:, wss:, http: and https: (the PC's address is only known at pairing; the token is the gate).
+
 Output in --out (default <repo>/dist-bosapp):
   infantry-ai-<version>-<platform>.bosapp       a zip: app.json, assets/icon.png, lib/ (the app library), bin/ (the CLI), plugins/, shell/dist/
   infantry-ai-<version>-<platform>.bosapp.sig   minisign signature of the zip
@@ -29,6 +36,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 PLATFORM = "windows-x86_64"
 EXE = {"windows-x86_64": ".exe"}
+PAGE_PLATFORMS = ("android-aarch64",)
+# AND-10: a phone reaches the PC at an address known only at pairing (LAN, tailnet, a hosted daemon).
+REMOTE_CONNECT = ["ws:", "wss:", "http:", "https:"]
 MAX_ENTRIES = 20000
 
 
@@ -147,6 +157,24 @@ def add_tree(z, src, prefix):
     return n
 
 
+def build_page_zip(pkg, manifest, dist, icon):
+    """AND-10: app.json, the icon and the page (shell/dist), nothing native."""
+    with zipfile.ZipFile(pkg, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("app.json", json.dumps(manifest, indent=2) + "\n")
+        z.write(icon, manifest["icon"])
+        if not add_tree(z, dist, "shell/dist"):
+            fail(f"{dist} holds no files")
+        if len(z.namelist()) > MAX_ENTRIES:
+            fail("package has too many files")
+
+
+def page_manifest(manifest):
+    m = json.loads(json.dumps(manifest))
+    ui = m.setdefault("ui", {})
+    ui["connect"] = list(dict.fromkeys(ui.get("connect", []) + REMOTE_CONNECT))
+    return m
+
+
 def build_zip(pkg, manifest, platform, library, cli, plugins, dist, icon):
     ext = EXE[platform]
     with zipfile.ZipFile(pkg, "w", zipfile.ZIP_DEFLATED) as z:
@@ -171,36 +199,53 @@ def need_file(p, what):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--library", required=True, help="the infantry-distribution library (target/<profile>/infantry_distribution.dll)")
-    ap.add_argument("--cli", required=True)
-    ap.add_argument("--plugins", required=True, help="output of rust/plugins/stage.sh (official/<Module>/...)")
+    ap.add_argument("--page-only", action="store_true", help="AND-10: the page only (no lib/, bin/, plugins/), for a phone")
+    ap.add_argument("--library", help="the infantry-distribution library (target/<profile>/infantry_distribution.dll)")
+    ap.add_argument("--cli")
+    ap.add_argument("--plugins", help="output of rust/plugins/stage.sh (official/<Module>/...)")
     ap.add_argument("--dist", required=True, help="the built shell (app/shell/dist)")
     ap.add_argument("--version")
-    ap.add_argument("--platform", default=PLATFORM)
+    ap.add_argument("--platform")
     ap.add_argument("--out", default=str(REPO / "dist-bosapp"))
     ap.add_argument("--base-url", help="where the package will be served; default is a file: url of --out")
     ap.add_argument("--minisign-key")
     ap.add_argument("--tauri-sign", action="store_true", help="sign with the updater key from the environment (CI)")
     ap.add_argument("--notes", default="")
     a = ap.parse_args(argv)
-    if a.platform not in EXE:
-        fail(f"platform {a.platform} is not packed yet (windows-x86_64 only)")
+    a.platform = a.platform or (PAGE_PLATFORMS[0] if a.page_only else PLATFORM)
+    if a.page_only:
+        if a.platform not in PAGE_PLATFORMS:
+            fail(f"--page-only packs {', '.join(PAGE_PLATFORMS)}, not {a.platform}")
+        if a.library or a.cli or a.plugins:
+            fail("--page-only takes no --library, --cli or --plugins (the phone package holds the page only)")
+    else:
+        if a.platform not in EXE:
+            fail(f"platform {a.platform} is not packed yet (windows-x86_64 only; android-aarch64 with --page-only)")
+        for v, w in ((a.library, "--library"), (a.cli, "--cli"), (a.plugins, "--plugins")):
+            if not v:
+                fail(f"{w} is required (or --page-only)")
     version = a.version or version_default()
     manifest = stamp_manifest(version)
     out = Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
-    library, cli = need_file(a.library, "library"), need_file(a.cli, "cli")
-    plugins, dist = Path(a.plugins), Path(a.dist)
-    for d, w in ((plugins, "plugins dir"), (dist, "shell dist")):
-        if not d.is_dir():
-            fail(f"{w} not found: {d}")
+    dist = Path(a.dist)
+    if not a.page_only:
+        library, cli, plugins = need_file(a.library, "library"), need_file(a.cli, "cli"), Path(a.plugins)
+        if not plugins.is_dir():
+            fail(f"plugins dir not found: {plugins}")
+    if not dist.is_dir():
+        fail(f"shell dist not found: {dist}")
     if not (dist / "index.html").is_file():
         fail(f"{dist} has no index.html (ui.entry is shell/dist/index.html)")
     icon = need_file(REPO / "app/src-tauri/icons/128x128@2x.png", "the Infantry AI logo")
 
     name = f"infantry-ai-{version}-{a.platform}.bosapp"
     pkg = out / name
-    build_zip(pkg, manifest, a.platform, library, cli, plugins, dist, icon)
+    if a.page_only:
+        manifest = page_manifest(manifest)
+        build_page_zip(pkg, manifest, dist, icon)
+    else:
+        build_zip(pkg, manifest, a.platform, library, cli, plugins, dist, icon)
     # BOS-CRT: a native file that imports the dynamic VC++ runtime stops on a clean Windows (STATUS_DLL_NOT_FOUND).
     chk = subprocess.run([sys.executable, str(REPO / "scripts/bos-crt-check.py"), str(pkg)], capture_output=True, text=True)
     if chk.returncode == 1:  # 2 = no PE file at all (a test fixture), not a failure
@@ -239,6 +284,15 @@ def main(argv=None):
         "platforms": {a.platform: {"url": base + name, "signature": sig, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}},
     }
     feed = {k: v for k, v in feed.items() if v is not None}
+    # AND-10: the Windows package and the page-only phone package of one version share one feed (one entry per platform).
+    old = out / "feed.json"
+    if old.is_file():
+        try:
+            prev = json.loads(old.read_text())
+        except ValueError:
+            prev = {}
+        if prev.get("version") == version and prev.get("contract") == feed["contract"]:
+            feed["platforms"] = {**{k: v for k, v in prev.get("platforms", {}).items() if k != a.platform}, **feed["platforms"]}
     (out / "feed.json").write_text(json.dumps(feed, indent=2) + "\n")
     entry = {
         "id": manifest["id"], "name": manifest["name"], "publisher": manifest["publisher"], "license": manifest["license"],

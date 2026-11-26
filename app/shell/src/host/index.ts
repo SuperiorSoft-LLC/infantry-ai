@@ -6,6 +6,7 @@
 import { browserHost, type Host } from "@infantry/client";
 import { battalionAppId, battalionHost } from "./battalion";
 import { battalionFrameHost, frameAppId, windowLink } from "./battalion/frame";
+import { battalionRemoteHost } from "./battalion/remote";
 import { tauriHost } from "./tauri";
 
 /** Set when this page is drawn in a frame of the BattalionOS window (BOS-17): it calls the OS by messages. Being framed decides it (BOS-26). */
@@ -17,4 +18,7 @@ export const isTauri = !frameApp && typeof window !== "undefined" && "__TAURI_IN
 /** Set when this window is an app window of BattalionOS. */
 const osApp = isTauri ? battalionAppId() : null;
 
-export const host: Host = frameApp ? battalionFrameHost(frameApp, windowLink()) : osApp ? battalionHost(osApp) : isTauri ? tauriHost() : browserHost();
+/** AND-10: the page-only package (a phone) is built with VITE_INFANTRY_BOS_REMOTE=1: no daemon of its own, it pairs with the PC. */
+const remotePage = import.meta.env.VITE_INFANTRY_BOS_REMOTE === "1";
+
+export const host: Host = frameApp ? (remotePage ? battalionRemoteHost(frameApp, windowLink()) : battalionFrameHost(frameApp, windowLink())) : osApp ? battalionHost(osApp) : isTauri ? tauriHost() : browserHost();
