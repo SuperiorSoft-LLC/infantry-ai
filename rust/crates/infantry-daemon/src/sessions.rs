@@ -673,9 +673,11 @@ impl Daemon {
     }
 
     /// A turn into `id` now when it is at rest, else held in its queue (mail, a board nudge).
+    /// OWNER-PRIO-1: daemon input never goes in front of what the owner typed: at rest with an owner prompt waiting in
+    /// the queue, it joins the queue behind it and the owner's prompt is the next turn.
     pub fn deliver(self: &Arc<Self>, id: &str, text: &str) -> Result<(), String> {
         self.not_held("prompt", id)?;
-        self.queue_add(id, text.to_string())
+        self.enqueue(id, text.to_string(), DELIVERED_PREFIX)
     }
 
     /// Like [`deliver`](Self::deliver), but a message that needs action now (a worker failed) goes into the receiver's
@@ -695,7 +697,7 @@ impl Daemon {
             }
             if !e.turn_active {
                 drop(e);
-                self.queue_add(id, text.to_string())?;
+                self.enqueue(id, text.to_string(), DELIVERED_PREFIX)?;
                 return Ok("queued");
             }
             e.hs.as_ref().and_then(|h| h.injector())
@@ -707,7 +709,7 @@ impl Daemon {
                 return Ok("injected");
             }
         }
-        self.queue_add(id, text.to_string())?;
+        self.enqueue(id, text.to_string(), DELIVERED_PREFIX)?;
         Ok("queued")
     }
 
@@ -1142,21 +1144,31 @@ impl Daemon {
 
     /// CHAT-QUEUE-1 `queue_add`: held at the end of `session.queued`; a session at rest takes it as a turn now.
     fn queue_add(self: &Arc<Self>, sid: &str, text: String) -> Result<(), String> {
+        self.enqueue(sid, text, OWNER_PREFIX)
+    }
+
+    /// `prefix` marks who queued it: [`OWNER_PREFIX`] (typed by the owner) or [`DELIVERED_PREFIX`] (mail, a nudge).
+    fn enqueue(self: &Arc<Self>, sid: &str, text: String, prefix: &str) -> Result<(), String> {
         let entry = self.find(sid).ok_or_else(|| gone_refusal("queue_add", sid))?;
         let mut e = entry.lock().unwrap();
         if text.trim().is_empty() {
             return Err("queue_add refused: nothing to queue".into());
         }
-        if !e.turn_active && !self.turns_paused() {
+        let owner_waiting = prefix == DELIVERED_PREFIX && e.rec.queued.iter().any(is_owner_turn);
+        if !e.turn_active && !self.turns_paused() && !owner_waiting {
             self.turn_into(&mut e, text);
             return Ok(());
         }
         if e.rec.queued.len() >= self.cfg.queue_max {
             return Err(format!("queue_add refused: the queue of {sid} is full ({} messages)", self.cfg.queue_max));
         }
-        let id = format!("q-{}", &uuid::Uuid::new_v4().to_string()[..8]);
+        let id = format!("{prefix}{}", &uuid::Uuid::new_v4().to_string()[..8]);
         e.rec.queued.push(QueuedTurn { id, text, at: now_ms() });
         self.push(&mut e);
+        if owner_waiting && !e.turn_active {
+            drop(e);
+            self.drain_later(sid);
+        }
         Ok(())
     }
 
@@ -1251,7 +1263,9 @@ impl Daemon {
             if e.removed || e.turn_active || e.rec.state == SessionState::Exited || e.rec.queued.is_empty() || d.turns_paused() {
                 return;
             }
-            let head = e.rec.queued.remove(0);
+            // OWNER-PRIO-1: the oldest owner prompt goes first; held mail and nudges follow in their order.
+            let i = e.rec.queued.iter().position(is_owner_turn).unwrap_or(0);
+            let head = e.rec.queued.remove(i);
             d.turn_into(&mut e, head.text);
         });
     }
@@ -2404,4 +2418,12 @@ mod ghost_tests {
         assert!(d.delete_session(&sid).unwrap_err().contains("no such session"));
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+/// Queue ids (opaque to clients) carry who queued the turn: `q-` the owner typed it, `d-` the daemon delivered it.
+const OWNER_PREFIX: &str = "q-";
+const DELIVERED_PREFIX: &str = "d-";
+
+fn is_owner_turn(q: &QueuedTurn) -> bool {
+    !q.id.starts_with(DELIVERED_PREFIX)
 }
