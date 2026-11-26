@@ -19,6 +19,23 @@ pub struct SettingsUnit {
     pub db: Arc<Db>,
 }
 
+/// RUNNER-SETTINGS-OWNER-1 (Kotlin `FrameGate.OWNER_ONLY_SETTING_KEYS`): keys (exact, or a prefix ending in `.`) only an
+/// owner connection may WRITE, through `settings_set` or `config_set`; a read stays open. The runner's trust keys.
+pub const OWNER_ONLY_SETTING_KEYS: &[&str] = &["runner.", "limits.runners.", "runners.enabled", "runners.advertiseHosts", "runners.fingerprint"];
+
+pub fn is_owner_only_setting(key: &str) -> bool {
+    let k = key.trim().to_lowercase();
+    OWNER_ONLY_SETTING_KEYS.iter().any(|p| {
+        let p = p.to_lowercase();
+        if p.ends_with('.') { k.starts_with(&p) } else { k == p }
+    })
+}
+
+/// Why a write of `key` is refused on a non-owner connection; None when it may go ahead.
+pub fn owner_refusal(key: &str, owner: bool) -> Option<String> {
+    (!owner && is_owner_only_setting(key)).then(|| format!("{} needs the owner credential; agents do not hold it", key.trim()))
+}
+
 fn row_key(scope: &str, target: &str, key: &str) -> String {
     format!("@scope/{scope}/{target}/{key}")
 }
@@ -159,7 +176,9 @@ impl FrameUnit for SettingsUnit {
         let d: Value = serde_json::from_str(if env.data.trim().is_empty() { "{}" } else { &env.data }).map_err(|e| Refusal::new(ty, format!("bad payload ({e})")))?;
         let key = text(&d, "key").ok_or_else(|| Refusal::new(ty, "a key is required"))?;
         if ty == SETTINGS_SET {
-            let _ = ctx;
+            if let Some(why) = owner_refusal(&key, ctx.owner) {
+                return Err(Refusal::new(ty, why));
+            }
             self.set(&key, d.get("value"), &d).map_err(|e| Refusal::new(ty, e))?;
         }
         let mut out = self.resolve(&key, &d);
@@ -194,6 +213,39 @@ mod tests {
         u.set("a.b", Some(&Value::Null), &json!({"scope": "project", "project": "p"})).unwrap();
         assert_eq!(u.resolve("a.b", &json!({"project": "p"}))["value"], json!(5));
         assert!(u.set("a.b", None, &json!({})).is_err());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[cfg(test)]
+mod owner_key_tests {
+    use super::*;
+
+    #[test]
+    fn owner_only_keys_match_exact_and_prefix_and_only_refuse_agents() {
+        assert!(is_owner_only_setting("runner.grants"));
+        assert!(is_owner_only_setting("limits.runners.linkCallSeconds"));
+        assert!(is_owner_only_setting("Runners.Enabled"));
+        assert!(!is_owner_only_setting("runners.enabledExtra"));
+        assert!(!is_owner_only_setting("sites.refreshSeconds"));
+        assert!(owner_refusal("runner.grants", false).is_some());
+        assert!(owner_refusal("runner.grants", true).is_none());
+        assert!(owner_refusal("sites.refreshSeconds", false).is_none());
+    }
+
+    #[test]
+    fn settings_set_refuses_an_agent_on_an_owner_key() {
+        let dir = std::env::temp_dir().join(format!("ownerkey-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = Arc::new(Db::open(dir.join("i.db")).unwrap());
+        db.write(|c| c.execute_batch("CREATE TABLE IF NOT EXISTS settings (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL)")).unwrap();
+        let u = SettingsUnit { db };
+        let set = |key: &str, owner: bool| u.handle(&Envelope::new(SETTINGS_SET, json!({"key": key, "value": 1}).to_string()), &FrameCtx { conn_id: 1, owner, bus: Default::default() });
+        let e = set("runners.enabled", false).err().unwrap().0;
+        assert!(e.contains("needs the owner credential"), "{e}");
+        assert!(u.app("runners.enabled").is_none(), "nothing written");
+        assert!(set("runners.enabled", true).is_ok());
+        assert!(set("sites.refreshSeconds", false).is_ok(), "other keys stay agent-writable");
         let _ = std::fs::remove_dir_all(dir);
     }
 }

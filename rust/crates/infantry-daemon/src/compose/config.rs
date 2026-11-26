@@ -143,6 +143,9 @@ impl FrameUnit for ConfigUnit {
         }
         let d: Value = serde_json::from_str(&env.data).map_err(|e| Refusal::new(f::CONFIG_SET, format!("bad payload ({e})")))?;
         let (node, key) = (d.get("node").and_then(Value::as_str).unwrap_or(""), d.get("key").and_then(Value::as_str).unwrap_or(""));
+        if let Some(why) = super::settings::owner_refusal(key, ctx.owner) {
+            return Err(Refusal::new(f::CONFIG_SET, why));
+        }
         let fl = field(&cards, node, key).ok_or_else(|| Refusal::new(f::CONFIG_SET, format!("no plugin declares setting {key} on {node}")))?;
         let value = d.get("value").cloned().unwrap_or(Value::Null);
         let stored = if value.is_null() {
@@ -187,6 +190,16 @@ mod tests {
         assert_eq!(out[0].r#type, f::CONFIG_SCHEMA);
         assert_eq!(serde_json::from_str::<Value>(&out[0].data).unwrap()["declarations"][0]["node"], "Demo_Plug.tab");
         serde_json::from_str::<Value>(&out[1].data).unwrap()["rows"].clone()
+    }
+
+    #[test]
+    fn config_set_refuses_an_agent_on_an_owner_key() {
+        let (u, root) = world();
+        let set = |owner: bool| u.handle(&Envelope::new(f::CONFIG_SET, json!({"node": "Demo_Plug.tab", "key": "limits.runners.auditShown", "value": 5}).to_string()), &FrameCtx { conn_id: 1, owner, bus: Default::default() });
+        assert!(set(false).err().unwrap().0.contains("needs the owner credential"));
+        // The owner passes the gate (then meets the usual "no plugin declares" refusal for this undeclared key).
+        assert!(!set(true).err().unwrap().0.contains("owner credential"));
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
