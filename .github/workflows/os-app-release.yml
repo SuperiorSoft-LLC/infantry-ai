@@ -92,7 +92,8 @@ jobs:
           args=(--library "$target/release/infantry_distribution.dll" --cli "$target/release/infantry.exe"
                 --plugins "$RUNNER_TEMP/plugins" --dist app/shell/dist --version "$VERSION" --out dist-bosapp
                 --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/os-app-v${VERSION}/")
-          notes="Infantry AI $VERSION as a BattalionOS app."
+          # docs/os-app-release-notes.md holds the owner-facing notes when its first line names this version
+          if head -n1 docs/os-app-release-notes.md 2>/dev/null | grep -qF "Infantry AI $VERSION "; then notes="$(cat docs/os-app-release-notes.md)"; else notes="Infantry AI $VERSION as a BattalionOS app."; fi
           if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
             args+=(--tauri-sign)
           elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
