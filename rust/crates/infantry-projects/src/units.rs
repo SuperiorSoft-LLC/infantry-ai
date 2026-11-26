@@ -119,7 +119,12 @@ impl FrameUnit for ProjectsUnit {
         let rf = refused(t);
         let one = |p: Project| Ok(vec![reply(env, f::PROJECT, &p)]);
         match t {
-            f::PROJECT_SAVE => one(self.store.save(&decode::<ProjectSave>(t, &env.data)?).map_err(rf)?),
+            f::PROJECT_SAVE => {
+                let p = self.store.save(&decode::<ProjectSave>(t, &env.data)?).map_err(rf)?;
+                // Every client sees the new or renamed project.
+                ctx.bus.publish(Envelope::new(f::PROJECT, serde_json::to_string(&p).unwrap_or_default()));
+                one(p)
+            }
             f::PROJECT_GET => one(self.store.get(&env.data).map_err(rf)?),
             f::PROJECT_LIST => Ok(vec![reply(env, f::PROJECTS, &self.store.list())]),
             f::PROJECT_DELETE => {

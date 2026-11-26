@@ -25,6 +25,90 @@ export interface ProjectInfo {
   goal?: string;
   directory?: string;
   baseBranch?: string;
+  laneCaps?: Record<string, number>;
+  autoRemoveDoneWorkers?: boolean;
+  experiments?: Record<string, string>;
+  /** Per-project data; `icon.color`, `icon.text` and `icon.image` hold the project icon. */
+  data?: Record<string, string>;
+}
+
+// ---- project icons ------------------------------------------------------------------------------
+
+export const ICON_KEYS = { color: "icon.color", text: "icon.text", image: "icon.image" } as const;
+/** The daemon's icon palette (it stores one per new project); the fallback for a project saved before icons. */
+export const ICON_PALETTE = ["#2563eb", "#7c3aed", "#db2777", "#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#0d9488", "#0891b2", "#4f46e5", "#9333ea", "#475569"];
+/** The daemon's per-value limit on project data: an uploaded image must fit in it. */
+export const ICON_IMAGE_MAX_CHARS = 4096;
+
+/** 1-2 letters for a name: "Infantry AI Site" -> "IS", "t51" -> "T5", "x" -> "X". */
+export function projectInitials(name: string): string {
+  const words = name.trim().split(/[\s_\-.]+/).filter((w) => /[\p{L}\p{N}]/u.test(w));
+  if (!words.length) return "?";
+  const first = (w: string) => [...w.replace(/[^\p{L}\p{N}]/gu, "")][0] ?? "";
+  if (words.length === 1) return [...words[0].replace(/[^\p{L}\p{N}]/gu, "")].slice(0, 2).join("").toUpperCase();
+  return (first(words[0]) + first(words[words.length - 1])).toUpperCase();
+}
+
+/** Same hash as the daemon's `icon_color_for`, so an old project without a stored color is stable everywhere. */
+export function paletteColorFor(id: string): string {
+  let h = 2166136261;
+  for (const b of new TextEncoder().encode(id)) h = Math.imul(h ^ b, 16777619) >>> 0;
+  return ICON_PALETTE[h % ICON_PALETTE.length];
+}
+
+export interface ProjectIcon {
+  text: string;
+  color: string;
+  image: string | null;
+}
+
+export function projectIcon(p: Pick<ProjectInfo, "id" | "name" | "data">): ProjectIcon {
+  const d = p.data ?? {};
+  const color = /^#[0-9a-fA-F]{6}$/.test(d[ICON_KEYS.color] ?? "") ? d[ICON_KEYS.color] : paletteColorFor(p.id);
+  const image = (d[ICON_KEYS.image] ?? "").startsWith("data:image/") ? d[ICON_KEYS.image] : null;
+  return { text: (d[ICON_KEYS.text] ?? "").trim() || projectInitials(p.name), color, image };
+}
+
+/** The Delete button is enabled only for exactly "DELETE". */
+export function deleteConfirmed(typed: string): boolean {
+  return typed === "DELETE";
+}
+
+export interface ProjectEdit {
+  name: string;
+  /** Blank = the initials of the name. */
+  iconText: string;
+  iconColor: string;
+  /** A data URL, or null for letters. */
+  iconImage: string | null;
+  autoRemoveDoneWorkers?: boolean;
+  laneCaps?: Record<string, number>;
+}
+
+/** The frames one Edit save sends: `project_save` for the name, `project_config` for icon and settings. */
+export function editFrames(p: ProjectInfo, e: ProjectEdit): { type: string; body: Record<string, unknown> }[] {
+  const out: { type: string; body: Record<string, unknown> }[] = [];
+  const name = e.name.trim();
+  if (name && name !== p.name) out.push({ type: "project_save", body: { id: p.id, name } });
+  const d = p.data ?? {};
+  const set: Record<string, string> = {};
+  const unset: string[] = [];
+  const want = (k: string, v: string | null) => {
+    const cur = d[k] ?? "";
+    if ((v ?? "") === cur) return;
+    if (v) set[k] = v;
+    else if (k in d) unset.push(k);
+  };
+  want(ICON_KEYS.color, e.iconColor);
+  want(ICON_KEYS.text, e.iconText.trim() || null);
+  want(ICON_KEYS.image, e.iconImage);
+  const cfg: Record<string, unknown> = {};
+  if (Object.keys(set).length) cfg.data = set;
+  if (unset.length) cfg.unsetData = unset;
+  if (e.autoRemoveDoneWorkers !== undefined && e.autoRemoveDoneWorkers !== !!p.autoRemoveDoneWorkers) cfg.autoRemoveDoneWorkers = e.autoRemoveDoneWorkers;
+  if (e.laneCaps && JSON.stringify(e.laneCaps) !== JSON.stringify(p.laneCaps ?? {})) cfg.laneCaps = e.laneCaps;
+  if (Object.keys(cfg).length) out.push({ type: "project_config", body: { projectId: p.id, ...cfg } });
+  return out;
 }
 
 export interface GitStatus {
@@ -199,6 +283,10 @@ export interface ProjectsActions {
   loadMoreHistory(): void;
   checkoutBranch(branch: string, create?: boolean): void;
   saveProject(input: { id?: string; name?: string; directory?: string }): void;
+  /** Name, icon and settings in one go (see `editFrames`); every client gets the changed project back. */
+  editProject(projectId: string, edit: ProjectEdit): void;
+  /** `project_delete`; the daemon removes it from Infantry AI (never the folder on disk). */
+  deleteProject(projectId: string): void;
   clearError(): void;
   dispose(): void;
 }
@@ -347,6 +435,17 @@ export function createProjectsStore(link: ProjectsLink): ProjectsStore {
           else if (p.id === get().currentId) send("project_git_status", p.id);
           return;
         }
+        case "project_deleted": {
+          const gone = json<ProjectInfo>(env.data);
+          if (!gone) return;
+          const rest = get().projects.filter((x) => x.id !== gone.id);
+          set({ projects: rest });
+          if (get().currentId === gone.id) {
+            if (rest[0]) get().select(rest[0].id);
+            else set({ currentId: null, status: null, history: null, branches: null, worktrees: null });
+          }
+          return;
+        }
         case "project_git": {
           const s = json<GitStatus>(env.data);
           if (s && forCurrent(s.projectId)) set({ status: s });
@@ -467,6 +566,14 @@ export function createProjectsStore(link: ProjectsLink): ProjectsStore {
       },
       saveProject(input) {
         send("project_save", input);
+      },
+      editProject(projectId, edit) {
+        const p = get().projects.find((x) => x.id === projectId);
+        if (!p) return;
+        for (const f of editFrames(p, edit)) send(f.type, f.body);
+      },
+      deleteProject(projectId) {
+        send("project_delete", { projectId });
       },
       clearError() {
         set({ error: null });

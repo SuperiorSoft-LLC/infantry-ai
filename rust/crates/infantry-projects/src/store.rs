@@ -19,6 +19,16 @@ pub const MAX_BRANCH_LENGTH: usize = 255;
 pub const DATA_KEY_MAX: usize = 80;
 pub const DATA_VALUE_MAX: usize = 4096;
 pub const DATA_MAX_ENTRIES: usize = 200;
+/// The `data` key that holds a project's icon color (`#rrggbb`); `icon.text` and `icon.image` sit beside it.
+pub const ICON_COLOR_KEY: &str = "icon.color";
+/// Readable icon backgrounds (white letters on each); a new project gets one, picked from its fresh id, stored once.
+pub const ICON_PALETTE: &[&str] = &["#2563eb", "#7c3aed", "#db2777", "#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#0d9488", "#0891b2", "#4f46e5", "#9333ea", "#475569"];
+
+/// The palette color a fresh project id maps to (the id is random, so projects look different).
+pub fn icon_color_for(id: &str) -> &'static str {
+    let h = id.bytes().fold(2166136261u32, |h, b| (h ^ b as u32).wrapping_mul(16777619));
+    ICON_PALETTE[h as usize % ICON_PALETTE.len()]
+}
 
 fn refuse<T>(why: impl Into<String>) -> Res<T> {
     Err(Refused(why.into()))
@@ -365,7 +375,9 @@ impl ProjectStore {
                 let goal = req.goal.as_deref().map(check_goal).transpose()?.unwrap_or_default();
                 let directory = if req.starter { self.starter_directory(&name)? } else { req.directory.as_deref().map(check_directory).transpose()?.unwrap_or_default() };
                 let id = self.mint(&inner, "project")?;
-                let p = Project { id, name, goal, directory, ..Project::empty() };
+                let mut data = BTreeMap::new();
+                data.insert(ICON_COLOR_KEY.to_string(), icon_color_for(&id).to_string());
+                let p = Project { id, name, goal, directory, data, ..Project::empty() };
                 self.put(&mut inner, p)
             }
             Some(id) => {
@@ -630,6 +642,7 @@ mod tests {
         assert_eq!(ws.len(), 1);
         assert_eq!(ws[0].path, None);
         let renamed = s.save(&ProjectSave { id: Some(id.clone()), name: Some("Beta".into()), ..Default::default() }).unwrap();
+        assert!(ICON_PALETTE.contains(&renamed.data.get(ICON_COLOR_KEY).map(String::as_str).unwrap_or("")), "a new project stores its icon color, and a rename keeps it");
         assert_eq!((renamed.name.as_str(), renamed.directory.as_str()), ("Beta", dir.as_str()));
     }
 }
