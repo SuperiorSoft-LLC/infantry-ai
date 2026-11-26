@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 //! RUST-UPD-2: the phone's in-app update. The desktop uses the Tauri updater plugin; Android has none, so the phone reads
-//! the same `latest.json` (feed rules in `feed.rs`) and a small Kotlin plugin (`UpdatePlugin.kt`) fetches the feed text,
+//! its own feed, `android.json` on the android-stable release (PHONE-UPD-1; never the standalone latest.json), in the
+//! latest.json shape (feed rules in `feed.rs`) and a small Kotlin plugin (`UpdatePlugin.kt`) fetches the feed text,
 //! downloads the APK and hands it to the system package installer. The WebView calls the SAME command names the desktop
 //! has (`update_settings_get`, `update_settings_set`, `update_check`, `update_install`) plus `update_progress`, which it
 //! polls while a download runs, so Settings > About is one component for both.
 
-use crate::feed::{android_offer, feed_allowed, nightly_feed, source_for, Offer, Source, UpdaterSettings, CHANNELS, DEFAULT_FEED};
+use crate::feed::{android_offer, android_source_for, feed_allowed, nightly_feed, Offer, Source, UpdaterSettings, ANDROID_DEFAULT_FEED, CHANNELS, DEFAULT_FEED};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -81,8 +82,11 @@ pub struct UpdaterView {
 pub fn update_settings_get(app: AppHandle) -> UpdaterView {
     let s = load(&app);
     UpdaterView {
-        feed_url: s.feed_template().to_string(),
-        default_feed_url: DEFAULT_FEED,
+        feed_url: match s.feed_template() {
+            DEFAULT_FEED => ANDROID_DEFAULT_FEED.to_string(),
+            t => t.to_string(),
+        },
+        default_feed_url: ANDROID_DEFAULT_FEED,
         channel: s.channel().to_string(),
         channels: CHANNELS,
         auto_check: s.auto_check.unwrap_or(true),
@@ -107,6 +111,8 @@ pub fn update_settings_set(
             return Err(format!("unknown channel `{c}` (stable | nightly)"));
         }
     }
+    // The shown default text means "no custom feed".
+    let feed_url = feed_url.map(|f| if f.trim() == ANDROID_DEFAULT_FEED || f.trim() == DEFAULT_FEED { String::new() } else { f });
     if let Some(u) = feed_url.as_deref().map(str::trim).filter(|u| !u.is_empty()) {
         if !feed_allowed(u) {
             return Err("the feed must be an https:// URL (http only on this machine)".into());
@@ -146,7 +152,7 @@ pub async fn update_check(app: AppHandle, updater: State<'_, Updater>, pending: 
     let s = load(&app);
     let current = app.package_info().version.to_string();
     let abi = updater.0.run_mobile_plugin_async::<Abi>("abi", ()).await.map_err(|e| e.to_string())?.abi;
-    let feed = match source_for(s.feed_template(), s.channel()) {
+    let feed = match android_source_for(&s) {
         Source::Manifest(u) => u,
         Source::ReleaseList(api) => {
             let list = updater.0.run_mobile_plugin_async::<Text>("fetch", Url { url: &api }).await.map_err(|e| e.to_string())?.text;

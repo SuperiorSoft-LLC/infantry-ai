@@ -21,6 +21,12 @@ pub const STABLE_FEED: &str = "https://github.com/SuperiorSoft-LLC/infantry-ai/r
 pub const RELEASES_API: &str = "https://api.github.com/repos/SuperiorSoft-LLC/infantry-ai/releases?per_page=30";
 /// What the settings show as the default feed: the per-channel GitHub source (a custom feed may use `{channel}`).
 pub const DEFAULT_FEED: &str = "github:SuperiorSoft-LLC/infantry-ai (latest release; nightly = newest prerelease)";
+/// PHONE-UPD-1: the phone line's own feed, `android.json` on the fixed prerelease `android-stable` (android-release.yml
+/// replaces it on every android-v* tag; scripts/android-feed.py by hand). The phone never reads the standalone latest.json,
+/// whose version line (0.7.x) is not the phone's (0.8.x).
+pub const ANDROID_FEED: &str = "https://github.com/SuperiorSoft-LLC/infantry-ai/releases/download/android-stable/android.json";
+/// What the phone's settings show as the default feed.
+pub const ANDROID_DEFAULT_FEED: &str = "github:SuperiorSoft-LLC/infantry-ai android-stable/android.json (the phone line)";
 pub const CHANNELS: [&str; 2] = ["stable", "nightly"];
 /// Named setting `updater.checkMinutes`: how often the open app re-checks. 0 turns the timer off (start + button remain).
 pub const DEFAULT_CHECK_MINUTES: u32 = 60;
@@ -69,6 +75,15 @@ pub fn source_for(template: &str, channel: &str) -> Source {
         return if channel == "nightly" { Source::ReleaseList(RELEASES_API.to_string()) } else { Source::Manifest(STABLE_FEED.to_string()) };
     }
     Source::Manifest(template.replace("{channel}", channel))
+}
+
+/// The phone's source. No custom feed (unset, or either default text): the phone line's `android.json`, on every channel
+/// (the phone has one line). A custom feed is kept, with `{channel}` replaced.
+pub fn android_source_for(s: &UpdaterSettings) -> Source {
+    match s.feed_template() {
+        t if t == DEFAULT_FEED || t == ANDROID_DEFAULT_FEED => Source::Manifest(ANDROID_FEED.to_string()),
+        t => source_for(t, s.channel()),
+    }
 }
 
 #[derive(Deserialize)]
@@ -297,6 +312,33 @@ mod tests {
         let http = feed("0.2.0", &apk("android-aarch64").replace("https://x", "http://evil.example"));
         assert!(android_offer(&http, "0.1.0", "stable", "aarch64").unwrap_err().contains("https"));
         assert!(android_offer("{}", "0.1.0", "stable", "aarch64").is_err());
+    }
+
+    #[test]
+    fn the_phone_reads_its_own_feed_never_the_standalone_latest_json_and_keeps_a_custom_feed() {
+        for ch in ["stable", "nightly"] {
+            let s = UpdaterSettings { channel: Some(ch.into()), ..Default::default() };
+            assert_eq!(android_source_for(&s), Source::Manifest(ANDROID_FEED.into()));
+            let shown = UpdaterSettings { channel: Some(ch.into()), feed_url: Some(ANDROID_DEFAULT_FEED.into()), ..Default::default() };
+            assert_eq!(android_source_for(&shown), Source::Manifest(ANDROID_FEED.into()));
+        }
+        assert!(ANDROID_FEED.ends_with("/releases/download/android-stable/android.json") && !ANDROID_FEED.contains("latest"));
+        assert!(feed_allowed(ANDROID_FEED));
+        let custom = UpdaterSettings { channel: Some("nightly".into()), feed_url: Some("https://x/{channel}/a.json".into()), ..Default::default() };
+        assert_eq!(android_source_for(&custom), Source::Manifest("https://x/nightly/a.json".into()));
+    }
+
+    /// The phone line's feed (what scripts/android-feed.py writes): 0.8.4 sees 0.8.5, never the standalone 0.7.2.
+    #[test]
+    fn the_phone_feed_offers_the_next_phone_build_and_never_a_lower_line() {
+        let json = format!(
+            r#"{{"version":"0.8.5","notes":"n","pub_date":"2026-11-25T12:00:00Z","platforms":{{"android-aarch64":{{"url":"https://github.com/o/r/releases/download/android-v0.8.5/InfantryAI_0.8.5_arm64.apk","sha256":"{SHA}","size":7,"signature":"sig"}}}}}}"#
+        );
+        let o = android_offer(&json, "0.8.4", "stable", "aarch64").unwrap().unwrap();
+        assert_eq!((o.version.as_str(), o.size), ("0.8.5", Some(7)));
+        assert!(o.url.ends_with("/android-v0.8.5/InfantryAI_0.8.5_arm64.apk"));
+        assert_eq!(android_offer(&json, "0.8.5", "stable", "aarch64").unwrap(), None);
+        assert_eq!(android_offer(&feed("0.7.2", &apk("android-aarch64")), "0.8.4", "stable", "aarch64").unwrap(), None);
     }
 
     /// tests/fixtures/latest.json was written by scripts/release-tools.mjs (`feed`), so the script and this reader agree.
