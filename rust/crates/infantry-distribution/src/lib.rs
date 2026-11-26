@@ -311,12 +311,8 @@ fn register_runner_pool(composed: &Arc<infantry_daemon::compose::Composed>, stat
     let c4 = composed.clone();
     composed.daemon.start_runner_watch(Arc::new(move || read_setting(&c4, "limits.runners.offlineSessionSec").and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))).filter(|n| *n > 0).unwrap_or(60)));
     pool.start_heartbeat(Arc::new(move || {
-        let ask = infantry_protocol::envelope::Envelope::new("settings", serde_json::json!({"key": infantry_runner_pool::HEARTBEAT_KEY}).to_string());
-        c.request(&ask, true)
-            .ok()
-            .and_then(|r| r.into_iter().next())
-            .and_then(|e| serde_json::from_str::<serde_json::Value>(&e.data).ok())
-            .and_then(|v| v["value"].as_u64().or_else(|| v["value"].as_str().and_then(|s| s.trim().parse().ok())))
+        read_setting(&c, infantry_runner_pool::HEARTBEAT_KEY)
+            .and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok())))
             .filter(|n| *n > 0)
             .unwrap_or(infantry_runner_pool::DEFAULT_HEARTBEAT_SEC)
     }));
@@ -335,6 +331,7 @@ fn owner_ask(composed: &Arc<infantry_daemon::compose::Composed>) -> impl Fn(&str
     }
 }
 
+/// One setting of this daemon by key (`settings_get`, resolved value; null is None). Every in-process setting read goes here.
 fn read_setting(composed: &Arc<infantry_daemon::compose::Composed>, key: &str) -> Option<serde_json::Value> {
     let ask = infantry_protocol::envelope::Envelope::new(infantry_protocol::frames::SETTINGS_GET, serde_json::json!({"key": key}).to_string());
     let v = composed.request(&ask, true).ok()?.into_iter().next().and_then(|e| serde_json::from_str::<serde_json::Value>(&e.data).ok())?;
@@ -353,9 +350,7 @@ fn plain_allowed(setting: &dyn Fn(&str) -> Option<serde_json::Value>) -> bool {
 /// `runners.advertiseHosts`, then `localhost`.
 fn serve_runner_link(composed: &Arc<infantry_daemon::compose::Composed>, state_dir: &std::path::Path, arg: &dyn Fn(&str) -> Option<String>) {
     let setting = |key: &str| -> Option<serde_json::Value> {
-        let ask = infantry_protocol::envelope::Envelope::new("settings", serde_json::json!({"key": key}).to_string());
-        let v = composed.request(&ask, true).ok()?.into_iter().next().and_then(|e| serde_json::from_str::<serde_json::Value>(&e.data).ok())?;
-        Some(v["value"].clone()).filter(|v| !v.is_null() && v.as_str().map_or(true, |s| !s.trim().is_empty()))
+        read_setting(composed, key).filter(|v| v.as_str().map_or(true, |s| !s.trim().is_empty()))
     };
     let num = |v: Option<serde_json::Value>| v.and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))).and_then(|n| u16::try_from(n).ok());
     let env = |k: &str| infantry_daemon::auth::env(k).filter(|s| !s.trim().is_empty());
@@ -432,5 +427,32 @@ impl infantry_runner_pool::CheckLend for CheckLendOver {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod setting_read_tests {
+    use super::read_setting;
+    use std::sync::Arc;
+
+    /// ef60c402: runner-side settings (the orphan grace, the heartbeat) set on this daemon are read back by `read_setting`.
+    #[test]
+    fn runner_settings_are_read_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let daemon = infantry_daemon::sessions::Daemon::new(Arc::new(infantry_daemon::harness::stub::Stub::default()), infantry_daemon::sessions::Config::new(dir.path().into(), dir.path().into())).unwrap();
+            let c = infantry_daemon::compose::build(&daemon, dir.path()).unwrap();
+            tokio::task::spawn_blocking(move || {
+                for (key, value) in [("limits.runners.orphanGraceSec", 60), (infantry_runner_pool::HEARTBEAT_KEY, 7)] {
+                    assert_eq!(read_setting(&c, key), None, "{key} is unset at first");
+                    let set = infantry_protocol::envelope::Envelope::new(infantry_protocol::frames::SETTINGS_SET, serde_json::json!({"key": key, "value": value}).to_string());
+                    c.request(&set, true).expect("settings_set answers");
+                    assert_eq!(read_setting(&c, key), Some(serde_json::json!(value)), "{key} is read back");
+                }
+            })
+            .await
+            .unwrap();
+        });
     }
 }
