@@ -147,11 +147,6 @@
     button:has(> svg:only-child) {
       min-width: 40px;
     }
-    input,
-    textarea,
-    select {
-      font-size: 16px;
-    }
   }
   html {
     @apply font-sans;
@@ -282,5 +277,15 @@
   }
   .no-scrollbar {
     scrollbar-width: none;
+  }
+}
+
+/* PHONE-SESSION-UI-1: touch fields at 16px, unlayered so a text-size utility (the composer's 13px) cannot win. A field
+   under 16px makes Android zoom the page in on focus and the zoom stays: the session view then looks cut off on the right. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
   }
 }

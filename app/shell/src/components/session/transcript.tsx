@@ -211,6 +211,8 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
             <ThinkingSpinner label={agent.statusLine} elapsed={<Elapsed since={since} />} />
           </div>
         )}
+        {/* PHONE-SESSION-UI-1: room for the floating row (Expand, Minimize, Search...) so it never covers the last lines. */}
+        <div aria-hidden className="h-14 shrink-0" />
       </div>
       {away && (
         <IconButton label="Jump to latest" variant="outline" className="absolute right-5 bottom-16 rounded-full bg-card shadow" onClick={toBottom}>

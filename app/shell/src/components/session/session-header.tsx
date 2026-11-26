@@ -24,7 +24,7 @@ export function SessionHeader({ agent }: { agent: Agent }) {
   return (
     <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-3 pb-2 [&_span]:max-w-full [&_span]:break-all">
       <AgentAvatar agent={agent} size="md" />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-48">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-lg font-bold">{agent.name}</h1>
           <span className="font-mono text-xs text-muted-foreground">{agent.sessionId}</span>
@@ -58,11 +58,7 @@ export function SessionHeader({ agent }: { agent: Agent }) {
           <Chip tone="blue">
             {agent.tokensIn} / {agent.tokensOut}
           </Chip>
-        ) : (
-          <span title="Per-session token totals for past runs are not in the Rust version yet (GAPS-1); this window has seen no usage frame for the session.">
-            <Chip tone="blue">tokens: not in the Rust version yet</Chip>
-          </span>
-        )}
+        ) : null /* PHONE-SESSION-UI-1: no chip until real counts exist (developer text confused users). */}
         <IconButton label="Pop out this chat" onClick={() => ui.popOut(agent.id)}>
           <ExternalLink />
         </IconButton>
