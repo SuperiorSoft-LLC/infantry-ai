@@ -31,7 +31,7 @@ authenticated route refuses without a token, non-root, a ticket started with a f
 The image now carries the opencode and pi CLIs (claude too; `--build-arg INSTALL_CLAUDE=false` leaves it out). With no token
 configured, `entrypoint.sh` generates one into `/data/access-token` on first start (`INFANTRY_TOKEN_AUTO=false` turns that
 off). `docker-compose.yml` is the 2 GB droplet demo (limits as env settings, `mem_limit`, token in the volume); the full
-DigitalOcean recipe, the measured memory and the Linux notes are in `docs/docker-deploy.md`.
+DigitalOcean recipe, the measured memory and the Linux notes are in `docs/wiki/self-host-docker.md`.
 
 ## Domains and URLs
 
@@ -50,4 +50,4 @@ default):
 | `INFANTRY_DOCKER_IMAGE` | `urls.dockerImage` | `infantryai/infantry-ai` |
 
 The host name the browser uses is separate: `INFANTRY_WEB_HOSTS` (the daemon refuses other Host headers) and, with the
-`tls` profile, `INFANTRY_DOMAIN` (Caddy's site address). The full list: `docs/wiki/Settings.md`, section "Domains and URLs".
+`tls` profile, `INFANTRY_DOMAIN` (Caddy's site address). The full list: `docs/wiki/reference/settings.md`.

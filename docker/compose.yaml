@@ -24,7 +24,7 @@ services:
       # Host name(s) the browser uses (comma separated), e.g. agents.example.com. Empty: the daemon's own addresses only.
       INFANTRY_WEB_HOSTS: ${INFANTRY_WEB_HOSTS:-}
       # --- Domains and URLs (DOMAIN-ENV-1, settings/EndpointRegistry.kt): empty = the built-in default. Moving the site,
-      # the docs or the release files is an env change here, not a new image. See docs/wiki/Settings.md#domains-and-urls.
+      # the docs or the release files is an env change here, not a new image. See docs/wiki/reference/settings.md.
       INFANTRY_SITE_URL: ${INFANTRY_SITE_URL:-}
       INFANTRY_DOCS_URL: ${INFANTRY_DOCS_URL:-}
       INFANTRY_DOWNLOAD_URL: ${INFANTRY_DOWNLOAD_URL:-}

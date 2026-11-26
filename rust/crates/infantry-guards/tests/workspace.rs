@@ -54,7 +54,7 @@ fn core_names_no_plugin_id() {
 #[test]
 fn licence_line_holds() {
     let v = licences::check_crossings(&crates(), licences::CROSSINGS);
-    assert!(v.is_empty(), "licence line (docs/LICENSE-MAP.md section 1, docs/rust-port/DECOUPLE-PLAN.md section 7):\n  {}", v.join("\n  "));
+    assert!(v.is_empty(), "licence line (docs/LICENSE-MAP.md section 1, docs/archive/rust-port/DECOUPLE-PLAN.md section 7):\n  {}", v.join("\n  "));
 }
 
 /// Every `.rs` file carries the SPDX header of its crate's licence (scripts/license-headers.sh covers no `.rs` yet).
@@ -72,13 +72,13 @@ fn every_rust_file_carries_its_crates_spdx_header() {
 fn core_names_no_new_feature() {
     let cs = crates();
     let v = features::check_ratchet(&features::feature_edges(&cs), &features::scan(&rust_dir(), &cs), features::BASELINE, features::EDGE_BASELINE);
-    assert!(v.is_empty(), "core and the features (docs/rust-port/DECOUPLE-PLAN.md section 3; AGENTS.md rule 1):\n  {}", v.join("\n  "));
+    assert!(v.is_empty(), "core and the features (docs/archive/rust-port/DECOUPLE-PLAN.md section 3; AGENTS.md rule 1):\n  {}", v.join("\n  "));
 }
 
 /// DECOUPLE-1 (#45): the core files that still name a feature, by file and line. RED until the moves in
-/// docs/rust-port/DECOUPLE-PLAN.md land; the move that clears the last line removes the `#[ignore]`.
+/// docs/archive/rust-port/DECOUPLE-PLAN.md land; the move that clears the last line removes the `#[ignore]`.
 #[test]
-#[ignore = "RED (DECOUPLE-1 #45): core still names the features that leave it; see docs/rust-port/DECOUPLE-PLAN.md section 3"]
+#[ignore = "RED (DECOUPLE-1 #45): core still names the features that leave it; see docs/archive/rust-port/DECOUPLE-PLAN.md section 3"]
 fn core_names_no_feature() {
     let cs = crates();
     let edges: Vec<String> = features::feature_edges(&cs).iter().map(|(f, t)| format!("`{f}` depends on `{t}`")).collect();

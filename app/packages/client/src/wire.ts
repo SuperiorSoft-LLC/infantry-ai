@@ -2,7 +2,7 @@
 // Copyright (c) SuperiorSoft LLC
 // The daemon wire, hand-written to match the Kotlin DTOs (superiorSoftLibrary/infantryUiCore/.../protocol/WireProtocol.kt and
 // infantryProtocol). Only what this client reads is typed; unknown keys are ignored, as the Kotlin decoder does.
-// ts-rs generates these from the Rust daemon later (docs/rust-port/PLAN.md).
+// ts-rs generates these from the Rust daemon later (docs/archive/rust-port/PLAN.md).
 
 /** Who caused a turn. Absent = the owner (the UI). */
 export type MessageOrigin =

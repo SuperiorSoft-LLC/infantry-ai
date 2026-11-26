@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-//! What core still names of the features that leave it (DECOUPLE-1 #45, EPIC #41; docs/rust-port/DECOUPLE-PLAN.md
+//! What core still names of the features that leave it (DECOUPLE-1 #45, EPIC #41; docs/archive/rust-port/DECOUPLE-PLAN.md
 //! section 3).
 //!
 //! Core holds generic mechanisms only (AGENTS.md rule 1). [`CORE_CRATES`] are the crates that stay core once the moves

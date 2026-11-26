@@ -1,5 +1,5 @@
 # Infantry AI public demo on a small droplet (DOCKER-2, ticket c00d1d1c). Target: 2 GB DigitalOcean droplet + 2 GB swap.
-# Step-by-step: docs/docker-deploy.md.  The hardened variant with secrets as files and a read-only root is compose.yaml.
+# Step-by-step: docs/wiki/self-host-docker.md.  The hardened variant with secrets as files and a read-only root is compose.yaml.
 #
 #   docker compose -f docker/docker-compose.yml up -d
 #   docker compose -f docker/docker-compose.yml exec infantry-ai cat /data/access-token     # the token (first start makes it)
@@ -29,7 +29,7 @@ services:
       # daemon cannot see the droplet's public address, so the browser UI refuses other hosts until this is set.
       INFANTRY_WEB_HOSTS: ${INFANTRY_WEB_HOSTS:-}
       # --- Domains and URLs (DOMAIN-ENV-1, settings/EndpointRegistry.kt): empty = the built-in default. Moving the site,
-      # the docs or the release files is an env change here, not a new image. See docs/wiki/Settings.md#domains-and-urls.
+      # the docs or the release files is an env change here, not a new image. See docs/wiki/reference/settings.md.
       INFANTRY_SITE_URL: ${INFANTRY_SITE_URL:-}
       INFANTRY_DOCS_URL: ${INFANTRY_DOCS_URL:-}
       INFANTRY_DOWNLOAD_URL: ${INFANTRY_DOWNLOAD_URL:-}

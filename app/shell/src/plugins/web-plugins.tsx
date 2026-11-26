@@ -50,7 +50,7 @@ function installHost(): void {
 
 async function read(path: string): Promise<string> {
   const at = daemonLink();
-  // The embedded runner has no HTTP side: web UI plugins come from a daemon (docs/wiki/Web-UI-plugins.md).
+  // The embedded runner has no HTTP side: web UI plugins come from a daemon (docs/wiki/plugins/ui-pages.md).
   if (!at) throw new Error(`${path}: this window runs without a daemon, and web UI plugins are served by one`);
   return new TextDecoder().decode(await host.daemonGet(path, at));
 }

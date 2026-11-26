@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-//! The licence line (docs/LICENSE-MAP.md section 1; docs/rust-port/DECOUPLE-PLAN.md section 7): the Rust port of the
+//! The licence line (docs/LICENSE-MAP.md section 1; docs/archive/rust-port/DECOUPLE-PLAN.md section 7): the Rust port of the
 //! Kotlin `DaemonCoreGuardTest`, `HarnessCoreGuardTest` and `LicenseMapGuardTest`.
 //!
 //! Core is MPL-2.0; the SDK, the APIs, the features and the plugins are Apache-2.0. On normal and build dependencies

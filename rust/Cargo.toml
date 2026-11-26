@@ -15,7 +15,7 @@ version = "0.8.6"
 # workspace crates keep line tables only (backtraces keep file:line; a debugger shows no locals) and dependencies
 # get none. Measured: daemon edit 15 s -> 7 s, infantry-core edit 20 s -> 9.5 s, clean build 469 s -> 296 s.
 # Full debug info for your own crates when you need a debugger: set CARGO_PROFILE_DEV_DEBUG=full.
-# Release, owner-test and the MSI are not affected (docs/wiki/Build-speed.md).
+# Release, owner-test and the MSI are not affected (docs/wiki/contributing/build-and-test.md, "Build speed").
 [profile.dev]
 debug = "line-tables-only"
 
