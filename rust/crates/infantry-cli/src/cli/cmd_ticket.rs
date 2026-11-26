@@ -104,6 +104,15 @@ pub fn comment_flags_error(kind: Option<&str>, state: Option<&str>) -> Option<St
     None
 }
 
+pub const COMMENTS_USAGE: &str = "infantry ticket comments <id|prefix> [--which latestOpen|latest|first|all] [--kind done|issue|note] [--limit N]";
+
+/// `ticket comments`: one ticket id; --limit a whole number > 0.
+pub fn comments_usage_error(p: &Parsed) -> Option<String> {
+    let bad_id = p.args.len() != 2 || p.args[1].trim().is_empty();
+    let bad_limit = p.val("limit").is_some_and(|l| l.parse::<u32>().map_or(true, |n| n == 0));
+    (bad_id || bad_limit).then(|| COMMENTS_USAGE.to_string())
+}
+
 /// `TicketEpicCli.usageError`.
 pub fn epic_usage_error(args: &[String]) -> Option<String> {
     (args.len() < 2 || args.iter().any(|a| a.trim().is_empty())).then(|| EPIC_USAGE.to_string())
@@ -152,6 +161,7 @@ pub fn usage_error(p: &Parsed) -> Option<String> {
             let flagged = p.val("kind").is_some() && !matches!(words.first().map(String::as_str), Some("resolve" | "list"));
             if flagged { (words.len() < 2).then(|| COMMENT_USAGE.to_string()) } else { comment_usage_error(words) }
         }),
+        Some("comments") => comments_usage_error(p),
         Some("epic") => epic_usage_error(&args[1..]),
         Some(a @ ("archive" | "restore")) => archive_usage_error(Some(a), &args[1..], p.val("epic"), p.val("filter")),
         Some("files") => {
@@ -255,6 +265,7 @@ pub fn run(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
         Some("files") => files(ctx, p),
         Some("archive") | Some("restore") => archive_command(ctx, p),
         Some("comment") => comment(ctx, &args_from(p, 1), p.val("kind"), p.val("state")),
+        Some("comments") => comments(ctx, p),
         Some("epic") => epic(ctx, &args_from(p, 1), p.flag("force")),
         Some("related") => related(ctx, p),
         _ => show(ctx, p),
@@ -1537,9 +1548,32 @@ pub fn plugin_tool_call(ctx: &mut Ctx, name: &str, arguments: Map<String, Value>
     Ok((s(&result, "text").unwrap_or_default(), result.get("isError").and_then(|x| x.as_bool()).unwrap_or(false)))
 }
 
+/// The `infantry_ticket_comments` arguments of `ticket comments <id> [--which] [--kind] [--limit]`.
+pub fn comments_args(p: &Parsed) -> Map<String, Value> {
+    let mut a = Map::new();
+    a.insert("ticketId".into(), Value::String(p.args[1].clone()));
+    for k in ["which", "kind"] {
+        if let Some(v) = p.val(k) {
+            a.insert(k.into(), Value::String(v.to_string()));
+        }
+    }
+    if let Some(n) = p.val("limit").and_then(|l| l.parse::<u64>().ok()) {
+        a.insert("limit".into(), Value::from(n));
+    }
+    a
+}
+
+fn comments(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
+    run_comment_tool(ctx, "infantry_ticket_comments", comments_args(p))
+}
+
 /// `TicketCommentCli.run`.
 fn comment(ctx: &mut Ctx, args: &[String], kind_flag: Option<&str>, state_flag: Option<&str>) -> CmdResult {
     let (tool, a) = comment_tool(args, kind_flag, state_flag);
+    run_comment_tool(ctx, tool, a)
+}
+
+fn run_comment_tool(ctx: &mut Ctx, tool: &str, a: Map<String, Value>) -> CmdResult {
     let (text, is_error) = plugin_tool_call(ctx, tool, a)?;
     if text.starts_with("Unknown tool:") {
         ctx.err("error: this daemon has no ticket comment tools (Infantry_Board's daemon half is not loaded)");
@@ -1655,6 +1689,20 @@ mod tests {
         assert!(no_done_comment("no comments", false));
         assert!(!no_done_comment("ab12cd34 done/open by x 10:00: shipped", false));
         assert!(!no_done_comment("no comments", true));
+    }
+
+    #[test]
+    fn ticket_comments_matches_the_mcp_tool() {
+        let p = parsed(&["ticket", "comments", "7d707629", "--which", "all", "--kind", "done", "--limit", "5"]);
+        assert_eq!(usage_error(&p), None);
+        let a = comments_args(&p);
+        assert_eq!(Value::Object(a), serde_json::json!({ "ticketId": "7d707629", "which": "all", "kind": "done", "limit": 5 }));
+        let bare = parsed(&["ticket", "comments", "7d707629"]);
+        assert_eq!(usage_error(&bare), None);
+        assert_eq!(Value::Object(comments_args(&bare)), serde_json::json!({ "ticketId": "7d707629" }));
+        assert_eq!(usage_error(&parsed(&["ticket", "comments"])).unwrap(), COMMENTS_USAGE);
+        assert_eq!(usage_error(&parsed(&["ticket", "comments", "a", "--limit", "0"])).unwrap(), COMMENTS_USAGE);
+        assert_eq!(usage_error(&parsed(&["ticket", "comments", "a", "--limit", "x"])).unwrap(), COMMENTS_USAGE);
     }
 
     #[test]

@@ -389,7 +389,8 @@ impl Comments {
         Ok(missed)
     }
 
-    /// A comment by id or unique prefix (`%` and `_` ignored); None for unknown or ambiguous.
+    /// A comment by full id, unique prefix, or unique suffix (the short id listings print; `%` and `_` ignored).
+    /// None for unknown; a key that matches several comments is refused with a clear error.
     pub fn get(&self, id_or_prefix: &str) -> Result<Option<Comment>, OrchError> {
         let key: String = id_or_prefix.trim().chars().filter(|c| *c != '%' && *c != '_').collect();
         if key.is_empty() {
@@ -398,12 +399,19 @@ impl Comments {
         let found = self
             .db
             .read(|c| {
-                let mut st = c.prepare("SELECT * FROM infantry_board_comments WHERE id LIKE ?1")?;
-                let v = st.query_map([format!("{key}%")], comment_of)?.collect::<rusqlite::Result<Vec<_>>>()?;
+                let mut st = c.prepare("SELECT * FROM infantry_board_comments WHERE id LIKE ?1 OR id LIKE ?2")?;
+                let v = st.query_map([format!("{key}%"), format!("%{key}")], comment_of)?.collect::<rusqlite::Result<Vec<_>>>()?;
                 Ok(v)
             })
             .map_err(failed)?;
-        Ok(if found.len() == 1 { found.into_iter().next() } else { None })
+        if let Some(exact) = found.iter().find(|c| c.id == key) {
+            return Ok(Some(exact.clone()));
+        }
+        match found.len() {
+            0 => Ok(None),
+            1 => Ok(found.into_iter().next()),
+            n => Err(refused(format!("comment id '{key}' is ambiguous ({n} comments match); give more characters"))),
+        }
     }
 
     /// Marks a comment resolved (idempotent, no mail); None for an unknown / ambiguous id.

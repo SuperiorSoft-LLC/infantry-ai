@@ -122,6 +122,7 @@ const FLAGS: &[(&str, Kind, &str)] = &[
     ("--before", Kind::Value, "--before expects a ticket id or prefix (see: infantry tickets)"),
     ("--path", Kind::Multi, "--path expects a path or glob, e.g. --path '**/TicketBoard.kt'"),
     ("--related", Kind::Bool, ""),
+    ("--which", Kind::Value, "--which expects latestOpen|latest|first|all"),
     ("--related-to", Kind::Multi, "--related-to expects a ticket id or prefix (see: infantry tickets)"),
     ("--suggest", Kind::Bool, ""),
     ("--backfill", Kind::Bool, ""),

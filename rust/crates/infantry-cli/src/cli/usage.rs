@@ -35,6 +35,7 @@ Tickets:
   agent queue <agent> [add <id> [--at n] | rm <id> | mv <id> <n> | clear]   An agent's persistent ticket queue (agent = profile id or unique name): lists it; its worker ending starts the first queued ticket
   ticket assign <id|prefix> <agent> [--queue] [--at n]   Give a todo ticket to an existing agent (start now, or --queue behind its work)
   agent switch <agent> <ticketId> [--now]   The agent leaves its ticket (handoff, todo) for another; the worker ends, the new ticket starts on exit
+  ticket comments <id|prefix> [--which latestOpen|latest|first|all] [--kind done|issue|note] [--limit N]   Read a ticket's comments (the ids shown resolve with ticket comment resolve)
   ticket unassign <id|prefix> [--now] [--note <text>]   Take an in_progress ticket off its worker: back to todo (top), branch and work kept, with a handoff comment
   ticket restart <id|prefix> [--fresh]   Put a worker back on an in_progress ticket whose worker died: resumes the session; if that dies within board.restartResumeSeconds (or with --fresh)
                       a fresh session starts on the SAME worktree and branch with the brief and a continue-from-your-last-commit note

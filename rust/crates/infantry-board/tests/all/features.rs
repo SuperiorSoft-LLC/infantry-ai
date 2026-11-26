@@ -250,3 +250,31 @@ fn creator_is_notified_by_default_and_recipients_take_a_mode() {
     let n = block_on(f.orch.notify_edit(NotifyEdit { ticket_id: "ticket-00000001".into(), remove: vec!["role:qa".into()], ..Default::default() })).unwrap();
     assert!(!n.iter().any(|e| e.starts_with("role:qa")), "{n:?}");
 }
+
+#[test]
+fn a_comment_is_fetched_and_resolved_by_the_id_its_listing_prints() {
+    let f = fixture("comment-short-id", kotlin_daemon_env());
+    three(&f);
+    let owner = CommentAuthor::owner();
+    let add = |body: &str| {
+        block_on(f.orch.comment_add(CommentAdd { ticket_id: "ticket-00000001".into(), body: body.into(), kind: None, state: None, author: owner.clone(), wake_kind: None, wake_key: None })).unwrap()
+    };
+    let c = add("first");
+    let listed = block_on(f.orch.comments(CommentQuery { ticket_id: "ticket-00000001".into(), ..Default::default() })).unwrap();
+    let shown = infantry_board::tools::short(&listed[0].id);
+    assert_eq!(shown.len(), 8);
+    // fetch by the listed (suffix) id, by a prefix and by the full id
+    let store = f.board.comment_store().unwrap();
+    assert_eq!(store.get(&shown).unwrap().map(|x| x.id), Some(c.id.clone()));
+    assert_eq!(store.get(&c.id[..8]).unwrap().map(|x| x.id), Some(c.id.clone()));
+    assert_eq!(store.get(&c.id).unwrap().map(|x| x.id), Some(c.id.clone()));
+    // resolve by the listed id
+    let r = block_on(f.orch.comment_resolve(shown, owner.clone())).unwrap();
+    assert_eq!((r.id.as_str(), r.state.as_str()), (c.id.as_str(), "resolved"));
+    // a key matching several comments is a clear refusal, not "no comment"
+    // 17 UUIDs: two share a first hex digit, so that one-char key matches several
+    let ids: Vec<String> = (0..16).map(|n| add(&format!("more {n}")).id).chain([c.id.clone()]).collect();
+    let key = ids.iter().map(|i| &i[..1]).find(|k| ids.iter().filter(|i| i.starts_with(*k)).count() > 1).unwrap().to_string();
+    let amb = store.get(&key);
+    assert!(matches!(amb, Err(OrchError::Refused(ref m)) if m.contains("ambiguous")), "{amb:?}");
+}
