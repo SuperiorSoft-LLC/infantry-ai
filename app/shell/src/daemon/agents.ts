@@ -90,7 +90,7 @@ export function toAgent(
     progress: r.progress && isRunning(r) ? (r.progress.percent ?? null) : undefined,
     age: ago(r.lastHeartbeat),
     activityAt: v.activityAt ?? r.lastEventAt ?? r.lastHeartbeat,
-    lastLine: v.lastLine || r.workingDir,
+    lastLine: v.lastLine || r.lastAction || r.workingDir,
     group: status === "working" || status === "waiting" || status === "needs-input" ? "running" : "quiet",
     provider: r.provider,
     model: r.model ?? "default",
@@ -121,18 +121,33 @@ function cachedAgent(
   return agent;
 }
 
+/** FIRST-SYNC-1: true until the project list has arrived and a project is selected. Lists of sessions stay empty
+ *  ("Syncing") meanwhile, so no session shows under a wrong or default project and nothing jumps when projects load. */
+export function useSyncing(): boolean {
+  const loaded = useDaemon((s) => s.projectsLoaded);
+  const pending = useProjects((s) => s.projects.length > 0 && !s.currentId);
+  return !loaded || pending;
+}
+
+/** The daemon's host as the user typed it (for "Syncing with <host>…"). */
+export function useDaemonHost(): string {
+  const url = useDaemon((s) => s.connection.url);
+  try { return new URL(url).hostname; } catch { return "the daemon"; }
+}
+
 /** Every session of the selected project as an Agent, newest first. The Assistant is not one of them: it lives in its own box. */
 export function useAgentList(): Agent[] {
+  const syncing = useSyncing();
   const { sessions, agents, tickets, projects } = useDaemon(
     useShallow((s) => ({ sessions: s.sessions, agents: s.agents, tickets: s.tickets, projects: s.projects })),
   );
   const projectId = useProjects((s) => s.currentId);
   return useMemo(
     () =>
-      inProject(withoutAssistant(Object.values(sessions)), projectId)
+      syncing ? [] : inProject(withoutAssistant(Object.values(sessions)), projectId)
         .sort((a, b) => b.record.spawnedAt - a.record.spawnedAt)
         .map((v) => cachedAgent(v, agents, tickets, projects)),
-    [sessions, agents, tickets, projects, projectId],
+    [sessions, agents, tickets, projects, projectId, syncing],
   );
 }
 

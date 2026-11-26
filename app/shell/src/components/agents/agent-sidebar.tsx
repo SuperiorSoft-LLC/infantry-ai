@@ -3,8 +3,8 @@
 // Left sidebar: counters, board, search, role filter, the Waiting on you / Ready to check / Running / Quiet groups,
 // New agent.
 import { useCallback, useEffect } from "react";
-import { Search, UserPlus, SearchX, Unplug } from "lucide-react";
-import { useAgentList } from "@/daemon/agents";
+import { Search, UserPlus, SearchX, Unplug, Loader2 } from "lucide-react";
+import { useAgentList, useDaemonHost, useSyncing } from "@/daemon/agents";
 import { useDaemon } from "@/daemon/daemon";
 import { useRolesLoaded } from "@/components/knowledge/use-knowledge";
 import { useUi } from "@/state/ui-state";
@@ -23,6 +23,8 @@ export function AgentSidebar() {
   useRolesLoaded();
   const agents = useAgentList();
   const link = useDaemon((s) => s.connection.state);
+  const syncing = useSyncing();
+  const host = useDaemonHost();
   const select = useCallback((id: string) => ui.set("selectedAgentId", id), [ui.set]);
   // Open the newest session when nothing (or a session that is unknown) is selected. CHAT-GONE-2: a chat open on a
   // worker the daemon reports gone stays open, so it can say so (it does not jump to another worker's chat).
@@ -63,7 +65,9 @@ export function AgentSidebar() {
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-2 px-2.5 pb-3">
-          {agents.length === 0 ? (
+          {agents.length === 0 && syncing && link === "open" ? (
+            <EmptyState icon={<Loader2 className="size-6 animate-spin" />} title={`Syncing with ${host}…`} hint="Loading projects and agents." />
+          ) : agents.length === 0 ? (
             <EmptyState
               icon={<Unplug className="size-6" />}
               title={link === "open" ? "No sessions yet" : "Not connected"}

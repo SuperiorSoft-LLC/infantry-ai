@@ -5,8 +5,10 @@
 //
 // Replay: each session-stream frame carries a per-session `sequence` (from 1). A session's `cursor` is the highest
 // CONTIGUOUS sequence applied; a frame ahead of it is held until the gap fills (or the daemon says it was evicted).
-// On connect the client asks for every session's retained history (`replay_request`, exclusive cursor); after a
-// reconnect to the same daemon instance it asks again from each cursor; a new instance (daemon restart) starts over.
+// On connect the client asks no history (FIRST-SYNC-1: `historyOnConnect` "selected"): the session list is the snapshot, and a
+// session's history is asked when it is opened. An unopened session takes live frames as a peek (record, status, last
+// line) without moving its cursor, so opening it later replays from the start with no false gap. After a reconnect to
+// the same daemon instance each opened session asks again from its cursor; a new instance (daemon restart) starts over.
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { DaemonConnection, type LinkState, type TransportFactory } from "./connection";
 import { applyFrames, type TranscriptItem } from "./transcript";
@@ -31,7 +33,7 @@ export interface StoreSettings {
   historyOnConnect: "all" | "selected";
 }
 
-export const DEFAULT_SETTINGS: StoreSettings = { sendAckSeconds: 45, maxHeldFrames: 512, gapWaitMs: 2000, flushFallbackMs: 250, historyOnConnect: "all" };
+export const DEFAULT_SETTINGS: StoreSettings = { sendAckSeconds: 45, maxHeldFrames: 512, gapWaitMs: 2000, flushFallbackMs: 250, historyOnConnect: "selected" };
 
 export interface PendingSend {
   clientId: string;
@@ -96,6 +98,8 @@ export interface DaemonState {
   agents: Record<string, AgentProfile>;
   tickets: Record<string, TicketSummary>;
   projects: ProjectSummary[];
+  /** FIRST-SYNC-1: the project list has arrived since the last READY; until then sessions are not grouped and lists show "Syncing". */
+  projectsLoaded: boolean;
   pending: Record<string, PendingSend>;
   /** CHAT-GONE-1: sessions known to be gone, by id. */
   gone: Record<string, GoneSession>;
@@ -205,7 +209,7 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
       const streams = new Map<string, Envelope[]>();
       /** Each session's cursor within this batch (frames collected but not yet applied count). */
       const cursors = new Map<string, number>();
-      let agents = s.agents, tickets = s.tickets, projects = s.projects, pending = s.pending, connection = s.connection, gone = s.gone;
+      let agents = s.agents, tickets = s.tickets, projects = s.projects, projectsLoaded = s.projectsLoaded, pending = s.pending, connection = s.connection, gone = s.gone;
       const writeSessions = () => {
         if (!touched) { sessions = { ...sessions }; touched = true; }
       };
@@ -264,6 +268,12 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
           }
           const v = sessions[sid];
           if (!v) continue;
+          if (!v.historyAsked) {
+            flushStreams();
+            writeSessions();
+            sessions[sid] = { ...applyToView(v, [env]), cursor: v.cursor, items: v.items };
+            continue;
+          }
           const r = sequenced(sid, cursors.get(sid) ?? v.cursor, env);
           cursors.set(sid, r.cursor);
           if (r.frames.length > 0) {
@@ -294,8 +304,9 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
               writeSessions();
               for (const id of Object.keys(sessions)) sessions[id] = newView(sessions[id].record, false);
             }
-            out({ type: Frame.AGENT_LIST, data: "" });
+            // FIRST-SYNC-1: projects first, so sessions land under their own project, never a default one.
             out({ type: Frame.PROJECT_LIST, data: "" });
+            out({ type: Frame.AGENT_LIST, data: "" });
             out({ type: Frame.TICKET_LIST, data: JSON.stringify({ compact: true }) }); // summaries only
             break;
           }
@@ -372,6 +383,7 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
           case Frame.PROJECTS: {
             const list = json<ProjectSummary[]>(env.data) ?? [];
             projects = list.map((p) => ({ id: p.id, name: p.name, directory: p.directory }));
+            projectsLoaded = true;
             break;
           }
           case Frame.ERROR: {
@@ -416,7 +428,7 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
         }
         if (changed) pending = nextPending;
       }
-      return { sessions, agents, tickets, projects, pending, connection, gone };
+      return { sessions, agents, tickets, projects, projectsLoaded, pending, connection, gone };
     };
 
     /** In-order delivery for one session: frames at or below the cursor are dropped, frames ahead are held. */
@@ -468,6 +480,7 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
       agents: {},
       tickets: {},
       projects: [],
+      projectsLoaded: false,
       pending: {},
       gone: {},
       stats: { lastBatch: 0, flushes: 0, frames: 0 },

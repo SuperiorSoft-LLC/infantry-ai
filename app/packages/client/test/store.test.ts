@@ -28,7 +28,7 @@ afterEach(() => store?.getState().disconnect());
 
 function connected() {
   const d = fakeDaemon();
-  store = createDaemonStore({ url: "ws://test/ws", transport: d.factory, settings: { flushFallbackMs: 1, sendAckSeconds: 1 } });
+  store = createDaemonStore({ url: "ws://test/ws", transport: d.factory, settings: { flushFallbackMs: 1, sendAckSeconds: 1, historyOnConnect: "all" } });
   store.getState().connect();
   d.open();
   return { d, s: store };
@@ -261,7 +261,7 @@ describe("daemon store", () => {
 describe("a hole in the sequence", () => {
   it("is skipped after gapWaitMs, marked as missing, and the later frames show (also with no more frames coming)", async () => {
     const d = fakeDaemon();
-    store = createDaemonStore({ url: "ws://test/ws", transport: d.factory, settings: { flushFallbackMs: 1, gapWaitMs: 30 } });
+    store = createDaemonStore({ url: "ws://test/ws", transport: d.factory, settings: { flushFallbackMs: 1, gapWaitMs: 30, historyOnConnect: "all" } });
     store.getState().connect();
     d.open();
     d.push({ type: "ready", data: "instance=i1 since=0" });
@@ -274,5 +274,54 @@ describe("a hole in the sequence", () => {
     const v = store.getState().sessions.s1;
     expect(v.cursor).toBe(5777);
     expect(v.items.map((i) => i.kind)).toEqual(["text", "gap", "text"]);
+  });
+});
+
+describe("first sync (FIRST-SYNC-1)", () => {
+  function fresh() {
+    const d = fakeDaemon();
+    store = createDaemonStore({ url: "ws://test/ws", transport: d.factory, settings: { flushFallbackMs: 1, gapWaitMs: 30 } });
+    store.getState().connect();
+    d.open();
+    return { d, s: store };
+  }
+
+  it("asks projects before agents, and marks projects loaded only when they arrive", async () => {
+    const { d, s } = fresh();
+    d.push({ type: "ready", data: "instance=i1 since=0" });
+    await tick();
+    const types = d.sent.map((e) => e.type);
+    expect(types.indexOf("project_list")).toBeLessThan(types.indexOf("agent_list"));
+    expect(s.getState().projectsLoaded).toBe(false);
+    d.push({ type: "projects", data: JSON.stringify([{ id: "p1", name: "One", directory: "d" }]) });
+    await tick();
+    expect(s.getState().projectsLoaded).toBe(true);
+  });
+
+  it("asks no history at connect: the session list is the snapshot", async () => {
+    const { d } = fresh();
+    d.push({ type: "ready", data: "instance=i1 since=0" });
+    d.push({ type: "sessions", data: JSON.stringify([rec("s1"), rec("s2"), rec("s3")]) });
+    await tick();
+    expect(d.sent.filter((e) => e.type === "replay_request")).toHaveLength(0);
+  });
+
+  it("an unopened session takes live frames as a peek, then replays from the start when opened (no false gap)", async () => {
+    const { d, s } = fresh();
+    d.push({ type: "ready", data: "instance=i1 since=0" });
+    d.push({ type: "sessions", data: JSON.stringify([rec("s1")]) });
+    d.push({ type: "text_delta", data: "working on it", sessionId: "s1", sequence: 500 });
+    await new Promise((r) => setTimeout(r, 60)); // past gapWaitMs: nothing may be marked missing
+    let v = s.getState().sessions.s1;
+    expect(v.lastLine).toBe("working on it");
+    expect(v.cursor).toBe(0);
+    expect(v.items).toHaveLength(0);
+    s.getState().requestHistory("s1");
+    expect(d.sent.find((e) => e.type === "replay_request")).toMatchObject({ sessionId: "s1", data: '{"lastSequence":0}' });
+    d.push({ type: "text_delta", data: "a", sessionId: "s1", sequence: 1 });
+    await tick();
+    v = s.getState().sessions.s1;
+    expect(v.cursor).toBe(1);
+    expect(v.items.map((i) => i.kind)).toEqual(["text"]);
   });
 });
