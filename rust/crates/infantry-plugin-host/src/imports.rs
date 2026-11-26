@@ -282,7 +282,8 @@ impl PluginImports {
     pub fn http_send(&self, request: HttpRequest) -> Result<HttpResponse, String> {
         self.check("http")?;
         let allowed = self.decl.endpoint_addresses();
-        let ok = allowed.iter().any(|base| url_under(&request.url, base));
+        let runtime = self.decl.http_runtime_hosts && request.url.get(..8).is_some_and(|p| p.eq_ignore_ascii_case("https://"));
+        let ok = runtime || allowed.iter().any(|base| url_under(&request.url, base));
         if !ok {
             return Err(format!("http refused: {} is not one of {}'s daemon.endpoints", origin_of(&request.url), self.module_id));
         }
@@ -570,5 +571,30 @@ mod secrets_tests {
         assert!(undeclared_secret("Acme", &declared, "plugin_secret_clear", "{}").is_some(), "no field is not a declared field");
         assert_eq!(undeclared_secret("Acme", &[], "plugin_secret_get", r#"{"field":"ANY"}"#), None, "an empty list leaves the field free");
         assert_eq!(undeclared_secret("Acme", &declared, "ticket_list", "{}"), None, "other frames are not touched");
+#[cfg(test)]
+mod runtime_hosts_tests {
+    use super::*;
+    use crate::services::MemoryServices;
+
+    fn cards_like(runtime: bool) -> PluginImports {
+        let mut decl: DaemonDecl = serde_json::from_str(r#"{"wants":["http"]}"#).unwrap();
+        if runtime {
+            decl = serde_json::from_str(r#"{"wants":["http"],"httpRuntimeHosts":true}"#).unwrap();
+        }
+        PluginImports::new("Infantry_Cards", Tier::Official, decl, Arc::new(MemoryServices::new()), ["http".to_string()].into(), BTreeSet::new())
+    }
+    fn get(url: &str) -> HttpRequest {
+        HttpRequest { method: "GET".into(), url: url.into(), ..Default::default() }
+    }
+
+    #[test]
+    fn runtime_hosts_grant_lets_https_through_and_nothing_else() {
+        let fav = "https://www.google.com/s2/favicons?domain=reuters.com&sz=64";
+        // No grant: refused (CARDS-THUMBS-1).
+        assert!(cards_like(false).http_send(get(fav)).unwrap_err().contains("http refused"));
+        // Grant: passes the filter (MemoryServices has no network).
+        let i = cards_like(true);
+        assert!(i.http_send(get(fav)).unwrap_err().contains("no network"));
+        assert!(i.http_send(get("http://plain.example/x.png")).unwrap_err().contains("http refused"));
     }
 }

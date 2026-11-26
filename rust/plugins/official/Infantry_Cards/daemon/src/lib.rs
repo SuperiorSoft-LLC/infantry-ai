@@ -5,8 +5,8 @@
 //!
 //! HOST NEEDS: (1) the loaded modules' `cards` descriptors: this plugin asks the `module_cards` frame
 //! (`{}` -> `cards` `[{type,module,summary,spec,hosts[]}]`, spec already resolved to text by the host, first
-//! declaration of a type wins); (2) the image proxy fetches from any host a card type declares, but `http` is limited
-//! to `daemon.endpoints`, so the fetch works only once the host grants card hosts (or fetches for the guest). The
+//! declaration of a type wins); (2) the image proxy fetches from any host a card type declares; module.json sets
+//! `daemon.httpRuntimeHosts` so `http` is not limited to `daemon.endpoints`, and `image_answer` enforces the hosts. The
 //! on-disk image cache (`limits.cards.imageCacheMb`, `imageTtlHours`) is not built: it needs a files import.
 use infantry_plugin_sdk::types::{CallContext, Caller, Frame, HttpRequest};
 use infantry_plugin_sdk::{export_plugin, host, Plugin};
