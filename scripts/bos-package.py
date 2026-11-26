@@ -122,6 +122,8 @@ def verify_minisig(pub_line, sig_text, data):
 
 
 def sign_with_tauri(pkg):
+    # The signer runs from app/: a relative path would be read against app/, not the caller's cwd (AND-FEED-FIX-1).
+    pkg = Path(pkg).resolve()
     for v in ("TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
         if v not in os.environ:
             fail(f"--tauri-sign needs {v} in the environment")

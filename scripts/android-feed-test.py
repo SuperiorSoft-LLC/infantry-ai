@@ -34,6 +34,38 @@ def run(*args):
 
 
 class Feed(unittest.TestCase):
+    def test_tauri_sign_takes_a_relative_apk_from_another_cwd(self):
+        # AND-FEED-FIX-1: the signer runs from app/, so the APK path handed to it must be absolute.
+        import base64, os
+        with tempfile.TemporaryDirectory() as t:
+            t = Path(t)
+            sk, kid, pk = bp.throwaway_key(t)
+            (t / "dist").mkdir()
+            (t / "dist/InfantryAI_0.8.5_arm64.apk").write_bytes(b"apk-bytes")
+            seen = {}
+
+            def fake_signer(cmd, cwd=None, **kw):  # behaves like `tauri signer sign <file>`: reads <file> against cwd
+                f = Path(cwd) / cmd[-1]
+                seen["arg"] = cmd[-1]
+                if not f.is_file():
+                    return subprocess.CompletedProcess(cmd, 1, "", f"failed to open data file {cmd[-1]}")
+                Path(str(f) + ".sig").write_text(base64.b64encode(bp.sign_throwaway(sk, kid, f.read_bytes()).encode()).decode())
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+
+            old = (os.getcwd(), bp.subprocess.run, bp.shutil.which, dict(os.environ))
+            os.chdir(t)
+            bp.subprocess.run, bp.shutil.which = fake_signer, lambda n: "pnpm"
+            os.environ.update(TAURI_SIGNING_PRIVATE_KEY="x", TAURI_SIGNING_PRIVATE_KEY_PASSWORD="")
+            af.load_packager = lambda: bp
+            try:
+                f = af.build_feed("dist/InfantryAI_0.8.5_arm64.apk", "o/r", pubkey=bp.pub_text(kid, pk), tauri_sign=True)
+            finally:
+                os.chdir(old[0]); bp.subprocess.run, bp.shutil.which = old[1], old[2]
+                os.environ.clear(); os.environ.update(old[3])
+            self.assertTrue(Path(seen["arg"]).is_absolute())
+            self.assertEqual(f["version"], "0.8.5")
+            self.assertTrue((t / "dist/InfantryAI_0.8.5_arm64.apk.sig").is_file())
+
     def test_the_feed_names_the_tag_download_and_agrees_with_the_apk(self):
         with tempfile.TemporaryDirectory() as t:
             apk, pub = signed_apk(Path(t))

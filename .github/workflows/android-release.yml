@@ -20,6 +20,13 @@ name: android-release
 on:
   push:
     tags: ['android-v*']
+  # AND-FEED-FIX-1: make the phone feed for an EXISTING android-v<version> release without re-tagging. The APK is
+  # downloaded, checked against its .sha256 asset, signed with the TAURI key; the APK itself is never replaced.
+  workflow_dispatch:
+    inputs:
+      feed_only_version:
+        description: 'Version whose android-v<version> release gets its .apk.sig and the android.json feed (e.g. 0.8.5)'
+        required: true
 
 permissions:
   contents: write
@@ -30,6 +37,7 @@ concurrency:
 
 jobs:
   android:
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -113,5 +121,44 @@ jobs:
           pip install cryptography
           python scripts/android-feed.py --apk "dist/InfantryAI_${VERSION}_arm64.apk" --repo "$GITHUB_REPOSITORY"             --out dist/android.json --tauri-sign
           gh release upload "android-v$VERSION" "dist/InfantryAI_${VERSION}_arm64.apk.sig"
+          gh release view android-stable >/dev/null 2>&1 || gh release create android-stable --prerelease --latest=false             --title "Infantry AI for Android: update feed" --notes "The phone app's update feed (android.json); every android-v* tag replaces it."
+          gh release upload android-stable dist/android.json --clobber
+
+  feed-only:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      VERSION: ${{ inputs.feed_only_version }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Require the TAURI secret and a plain version
+        run: |
+          set -euo pipefail
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo "::error::the secret TAURI_SIGNING_PRIVATE_KEY is missing"; exit 1; }
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "::error::bad version $VERSION"; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: app/package.json }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: pnpm, cache-dependency-path: app/pnpm-lock.yaml }
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Download the released APK and check it against its .sha256
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh release download "android-v$VERSION" --repo "$GITHUB_REPOSITORY" --dir dist             --pattern "InfantryAI_${VERSION}_arm64.apk" --pattern "InfantryAI_${VERSION}_arm64.apk.sha256"
+          (cd dist && sha256sum -c "InfantryAI_${VERSION}_arm64.apk.sha256")
+      - name: The phone feed (android.json on android-stable; never latest.json)
+        run: |
+          set -euo pipefail
+          pip install cryptography
+          python scripts/android-feed.py --apk "dist/InfantryAI_${VERSION}_arm64.apk" --repo "$GITHUB_REPOSITORY" --out dist/android.json --tauri-sign
+          gh release upload "android-v$VERSION" "dist/InfantryAI_${VERSION}_arm64.apk.sig" --clobber
           gh release view android-stable >/dev/null 2>&1 || gh release create android-stable --prerelease --latest=false             --title "Infantry AI for Android: update feed" --notes "The phone app's update feed (android.json); every android-v* tag replaces it."
           gh release upload android-stable dist/android.json --clobber
