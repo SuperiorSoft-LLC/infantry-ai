@@ -42,7 +42,7 @@ pub const RUST_STATE_SUBDIR: [&str; 2] = ["SuperiorSoft", "InfantryAI-Rust"];
 /// `VERSION_PROBE_MS`.
 const VERSION_PROBE_MS: u64 = 2_000;
 /// The CLI's contract (`EventVocabulary.VERSION`), read from the Kotlin source at build time.
-pub const CONTRACT: &str = env!("INFANTRY_CONTRACT_VERSION");
+pub const CONTRACT: &str = infantry_protocol::CONTRACT_VERSION;
 /// `Message.from` of a message typed at a terminal (no session named).
 pub const HUMAN_SENDER: &str = "user";
 

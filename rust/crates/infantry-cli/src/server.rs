@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 pub const SERVER_NAME: &str = "infantry";
-pub const SERVER_VERSION: &str = env!("INFANTRY_CONTRACT_VERSION");
+pub const SERVER_VERSION: &str = infantry_protocol::CONTRACT_VERSION;
 const SUPPORTED_PROTOCOL_VERSIONS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];
 const PARSE_ERROR: i64 = -32700;
 const INVALID_REQUEST: i64 = -32600;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) SuperiorSoft LLC
-//! The MCP `serverInfo.version` is the daemon contract (`EventVocabulary.VERSION` in infantryProtocol). Read it from the
+//! The single source of the contract version (CLI, MCP `serverInfo.version` and the daemon ready frame): the daemon contract (`EventVocabulary.VERSION` in infantryProtocol). Read it from the
 //! Kotlin source at build time so the two bridges can never drift; `INFANTRY_CONTRACT_VERSION` overrides it (a build outside
 //! the monorepo).
 

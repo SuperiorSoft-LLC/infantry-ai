@@ -147,10 +147,11 @@ impl Normalizer {
         }
     }
 
-    /// `ready` data is `provider=.. contract=.. instance=.. since=.. build=..`; instance, since and build vary per run.
+    /// `ready` data is `provider=.. contract=.. instance=.. since=.. build=..`; contract, instance, since and build vary per build or run.
     fn ready(s: &str) -> String {
         s.split(' ')
             .map(|kv| match kv.split_once('=') {
+                Some(("contract", _)) => "contract=<contract>".to_string(),
                 Some(("instance", _)) => "instance=<id>".to_string(),
                 Some(("since", _)) => "since=<ts>".to_string(),
                 Some(("build", _)) => "build=<build>".to_string(),

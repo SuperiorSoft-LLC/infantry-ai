@@ -1,7 +1,7 @@
 {
   "frames": [
     {
-      "data": "provider=stub contract=1.155.0 instance=<id> since=<ts> build=<build>",
+      "data": "provider=stub contract=<contract> instance=<id> since=<ts> build=<build>",
       "sessionId": null,
       "type": "ready"
     },

@@ -4,8 +4,8 @@
 
 use serde_json::{json, Value};
 
-/// The contract the sessions frames here are recorded against (the Kotlin fixtures say `contract=1.155.0`).
-pub const CONTRACT: &str = "1.155.0";
+/// The contract this daemon reports (ready frame, /health): the one source in `infantry-protocol`, same as the CLI.
+pub const CONTRACT: &str = infantry_protocol::CONTRACT_VERSION;
 
 pub const READY: &str = "ready";
 pub const POLICY: &str = "policy";
@@ -158,5 +158,15 @@ mod write_tests {
         let w = infantry_harness::writes::file_writes(name, input, infantry_harness::writes::WRITE_MAX_BYTES);
         assert_eq!(w[0]["path"], "a.rs");
         assert_eq!(w[0]["edits"][0]["oldText"], "x");
+    }
+}
+
+#[cfg(test)]
+mod contract_version_tests {
+    /// CONTRACT-VER-1: the daemon must report the same contract as the CLI built from the same tree.
+    #[test]
+    fn daemon_contract_is_the_protocol_contract() {
+        assert_eq!(super::CONTRACT, infantry_protocol::CONTRACT_VERSION);
+        assert!(super::ready("stub", "i", "b").contains(&format!(" contract={} ", infantry_protocol::CONTRACT_VERSION)));
     }
 }

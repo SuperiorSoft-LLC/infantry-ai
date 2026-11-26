@@ -16,6 +16,10 @@ pub mod usage;
 
 pub use envelope::{Envelope, MessageOrigin};
 
+/// The contract version (`EventVocabulary.VERSION`), read at build time by `build.rs`. The single source: the CLI, the
+/// MCP `serverInfo.version` and the daemon ready frame all report this, so one build can never disagree with itself.
+pub const CONTRACT_VERSION: &str = env!("INFANTRY_CONTRACT_VERSION");
+
 /// Declares a wire DTO: camelCase, Debug/Clone/PartialEq, serde and ts-rs export.
 macro_rules! dto {
     ($(#[$m:meta])* $v:vis struct $n:ident { $($body:tt)* }) => {

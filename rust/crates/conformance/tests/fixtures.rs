@@ -57,7 +57,7 @@ fn normalizer_blanks_ids_times_and_paths_and_numbers_ids_by_first_use() {
 fn ready_keeps_provider_and_contract_only() {
     let e = Envelope::new("ready", "provider=stub contract=1.155.0 instance=abc since=5 build=dev");
     let v = Normalizer::new().frame(&e);
-    assert_eq!(v["data"], json!("provider=stub contract=1.155.0 instance=<id> since=<ts> build=<build>"));
+    assert_eq!(v["data"], json!("provider=stub contract=<contract> instance=<id> since=<ts> build=<build>"));
 }
 
 #[test]
