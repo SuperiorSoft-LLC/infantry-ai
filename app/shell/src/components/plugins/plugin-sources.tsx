@@ -131,6 +131,8 @@ export function UninstallDialog({ p, onClose }: { p: PluginRow; onClose: () => v
 /** The sources of this host: one card each (folder or git) with refresh and remove, and a field to add one. */
 export function SourcesPanel({ sources, pending }: { sources: PluginSource[]; pending: string[] }) {
   const [where, setWhere] = useState("");
+  // PLUGIN-SRC-1: a labelled (default) source is removed only after a confirm, so it is not lost by accident.
+  const [confirm, setConfirm] = useState<PluginSource | null>(null);
   const add = () => {
     if (!where.trim()) return;
     pluginsStore().getState().addSource(where);
@@ -168,17 +170,45 @@ export function SourcesPanel({ sources, pending }: { sources: PluginSource[]; pe
                 <IconButton label={`Refresh ${s.id}`} disabled={pending.includes(s.id)} onClick={() => pluginsStore().getState().refreshSource(s.id)}>
                   <RefreshCw />
                 </IconButton>
-                <IconButton label={`Remove ${s.id}`} disabled={pending.includes(s.id)} onClick={() => pluginsStore().getState().removeSource(s.id)}>
+                <IconButton label={`Remove ${s.id}`} disabled={pending.includes(s.id)} onClick={() => (s.label ? setConfirm(s) : pluginsStore().getState().removeSource(s.id))}>
                   <Trash2 />
                 </IconButton>
               </div>
               <div className="flex flex-wrap gap-2">
+                {s.label && <Chip tone="green">{s.label}</Chip>}
                 <Chip tone="neutral">{s.kind}</Chip>
                 <Chip tone={s.offers < 0 ? "red" : "neutral"}>{s.offers < 0 ? "folder missing" : `${s.offers} plugin${s.offers === 1 ? "" : "s"}`}</Chip>
               </div>
             </article>
           ))}
         </div>
+      )}
+      {confirm && (
+        <AppDialog
+          open
+          onOpenChange={(o) => !o && setConfirm(null)}
+          title={`Remove the ${confirm.label} source?`}
+          description={confirm.location}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setConfirm(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                aria-label={`Confirm remove ${confirm.id}`}
+                onClick={() => {
+                  pluginsStore().getState().removeSource(confirm.id);
+                  setConfirm(null);
+                }}
+              >
+                Remove
+              </Button>
+            </>
+          }
+        >
+          <p className="text-[13px] text-muted-foreground">Its plugins leave Browse. It is not added back on its own; add its URL again to restore it.</p>
+        </AppDialog>
       )}
     </div>
   );

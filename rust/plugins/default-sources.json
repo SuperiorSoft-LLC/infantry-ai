@@ -1,0 +1,6 @@
+{
+  "_": "PLUGIN-SRC-1: the plugin sources a host starts with. stage.sh copies this file into the staged plugins folder; the daemon adds each location once (a source the user removed is not added again). Add a source here, not in code.",
+  "sources": [
+    { "location": "https://github.com/SuperiorSoft-LLC/infantry-plugins", "label": "Official" }
+  ]
+}

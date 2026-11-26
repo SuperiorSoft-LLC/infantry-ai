@@ -68,3 +68,12 @@ Timeouts and budgets are data, not code: `daemon.limits` (`callTimeoutMs`, `tool
 `routeRequestsPerMinute`, `memoryMbHint`) and a per-tool or per-frame `timeoutMs`. A declared timeout is capped by the
 daemon setting `limits.plugins.maxDeclaredTimeoutMs`. With none declared, the host default applies
 (`limits.plugins.toolTimeoutMs` for tools, 10 s for frames).
+
+## Default plugin sources
+
+`rust/plugins/default-sources.json` names the sources a host starts with (today the official repo,
+https://github.com/SuperiorSoft-LLC/infantry-plugins, labelled `Official`). `stage.sh` copies it into the staged plugins
+folder; at start the daemon adds each location once, off the boot path (`INFANTRY_DEFAULT_SOURCES` names another file).
+The seeded locations are kept in `plugin-sources-seeded.json`, so a default the user removed is not added back; one that
+could not be added (offline) is tried again at the next start. The Sources tab shows the label as a badge and asks before
+removing a labelled source. Add a default source in that file, not in code.
