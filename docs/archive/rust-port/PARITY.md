@@ -205,7 +205,7 @@ All *(fixed today)*: before this sweep no window-wide key worked, and the hints 
 | Secrets vault (reveal behind Windows Hello) | yes | done | |
 | Phone pairing, `infantry` on PATH, updater | yes | done | RUST-UPD-1. |
 | Tool approval settings (timer, expiry, rules) | yes | missing | Rules: UI only (`approval_rules`). Timer and expiry: daemon (`tool_approval_set` has no handler). |
-| Setup wizard (install Node, providers) | yes | done | Node + harness install, sign-in check, first agent (ticket 4097d75b). Gaps: no in-app login (the tool's own sign-in), no outdated/update check. `cli_locations` still has no handler. |
+| Setup wizard (install Node, providers) | yes | done | Node + harness install, sign-in check, first agent (ticket 4097d75b); `cli_locations` / `cli_location_set` and tools `infantry_harness_status` / `infantry_harness_install` (ticket 82b4ccd2). Gaps: no in-app login (the tool's own sign-in), no outdated/update check. `cli_locations` still has no handler. |
 | Plugin drop-in install, consent dialog | yes | missing | UI only (`plugin_admin`). |
 | About: version | yes | done | *(fixed today)* It was a fixed string. |
 
@@ -264,7 +264,7 @@ This sweep changed 38 rows:
   Stats, the Prompts and Skills panels, and the version.
 - 11 had sample data or dead buttons removed. They now read as missing instead of looking finished.
 
-Most missing rows are **UI only**: the Rust daemon already handles the frames. RUST-FRAMES-3 added the handlers RUST-UI-8 found missing for `image_upload` / `image_fetch`, `command_catalog`, `session_project`, `notify_push`, `run_branches`, ticket comment lines and `timeline_list`; RUST-UI-10 built their UI. Still without a handler: `command_result`, `pipeline_*`, `tool_approval_set`, `harness_install`, `cli_locations`, calendar, and (with a TTS plugin) spoken alerts.
+Most missing rows are **UI only**: the Rust daemon already handles the frames. RUST-FRAMES-3 added the handlers RUST-UI-8 found missing for `image_upload` / `image_fetch`, `command_catalog`, `session_project`, `notify_push`, `run_branches`, ticket comment lines and `timeline_list`; RUST-UI-10 built their UI. Still without a handler: `command_result`, `pipeline_*`, `tool_approval_set`, calendar, and (with a TTS plugin) spoken alerts.
 
 The biggest UI gaps, in the order the owner will feel them:
 

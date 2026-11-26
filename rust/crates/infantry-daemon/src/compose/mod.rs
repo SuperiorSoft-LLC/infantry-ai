@@ -18,6 +18,7 @@ mod agent_registry;
 mod agent_tools;
 pub mod armory;
 mod harness_frames;
+mod cli_locations;
 mod harness_install;
 pub mod host_frames;
 pub mod installer;
@@ -881,7 +882,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         },
     ))));
     let harness_list = harness_frames::HarnessFrames::new(daemon.clone(), creds.clone());
-    units.push(harness_install::HarnessInstall::new(state_dir, {
+    let harness_install = harness_install::HarnessInstall::new(state_dir, {
         let h = harness_list.clone();
         Arc::new(move || h.rebuild_now())
     }, {
@@ -890,7 +891,10 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         Arc::new(move || {
             b.publish(Envelope::new(infantry_protocol::frames::HARNESS_INSTALL_RESULT, serde_json::json!({ "done": true }).to_string()));
         })
-    }));
+    });
+    tools.set_harness_install(harness_install.clone());
+    units.push(cli_locations::CliLocations::new(db.clone(), harness_install.clone()));
+    units.push(harness_install);
     units.push(harness_list);
     units.push(Arc::new(host_frames::HostFrames {
         daemon: daemon.clone(),

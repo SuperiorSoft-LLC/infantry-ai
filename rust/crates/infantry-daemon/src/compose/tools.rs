@@ -31,11 +31,12 @@ pub struct Tools {
     knowledge: OnceLock<Arc<infantry_knowledge::Knowledge>>,
     runs: OnceLock<Arc<crate::run::RunManager>>,
     agents: OnceLock<Arc<super::agent_tools::AgentTools>>,
+    harness: OnceLock<Arc<super::harness_install::HarnessInstall>>,
 }
 
 impl Tools {
     pub fn new(daemon: Arc<Daemon>) -> Tools {
-        Tools { daemon, scripting: OnceLock::new(), plugins: OnceLock::new(), knowledge: OnceLock::new(), runs: OnceLock::new(), agents: OnceLock::new() }
+        Tools { daemon, scripting: OnceLock::new(), plugins: OnceLock::new(), knowledge: OnceLock::new(), runs: OnceLock::new(), agents: OnceLock::new(), harness: OnceLock::new() }
     }
 
     pub fn set_scripting(&self, t: ScriptingTools) {
@@ -52,6 +53,10 @@ impl Tools {
 
     pub fn set_agents(&self, a: Arc<super::agent_tools::AgentTools>) {
         let _ = self.agents.set(a);
+    }
+
+    pub fn set_harness_install(&self, h: Arc<super::harness_install::HarnessInstall>) {
+        let _ = self.harness.set(h);
     }
 
     pub fn set_plugins(&self, h: Option<Arc<PluginHost>>) {
@@ -138,6 +143,13 @@ impl ScriptHost for Tools {
                 }
             }
         }
+        if self.harness.get().is_some() {
+            for t in harness_tool_catalog() {
+                if !out.iter().any(|o| o.name == t.name) {
+                    out.push(t);
+                }
+            }
+        }
         if let Some(h) = self.plugins() {
             for t in h.tools() {
                 if out.iter().any(|o| o.name == t.decl.name) {
@@ -181,6 +193,9 @@ impl ScriptHost for Tools {
             return r;
         }
         if let Some(r) = self.agents.get().and_then(|a| a.board_call(name, args, inv)) {
+            return r;
+        }
+        if let Some(r) = self.harness.get().and_then(|h| harness_tool_call(h, name, args)) {
             return r;
         }
         if let Some(h) = self.plugins() {
@@ -272,5 +287,60 @@ impl FrameUnit for ToolsUnit {
                 Ok(vec![reply(env, PLUGIN_TOOL_RESULT, json!({"text": r.text, "isError": r.is_error}).to_string())])
             }
         }
+    }
+}
+
+/// `infantry_harness_status` / `infantry_harness_install`: the setup wizard's report and install, for agents.
+fn harness_tool_catalog() -> Vec<ToolInfo> {
+    vec![
+        ToolInfo {
+            name: "infantry_harness_status".into(),
+            description: "Which harness CLIs are installed on the daemon's machine, their versions, where each runs from, and whether Node/npm is there: the report the setup wizard shows (harness_install_status). Install missing ones with infantry_harness_install.".into(),
+            input_schema: json!({"type": "object", "properties": {}, "additionalProperties": false}),
+            read_only: true,
+        },
+        ToolInfo {
+            name: "infantry_harness_install".into(),
+            description: "Start installing harness CLIs on the daemon's machine into Infantry AI's own folder (no admin rights; the user's own installs are never shadowed). ids: which ones (default: every missing one). update=true also refreshes outdated ones. Runs in the background: poll infantry_harness_status until it is no longer busy. Sign-in stays the user's.".into(),
+            input_schema: json!({"type": "object", "properties": {
+                "ids": {"type": "array", "items": {"type": "string"}, "description": "Harness ids (infantry_harness_status lists them). Default: all missing."},
+                "update": {"type": "boolean", "description": "Also update outdated CLIs (default false)."}}, "additionalProperties": false}),
+            read_only: false,
+        },
+    ]
+}
+
+fn harness_tool_call(h: &super::harness_install::HarnessInstall, name: &str, args: &Map<String, Value>) -> Option<ToolResult> {
+    match name {
+        "infantry_harness_status" => Some(ToolResult::ok(h.status_report().to_string())),
+        "infantry_harness_install" => {
+            let ids: Vec<String> = args.get("ids").and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(|s| s.trim().to_string())).filter(|s| !s.is_empty()).collect()).unwrap_or_default();
+            Some(match h.begin(ids, matches!(args.get("update"), Some(Value::Bool(true)))) {
+                Ok(()) => ToolResult::ok(json!({"started": true}).to_string()),
+                Err(e) => ToolResult::err(format!("infantry_harness_install refused: {e}")),
+            })
+        }
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod harness_tool_tests {
+    use super::*;
+
+    #[test]
+    fn both_harness_tools_answer_and_install_refuses_an_unknown_harness() {
+        let dir = std::env::temp_dir().join(format!("hi-tools-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let h = super::super::harness_install::HarnessInstall::new(&dir, Arc::new(|| {}), Arc::new(|| {}));
+        assert_eq!(harness_tool_catalog().iter().map(|t| (t.name.as_str(), t.read_only)).collect::<Vec<_>>(), [("infantry_harness_status", true), ("infantry_harness_install", false)]);
+        let st = harness_tool_call(&h, "infantry_harness_status", &Map::new()).unwrap();
+        assert!(!st.is_error && st.text.starts_with('{'), "{}", st.text);
+        let mut a = Map::new();
+        a.insert("ids".into(), json!(["nope"]));
+        let bad = harness_tool_call(&h, "infantry_harness_install", &a).unwrap();
+        assert!(bad.is_error && bad.text.contains("unknown harness 'nope'"), "{}", bad.text);
+        assert!(harness_tool_call(&h, "infantry_other", &a).is_none());
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

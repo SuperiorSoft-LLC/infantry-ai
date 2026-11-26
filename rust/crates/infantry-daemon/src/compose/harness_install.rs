@@ -73,6 +73,33 @@ impl HarnessInstall {
     }
 
     /// The last good report at once (never a probe on the caller's thread); a stale or missing one is refreshed on a thread.
+    // ---- the seams cli_locations and the agent tools use ----
+
+    /// The harness status report (the `harness_install_status` body).
+    pub fn status_report(&self) -> Value {
+        self.report_cached()
+    }
+
+    /// Starts an install in the background; an unknown id is refused before anything runs.
+    pub fn begin(&self, ids: Vec<String>, update: bool) -> Result<(), String> {
+        if let Some(bad) = ids.iter().find(|i| !KNOWN.iter().any(|k| k.0 == i.as_str())) {
+            return Err(format!("unknown harness '{bad}'"));
+        }
+        self.start(ids, update, false)
+    }
+
+    /// The harness CLIs this installer knows, as `(id, label)`.
+    pub fn clis() -> Vec<(&'static str, &'static str)> {
+        KNOWN.iter().map(|k| (k.0, k.1)).collect()
+    }
+
+    /// Where harness `id` runs from without an override: `(path, source)`, source `path` (the user's own) or `app` (the
+    /// app's private copy). None = not found (or not a known harness).
+    pub fn located(&self, id: &str) -> Option<(PathBuf, &'static str)> {
+        let cmd = KNOWN.iter().find(|k| k.0 == id)?.2;
+        find_user_cli(&self.prefix, cmd).map(|p| (p, "path")).or_else(|| find_private_cli(&self.prefix, cmd).map(|p| (p, "app")))
+    }
+
     fn report_cached(&self) -> Value {
         if self.busy.load(Ordering::SeqCst) {
             return self.report_with(false); // an install is polled every 1.5 s; cached versions only
@@ -595,6 +622,7 @@ fn install_node(prefix: &Path, platform: &str, note: &dyn Fn(String), live: Opti
 #[cfg(test)]
 mod tests {
     use super::*;
+
 
     #[test]
     fn the_newest_lts_with_a_zip_is_picked() {
