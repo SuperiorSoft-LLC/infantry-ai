@@ -102,7 +102,9 @@ impl HarnessInstall {
         let Some(me) = self.me.upgrade() else { return };
         std::thread::spawn(move || {
             let fresh = me.report_with(true);
-            let changed = me.snapshot.lock().unwrap_or_else(|e| e.into_inner()).replace((Instant::now(), fresh.clone())).is_none_or(|(_, old)| old["harnesses"] != fresh["harnesses"]);
+            // Only a report that differs from one already served is pushed: the first (warm-up) probe has no earlier answer
+            // any client could hold, so it is not a change (SESSIONS-SUITE-RED-1: it was a stray push at daemon start).
+            let changed = me.snapshot.lock().unwrap_or_else(|e| e.into_inner()).replace((Instant::now(), fresh.clone())).is_some_and(|(_, old)| old["harnesses"] != fresh["harnesses"]);
             me.refreshing.store(false, Ordering::SeqCst);
             if changed {
                 (me.on_done)();
