@@ -47,15 +47,29 @@ nav:
       - Services and Hosting: services-and-hosting.md
       - Remote runners: remote-runners.md
       - Runner in Docker: self-host-docker.md
-  - Architecture: Architecture.md
-  - Plugins: Plugins.md
-  - Make a plugin: make-a-plugin.md
-  - Plugin API: plugin-api.md
-  - Daemon plugin API: daemon-plugin-api.md
-  - Licensing (draft): licensing.md
-  - Recipes:
-      - Overview: recipes/README.md
-      - Add a UI panel plugin: recipes/add-ui-panel-plugin.md
-      - Split into a child plugin: recipes/split-into-child-plugin.md
-      - Add a daemon tool: recipes/add-daemon-tool.md
-      - Add a CLI harness: recipes/add-cli-harness.md
+  - Plugins:
+      - Overview: plugins/overview.md
+      - Create a plugin: plugins/create.md
+      - Build and run: plugins/build.md
+      - Configure: plugins/configure.md
+      - Secrets: plugins/secrets.md
+      - Endpoints: plugins/endpoints.md
+      - UI pages: plugins/ui-pages.md
+      - Daemon tools: plugins/daemon-tools.md
+      - Publish: plugins/publish.md
+      - Official plugins: plugins/official-plugins.md
+  - BattalionOS apps: battalionos-apps.md
+  - Reference:
+      - CLI: reference/cli.md
+      - MCP tools: reference/mcp-tools.md
+      - Protocol: reference/protocol.md
+      - Settings: reference/settings.md
+      - Lua API: reference/lua-api.md
+  - Contributing:
+      - Architecture: contributing/architecture.md
+      - Build and test: contributing/build-and-test.md
+      - Test daemon: contributing/test-daemon.md
+      - Add a harness: contributing/add-a-harness.md
+      - Releasing: contributing/releasing.md
+      - UI style: contributing/ui-style.md
+      - Licensing: licensing.md

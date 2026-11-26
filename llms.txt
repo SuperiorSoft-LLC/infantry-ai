@@ -1,51 +1,42 @@
 # Infantry AI
 
-> Infantry AI is a command post for coding agents: a daemon with a ticket board, agents on their own git branches, mail, shared project knowledge, Lua scripts and hooks, plus a desktop app (Tauri 2 with a React front end), an Android app and the `infantry` CLI. The main branch is the Rust framework: the daemon is a Rust binary, every feature is a plugin (a module with a `module.json` and a WASM or sidecar daemon half). Core is MPL-2.0, everything else Apache-2.0.
+> Infantry AI is a command post for coding agents: a daemon with a ticket board, agents on their own git branches, mail, shared project knowledge, Lua scripts and hooks, plus a desktop app (Tauri 2 with a React front end), an Android app and the `infantry` CLI. It runs on BattalionOS, the MPL-2.0 core and shell; the daemon is a Rust binary and features are plugins (a module with a `module.json` and a WASM or sidecar daemon half). Everything on top of the core is Apache-2.0.
 
-Read AGENTS.md first. Facts in these docs come from the code; where an older design record disagrees, the code wins. The Kotlin version is on the `legacy-java` branch.
+Read AGENTS.md first. Facts in these docs come from the code; where a page and the code disagree, the code wins.
 
 ## Start here
 
 - [AGENTS.md](AGENTS.md): the guide for AI coding agents: rules, repo layout, build and test commands, where each change goes.
-- [Architecture](docs/wiki/Architecture.md): the daemon, the layers, the wire, plugins, a request from the app to the daemon and back, scripting.
-- [Mini AI OS](docs/wiki/Mini-AI-OS.md): the identity and boot chain: core as kernel, installer, UI, plugins as apps.
-- [Install](docs/wiki/Install.md): the Windows installer, the headless daemon, `infantry` on PATH, building from source.
-- [Android](docs/wiki/Android.md): the Android app, pairing a phone to a daemon, building the APK.
-- [Updates](docs/wiki/Updates.md): the stable and nightly channels, the feed, signing, the release pipeline.
-- [Command line](docs/wiki/CommandLine.md): the native `infantry` command.
-- [Build speed](docs/wiki/Build-speed.md): the dev build settings and their measured effect.
-- [Recipes](docs/wiki/recipes/README.md): worked "how to add X" guides with the files to touch.
+- [Home](docs/wiki/index.md): what Infantry AI and BattalionOS are.
+- [Install the desktop app](docs/wiki/install-desktop.md): the Windows installer and updates.
+- [Install in BattalionOS](docs/wiki/install-battalionos.md): Infantry AI as a BattalionOS app.
+- [First project and agent](docs/wiki/first-project.md), [Board and tickets](docs/wiki/board-and-tickets.md).
+
+## User guide
+
+- [Providers and models](docs/wiki/providers-and-models.md): harnesses (Claude Code, Codex, opencode, pi), sign-in, context limit, usage.
+- [Mail and decisions](docs/wiki/mail-and-decisions.md): mail, notifications, owner questions.
+- [Knowledge, scripting, settings, secrets](docs/wiki/knowledge-scripting-settings.md).
+- [Phone app](docs/wiki/phone.md), [Services and Hosting](docs/wiki/services-and-hosting.md).
+- [Remote runners](docs/wiki/remote-runners.md), [Runner in Docker](docs/wiki/self-host-docker.md).
 
 ## Build plugins
 
-- [Plugins](docs/wiki/Plugins.md): `module.json`, the daemon half (WASM component or sidecar), grants, the official plugins, building with `rust/plugins/stage.sh`.
-- [Make a plugin](docs/wiki/make-a-plugin.md): from an official plugin to a built daemon half.
-- [Web UI plugins](docs/wiki/Web-UI-plugins.md): a plugin's web UI half: the `ui` manifest block, the slots, `@infantry/ui-plugin-api`, scoped styles, faults, the trust model and the Tauri CSP.
-- [Daemon plugin API](docs/wiki/daemon-plugin-api.md): the WIT world: exports, imports, frames, tools, routes, hooks, events.
-- [Plugin knowledge](docs/wiki/plugin-knowledge.md): module.json `knowledge` and the PLUGIN TOOLS briefing.
-- [Plugin lifecycle](docs/wiki/Plugin-lifecycle.md): install, update, enable, disable, remove.
-- [Publish a plugin](docs/wiki/publish-a-plugin.md): package a plugin from its own repo.
+- [Overview](docs/wiki/plugins/overview.md): daemon half (WASM or sidecar), UI half, `module.json`.
+- [Create](docs/wiki/plugins/create.md), [Build and run](docs/wiki/plugins/build.md), [Configure](docs/wiki/plugins/configure.md), [Secrets](docs/wiki/plugins/secrets.md), [Endpoints](docs/wiki/plugins/endpoints.md).
+- [UI pages](docs/wiki/plugins/ui-pages.md), [Daemon tools](docs/wiki/plugins/daemon-tools.md), [Publish](docs/wiki/plugins/publish.md), [Official plugins](docs/wiki/plugins/official-plugins.md).
+- [BattalionOS apps](docs/wiki/battalionos-apps.md): apps are documented in the BattalionOS repo.
 
-## Run and automate
+## Reference
 
-- [Harnesses](docs/wiki/Harnesses.md): the harness contract and the four harness crates (Claude Code, Codex, opencode, pi).
-- [Runners](docs/wiki/runner-quickstart.md): local and linked remote runners, setup, troubleshooting.
-- [Scripting](docs/wiki/Scripting.md): the sandboxed Lua API, hooks, the process bridge.
-- [Settings](docs/wiki/Settings.md): scopes (app, project, role, session) and cost-saving defaults.
-- [Health](docs/wiki/Health.md): the daemon health and environment report.
-- [Notifications](docs/wiki/Notifications.md): the notification bus and its presenters.
-- [Board](docs/wiki/Board.md): tickets, lanes and epics.
-- [Secrets](docs/wiki/Secrets.md) and [Vault](docs/wiki/Vault.md): saved secrets and the encrypted vault.
+- [CLI](docs/wiki/reference/cli.md), [MCP tools](docs/wiki/reference/mcp-tools.md), [Protocol](docs/wiki/reference/protocol.md), [Settings](docs/wiki/reference/settings.md), [Lua API](docs/wiki/reference/lua-api.md). Generated by `scripts/docs-gen-reference.sh`.
 
-## Project
+## Contributing
 
-- [README](README.md): what Infantry AI is and how to get it running.
-- [CONTRIBUTING](CONTRIBUTING.md): building, branches, testing.
-- [Licensing](docs/wiki/licensing.md): what is MPL-2.0 and what is Apache-2.0, per crate and module.
-- [Rust port records](docs/rust-port/PLAN.md): the plan, the layer table, migration, parity and the move-over bar.
-- [Decouple plan](docs/rust-port/DECOUPLE-PLAN.md): what leaves core, the licence line, and the moves that make the orchestrator removable (EPIC #41).
+- [Architecture](docs/wiki/contributing/architecture.md), [Layers](docs/rust-port/LAYERS.md), [Build and test](docs/wiki/contributing/build-and-test.md), [Test daemon](docs/wiki/contributing/test-daemon.md).
+- [Add a harness](docs/wiki/contributing/add-a-harness.md), [Releasing](docs/wiki/contributing/releasing.md), [UI style](docs/wiki/contributing/ui-style.md), [Licensing](docs/wiki/licensing.md).
+- [README](README.md), [CONTRIBUTING](CONTRIBUTING.md).
 
 ## Optional
 
-- [docs index](docs/README.md): every docs file marked current reference, design record (dated) or history, with its replacement wiki page.
-- [Legacy Kotlin pages](docs/wiki/index.md): the pages marked `legacy-java` describe the Kotlin app on the `legacy-java` branch.
+- [docs index](docs/README.md): what is in `docs/`, including `docs/archive/` (dated design records, kept for history only).

@@ -22,13 +22,13 @@ The Kotlin/Gradle version is kept on the `legacy-java` branch. Every section bel
 2. **No plugin ids, preset values or build-stack names in core.** `infantry-core` names no plugin id. The guard
    `core_names_no_plugin_id` in `rust/crates/infantry-guards` fails the build when it does (section 6).
 3. **Layers point down only.** Platform core (L1), runner (L2), harnesses (L3), orchestration (L4), then the composition
-   roots. Agents never depend on orchestration. See [Architecture](docs/wiki/Architecture.md) and
+   roots. Agents never depend on orchestration. See [Architecture](docs/wiki/contributing/architecture.md) and
    [docs/rust-port/LAYERS.md](docs/rust-port/LAYERS.md). The guard `every_workspace_crate_respects_the_layer_map`
    enforces it.
 4. **A plugin sees only its SDK.** A daemon plugin compiles against `infantry-plugin-sdk` and the WIT world in
    `infantry-plugin-wit`. It does not import daemon internals (`infantry-daemon`, `infantry-plugin-host`).
 5. **No hard-coded limits.** A limit is a named setting. A cost trade-off is a setting whose default is the cheapest
-   choice ([Settings](docs/wiki/Settings.md)).
+   choice ([Settings](docs/wiki/reference/settings.md)).
 6. **Tests never bind ports 8787, 8788, 8797 or 8798.** Those are the owner's daemon and UI and the PM's MCP pair
    (`DEV_OWNER_PORTS` in `rust/crates/infantry-daemon/src/health.rs`). Use port 0 or a free port. The daemon's own
    default is 18990, and it refuses 8797 (the Kotlin app's port).
@@ -56,7 +56,7 @@ The Kotlin/Gradle version is kept on the `legacy-java` branch. Every section bel
 | `rust/crates/infantry-migrate` | Snapshots a Kotlin state dir into a Rust one. |
 | `rust/crates/infantry-guards` | Test-only layer and rule guards. |
 | `rust/crates/conformance` | Black-box v1 WebSocket conformance suite, runnable against any daemon URL. |
-| `rust/plugins/official/` | The official plugins (14 daemon halves; see [Plugins](docs/wiki/Plugins.md)). |
+| `rust/plugins/official/` | The official plugins (14 daemon halves; see [Plugins](docs/wiki/plugins/overview.md)). |
 | `rust/plugins/stage.sh` | Builds the official daemon plugins as WASM components and lays them out for the daemon. |
 | `app/` | The pnpm workspace. `app/packages/ui` and `app/packages/client` are the React app; `app/shell` is the Vite shell; `app/src-tauri` is the Tauri 2 host (crate `infantry-tauri`) with its generated Android project in `gen/android`. |
 | `scripts/` | Owner build and proof scripts: `rust-owner-build.ps1`, `rust-build-env.ps1`, `rust-update-e2e.ps1`, and the release tools. |
@@ -102,26 +102,26 @@ Every Rust build on the owner's machine, in any worktree, shares one target dir 
 MERGED step, `pwsh -NoProfile -File scripts/cargo-target-sweep.ps1` trims artifacts unused for `INFANTRY_SWEEP_DAYS` days.
 Dev builds keep line tables only for workspace crates and no debug info for dependencies (a debugger session:
 `CARGO_PROFILE_DEV_DEBUG=full`); the settings, their measured effect and `scripts/rust-build-bench.ps1` are in
-[Build speed](docs/wiki/Build-speed.md).
+[Build speed](docs/wiki/contributing/build-and-test.md).
 
 Read build output with `tail -n 20` and look at errors, not warning counts. Versions: `rust/Cargo.toml` (the workspace
 and profiles) and `app/package.json` (pnpm 11.21.0, `@tauri-apps/cli` 2). Check them before you use an API from memory.
 
-For the installer, the updater, and the Android build, read [Install](docs/wiki/Install.md),
-[Android](docs/wiki/Android.md) and [Updates](docs/wiki/Updates.md).
+For the installer, the updater, and the Android build, read [Install](docs/wiki/install-desktop.md),
+[Android](docs/wiki/phone.md) and [Updates](docs/wiki/install-desktop.md).
 
 ## 4. Where each kind of change goes
 
 | You want to | Go to | Recipe |
 |---|---|---|
-| Add a daemon tool, route or hook from a plugin | the plugin's daemon half (`rust/plugins/official/<Module>/`) and its `module.json` | [add a daemon tool](docs/wiki/recipes/add-daemon-tool.md) |
-| Add a tab, panel or card from a plugin | the plugin's web UI half (`<Module>/ui/`, module.json `ui`) | [Web UI plugins](docs/wiki/Web-UI-plugins.md) |
-| Add a panel or screen in the app | the React app (`app/shell/src`, `app/packages/ui`, `app/packages/client`) | [Plugins](docs/wiki/Plugins.md) |
-| Add a setting | the daemon settings and `ui.json` | [Settings](docs/wiki/Settings.md) |
-| Automate a process | a Lua script and a hook | [Scripting](docs/wiki/Scripting.md), [add a Lua hook](docs/wiki/recipes/add-lua-hook.md) |
-| Support another agent CLI | a harness crate on `infantry-harness` | [add a CLI harness](docs/wiki/recipes/add-cli-harness.md) |
-| Add a model group | the harness's models | [add a provider](docs/wiki/recipes/add-provider.md) |
-| Change the wire format | `infantry-protocol`, then both ends | [Architecture](docs/wiki/Architecture.md) |
+| Add a daemon tool, route or hook from a plugin | the plugin's daemon half (`rust/plugins/official/<Module>/`) and its `module.json` | [add a daemon tool](docs/wiki/plugins/daemon-tools.md) |
+| Add a tab, panel or card from a plugin | the plugin's web UI half (`<Module>/ui/`, module.json `ui`) | [Web UI plugins](docs/wiki/plugins/ui-pages.md) |
+| Add a panel or screen in the app | the React app (`app/shell/src`, `app/packages/ui`, `app/packages/client`) | [Plugins](docs/wiki/plugins/overview.md) |
+| Add a setting | the daemon settings and `ui.json` | [Settings](docs/wiki/reference/settings.md) |
+| Automate a process | a Lua script and a hook | [Scripting](docs/wiki/knowledge-scripting-settings.md), [add a Lua hook](docs/wiki/reference/lua-api.md) |
+| Support another agent CLI | a harness crate on `infantry-harness` | [add a CLI harness](docs/wiki/contributing/add-a-harness.md) |
+| Add a model group | the harness's models | [add a provider](docs/wiki/providers-and-models.md) |
+| Change the wire format | `infantry-protocol`, then both ends | [Architecture](docs/wiki/contributing/architecture.md) |
 | Change what core can do | only if it is a generic mechanism; read [docs/rust-port/LAYERS.md](docs/rust-port/LAYERS.md) first | none |
 
 If you are about to add a feature to `infantry-daemon` or to a core crate, check first whether a plugin can do it.
@@ -140,16 +140,22 @@ If you are about to add a feature to `infantry-daemon` or to a core crate, check
 
 ## 5. Documentation map
 
-- [Mini AI OS](docs/wiki/Mini-AI-OS.md): the identity (a mini AI operating system), boot chain, plugins as apps. Read first.
-- [Architecture](docs/wiki/Architecture.md): layers, daemon, protocol, the request flow, plugins, scripting. Start here.
-- [Install](docs/wiki/Install.md), [Android](docs/wiki/Android.md), [Updates](docs/wiki/Updates.md).
-- [Plugins](docs/wiki/Plugins.md), [Make a plugin](docs/wiki/make-a-plugin.md), [Daemon plugin API](docs/wiki/daemon-plugin-api.md),
-  [Web UI plugins](docs/wiki/Web-UI-plugins.md).
-- [Recipes](docs/wiki/recipes/README.md): worked "how to add X" guides.
-- [Harnesses](docs/wiki/Harnesses.md), [Runners](docs/wiki/runner-quickstart.md), [Command line](docs/wiki/CommandLine.md).
-- [Scripting](docs/wiki/Scripting.md), [Settings](docs/wiki/Settings.md), [Health](docs/wiki/Health.md), [Notifications](docs/wiki/Notifications.md).
-- [Rust port design records](docs/rust-port/PLAN.md): the plan, the layer table, the migration, parity and the move-over bar.
-- [docs/README.md](docs/README.md): one line per `docs/*.md` file, marked current, design record (dated) or history.
+The wiki is `docs/wiki/` (built with `mkdocs build --strict -f docs/mkdocs.yml`, served in the app by Infantry_Docs).
+
+- Getting started and user guide: [Home](docs/wiki/index.md), [Install the desktop app](docs/wiki/install-desktop.md),
+  [Phone app](docs/wiki/phone.md), [Providers and models](docs/wiki/providers-and-models.md),
+  [Knowledge, scripting, settings](docs/wiki/knowledge-scripting-settings.md), [Remote runners](docs/wiki/remote-runners.md).
+- Plugins: [Overview](docs/wiki/plugins/overview.md), [Create](docs/wiki/plugins/create.md), [Build](docs/wiki/plugins/build.md),
+  [Daemon tools](docs/wiki/plugins/daemon-tools.md), [UI pages](docs/wiki/plugins/ui-pages.md), [Publish](docs/wiki/plugins/publish.md).
+- BattalionOS apps: [BattalionOS apps](docs/wiki/battalionos-apps.md) (the docs live in the BattalionOS repo).
+- Reference (generated by `scripts/docs-gen-reference.sh`): [CLI](docs/wiki/reference/cli.md),
+  [MCP tools](docs/wiki/reference/mcp-tools.md), [Protocol](docs/wiki/reference/protocol.md),
+  [Settings](docs/wiki/reference/settings.md), [Lua API](docs/wiki/reference/lua-api.md).
+- Contributing: [Architecture](docs/wiki/contributing/architecture.md), [Build and test](docs/wiki/contributing/build-and-test.md),
+  [Test daemon](docs/wiki/contributing/test-daemon.md), [Add a harness](docs/wiki/contributing/add-a-harness.md),
+  [Releasing](docs/wiki/contributing/releasing.md), [UI style](docs/wiki/contributing/ui-style.md),
+  [Licensing](docs/wiki/licensing.md), [docs/rust-port/LAYERS.md](docs/rust-port/LAYERS.md).
+- [docs/README.md](docs/README.md): what is in `docs/`, including `docs/archive/` (dated design records, not maintained).
 - [llms.txt](llms.txt): the same map in the llms.txt format.
 
 ## 6. Guards (tests that keep the rules true)
@@ -170,7 +176,7 @@ Port guards in tests: no test binds 8787, 8788, 8797 or 8798 (rule 6).
 
 The Kotlin guard tests (`LimitsGuardTest`, `DocsFreshnessGuardTest`, `SharedDocsGuardTest`, `NotificationGuardTest`,
 `WasmCommonMainGuardTest` and others under `superiorSoftLibrary/infantry/src/test`) belong to the Kotlin build. They
-are not run on main. See [Architecture](docs/wiki/Architecture.md) for the Rust equivalents.
+are not run on main. See [Architecture](docs/wiki/contributing/architecture.md) for the Rust equivalents.
 
 </details>
 
@@ -197,4 +203,4 @@ this tree:
 - The Kotlin daemon can still run as a child behind the Rust daemon during the port (`--legacy-backend`, see
   `rust/crates/infantry-daemon/src/main.rs`).
 - A command the native CLI does not have yet still runs through the Kotlin launcher (`rust/crates/infantry-cli/src/launcher.rs`, `cli/mod.rs` `run`).
-- Parity status and gaps: [PARITY.md](docs/rust-port/PARITY.md), [PARITY-GAPS.md](docs/rust-port/PARITY-GAPS.md).
+- Parity status and gaps: [PARITY.md](docs/archive/rust-port/PARITY.md), [PARITY-GAPS.md](docs/archive/rust-port/PARITY-GAPS.md).

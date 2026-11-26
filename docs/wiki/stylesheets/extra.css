@@ -1,4 +1,4 @@
-/* Infantry AI brand: values from infantryUiCore Theme.kt (DarkTones/LightTones) and ThemeAccent.RED. */
+/* Infantry AI brand: the app theme tokens (app/packages/ui/src/theme.css). */
 :root > * { --md-text-font: "Inter"; --md-code-font: "JetBrains Mono"; }
 [data-md-color-scheme="slate"] {
   --md-hue: 220;

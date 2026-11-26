@@ -39,7 +39,7 @@ Common tasks, from the repository root:
 
 **Run one Gradle build at a time.** The test JVMs are memory hungry; two builds in parallel can exhaust the host's RAM
 and crash. More detail: [QUICKSTART.md](superiorSoftLibrary/infantry/docs/QUICKSTART.md) (from source) and
-[docs/INFANTRY-INSTALL.md](docs/INFANTRY-INSTALL.md) (installer).
+[docs/INFANTRY-INSTALL.md](docs/wiki/install-desktop.md) (installer).
 
 ## Branches
 
@@ -47,14 +47,14 @@ and crash. More detail: [QUICKSTART.md](superiorSoftLibrary/infantry/docs/QUICKS
 - Work happens on a short-lived branch per change, named after its ticket or issue, e.g. `ticket/<id>-<short-slug>`
   or `fix/<issue-number>-<short-slug>`.
 - Changes are batched into a `staging-agenthq*` branch, the full test gate runs once over the batch
-  ([docs/GATE.md](docs/GATE.md)), and the batch is promoted to `feature-agenthq-mvp` only after it passes.
+  ([docs/GATE.md](docs/wiki/contributing/build-and-test.md)), and the batch is promoted to `feature-agenthq-mvp` only after it passes.
 - Never force-push a shared branch.
 
 ## Testing
 
 - Add or update tests with every behaviour change; a fix comes with a test that fails without it.
 - Run the tests of the module you touched, for example `./gradlew :superiorSoftLibrary:infantry:test`.
-- The full gate is `scripts/infantry-gate.sh <branch-or-sha>` ([docs/GATE.md](docs/GATE.md)). It takes tens of minutes.
+- The full gate is `scripts/infantry-gate.sh <branch-or-sha>` ([docs/GATE.md](docs/wiki/contributing/build-and-test.md)). It takes tens of minutes.
 - Tests never bind the real ports 8787 or 8788 (a guard test fails the build); use port 0.
 - Do not edit a test just to make it pass. If a test is wrong, say why in the commit message.
 - Documentation-only changes need no test run.

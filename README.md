@@ -63,7 +63,7 @@ More shots: [Settings](assets/screenshots/rust/rust-11-settings-modal-dark.png),
 
 **Your AI doesn't just run your workflow. It builds your workflow.**
 
-Infantry AI is an AI framework. It is no longer only a project-management app: it is the components to build something else. You can build a completely new application with it, or use the platform itself to build the application you want. The AI is no longer just the builder: the agents are the cells of the body, and they evolve the application into something else. The project-management board is one app built on this framework. See [docs/VISION.md](docs/VISION.md).
+Infantry AI is an AI framework. It is no longer only a project-management app: it is the components to build something else. You can build a completely new application with it, or use the platform itself to build the application you want. The AI is no longer just the builder: the agents are the cells of the body, and they evolve the application into something else. The project-management board is one app built on this framework. See [docs/VISION.md](docs/wiki/index.md).
 
 Infantry AI runs on BattalionOS, the MPL-2.0 core and shell (daemon, protocol, runner, desktop shell). Infantry AI (formerly AgentHQ) is the command post for coding agents built on it. You file tickets on a board, give each one a role
 (full-stack engineer, QA, PM, ...) and a provider (Claude Code, opencode, pi, or any CLI you describe in a JSON file),
@@ -115,13 +115,13 @@ A **runner** is where an agent actually runs. The **orchestrator** is the daemon
 - **Clients to orchestrator.** The desktop, web, Android and CLI clients all connect to the orchestrator over one WebSocket.
 - **Placement.** The orchestrator places each session on a runner. In the New agent dialog you pick *Project default*, *This computer*, *Any available runner* or a named runner.
 - **Local runner** is this machine. A **remote runner** is the same daemon in a Docker container on any machine: a home server, a cloud droplet.
-- **Two steps to add one.** `docker run` the runner image, then paste its endpoint into Settings > Runners. See the [runners guide](docs/wiki/runner-quickstart.md).
+- **Two steps to add one.** `docker run` the runner image, then paste its endpoint into Settings > Runners. See the [runners guide](docs/wiki/remote-runners.md).
 - **Local and remote behave the same.** They share one path for prompts, live replies (including thinking and tool calls), task status, restarts and kill, so a remote session feels local.
 - **Each runner has its own providers and models** (Claude Code, opencode, pi, ...), signed in on that runner.
 - **Agent mail goes through the orchestrator.** Agents on different runners message each other via the orchestrator, never runner to runner.
 - **Secured link.** The link is `wss` with a per-runner key; you can Rotate or Detach it. *Update runner* keeps a runner on the app's version (the image `infantry-runner:<tag>` must match the app).
 
-Full guide: [Runners: concepts, setup, update, troubleshooting](docs/wiki/runner-quickstart.md).
+Full guide: [Runners: concepts, setup, update, troubleshooting](docs/wiki/remote-runners.md).
 
 ## Try it free with opencode
 
@@ -145,23 +145,23 @@ column is priority.
 
 **Scripts.** Your process lives in Lua scripts in `<project>/.infantry/scripts/`, not in anyone's memory: what happens
 when a ticket is done, when mail arrives, when a build ends. Hooks run a script on a lane change, on incoming mail, on
-a timer or on a named event, and a script can call every tool an agent has. See [Scripting](docs/wiki/Scripting.md).
+a timer or on a named event, and a script can call every tool an agent has. See [Scripting](docs/wiki/knowledge-scripting-settings.md).
 
 **Plugins.** The app is the OS, plugins are the programs: every tab, panel, board card and daemon tool, and every
 agent CLI harness, is a plugin with a `module.json`. Write your own in a few minutes. See
-[Plugins](docs/wiki/Plugins.md) and [Harnesses and providers](docs/wiki/Harnesses.md).
+[Plugins](docs/wiki/plugins/overview.md) and [Harnesses and providers](docs/wiki/providers-and-models.md).
 
 
 ## Documentation
 
 - [Wiki index](docs/wiki/index.md)
-- [Plugins](docs/wiki/Plugins.md): `module.json`, UI and daemon halves, config, building, installing, signing, a hello plugin
-- [Make a plugin](docs/wiki/make-a-plugin.md): from the template to a built UI + daemon plugin, every `module.json` field
-- [UI plugin API](docs/wiki/plugin-api.md) and [daemon plugin API](docs/wiki/daemon-plugin-api.md): the full references
-- [Scripting](docs/wiki/Scripting.md): the Lua API, hooks, exec, chat notes, progress, the session bridge
-- [Harnesses and providers](docs/wiki/Harnesses.md): the harness API, adding a harness or a provider
-- [Runners](docs/wiki/runner-quickstart.md): local and remote runners, setup, update, troubleshooting
-- [Settings](docs/wiki/Settings.md): scopes and the cost-saving defaults
+- [Plugins](docs/wiki/plugins/overview.md): `module.json`, UI and daemon halves, config, building, installing, signing, a hello plugin
+- [Make a plugin](docs/wiki/plugins/create.md): from the template to a built UI + daemon plugin, every `module.json` field
+- [UI plugin API](docs/wiki/plugins/ui-pages.md) and [daemon plugin API](docs/wiki/plugins/daemon-tools.md): the full references
+- [Scripting](docs/wiki/knowledge-scripting-settings.md): the Lua API, hooks, exec, chat notes, progress, the session bridge
+- [Harnesses and providers](docs/wiki/providers-and-models.md): the harness API, adding a harness or a provider
+- [Runners](docs/wiki/remote-runners.md): local and remote runners, setup, update, troubleshooting
+- [Settings](docs/wiki/reference/settings.md): scopes and the cost-saving defaults
 - [Licensing](docs/wiki/licensing.md) (draft): core MPL-2.0 vs Apache-2.0 per module, and the compatibility promise
 
 Build and preview the wiki site locally (MkDocs + Material, strict: a broken link fails; nothing is published):
@@ -245,7 +245,7 @@ There is no Linux desktop app yet. The macOS desktop app is beta (Apple silicon,
    as "blocked: <tool> denied".
 
 Your data lives in `%LOCALAPPDATA%\SuperiorSoft\InfantryAI`, apart from the program, so upgrades and uninstalls keep it.
-Details: [docs/INFANTRY-INSTALL.md](docs/INFANTRY-INSTALL.md).
+Details: [docs/INFANTRY-INSTALL.md](docs/wiki/install-desktop.md).
 
 ### Android (about 5 minutes)
 
@@ -366,7 +366,7 @@ restart the daemon.
 - **Android**: install the newer APK over the old one. Android only accepts it when both are signed with the same key,
   so stay on `InfantryAI-<version>.apk` (release-signed) builds; a `-debug.apk` cannot upgrade a release install.
 
-Details: [docs/RELEASING.md](docs/RELEASING.md) and [UPDATES.md](superiorSoftLibrary/infantry/docs/UPDATES.md).
+Details: [docs/RELEASING.md](docs/wiki/contributing/releasing.md) and [UPDATES.md](superiorSoftLibrary/infantry/docs/UPDATES.md).
 
 ## FAQ
 
@@ -404,7 +404,7 @@ has no copy, and `agenthq` is a deprecated alias of the `infantry` command.
 | Anything else | Open **Configuration > Logs > Open logs folder** and attach `infantry.log` to a [bug report](../../issues/new/choose). Read it first: logs can hold project paths and agent output. |
 
 More: [QUICKSTART.md troubleshooting](superiorSoftLibrary/infantry/docs/QUICKSTART.md#6-troubleshooting) and
-[INSTALL logs](docs/INFANTRY-INSTALL.md#logs).
+[INSTALL logs](docs/wiki/install-desktop.md).
 
 ## Roadmap and known issues
 
@@ -489,7 +489,7 @@ Secrets guard: `./gradlew verifySecretsNotTracked` fails if keys, keystores or t
 
 - Every `INFANTRY_*` variable is also read under its old name `AGENTHQ_*` (`AGENTHQ_PORT`, `AGENTHQ_TOKEN`, ...). The old
   names keep working; when both are set the `INFANTRY_*` one wins.
-- [Install and data layout (Windows)](docs/INFANTRY-INSTALL.md) · [Releasing](docs/RELEASING.md) ·
+- [Install and data layout (Windows)](docs/wiki/install-desktop.md) · [Releasing](docs/wiki/contributing/releasing.md) ·
   [Owner quickstart (from source)](superiorSoftLibrary/infantry/docs/QUICKSTART.md) ·
   [Architecture](superiorSoftLibrary/infantry/docs/ARCHITECTURE.md) · [MCP tools](superiorSoftLibrary/infantry/docs/MCP.md) ·
   [Agent quick reference](superiorSoftLibrary/infantry/docs/AGENT-QUICKREF.md)
@@ -498,4 +498,4 @@ Secrets guard: `./gradlew verifySecretsNotTracked` fails if keys, keystores or t
 
 <p align="center">© SuperiorSoft LLC. Infantry AI is a product of SuperiorSoft LLC.</p>
 
-Daemon: what the core is and the orchestrator/runner split are in [docs/DAEMON-CORE.md](docs/DAEMON-CORE.md).
+Daemon: what the core is and the orchestrator/runner split are in [docs/DAEMON-CORE.md](docs/wiki/contributing/architecture.md).
