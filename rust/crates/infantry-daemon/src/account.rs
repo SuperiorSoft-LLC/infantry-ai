@@ -179,6 +179,17 @@ struct State {
     access: HashMap<String, (String, i64)>,
     docs: HashMap<String, (Value, i64)>,
     flows: HashMap<String, Flow>,
+    /// Providers whose sign-in the service refused (the refresh token was dropped): they read "expired", not "never".
+    expired: std::collections::HashSet<String>,
+}
+
+/// What a try for a live access token found.
+enum Access {
+    Token(String),
+    /// The service refused the refresh token: the sign-in is over.
+    Refused,
+    /// The service could not be asked (network, 5xx): the sign-in is kept.
+    Unreachable(String),
 }
 
 pub struct Account {
@@ -186,6 +197,9 @@ pub struct Account {
     http: Arc<dyn AccountHttp>,
     tokens: Arc<dyn TokenStore>,
     state: Mutex<State>,
+    /// One refresh at a time: the service rotates refresh tokens and ends the whole sign-in when a used one is sent
+    /// again, so two callers refreshing at once (the Services card and a plugin) must not both send the same token.
+    refreshing: Mutex<()>,
     clock: fn() -> i64,
     settings: Box<dyn Fn(&str) -> Option<String> + Send + Sync>,
 }
@@ -242,7 +256,7 @@ pub fn fill_endpoints(v: &Value, endpoints: Option<&Value>, environment: &str) -
 
 impl Account {
     pub fn new(providers: Vec<Provider>, http: Arc<dyn AccountHttp>, tokens: Arc<dyn TokenStore>) -> Arc<Account> {
-        Arc::new(Account { providers, http, tokens, state: Mutex::new(State::default()), clock: now_ms, settings: Box::new(|_| None) })
+        Arc::new(Account { providers, http, tokens, state: Mutex::new(State::default()), refreshing: Mutex::new(()), clock: now_ms, settings: Box::new(|_| None) })
     }
 
     /// The same hub reading core settings (`account.deviceName`) through `get`. Call before the hub is shared.
@@ -267,7 +281,11 @@ impl Account {
         if module.is_empty() || !p.consumers.iter().any(|c| c.eq_ignore_ascii_case(module)) {
             return Err(format!("{} does not list '{module}' as a consumer of its account token", p.name));
         }
-        let Some(token) = self.access(p) else { return Err(format!("not signed in to {}", p.name)) };
+        let token = match self.access(p) {
+            Access::Token(t) => t,
+            Access::Refused => return Err(format!("not signed in to {}", p.name)),
+            Access::Unreachable(e) => return Err(format!("{} could not be reached: {e}", p.name)),
+        };
         let until = self.state.lock().unwrap().access.get(&p.id).map(|(_, u)| *u).unwrap_or(0);
         Ok(json!({ "accessToken": token, "expiresAt": until }))
     }
@@ -279,25 +297,39 @@ impl Account {
         }
     }
 
-    /// A live access token: the cached one, else a refresh-token grant (a refused refresh signs the provider out).
-    fn access(&self, p: &Provider) -> Option<String> {
+    fn cached_access(&self, p: &Provider) -> Option<String> {
         let now = (self.clock)();
-        if let Some((t, until)) = self.state.lock().unwrap().access.get(&p.id) {
-            if *until > now {
-                return Some(t.clone());
-            }
+        self.state.lock().unwrap().access.get(&p.id).filter(|(_, until)| *until > now).map(|(t, _)| t.clone())
+    }
+
+    /// A live access token: the cached one, else a refresh-token grant, one at a time. Only a refusal of the token
+    /// still kept ends the sign-in; a network failure or a 5xx keeps it.
+    fn access(&self, p: &Provider) -> Access {
+        if let Some(t) = self.cached_access(p) {
+            return Access::Token(t);
         }
-        let refresh = self.tokens.get(&p.refresh_field())?;
+        let _one = self.refreshing.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(t) = self.cached_access(p) {
+            return Access::Token(t); // another caller refreshed while this one waited
+        }
+        let Some(refresh) = self.tokens.get(&p.refresh_field()) else { return Access::Refused };
         match self.http.post_form(&p.token_url, &[("grant_type", "refresh_token"), ("refresh_token", &refresh), ("client_id", &p.client_id)]) {
             Ok((200, v)) => {
                 self.keep_tokens(p, &v);
-                self.state.lock().unwrap().access.get(&p.id).map(|(t, _)| t.clone())
+                match self.state.lock().unwrap().access.get(&p.id) {
+                    Some((t, _)) => Access::Token(t.clone()),
+                    None => Access::Unreachable("the service answered without an access token".into()),
+                }
             }
             Ok((400 | 401, _)) => {
-                self.tokens.delete(&p.refresh_field());
-                None
+                if self.tokens.get(&p.refresh_field()).as_deref() == Some(refresh.as_str()) {
+                    self.tokens.delete(&p.refresh_field());
+                    self.state.lock().unwrap().expired.insert(p.id.clone());
+                }
+                Access::Refused
             }
-            _ => None,
+            Ok((code, _)) => Access::Unreachable(format!("HTTP {code}")),
+            Err(e) => Access::Unreachable(e),
         }
     }
 
@@ -308,8 +340,9 @@ impl Account {
             (401, _) => {
                 self.state.lock().unwrap().access.remove(&p.id);
                 match self.access(p) {
-                    Some(t) => self.http.get_json(url, &t),
-                    None => Ok((401, Value::Null)),
+                    Access::Token(t) => self.http.get_json(url, &t),
+                    Access::Refused => Ok((401, Value::Null)),
+                    Access::Unreachable(e) => Err(e),
                 }
             }
             other => Ok(other),
@@ -319,6 +352,7 @@ impl Account {
     fn keep_tokens(&self, p: &Provider, v: &Value) {
         if let Some(r) = s(v, "refresh_token") {
             let _ = self.tokens.set(&p.refresh_field(), &r);
+            self.state.lock().unwrap().expired.remove(&p.id);
         }
         if let Some(a) = s(v, "access_token") {
             let ttl = v.get("expires_in").and_then(Value::as_i64).unwrap_or(0).max(0) * 1_000;
@@ -327,32 +361,57 @@ impl Account {
     }
 
     fn view(&self, p: &Provider, refresh: bool) -> Value {
+        let mut doc = Value::Null;
+        let mut unreachable = false;
+        if self.tokens.get(&p.refresh_field()).is_some() {
+            if let Some(url) = &p.account_url {
+                let now = (self.clock)();
+                let cached = self.state.lock().unwrap().docs.get(&p.id).filter(|(_, at)| !refresh && now - at < CACHE_MS).map(|(d, _)| d.clone());
+                doc = match cached {
+                    Some(d) => d,
+                    None => {
+                        let read = match self.access(p) {
+                            Access::Token(t) => self.read_doc(p, url, &t),
+                            Access::Refused => Ok((401, Value::Null)),
+                            Access::Unreachable(e) => Err(e),
+                        };
+                        match read {
+                            Ok((200, d)) => {
+                                self.state.lock().unwrap().docs.insert(p.id.clone(), (d.clone(), now));
+                                d
+                            }
+                            // Refused: the sign-in is over; the state below says expired, with no error next to it.
+                            Ok((401, _)) => Value::Null,
+                            Ok((code, _)) => {
+                                unreachable = true;
+                                json!({ "error": format!("{} could not be reached (HTTP {code})", p.name) })
+                            }
+                            Err(e) => {
+                                unreachable = true;
+                                json!({ "error": format!("{} could not be reached: {e}", p.name) })
+                            }
+                        }
+                    }
+                };
+            }
+        }
+        // Read after the refresh: a refused one has just ended the sign-in.
         let signed_in = self.tokens.get(&p.refresh_field()).is_some();
-        let mut v = json!({ "id": p.id, "name": p.name, "icon": p.icon, "signedIn": signed_in });
+        let sign_in = match (signed_in, unreachable) {
+            (true, true) => "unreachable",
+            (true, false) => "signed_in",
+            (false, _) if self.state.lock().unwrap().expired.contains(&p.id) => "expired",
+            (false, _) => "signed_out",
+        };
+        let mut v = json!({ "id": p.id, "name": p.name, "icon": p.icon, "signedIn": signed_in, "signIn": sign_in });
         let o = v.as_object_mut().expect("object");
         for (k, val) in [("description", &p.description), ("billingUrl", &p.billing_url), ("signUpUrl", &p.sign_up_url)] {
             if let Some(x) = val {
                 o.insert(k.into(), json!(x));
             }
         }
-        let mut doc = Value::Null;
-        if signed_in {
-            if let Some(url) = &p.account_url {
-                let now = (self.clock)();
-                let cached = self.state.lock().unwrap().docs.get(&p.id).filter(|(_, at)| !refresh && now - at < CACHE_MS).map(|(d, _)| d.clone());
-                doc = match cached {
-                    Some(d) => d,
-                    None => match self.access(p).map(|t| self.read_doc(p, url, &t)) {
-                        Some(Ok((200, d))) => {
-                            self.state.lock().unwrap().docs.insert(p.id.clone(), (d.clone(), now));
-                            d
-                        }
-                        Some(Ok((code, _))) => json!({ "error": format!("the account could not be read (HTTP {code})") }),
-                        Some(Err(e)) => json!({ "error": format!("the account could not be read: {e}") }),
-                        None => json!({ "error": "signed out: the sign-in expired" }),
-                    },
-                };
-            }
+        if !signed_in {
+            doc = Value::Null;
         }
         if let Some(email) = doc.get("email").or_else(|| doc.pointer("/user/email")).and_then(Value::as_str) {
             o.insert("user".into(), json!({ "email": mask_email(email) }));
@@ -395,6 +454,7 @@ impl Account {
             Some(f) => {
                 let signed_in = f["signedIn"].as_bool() == Some(true);
                 top["state"] = json!(if signed_in { "signed_in" } else { "signed_out" });
+                top["signIn"] = f["signIn"].clone();
                 if let Some(e) = f.pointer("/user/email") {
                     top["email"] = e.clone();
                 }
@@ -407,7 +467,8 @@ impl Account {
                 if let Some(e) = f.get("error") {
                     top["message"] = e.clone();
                 } else if !signed_in {
-                    top["message"] = json!(format!("Not signed in to {}.", f["name"].as_str().unwrap_or("the account")));
+                    let name = f["name"].as_str().unwrap_or("the account");
+                    top["message"] = json!(if f["signIn"] == "expired" { format!("The sign-in to {name} expired. Sign in again.") } else { format!("Not signed in to {name}.") });
                 }
                 top["services"] = f["services"].clone();
             }
@@ -826,5 +887,99 @@ mod tests {
         assert_eq!(a.device_name(), "Anthony's desk");
         let long = Account::new(vec![], http, Arc::new(MemTokens::default())).with_settings(|_| Some("x".repeat(500)));
         assert_eq!(long.device_name().chars().count(), DEVICE_NAME_MAX);
+    }
+
+    /// The hosting server's refresh rules (superiorsoft-core auth/Auth.kt `refresh`): every refresh rotates the refresh
+    /// token, and a used one sent again kills the whole sign-in (400 invalid_grant). Refreshes are slow, like a network.
+    #[derive(Default)]
+    struct StrictServer {
+        live: Mutex<Option<String>>,
+        used: Mutex<Vec<String>>,
+        n: Mutex<u32>,
+        down: Mutex<bool>,
+    }
+    impl AccountHttp for StrictServer {
+        fn post_form(&self, _url: &str, form: &[(&str, &str)]) -> Result<(u16, Value), String> {
+            if *self.down.lock().unwrap() {
+                return Err("connection refused".into());
+            }
+            let sent = form.iter().find(|(k, _)| *k == "refresh_token").map(|(_, v)| v.to_string()).unwrap_or_default();
+            std::thread::sleep(std::time::Duration::from_millis(60));
+            if self.used.lock().unwrap().contains(&sent) {
+                *self.live.lock().unwrap() = None; // replay: the family is gone
+                return Ok((400, json!({"error": "invalid_grant", "error_description": "refresh token reused"})));
+            }
+            let mut live = self.live.lock().unwrap();
+            if live.as_deref() != Some(sent.as_str()) {
+                return Ok((400, json!({"error": "invalid_grant", "error_description": "unknown refresh token"})));
+            }
+            self.used.lock().unwrap().push(sent);
+            let mut n = self.n.lock().unwrap();
+            *n += 1;
+            *live = Some(format!("rt{n}"));
+            Ok((200, json!({"access_token": format!("at{n}"), "refresh_token": format!("rt{n}"), "expires_in": 3600})))
+        }
+        fn get_json(&self, _url: &str, bearer: &str) -> Result<(u16, Value), String> {
+            Ok(if bearer.starts_with("at") { (200, json!({"email": "alice@example.com", "plan": {"name": "Basic"}})) } else { (401, Value::Null) })
+        }
+    }
+
+    fn strict() -> (Arc<StrictServer>, Arc<MemTokens>, Arc<Account>) {
+        let server = Arc::new(StrictServer::default());
+        *server.live.lock().unwrap() = Some("rt0".into());
+        let tokens = Arc::new(MemTokens::default());
+        tokens.set("acct_acme_refresh", "rt0").unwrap();
+        let a = Account::new(vec![consumer_provider()], server.clone(), tokens.clone());
+        (server, tokens, a)
+    }
+
+    /// HOSTING-SIGNIN-1: the Services card (status) and the Sites plugin (token_for) refresh at the same moment. Both
+    /// sent the same refresh token; the server killed the sign-in on the replay and the card read "Connected" next to
+    /// "signed out: the sign-in expired".
+    #[test]
+    fn a_card_and_a_plugin_refreshing_at_once_keep_the_sign_in() {
+        let (server, tokens, a) = strict();
+        let (a1, a2) = (a.clone(), a.clone());
+        let t1 = std::thread::spawn(move || a1.status(None, true).unwrap());
+        let t2 = std::thread::spawn(move || a2.token_for(Some("acme"), "Good_Mod"));
+        let s = t1.join().unwrap();
+        assert!(t2.join().unwrap().is_ok(), "the plugin got a token");
+        assert_eq!(s["providers"][0]["signIn"], "signed_in", "{s}");
+        assert!(s["message"].is_null(), "{s}");
+        assert_eq!(*server.n.lock().unwrap(), 1, "one refresh for both");
+        assert_eq!(tokens.get("acct_acme_refresh"), server.live.lock().unwrap().clone(), "the kept token is the live one");
+        assert_eq!(a.status(None, true).unwrap()["state"], "signed_in");
+    }
+
+    #[test]
+    fn a_refused_refresh_reads_expired_with_sign_in_never_connected() {
+        let (server, tokens, a) = strict();
+        *server.live.lock().unwrap() = None; // the server ended the sign-in
+        for _ in 0..2 {
+            let s = a.status(None, true).unwrap();
+            let p = &s["providers"][0];
+            assert_eq!((p["signedIn"].as_bool(), p["signIn"].as_str(), s["state"].as_str()), (Some(false), Some("expired"), Some("signed_out")), "{s}");
+            assert!(s["message"].as_str().unwrap().contains("expired"), "{s}");
+        }
+        assert!(tokens.get("acct_acme_refresh").is_none());
+    }
+
+    #[test]
+    fn an_unreachable_service_keeps_the_sign_in_and_says_unreachable() {
+        let (server, tokens, a) = strict();
+        *server.down.lock().unwrap() = true;
+        let s = a.status(None, true).unwrap();
+        let p = &s["providers"][0];
+        assert_eq!((p["signedIn"].as_bool(), p["signIn"].as_str()), (Some(true), Some("unreachable")), "{s}");
+        assert!(!p["error"].as_str().unwrap().contains("signed out"), "{s}");
+        assert_eq!(tokens.get("acct_acme_refresh").as_deref(), Some("rt0"), "a network failure never drops the sign-in");
+        *server.down.lock().unwrap() = false;
+        assert_eq!(a.status(None, true).unwrap()["providers"][0]["signIn"], "signed_in");
+    }
+
+    #[test]
+    fn a_never_signed_in_provider_reads_signed_out() {
+        let a = Account::new(vec![consumer_provider()], Arc::new(StrictServer::default()), Arc::new(MemTokens::default()));
+        assert_eq!(a.status(None, true).unwrap()["providers"][0]["signIn"], "signed_out");
     }
 }

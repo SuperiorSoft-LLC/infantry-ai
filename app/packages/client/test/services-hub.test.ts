@@ -21,8 +21,18 @@ describe("services hub", () => {
   it("each provider gets its own correct card", () => {
     const ps = accountProviders(doc);
     expect(ps.map((p) => p.name)).toEqual(["Infantry AI", "Acme", "W"]);
-    expect(ps.map((p) => cardChip(p).label)).toEqual(["Connected", "Not connected", "Waiting for approval"]);
+    expect(ps.map((p) => cardChip(p).label)).toEqual(["Signed in", "Not signed in", "Waiting for approval"]);
     expect(ps[0].plan).toBe("Pro");
+  });
+
+  it("HOSTING-SIGNIN-1: one true state per card, never Connected next to signed out", () => {
+    const chip = (p: Record<string, unknown>) => cardChip(accountProviders({ providers: [{ id: "h", ...p }] })[0]).label;
+    expect(chip({ signedIn: true, signIn: "signed_in" })).toBe("Signed in");
+    expect(chip({ signedIn: false, signIn: "expired" })).toBe("Sign-in expired");
+    expect(chip({ signedIn: false, signIn: "signed_out" })).toBe("Not signed in");
+    expect(chip({ signedIn: true, signIn: "unreachable" })).toBe("Service unreachable");
+    expect(chip({ signedIn: true })).toBe("Signed in");
+    expect(chip({ signedIn: false, signIn: "bogus" })).toBe("Not signed in");
   });
 
   it("a connected card opens its dashboard; signed out elsewhere returns to the list", () => {

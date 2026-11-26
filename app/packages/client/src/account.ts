@@ -13,11 +13,17 @@ export interface AccountFlow {
   error: string | null;
 }
 
+/** The one sign-in state of a provider (daemon `signIn`): the card shows exactly this one. */
+export type SignInState = "signed_in" | "expired" | "signed_out" | "unreachable";
+const SIGN_IN_STATES: SignInState[] = ["signed_in", "expired", "signed_out", "unreachable"];
+
 export interface AccountProvider {
   id: string;
   name: string;
   description: string | null;
+  /** True while the app holds a sign-in (also when the service cannot be reached right now). */
   signedIn: boolean;
+  signIn: SignInState;
   /** Masked by the daemon. */
   email: string | null;
   plan: string | null;
@@ -47,6 +53,7 @@ export function accountProviders(data: Obj | null): AccountProvider[] {
         name: text(p, "name") ?? id,
         description: text(p, "description"),
         signedIn: p.signedIn === true,
+        signIn: SIGN_IN_STATES.includes(p.signIn as SignInState) ? (p.signIn as SignInState) : p.signedIn === true ? "signed_in" : "signed_out",
         email: text(obj(p.user), "email"),
         plan: plan ? (text(plan, "name") ?? text(plan, "status")) : text(p, "plan"),
         error: text(p, "error"),
@@ -121,12 +128,17 @@ export const signInTracker = createSignInTracker();
 
 export type CardTone = "neutral" | "green" | "amber";
 
-/** The chip of a provider card: Connected, Waiting for approval (a sign-in flow runs), or Not connected. */
+/** The chip of a provider card, one true state: Signed in, Service unreachable, Waiting for approval (a sign-in flow
+ * runs), Sign-in expired, or Not signed in. */
 export function cardChip(p: AccountProvider): { label: string; tone: CardTone } {
-  if (p.signedIn) return { label: "Connected", tone: "green" };
+  if (p.signedIn) return p.signIn === "unreachable" ? { label: "Service unreachable", tone: "amber" } : { label: "Signed in", tone: "green" };
   if (p.flow?.state === "pending") return { label: "Waiting for approval", tone: "amber" };
-  return { label: "Not connected", tone: "neutral" };
+  if (p.signIn === "expired") return { label: "Sign-in expired", tone: "amber" };
+  return { label: "Not signed in", tone: "neutral" };
 }
+
+/** One short line under a card that is not signed in: the app holds its own sign-in, apart from the website's. */
+export const SEPARATE_SIGN_IN_TEXT = "The app signs in on its own: being signed in on the website does not sign in the app.";
 
 /** The list's empty text (Kotlin, AccountScreens.kt:131-134). */
 export const NO_PROVIDERS_TEXT = "No service has registered an account provider yet. A plugin adds one by publishing an account.provider/<id> endpoint";

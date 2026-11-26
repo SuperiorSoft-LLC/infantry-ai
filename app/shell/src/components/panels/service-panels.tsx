@@ -8,7 +8,7 @@
 //   Sites    `sites_list` (Infantry_Sites' `infantry_sites_list`): hosting servers, read-only
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, Globe, GitPullRequest, Plug, Server } from "lucide-react";
-import { accountProviders, accountState, cardChip, flowView, hubView, NO_PROVIDERS_TEXT, servicePages, shouldOpenApproval, signOutConfirm, type ServicePage, manageUrl, serverStatus, settingKey, shownAnswer, siteDate, SITES_REFRESH_DEFAULT, SITES_REFRESH_KEY, SITES_REFRESH_NODE, startAutoRefresh, reviewQueue, signInBody, signInTracker, signInUri, signOutBody, type AccountProvider, type McpServerView } from "@infantry/client";
+import { accountProviders, accountState, cardChip, SEPARATE_SIGN_IN_TEXT, flowView, hubView, NO_PROVIDERS_TEXT, servicePages, shouldOpenApproval, signOutConfirm, type ServicePage, manageUrl, serverStatus, settingKey, shownAnswer, siteDate, SITES_REFRESH_DEFAULT, SITES_REFRESH_KEY, SITES_REFRESH_NODE, startAutoRefresh, reviewQueue, signInBody, signInTracker, signInUri, signOutBody, type AccountProvider, type McpServerView } from "@infantry/client";
 import { AppDialog, Button, Chip, EmptyState, PanelCard, Switch } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { TabPage } from "@/components/tabs/tab-page";
@@ -310,6 +310,7 @@ function ProviderCard({ p, onOpen }: { p: AccountProvider; onOpen: () => void })
         </p>
       )}
       {p.error && <p className="text-xs text-destructive">{p.error}</p>}
+      {!p.signedIn && p.signIn === "expired" && <p className="text-xs text-muted-foreground">{SEPARATE_SIGN_IN_TEXT}</p>}
       {p.signedIn ? (
         <Button className="mt-2" size="sm" onClick={onOpen} aria-label={`Open ${p.name}`}>
           Open
