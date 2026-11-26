@@ -93,6 +93,11 @@ pub fn run_checked(a: Vec<String>) -> Result<(), String> {
     if let Err(e) = std::fs::create_dir_all(&state_dir) {
         fail(format!("state dir {}: {e}", state_dir.display()));
     }
+    // TESTENV-3: an explicit state dir that is not the default one (a test daemon, a second instance) keeps the agents'
+    // folders and the starter projects inside it, never in the real `~/Infantry AI`. An explicit INFANTRY_HOME_ROOT wins.
+    if explicit_state.as_deref().is_some_and(|e| e != default_state_dir()) && auth::env(infantry_daemon::sessions::HOME_ROOT_ENV).is_none() {
+        std::env::set_var(infantry_daemon::sessions::HOME_ROOT_ENV, state_dir.join("home"));
+    }
     // DAEMON-LOCK: one live Infantry AI per data folder, program or library alike; taken before any other file of the folder
     // is opened (launch.json included), held until this function returns. A bounded wait covers a holder that is closing.
     let lock_wait = arg("--lock-wait-secs").or_else(|| auth::env("INFANTRY_LOCK_WAIT_SECS")).map(|v| v.trim().parse::<u64>().map(std::time::Duration::from_secs).unwrap_or_else(|_| fail(format!("bad lock wait `{v}`")))).unwrap_or(infantry_daemon::state_lock::DEFAULT_WAIT);

@@ -99,6 +99,7 @@ $psi = [Diagnostics.ProcessStartInfo]::new('cmd.exe', "/c pnpm exec vite --host 
 $psi.WorkingDirectory = Join-Path $repo 'app\shell'; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
 $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true   # the log files get the output; the terminal (or a pipe reading this script) is not held open by it
 $psi.Environment['INFANTRY_UI_PORT'] = "$port"   # the page's own server setting (app/shell/vite.config.ts), set for it alone
+$psi.Environment['INFANTRY_PORT'] = "$daemonPort"   # TESTENV-3: the dev server's proxy has no default daemon port
 $vite = [Diagnostics.Process]::Start($psi)
 $up = $false
 for ($i = 0; $i -lt 150 -and -not $up -and -not $vite.HasExited; $i++) { try { $c = [Net.Sockets.TcpClient]::new('127.0.0.1', $port); $c.Close(); $up = $true } catch { Start-Sleep -Milliseconds 200 } }

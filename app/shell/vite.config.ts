@@ -11,10 +11,16 @@ const host = process.env.TAURI_DEV_HOST;
 // The daemon the browser build talks to in development. The daemon refuses a browser Origin that does not match
 // its own Host (CONTRACT §7), so dev and tests reach it through this same-origin proxy, which drops the Origin
 // header: the daemon then sees a plain local client. The Tauri build connects from Rust and needs no proxy.
-const daemon = process.env.INFANTRY_URL ?? `http://127.0.0.1:${process.env.INFANTRY_PORT ?? "8787"}`;
-const daemonHttp = daemon.replace(/^ws/, "http").replace(/\/ws$/, "");
+// TESTENV-3: no default port. 8787 is the owner's daemon; a dev server or test must name its daemon explicitly.
+const daemon = process.env.INFANTRY_URL ?? (process.env.INFANTRY_PORT ? `http://127.0.0.1:${process.env.INFANTRY_PORT}` : undefined);
+const daemonHttp = (daemon ?? "").replace(/^ws/, "http").replace(/\/ws$/, "");
 
-export default defineConfig(() => ({
+export default defineConfig(({ command }) => {
+  // The build needs no daemon; only the dev server (serve) proxies to one.
+  if (command === "serve" && !daemon) {
+    throw new Error("vite: set INFANTRY_URL (e.g. ws://127.0.0.1:18990/ws) or INFANTRY_PORT to the daemon this dev server proxies to; there is no default.");
+  }
+  return {
   plugins: [react(), tailwindcss()],
   resolve: {
     // The workspace packages resolve by path, so the build needs no node_modules links (Windows installs are
@@ -55,4 +61,5 @@ export default defineConfig(() => ({
       },
     },
   },
-}));
+  };
+});

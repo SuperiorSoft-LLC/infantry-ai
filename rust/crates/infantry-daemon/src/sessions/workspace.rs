@@ -22,10 +22,9 @@ pub struct WorkspaceSpec {
     pub keep: bool,
 }
 
-/// The default root: the user's home folder plus `Infantry AI` (None when the home folder is unknown).
+/// The default root: `INFANTRY_HOME_ROOT`, else the user's home folder plus `Infantry AI` (None when unknown).
 pub fn default_root() -> Option<PathBuf> {
-    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).filter(|h| !h.is_empty())?;
-    Some(PathBuf::from(home).join("Infantry AI"))
+    infantry_projects::store::home_root()
 }
 
 /// Reads the spec from the two settings (blank or absent root = the default root).

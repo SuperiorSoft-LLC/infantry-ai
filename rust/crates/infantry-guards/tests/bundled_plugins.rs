@@ -49,7 +49,11 @@ fn fake_repo(dir: &Path) {
 }
 
 fn run(build_env: Option<&str>, profile: &str) -> (bool, String, String) {
-    let dir = std::env::temp_dir().join(format!("infantry-svc8-guard-{}-{}", std::process::id(), profile));
+    // TESTENV-3: one temp dir per call. Keyed on pid + profile only, two tests running "release" at once shared it and
+    // one removed the other's args.txt (the flake in a_prod_release_stages_the_bundled_plugin_for_prod).
+    static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("infantry-svc8-guard-{}-{}-{seq}", std::process::id(), profile));
     let _ = std::fs::remove_dir_all(&dir);
     let (repo, out) = (dir.join("repo"), dir.join("out"));
     fake_repo(&repo);

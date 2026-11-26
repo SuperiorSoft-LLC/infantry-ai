@@ -21,7 +21,7 @@ case "$act" in
 start)
   name="${name:-td$$}"; [ -f "$REG/$name.env" ] && { echo "test-daemon: '$name' already registered; stop it first" >&2; exit 1; }
   if [ -n "$wt" ]; then
-    ( cd "$wt/rust" && cargo build -q -p infantry-distribution ) >&2 || { echo "test-daemon: cargo build failed in $wt" >&2; exit 2; }
+    ( cd "$wt/rust" && cargo build -q -p infantry-distribution -p infantry-cli ) >&2 || { echo "test-daemon: cargo build failed in $wt" >&2; exit 2; }
     tgt="${CARGO_TARGET_DIR:-${INFANTRY_CARGO_TARGET_DIR:-$wt/rust/target}}"; bin="$tgt/debug/infantry-daemon.exe"; [ -f "$bin" ] || bin="$tgt/debug/infantry-daemon"
   elif [ -z "$bin" ]; then
     b="${AGENTHQ_BUILDS:-/c/Users/antho/agenthq-dist/builds}"
@@ -53,6 +53,12 @@ start)
   # On Windows $! is the MSYS stub; the daemon's own pid is the one listening on our port.
   lp="$(netstat -ano 2>/dev/null | awk -v a="127.0.0.1:$port" '$2==a && $4=="LISTENING"{print $5; exit}')"
   [ -n "$lp" ] && { wpid="$lp"; sed -i "s/^WINPID=.*/WINPID=$wpid/" "$REG/$name.env"; }
+  # TESTENV-3: the agents' folders (workspace.root) go inside the temp state dir, never the real ~/Infantry AI (the daemon
+  # also derives its home from an explicit --state-dir). Not settable = not isolated: stop it and refuse.
+  ws="$(win "$state")/home"; cli="$(dirname "$bin")/infantry.exe"; [ -f "$cli" ] || cli="$(dirname "$bin")/infantry"
+  if ! env "${scrub[@]}" INFANTRY_URL="ws://127.0.0.1:$port/ws" INFANTRY_STATE_DIR="$(win "$state")" "$cli" settings set workspace.root "$ws" >&2; then
+    echo "test-daemon: refused: could not set workspace.root=$ws on port $port; stopping it" >&2
+    kill "$bpid" 2>/dev/null; taskkill //PID "$wpid" //F >/dev/null 2>&1; rm -f "$REG/$name.env"; rm -rf "$state"; exit 2; fi
   printf '{"name":"%s","port":%s,"url":"ws://127.0.0.1:%s/ws","health":"http://127.0.0.1:%s/health","stateDir":"%s","pid":%s,"log":"%s","bin":"%s","plugins":"%s","env":["INFANTRY_URL=ws://127.0.0.1:%s/ws","INFANTRY_STATE_DIR=%s"],"stop":"scripts/test-daemon.sh stop --pid %s"}\n' \
     "$name" "$port" "$port" "$port" "$(win "$state")" "$wpid" "$(win "$log")" "$(win "$bin")" "$(win "$plugins")" "$port" "$(win "$state")" "$wpid";;
 stop)

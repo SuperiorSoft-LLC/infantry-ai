@@ -316,9 +316,21 @@ pub struct ProjectStore {
     pub lane_default: Mutex<i32>,
 }
 
+/// TESTENV-3: the env var naming the user-visible home folder (`~/Infantry AI` when unset). A daemon started with an
+/// explicit, non-default state dir sets it to a folder inside that state dir, so a test daemon leaves nothing in the real home.
+pub const HOME_ROOT_ENV: &str = "INFANTRY_HOME_ROOT";
+
+/// The user-visible home folder: `INFANTRY_HOME_ROOT`, else the user's home plus `Infantry AI` (None when neither is known).
+pub fn home_root() -> Option<PathBuf> {
+    if let Some(r) = std::env::var_os(HOME_ROOT_ENV).filter(|r| !r.is_empty()) {
+        return Some(PathBuf::from(r));
+    }
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).filter(|h| !h.is_empty())?;
+    Some(PathBuf::from(home).join("Infantry AI"))
+}
+
 fn default_projects_root() -> PathBuf {
-    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-    home.join("Infantry AI")
+    home_root().unwrap_or_else(|| PathBuf::from("Infantry AI"))
 }
 
 impl ProjectStore {
