@@ -36,7 +36,7 @@ import {
 } from "@infantry/client";
 import { useShallow } from "zustand/react/shallow";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
-import { useAgentList } from "@/daemon/agents";
+import { useAgentList, useDaemonHost, useSyncing } from "@/daemon/agents";
 import { useUi } from "@/state/ui-state";
 import { openSessionDialog } from "./session-actions";
 import { readImageFile, Thumb } from "./chat-images";
@@ -127,6 +127,8 @@ export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: st
   const queued = record?.queued ?? NO_QUEUE;
   const online = useDaemon((s) => s.connection.state === "open");
   const agentCount = useAgentList().length;
+  const syncing = useSyncing();
+  const host = useDaemonHost();
   // RUST-MIGRATE-1: a session live in the other app is never run here too (the daemon refuses it as well).
   const heldBy = record?.heldBy ?? undefined;
   // CHAT-GONE-1: the daemon no longer has this session (removed, ended, unknown after a restart): nothing can be sent.
@@ -367,7 +369,7 @@ ${cur}` : back);
         </p>
       )}
       <div className="truncate pb-0.5 pl-1.5 text-[11px] text-muted-foreground" data-testid="composer-status">
-        {composerStatusLine(null, agentCount, gone ? "gone" : record ? (busy ? "working" : String(record.state).toLowerCase()) : null)}
+        {syncing ? `Syncing with ${host}…` : composerStatusLine(null, agentCount, gone ? "gone" : record ? (busy ? "working" : String(record.state).toLowerCase()) : null)}
       </div>
       <div style={ring} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
         <div className="relative rounded-2xl bg-card" style={{ border: "var(--ring-w) solid var(--ring-c)", transition: "border-color 120ms" }}>

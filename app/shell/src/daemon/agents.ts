@@ -125,7 +125,8 @@ function cachedAgent(
  *  ("Syncing") meanwhile, so no session shows under a wrong or default project and nothing jumps when projects load. */
 export function useSyncing(): boolean {
   const loaded = useDaemon((s) => s.projectsLoaded);
-  const pending = useProjects((s) => s.projects.length > 0 && !s.currentId);
+  // Both stores: the daemon store's list and the projects store's own (which selects the current project).
+  const pending = useProjects((s) => !s.loaded || (s.projects.length > 0 && !s.currentId));
   return !loaded || pending;
 }
 
