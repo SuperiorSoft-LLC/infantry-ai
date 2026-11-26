@@ -467,11 +467,24 @@ fn save_notify(ctx: &mut Ctx, p: &Parsed, ticket_id: &str, created: bool) -> Res
     }
 }
 
+/// Whether the daemon lists a project with this exact id (a ticket under an unknown project is refused).
+fn project_known(ctx: &mut Ctx, id: &str) -> Result<bool, String> {
+    let answer = ctx.stream().request(&Envelope::new("project_list", ""), "projects", "project_list", true)?;
+    let rows: Vec<Value> = serde_json::from_str(&answer.data).map_err(|e| format!("malformed projects answer from the daemon: {e}"))?;
+    Ok(rows.iter().any(|r| r.get("id").and_then(Value::as_str) == Some(id.trim())))
+}
+
 /// `createTicket`.
 fn create(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
     check_contract(ctx)?;
     let title = p.val("title").unwrap_or("").trim().to_string();
     let project = Some(board_project(p, ctx.getenv)).filter(|x| !x.trim().is_empty());
+    if let Some(pid) = project.as_deref() {
+        if !project_known(ctx, pid)? {
+            ctx.err(format!("error: unknown project '{}': `infantry project list` shows the project ids", pid.chars().take(80).collect::<String>()));
+            return Ok(2);
+        }
+    }
     let Ok(epic_id) = epic_for(ctx, p, project.as_deref())? else { return Ok(2) };
     let paths = p.vals("image");
     let images = if paths.is_empty() {
