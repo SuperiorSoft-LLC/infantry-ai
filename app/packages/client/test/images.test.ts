@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 import { describe, expect, it } from "vitest";
-import { fetchImage, imageRefs, imageTag, uploadImage, type Envelope } from "../src";
+import { fetchImage, fileTag, imageRefs, imageTag, uploadImage, UPLOAD_UNAVAILABLE, type Envelope } from "../src";
 
 function link() {
   const taps = new Set<(e: Envelope) => void>();
@@ -38,5 +38,17 @@ describe("chat images", () => {
     const n = l.sent.length;
     expect(await fetchImage(l, ID)).toBe("data:image/png;base64,QQ==");
     expect(l.sent.length).toBe(n);
+  });
+
+  it("uploads any file as purpose file, and names the plugin when the frame is not served", async () => {
+    const l = link();
+    const up = uploadImage(l, "p1", "AAA=", "text/plain", "run.log", "file");
+    expect(JSON.parse(l.sent[0].data)).toEqual({ projectId: "p1", purpose: "file", base64: "AAA=", mimeType: "text/plain", fileName: "run.log" });
+    l.answer("image", { path: "/p/.infantry/uploads/file/x.log", mimeType: "text/plain", bytes: 3 });
+    expect(await up).toEqual({ ok: true, path: "/p/.infantry/uploads/file/x.log", mimeType: "text/plain" });
+    expect(fileTag("/a/x.log")).toBe("[file: /a/x.log]");
+    const off = uploadImage(l, "p1", "AAA=");
+    l.answer("error", "image_upload refused: this daemon does not serve that frame yet");
+    expect(await off).toEqual({ ok: false, text: UPLOAD_UNAVAILABLE });
   });
 });

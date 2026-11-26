@@ -21,6 +21,7 @@ import {
   composerToolsThatFit,
   imageRefs,
   imageTag,
+  fileTag,
   insertAt,
   matchSlash,
   setDraft,
@@ -53,6 +54,8 @@ const rows = (n: number) => n * LINE + 24;
 /** Kotlin COMPOSER_JOIN_RADIUS_DP / COMPOSER_TAB_RADIUS_DP. */
 const JOIN = 6;
 const IMAGE_MAX = 10 * 1024 * 1024;
+/** The daemon's limit for a non-image attachment (Infantry_Chat images.rs MAX_FILE_BYTES). */
+const FILE_MAX = 20 * 1024 * 1024;
 
 interface Act {
   label: string;
@@ -151,26 +154,25 @@ export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: st
   const refs = useMemo(() => imageRefs(text).refs, [text]);
   const attach = async (files: File[]) => {
     if (!files.length) return;
-    const others = files.filter((f) => !f.type.startsWith("image/"));
-    // The Rust daemon stores chat images only (`image_upload` purposes chat / ticket); other files are refused here.
-    if (others.length) setAttachError(`${others[0].name}: only images can be attached for now`);
-    else setAttachError(null);
-    if (!project) return setAttachError("Pick a project first: images are stored in a project.");
+    setAttachError(null);
+    if (!project) return setAttachError("Pick a project first: attachments are stored in a project.");
     let caret = box.current?.selectionStart ?? text.length;
     const into = chat; // an upload lands in the chat it was started from, even if the user switched away meanwhile
-
-    for (const f of files.filter((f) => f.type.startsWith("image/"))) {
-      const name = f.name || "pasted image";
-      if (f.size > IMAGE_MAX) {
-        setAttachError(`${name}: the file is over the 10 MB limit`);
+    for (const f of files) {
+      const name = f.name || "pasted file";
+      // Images go as chat images (shown as thumbnails); any other file (text, logs, PDFs, code) is stored as a file and named by path.
+      const image = /^image\/(png|jpeg|gif|webp)$/.test(f.type);
+      const max = image ? IMAGE_MAX : FILE_MAX;
+      if (f.size > max) {
+        setAttachError(`${name}: the file is over the ${max / (1024 * 1024)} MB limit`);
         continue;
       }
       setUploading((n) => n + 1);
       try {
-        const r = await uploadImage(daemonStore().getState(), project, await readImageFile(f), f.type, f.name);
+        const r = await uploadImage(daemonStore().getState(), project, await readImageFile(f), f.type, f.name, image ? "chat" : "file");
         if (r.ok) {
           const cur = draftOf(windowId, into);
-          const at = insertAt(cur, caret, imageTag(r.path));
+          const at = insertAt(cur, caret, (image ? imageTag : fileTag)(r.path));
           setDraft(windowId, into, at.text);
           caret = at.caret;
         } else setAttachError(`${name}: ${r.text}`);
@@ -376,7 +378,6 @@ ${cur}` : back);
           <input
             ref={fileInput}
             type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp"
             multiple
             hidden
             onChange={(e) => (void attach(Array.from(e.target.files ?? [])), (e.target.value = ""))}

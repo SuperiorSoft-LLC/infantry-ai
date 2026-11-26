@@ -10,6 +10,12 @@ import type { FrameLink } from "./stores/link";
 /** How an attached image travels in a prompt (Kotlin `ChatAttachments.image`). */
 export const imageTag = (path: string): string => `[image: ${path}]`;
 
+/** How any other attached file travels in a prompt: its stored path, which every harness can read. */
+export const fileTag = (path: string): string => `[file: ${path}]`;
+
+/** The plain sentence shown when the upload frame is not served: its plugin (Infantry_Chat) is off. */
+export const UPLOAD_UNAVAILABLE = "Attachments need the Chat plugin. Turn it on in Plugins.";
+
 const IMAGE_REF = /\[image: ([^\]\n]+)\]/g;
 
 export interface ImageRef {
@@ -31,13 +37,16 @@ export function imageRefs(text: string): { text: string; refs: ImageRef[] } {
 
 export type UploadAnswer = { ok: true; path: string; mimeType: string } | { ok: false; text: string };
 
-/** Uploads one chat image of [projectId]; the answer's path is what the prompt names. */
-export async function uploadImage(link: FrameLink, projectId: string, base64: string, mimeType?: string, fileName?: string): Promise<UploadAnswer> {
-  const body: Record<string, string> = { projectId, purpose: "chat", base64 };
+/** Uploads one chat image (purpose "chat") or any other file (purpose "file") of [projectId]; the answer's path is what the prompt names. */
+export async function uploadImage(link: FrameLink, projectId: string, base64: string, mimeType?: string, fileName?: string, purpose: "chat" | "file" = "chat"): Promise<UploadAnswer> {
+  const body: Record<string, string> = { projectId, purpose, base64 };
   if (mimeType) body.mimeType = mimeType;
   if (fileName) body.fileName = fileName;
   const a = await askFrame(link, { type: "image_upload", data: JSON.stringify(body) });
-  if (!a.ok) return { ok: false, text: a.text.replace(/^image_upload refused: /, "") };
+  if (!a.ok) {
+    const text = a.text.replace(/^image_upload refused: /, "");
+    return { ok: false, text: /does not serve that frame/.test(text) ? UPLOAD_UNAVAILABLE : text };
+  }
   try {
     const v = JSON.parse(a.env.data) as { path?: string; mimeType?: string };
     return v.path ? { ok: true, path: v.path, mimeType: v.mimeType ?? "" } : { ok: false, text: "the daemon stored no path" };
