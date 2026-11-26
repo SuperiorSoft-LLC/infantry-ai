@@ -80,3 +80,61 @@ fn a_local_build_stages_for_staging_and_a_bad_env_is_refused() {
     let (ok, _, err) = run(Some("live"), "release");
     assert!(!ok && err.contains("not prod, staging or dev"), "a bad env is refused: {err}");
 }
+
+/// SITES-ENV-1: the names of the steps in `workflow` that stage plugins (stage.sh, stage-external.sh or stage-bundle.sh)
+/// and run without `INFANTRY_BUILD_ENV: prod`, neither on the step nor on its job (nor workflow-wide).
+fn stage_steps_without_prod(workflow: &str) -> Vec<String> {
+    const PROD: &str = "INFANTRY_BUILD_ENV: prod";
+    let stages = |t: &str| ["stage.sh", "stage-external.sh", "stage-bundle.sh"].iter().any(|s| t.contains(s));
+    let lines: Vec<&str> = workflow.lines().collect();
+    let jobs_at = lines.iter().position(|l| l.trim_end() == "jobs:").unwrap_or(lines.len());
+    let top_prod = lines[..jobs_at].iter().any(|l| l.contains(PROD) && !l.trim_start().starts_with('#'));
+    let indent = |l: &str| l.len() - l.trim_start().len();
+    let mut bad = Vec::new();
+    let mut i = jobs_at + 1;
+    while i < lines.len() {
+        // A job: a key at indent 2 under jobs:. Its header runs to `steps:`; each step starts at "- " under it.
+        let job_end = (i + 1..lines.len()).find(|&j| !lines[j].trim().is_empty() && indent(lines[j]) <= 2).unwrap_or(lines.len());
+        let job = &lines[i..job_end];
+        let steps_at = job.iter().position(|l| l.trim_end().ends_with("steps:")).unwrap_or(job.len());
+        let job_prod = top_prod || job[..steps_at].iter().any(|l| l.contains(PROD) && !l.trim_start().starts_with('#'));
+        let starts: Vec<usize> = (steps_at..job.len()).filter(|&k| job[k].trim_start().starts_with("- ") && indent(job[k]) <= 6).collect();
+        for (n, &s) in starts.iter().enumerate() {
+            let step: Vec<&str> = job[s..*starts.get(n + 1).unwrap_or(&job.len())].iter().map(|l| l.split(" #").next().unwrap_or("")).filter(|l| !l.trim_start().starts_with('#')).collect();
+            let text = step.join("\n");
+            if stages(&text) && !job_prod && !text.contains(PROD) {
+                bad.push(format!("{} / {}", lines[i].trim(), step[0].trim()));
+            }
+        }
+        i = job_end;
+    }
+    bad
+}
+
+#[test]
+fn every_release_step_that_stages_plugins_runs_with_prod() {
+    for wf in ["os-app-release.yml", "rust-release.yml", "android-release.yml"] {
+        let w = std::fs::read_to_string(repo_root().join(".github/workflows").join(wf)).unwrap();
+        let bad = stage_steps_without_prod(&w);
+        assert!(bad.is_empty(), "{wf}: these steps stage plugins without INFANTRY_BUILD_ENV: prod (they ship staging endpoints): {bad:?}");
+    }
+}
+
+#[test]
+fn the_stage_step_check_catches_a_step_without_prod() {
+    // The 0.8.5 shape: prod on the build step only, not on the stage step.
+    let broken = "jobs:\n  package:\n    runs-on: x\n    steps:\n      - name: Build\n        env: { INFANTRY_BUILD_ENV: prod }\n        run: cargo build\n      - name: Stage the plugins\n        run: bash rust/plugins/stage.sh out release\n";
+    assert_eq!(stage_steps_without_prod(broken).len(), 1, "the 0.8.5 workflow shape must fail");
+    let fixed = broken.replace("    steps:\n", "    env: { INFANTRY_BUILD_ENV: prod }\n    steps:\n");
+    assert!(stage_steps_without_prod(&fixed).is_empty(), "job-level prod covers the stage step");
+    let step_level = "jobs:\n  a:\n    steps:\n      - name: Stage\n        env: { INFANTRY_BUILD_ENV: prod }\n        run: bash src-tauri/scripts/stage-bundle.sh\n";
+    assert!(stage_steps_without_prod(step_level).is_empty(), "step-level prod is enough");
+}
+
+#[test]
+fn the_os_app_workflow_checks_the_staged_plugins_for_local_endpoints() {
+    let w = std::fs::read_to_string(repo_root().join(".github/workflows/os-app-release.yml")).unwrap();
+    let stage = w.find("rust/plugins/stage.sh").expect("os-app stages the plugins");
+    let check = w.find(r"127\.0\.0\.1|localhost|\(staging\)").expect("a package check for local or staging endpoints");
+    assert!(check > stage && w[check..].contains("--include=module.json"), "the check runs after staging, over every module.json");
+}

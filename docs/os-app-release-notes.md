@@ -1,7 +1,4 @@
-Infantry AI 0.8.5 as a BattalionOS app.
+Infantry AI 0.8.6 as a BattalionOS app.
 
 What changed for you:
-- Hosting sign-in no longer dies on the way: the Services card says the true state. When you are not signed in it says "Not signed in" with a Sign in button, never "Connected" while signed out.
-- The Sites page shows what is happening: loading, not signed in (with Sign in), could not be reached, or your sites.
-- Decisions for you arrive as mail with answer buttons. Mail has "Mark all read" and "Archive read" to clear the inbox in one go.
-- Phones: from 0.8.5 on the phone app finds its own updates (Settings > About). A phone on 0.8.4 installs the 0.8.5 APK by hand once.
+- Infantry AI Hosting sign-in now reaches the real service. 0.8.4 and 0.8.5 shipped the hosting plugin pointed at a local test address (127.0.0.1:18953), so Sign in failed with "Connection Failed". Sign in again after updating.

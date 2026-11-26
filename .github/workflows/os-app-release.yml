@@ -43,6 +43,9 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 90
     defaults: { run: { shell: bash } }
+    # SITES-ENV-1: prod for EVERY step. Set on one step only, "Stage the plugins" ran without it and shipped Infantry_Sites
+    # with staging endpoints (127.0.0.1:18953) in 0.8.4 and 0.8.5. The guard bundled_plugins.rs checks this.
+    env: { INFANTRY_BUILD_ENV: prod }
     steps:
       - uses: actions/checkout@v4
       - name: "Checkout the infantry-plugins repo (bundled-external.json plugins are built from it)"
@@ -71,10 +74,15 @@ jobs:
         run: pnpm build
       - name: Build the daemon library and the CLI
         working-directory: rust
-        env: { INFANTRY_BUILD_ENV: prod, CARGO_BUILD_JOBS: '4' }
+        env: { CARGO_BUILD_JOBS: '4' }
         run: cargo build --release -p infantry-distribution -p infantry-cli
       - name: Stage the plugins
         run: bash rust/plugins/stage.sh "$RUNNER_TEMP/plugins" release
+      - name: The staged plugins carry no local or staging endpoint
+        run: |
+          set -euo pipefail
+          bad="$(grep -rlE '127\.0\.0\.1|localhost|\(staging\)' --include=module.json "$RUNNER_TEMP/plugins" || true)"
+          if [ -n "$bad" ]; then echo "::error::staged module.json with a local or staging endpoint:"; echo "$bad"; exit 1; fi
       - name: Check the VC++ runtime (a clean Windows has none)
         run: |
           set -euo pipefail
