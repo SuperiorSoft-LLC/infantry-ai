@@ -241,6 +241,8 @@ fn cli(root: &Path) -> String {
 fn schema_args(schema: &Value) -> String {
     let required: Vec<&str> = schema["required"].as_array().map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
     let Some(props) = schema["properties"].as_object() else { return String::new() };
+    // Sorted explicitly: feature unification (serde_json preserve_order, enabled by infantry-cli) must not change the page.
+    let props: BTreeMap<&String, &Value> = props.iter().collect();
     let mut out = String::new();
     for (k, v) in props {
         let ty = v["type"].as_str().map(str::to_string).unwrap_or_else(|| prim(&v["type"]));

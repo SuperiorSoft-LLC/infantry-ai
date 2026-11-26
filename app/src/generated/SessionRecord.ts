@@ -19,7 +19,19 @@ import type { SessionWaiting } from "./SessionWaiting";
  * in order (NEVER-default fields omitted), then the computed `live` and `turnActive`;
  * an IDLE session with background work reads BUSY on the wire.
  */
-export type SessionRecord = { id: string, provider: string, workingDir: string, spawnedAt: bigint, lastHeartbeat: bigint, state: SessionState, providerSessionId: string | null, childPid: bigint | null, childStartedAt: bigint | null, ownerId: string | null, runCount: number, resumeCount: number, lastExitCode: number | null, killOutcome: KillOutcome | null, killedBy: string | null, killReason: string | null, lastError: string | null, worktreePath: string | null, worktreeBranch: string | null, repoRoot: string | null, worktreeBaseRef: string | null, model: string | null, effort: string | null, contextLimit: number | null, contextLimitSupport: string | null, contextLimitSource: string | null, contextLimitHow: string | null, effortSupport: string | null, agentId: string | null, role: string | null, ticketId: string | null, contextSources: Array<ContextSource>, projectId: string | null, unattended: boolean, report: SessionReport | null, isProcessAlive: boolean, dormant: boolean, runner: string, keptProcess: KeptProcess | null, backgroundWork: BackgroundWork | null, bgJobs: Array<BgJob>, backgroundTasks: Array<BackgroundTaskView>, automation: SessionAutomation | null, lastAction: string | null, lastOutputAt: bigint | null, lastEventAt: bigint | null, lastTurnAt: bigint | null, watch: AgentWatch | null, watchLabel: string | null, runPhase: string | null, spawnerSessionId: string | null, global: boolean, progress: SessionProgress | null, waiting: SessionWaiting | null, mcp: string | null, mcpChangedAt: bigint | null, mcpServers: Array<McpServerStatusView>, queued: Array<QueuedTurn>, 
+export type SessionRecord = { id: string, provider: string, workingDir: string, spawnedAt: bigint, lastHeartbeat: bigint, state: SessionState, providerSessionId: string | null, childPid: bigint | null, childStartedAt: bigint | null, ownerId: string | null, runCount: number, resumeCount: number, lastExitCode: number | null, killOutcome: KillOutcome | null, killedBy: string | null, killReason: string | null, lastError: string | null, worktreePath: string | null, worktreeBranch: string | null, repoRoot: string | null, worktreeBaseRef: string | null, model: string | null, effort: string | null, contextLimit: number | null, contextLimitSupport: string | null, 
+/**
+ * Where `context_limit` came from: `ticket`, `session`, `role`, `project`, `app` or `default`.
+ */
+contextLimitSource: string | null, 
+/**
+ * How the harness applies it (or why it does not).
+ */
+contextLimitHow: string | null, effortSupport: string | null, agentId: string | null, role: string | null, ticketId: string | null, contextSources: Array<ContextSource>, projectId: string | null, unattended: boolean, report: SessionReport | null, isProcessAlive: boolean, dormant: boolean, runner: string, 
+/**
+ * RR-4: the id of the harness process on `runner` (the placement is kept with the session across a daemon restart).
+ */
+runnerProc: string | null, keptProcess: KeptProcess | null, backgroundWork: BackgroundWork | null, bgJobs: Array<BgJob>, backgroundTasks: Array<BackgroundTaskView>, automation: SessionAutomation | null, lastAction: string | null, lastOutputAt: bigint | null, lastEventAt: bigint | null, lastTurnAt: bigint | null, watch: AgentWatch | null, watchLabel: string | null, runPhase: string | null, spawnerSessionId: string | null, global: boolean, progress: SessionProgress | null, waiting: SessionWaiting | null, mcp: string | null, mcpChangedAt: bigint | null, mcpServers: Array<McpServerStatusView>, queued: Array<QueuedTurn>, 
 /**
  * RUST-MIGRATE-1 (additive, Rust daemon only): the other app that is running this session right now (a session
  * migrated from the Kotlin app that is live there). Computed per listing, never stored; a turn is refused while set.
