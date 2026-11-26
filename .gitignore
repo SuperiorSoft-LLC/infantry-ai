@@ -55,3 +55,10 @@ __pycache__/
 
 # BOS-31: the dev app folder (scripts/bos-dev-app.ps1)
 /dist-bosdev/
+
+# GITIGNORE-1: every cargo target dir, wherever a script or test puts it (rust/target, rust/target-wasm-test,
+# plugin/crate-local target dirs, --target-dir copies). DOCS-F committed rust/target-wasm-test by mistake (c99599df9).
+**/target/
+**/target-*/
+**/*.wasm
+!**/tests/fixtures/**/*.wasm

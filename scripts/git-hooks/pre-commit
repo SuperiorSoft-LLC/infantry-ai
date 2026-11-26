@@ -2,4 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) SuperiorSoft LLC
 # MERGE-MARKERS-1: concluding a merge with conflict markers is refused (see merge-marker-guard.sh).
-exec sh "$(dirname "$0")/merge-marker-guard.sh" pre-commit
+# GITIGNORE-1: adding build output (target dirs, files over 5 MB) is refused (see build-output-guard.sh).
+dir="$(dirname "$0")"
+sh "$dir/build-output-guard.sh" || exit 1
+exec sh "$dir/merge-marker-guard.sh" pre-commit
