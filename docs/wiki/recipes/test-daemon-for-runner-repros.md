@@ -4,7 +4,8 @@
 
 > **legacy-java:** this section describes the Kotlin app. It lives on the `legacy-java` branch. The Rust framework on main is described in [Architecture](../Architecture.md).
 
-> **Rust daemon:** on main, start a throwaway daemon with `cargo run -p infantry-distribution -- --port <free port> --state-dir <scratch dir>` from `rust/`. Use a free port, never 8787, 8788, 8797 or 8798. The Gradle steps below are the Kotlin ones.
+> **Rust daemon:** on main, one command starts a throwaway Rust daemon: `scripts/test-daemon.sh start [--worktree <dir>] [--bin <infantry-daemon.exe>] [--plugins <dir>] [--name <n>]`
+> (or the project Lua script `test-daemon`, `{"action":"start"}`). It runs the daemon detached on 127.0.0.1 and a free 189xx port (never 18990, 8787, 8788, 8797 or 8798), on a fresh temp state dir, with every `INFANTRY_*`, `AGENTHQ_*`, `BATTALION_*` and `CLAUDE*` variable removed and `INFANTRY_PLUGINS_DIR` set to `--plugins` or an empty dir. It waits for `/health` 200 and prints one JSON line (url, port, pid, state dir, log file). The binary is `--bin`, else a `cargo build -p infantry-distribution` in `--worktree`, else the newest `*-rust-*` packaged build. Stop it with `scripts/test-daemon.sh stop --pid <pid>` (kills by PID only, deletes the state dir); `status` lists the running ones. The Gradle steps below are the Kotlin ones.
 
 ## Legacy (Kotlin) reference
 
