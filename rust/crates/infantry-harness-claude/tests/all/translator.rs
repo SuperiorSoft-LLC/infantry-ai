@@ -29,6 +29,7 @@ const T: Timings = Timings {
     ready_fallback_ms: 8_000,
     dialog_grace_ms: 3_000,
     first_submit_ms: 30_000,
+    first_submit_recoveries: 3,
     hook_silent_ms: 20_000,
     own_idle_ms: 20_000,
     screen_tail_chars: 600,
@@ -450,7 +451,7 @@ fn the_screen_in_a_failure_reason_starts_at_the_first_row_with_words() {
 }
 
 #[test]
-fn a_first_paste_the_booting_cli_lost_is_entered_again_once_then_fails() {
+fn a_first_paste_the_booting_cli_lost_is_entered_again_with_backoff_then_fails() {
     let mut r = Rig::new(ApprovalMode::AllowAll);
     let p = "read a.txt and tell me what it says";
     r.entered(p);
@@ -459,12 +460,53 @@ fn a_first_paste_the_booting_cli_lost_is_entered_again_once_then_fails() {
     r.now = pasted_at + T.first_submit_ms;
     r.tick();
     assert_eq!(r.written.last().unwrap(), tty::ENTER, "the prompt sits in the box: Enter again");
-    assert!(r.seen.iter().any(|e| matches!(e, HarnessEvent::Warning(w) if w.contains("Enter pressed again"))));
-    r.now += T.first_submit_ms;
+    assert!(r.seen.iter().any(|e| matches!(e, HarnessEvent::Warning(w) if w.contains("recovery 1 of 3: Enter pressed again"))));
+    // START-PASTE-1: each later recovery waits twice as long, so a loaded PC gets 30 + 60 + 120 + 240 s.
+    for n in 1..=T.first_submit_recoveries {
+        let wait = T.first_submit_ms << n;
+        r.now += wait - 1;
+        r.tick();
+        assert!(r.ends().is_empty(), "not yet due before recovery {}", n + 1);
+        r.now += 1;
+        r.tick();
+    }
+    let ends = r.ends();
+    assert_eq!(ends.len(), 1, "{ends:?}");
+    assert_eq!(ends[0].0, TurnEnd::Failed);
+    let why = ends[0].1.as_deref().unwrap();
+    assert!(why.contains("after 3 recoveries"), "{why}");
+    assert!(why.contains("screen: ") && !why.ends_with("screen: "), "the screen is named: {why}");
+}
+
+#[test]
+fn a_slow_start_that_draws_nothing_is_waited_for_then_named_empty() {
+    // START-PASTE-1: under 100% CPU claude can draw nothing for long after the paste; that is a slow start, not a lost paste.
+    let mut r = Rig::new(ApprovalMode::AllowAll);
+    r.entered("hello there");
+    r.rows = vec![String::new(); 4];
+    r.now += T.first_submit_ms * 3;
     r.tick();
+    let pastes = r.written.iter().filter(|w| **w == paste("hello there")).count();
+    assert_eq!(pastes, 1, "nothing re-sent while the screen is blank and the boot time is not up");
+    assert!(r.ends().is_empty());
+    r.now += T.boot_timeout_ms * 8;
+    for _ in 0..=T.first_submit_recoveries { r.now += T.first_submit_ms << 4; r.tick(); }
     let ends = r.ends();
     assert_eq!(ends[0].0, TurnEnd::Failed);
-    assert!(ends[0].1.as_deref().unwrap().contains("after one recovery"), "{ends:?}");
+    assert!(ends[0].1.as_deref().unwrap().contains("(empty: claude drew no text"), "{ends:?}");
+}
+
+#[test]
+fn a_slow_start_that_draws_late_takes_the_prompt() {
+    let mut r = Rig::new(ApprovalMode::AllowAll);
+    r.entered("hello there");
+    r.rows = vec![String::new(); 4];
+    r.now += T.first_submit_ms * 2;
+    r.tick();
+    r.event("submit");
+    r.now += T.boot_timeout_ms;
+    r.tick();
+    assert!(r.ends().is_empty(), "taken once the loaded CLI caught up");
 }
 
 #[test]

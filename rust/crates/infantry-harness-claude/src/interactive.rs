@@ -69,8 +69,11 @@ pub struct Timings {
     /// Up without a `SessionStart` hook: this long after the first screen.
     pub ready_fallback_ms: u64,
     pub dialog_grace_ms: u64,
-    /// FIRST-TURN-1: from the first paste to the CLI taking it before one recovery (0 = not watched).
+    /// FIRST-TURN-1: from the first paste to the CLI taking it before the first recovery (0 = not watched). Each later
+    /// recovery waits twice as long as the one before (START-PASTE-1: a loaded PC can take minutes to draw).
     pub first_submit_ms: u64,
+    /// START-PASTE-1: recoveries (Enter again or the prompt pasted again) before the first turn fails.
+    pub first_submit_recoveries: u32,
     /// HOOK-SHELL-1: an answered turn with no hook event this long means the hooks write nothing (said once).
     pub hook_silent_ms: u64,
     /// RESTART-HANG-1: a turn of the CLI's own that, with a prompt waiting behind it, draws nothing, records nothing and
@@ -96,6 +99,7 @@ impl Default for Timings {
             ready_fallback_ms: 8_000,
             dialog_grace_ms: 3_000,
             first_submit_ms: 30_000,
+            first_submit_recoveries: 3,
             hook_silent_ms: 20_000,
             own_idle_ms: 20_000,
             screen_tail_chars: 600,
@@ -121,6 +125,7 @@ struct Turn {
     /// FIRST-TURN-1: the process's first pasted turn, held to the submit deadline.
     watched: bool,
     recovery: Option<&'static str>,
+    recoveries: u32,
     recovered_at: Option<u64>,
 }
 
@@ -479,7 +484,27 @@ impl Interactive {
             return false;
         }
         let (Some(pasted), true) = (turn.pasted_at, self.t.first_submit_ms > 0) else { return false };
-        self.now.saturating_sub(pasted.max(turn.recovered_at.unwrap_or(0))) >= self.t.first_submit_ms
+        // START-PASTE-1: a CLI that has drawn nothing yet is still starting (a loaded PC): wait for it up to the boot timeout.
+        if self.screen_tail().is_empty() && self.now.saturating_sub(turn.opened_at) < self.t.boot_timeout_ms {
+            return false;
+        }
+        self.now.saturating_sub(pasted.max(turn.recovered_at.unwrap_or(0))) >= self.first_submit_wait(turn)
+    }
+
+    /// START-PASTE-1: the wait before the next recovery, doubled after each one.
+    fn first_submit_wait(&self, turn: &Turn) -> u64 {
+        self.t.first_submit_ms.saturating_mul(1u64 << turn.recoveries.min(8))
+    }
+
+    /// START-PASTE-1: the screen for a failure reason; an empty one says how long claude has drawn nothing.
+    fn screen_for_reason(&self) -> String {
+        let tail = self.screen_tail();
+        if !tail.is_empty() {
+            return tail;
+        }
+        let quiet = self.now.saturating_sub(self.last_output_at) / 1000;
+        let rows = self.rows.iter().filter(|r| !r.trim().is_empty()).count();
+        format!("(empty: claude drew no text; last output {quiet} s ago, {rows} non-blank rows, raw: {:?})", self.rows.iter().map(|r| r.trim_end()).filter(|r| !r.is_empty()).collect::<Vec<_>>().join(" | "))
     }
 
     /// RESTART-HANG-1: [turn] is one the CLI started itself, a prompt of the host's waits behind it, and the CLI shows no
@@ -575,10 +600,15 @@ impl Interactive {
             self.end(turn, TurnEnd::Completed, None, out);
             return;
         } else if self.first_turn_due(&turn) {
-            let waited = format!("took no prompt {} s after the paste", self.t.first_submit_ms / 1000);
-            if let Some(tried) = turn.recovery {
-                let reason =
-                    format!("the interactive claude {waited}, after one recovery ({tried}); screen: {}", self.screen_tail());
+            let waited = format!("took no prompt {} s after the paste", now.saturating_sub(turn.opened_at) / 1000);
+            if turn.recoveries >= self.t.first_submit_recoveries {
+                let tried = turn.recovery.unwrap_or("none");
+                let n = turn.recoveries;
+                let reason = format!(
+                    "the interactive claude {waited}, after {n} recover{} (last: {tried}); screen: {}",
+                    if n == 1 { "y" } else { "ies" },
+                    self.screen_for_reason()
+                );
                 self.end(turn, TurnEnd::Failed, Some(reason), out);
                 return;
             }
@@ -595,8 +625,14 @@ impl Interactive {
                 "the prompt pasted again"
             };
             turn.recovery = Some(tried);
+            turn.recoveries += 1;
             turn.recovered_at = Some(now);
-            out.push(HarnessEvent::Warning(format!("claude: the first turn {waited}; trying once: {tried}")));
+            out.push(HarnessEvent::Warning(format!(
+                "claude: the first turn {waited}; recovery {} of {}: {tried}; screen: {}",
+                turn.recoveries,
+                self.t.first_submit_recoveries,
+                self.screen_for_reason()
+            )));
         } else if turn.pasted_at.is_some_and(|p| now.saturating_sub(p) >= self.t.paste_settle_ms) && turn.entered_at.is_none() {
             self.key(ENTER);
             turn.entered_at = Some(now);
