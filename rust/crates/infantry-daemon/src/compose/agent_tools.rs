@@ -650,6 +650,12 @@ mod wake_route_tests {
     use infantry_scripting::host::ScriptHost;
 
     fn setup() -> (std::path::PathBuf, Arc<Daemon>, Arc<crate::compose::Composed>, String) {
+        // TESTS-RED-1: the daemon's own WAKE-2 tool is under test, not an installed plugin's. A worker shell under
+        // BattalionOS inherits BATTALION_APP_DIR, so without this the owner's installed plugins load and Infantry_Chat's
+        // `infantry_message` ("ok <id> QUEUED") answers first. An empty plugins dir (it wins over the package dir) = CI.
+        let none = std::env::temp_dir().join("infantry-wake2-no-plugins");
+        std::fs::create_dir_all(&none).unwrap();
+        std::env::set_var(crate::compose::PLUGINS_DIR_ENV, &none);
         let dir = std::env::temp_dir().join(format!("infantry-wake2-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let daemon = Daemon::new(Arc::new(crate::harness::stub::Stub { start_ms: 5_000, line_ms: 25 }), Config::new(dir.clone(), dir.clone())).unwrap();
