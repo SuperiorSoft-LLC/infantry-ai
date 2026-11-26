@@ -207,7 +207,10 @@ export function ConnectScreen() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="pair-token">Token</Label>
-              <Input id="pair-token" type="password" autoComplete="off" placeholder="From `infantry pair` on the daemon's machine" value={token} onChange={(e) => setToken(e.target.value)} />
+              <Input id="pair-token" type="password" autoComplete="off" placeholder="Pairing token" aria-describedby="pair-token-hint" value={token} onChange={(e) => setToken(e.target.value)} />
+              <p id="pair-token-hint" className="text-xs text-muted-foreground break-words">
+                From <code>infantry pair</code> on the daemon's machine.
+              </p>
             </div>
             {name && <p className="text-xs text-muted-foreground">Daemon: {name}</p>}
             {error && (
