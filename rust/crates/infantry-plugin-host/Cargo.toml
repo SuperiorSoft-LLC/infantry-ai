@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 infantry-proc = { path = "../infantry-proc" }
 infantry-core = { path = "../infantry-core" }
+infantry-protocol = { path = "../infantry-protocol" }
 infantry-plugin-wit = { path = "../infantry-plugin-wit" }
 wasmtime = "50"
 wasmtime-wasi = { version = "50", default-features = false, features = ["p2"] }

@@ -34,7 +34,8 @@ cp module.json plugins/official/Acme_Hello/
 cp target/wasm32-wasip2/release/acme_hello.wasm plugins/official/Acme_Hello/daemon.component
 ```
 
-Use `official/`: the daemon does not load a `community/` folder yet ([Overview](overview.md)).
+Your own plugin goes under `community/` with the owner's grants in `modules.json`, or under `official/` in a plugins
+folder you control ([Overview](overview.md)).
 
 For the plugins inside the Infantry AI repository, `rust/plugins/stage.sh <out-dir> [release]` does steps 2 and 3 for
 every module under `rust/plugins/official` (it also builds the web UI halves and copies `data` folders, and stages the

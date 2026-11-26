@@ -42,7 +42,7 @@ A catalog document:
 ] }
 ```
 
-`base` is a URL or a path next to the catalog. `tier` must be `official` or `core`. A file path may not leave the module
+`base` is a URL or a path next to the catalog. `tier` must be `official`, `core` or `community`. A file path may not leave the module
 folder. Each download is capped by the setting `catalog.maxFileBytes` (default 64 MiB). A failed refresh keeps the
 previous copy.
 
@@ -51,7 +51,9 @@ The user's list is `plugin-sources.json` in the state dir, shared by every conne
 
 ## Commands
 
-All are operations of the owner-only frame `plugin_admin` (`{"args": [op, id?]}`, answered `{code, out, err}`), which the app's plugin manager sends. The native `infantry` CLI has no `plugin` command yet.
+All are operations of the owner-only frame `plugin_admin` (`{"args": [op, id?]}`, answered `{code, out, err}`), which the app's plugin manager sends. From the command line: `infantry plugin <op> [id...] [--approve]` sends the same
+frame with the owner token of the state dir, prints `out` and `err`, and exits with `code`
+(`rust/crates/infantry-cli/src/cli/cmd_plugin.rs`). Example: `infantry plugin install Acme_Hello`.
 
 | Op | Does |
 |---|---|

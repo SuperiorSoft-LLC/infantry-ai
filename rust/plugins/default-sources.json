@@ -1,9 +1,10 @@
 {
-  "_": "PLUGIN-SRC-1: the plugin sources a host starts with. stage.sh copies this file into the staged plugins folder; the daemon adds each location once (a source the user removed is not added again). Add a source here, not in code. NEWS-PLUGIN-1: Official is the catalog of BUILT modules the infantry-plugins CI publishes on its dist branch (the repo itself holds sources only).",
+  "_": "PLUGIN-SRC-1: the plugin sources a host starts with. stage.sh copies this file into the staged plugins folder; the daemon adds each location once (a source the user removed is not added again). Add a source here, not in code. NEWS-PLUGIN-1: Official is the catalog of BUILT modules the infantry-plugins CI publishes on its dist branch (the repo itself holds sources only). PLUGIN-GAPS-1: `replaces` names old default locations; a host that seeded one drops it once (never a source the user added).",
   "sources": [
     {
       "location": "https://raw.githubusercontent.com/SuperiorSoft-LLC/infantry-plugins/dist/catalog.json",
-      "label": "Official"
+      "label": "Official",
+      "replaces": ["https://github.com/SuperiorSoft-LLC/infantry-plugins"]
     }
   ]
 }

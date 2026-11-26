@@ -46,10 +46,20 @@ The daemon loads every module under its plugins folder:
 `<plugins>` is the `INFANTRY_PLUGINS_DIR` environment variable, else the `plugins` folder beside the daemon executable.
 The tier (`core`, `official`, `community`) comes from the folder, never from the manifest.
 
-**Today only `official/` and `core/` are loaded.** The `community` tier exists in the plugin host, with its rules
-(grants from a `modules.json` allow list), but the daemon does not load a `community/` folder yet (`TIERS` in
-`rust/crates/infantry-daemon/src/compose/plugins.rs`). To run your own plugin now, put it under `official/` in a
-plugins folder you control.
+`official/`, `core/` and `community/` are loaded (`TIERS` in `rust/crates/infantry-daemon/src/compose/plugins.rs`).
+A third-party plugin goes under `community/`. A community module loads only with the grants the owner lists for it in
+`modules.json` in the daemon's state dir (read at start; restart the daemon after editing it):
+
+```json
+{ "Acme_Hello": { "allow": ["daemon.code", "daemon.tool", "daemon.frame", "daemon.import.http"] } }
+```
+
+`daemon.code` lets its daemon half run at all; `daemon.tool`, `daemon.frame` and `daemon.hook.<kind>` cover what it
+declares; `daemon.import.<name>` covers each import in `daemon.needs` (a refused `wants` entry is linked denied);
+`daemon.native` allows a native sidecar. A missing grant refuses the module (`missing grant '<g>' in modules.json`).
+Whatever it is granted, a community module may never declare routes or public routes, admit tokens, send or declare
+owner frames, or adopt core tables, its web UI half is not served yet, and its `account.providers` are ignored
+(plugin host rules: `rust/crates/infantry-plugin-host/src/host.rs`).
 
 ## Lifecycle
 

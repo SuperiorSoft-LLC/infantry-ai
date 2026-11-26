@@ -9,7 +9,7 @@ the overview below; a wrong command prints its own usage line and exits with cod
 
 These commands are served by the binary itself (`registry.rs`); `progress`, `run` and `waiting` also take raw words.
 
-`agents`, `ask`, `board`, `harness-install`, `harness-status`, `health`, `inbox`, `install-cli`, `issue`, `kill`, `project`, `prompt`, `read`, `remote`, `run-cmd`, `runner`, `script`, `secret`, `send`, `session`, `settings`, `thread`, `threads`, `ticket`, `tickets`, `uninstall-cli`, `usage`, `waiting`, `worktrees`
+`agents`, `ask`, `board`, `harness-install`, `harness-status`, `health`, `inbox`, `install-cli`, `issue`, `kill`, `plugin`, `project`, `prompt`, `read`, `remote`, `run-cmd`, `runner`, `script`, `secret`, `send`, `session`, `settings`, `thread`, `threads`, `ticket`, `tickets`, `uninstall-cli`, `usage`, `waiting`, `worktrees`
 
 ## Overview (`infantry --help`)
 
@@ -112,6 +112,9 @@ Tickets:
   settings [get [<key>]]   The daemon's durable settings, one `key = value` per line
   settings set <key> <value>   Store one (a number, true/false, JSON, or text); a refusal names the accepted range
   settings limits     Every limit (caps, thresholds, timeouts): value, default, range, what 0 means, its env name
+  plugin <op> [id...] [--approve]   The plugin manager (owner): status, available, search, show, install, uninstall,
+                      enable, disable, updates, update, sources, source-add, source-remove, source-refresh; --approve
+                      accepts a module signed by a key that is not a trusted signer
   health [--json]     Daemon health and environment: up/down, pid, port, uptime, last restart and why, plugins (and any
                       PluginGuard disabled), MCP bridges, OS/shell/paths/off-limits ports. Works with the daemon or the MCP
                       bridge down (reads the state dir). Same report as the infantry_health MCP tool.
@@ -297,6 +300,12 @@ infantry waiting show                                           print the flag
 The flag also clears by itself when your next turn starts, and expires N minutes (+ grace) after it was set.
 ```
 
+### cmd_plugin (`PLUGIN_USAGE`)
+
+```text
+usage: infantry plugin <status|available|search|show|install|uninstall|enable|disable|updates|update|sources|source-add|source-remove|source-refresh|signers|signer-add|signer-remove> [id...] [--approve]
+```
+
 ### cmd_project (`USAGE`)
 
 ```text
@@ -469,6 +478,7 @@ with `-`), `any` (any next word), `multi` / `multi-any` (repeatable), `switch` (
 | `--exclusive` | switch |  |
 | `--append` | switch |  |
 | `--edit` | switch |  |
+| `--approve` | switch |  |
 | `--role` | value | --role expects a role id (see: infantry role list) |
 | `--provider` | value | --provider expects a harness id (claude, opencode, pi, ...) |
 | `--model` | value | --model expects a model id the provider lists |

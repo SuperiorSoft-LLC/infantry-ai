@@ -266,6 +266,8 @@ impl SourceStore {
         for d in list["sources"].as_array().cloned().unwrap_or_default() {
             let Some(loc) = d["location"].as_str().map(str::trim).filter(|l| !l.is_empty()) else { continue };
             if seeded.iter().any(|s| s == loc) {
+                // A host that already seeded the new default may still list the old one it replaces.
+                lines.extend(self.drop_replaced(&d, &seeded));
                 continue;
             }
             let label = d["label"].as_str().map(str::to_string);
@@ -288,6 +290,28 @@ impl SourceStore {
             if ok {
                 seeded.push(loc.to_string());
                 let _ = super::host_frames::write_json(&seeded_file, &json!(seeded));
+                lines.extend(self.drop_replaced(&d, &seeded));
+            }
+        }
+        lines
+    }
+
+    /// PLUGIN-GAPS-1: a default entry may name the old locations it `replaces` (data in the defaults file, never code).
+    /// An old location is dropped only when this host seeded it from the defaults (it is in the seeded list) and it is
+    /// still listed with a label (the seeded default): a source the user added by hand has no label and is kept.
+    fn drop_replaced(&self, entry: &Value, seeded: &[String]) -> Vec<String> {
+        let mut lines = Vec::new();
+        for old in entry["replaces"].as_array().cloned().unwrap_or_default() {
+            let Some(old) = old.as_str().map(str::trim).filter(|o| !o.is_empty()) else { continue };
+            if !seeded.iter().any(|s| s == old) {
+                continue;
+            }
+            let id = self.items.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|s| s.location == old && s.label.is_some()).map(|s| s.id.clone());
+            if let Some(id) = id {
+                match self.remove(&id) {
+                    Ok(_) => lines.push(format!("{old}: replaced by the new default")),
+                    Err(e) => lines.push(format!("{old}: not replaced ({e})")),
+                }
             }
         }
         lines
@@ -518,6 +542,34 @@ mod tests {
         // No defaults file: nothing happens.
         assert!(SourceStore::load(&state).seed_defaults(&cfg.join("none.json")).is_empty());
         for d in [state, src, cfg] {
+            let _ = std::fs::remove_dir_all(d);
+        }
+    }
+
+    #[test]
+    fn a_seeded_default_is_replaced_once_but_a_hand_added_source_is_kept() {
+        let (state, old, new, hand, cfg) = (tmp("rs"), tmp("rsold"), tmp("rsnew"), tmp("rshand"), tmp("rscfg"));
+        for d in [&old, &new, &hand] {
+            module(d, "Ps_Rep", "1.0.0");
+        }
+        let defaults = cfg.join(DEFAULTS_FILE);
+        std::fs::write(&defaults, json!({ "sources": [ { "location": old.display().to_string(), "label": "Official" } ] }).to_string()).unwrap();
+        let store = SourceStore::load(&state);
+        store.seed_defaults(&defaults);
+        store.add(&hand.display().to_string()).unwrap();
+        let (old_loc, hand_loc) = (store.list()[0]["location"].as_str().unwrap().to_string(), store.list()[1]["location"].as_str().unwrap().to_string());
+        // A newer release names a new Official that replaces the old one (and, wrongly, the hand-added one).
+        std::fs::write(&defaults, json!({ "sources": [ { "location": new.display().to_string(), "label": "Official", "replaces": [old_loc, hand_loc] } ] }).to_string()).unwrap();
+        let store = SourceStore::load(&state);
+        let lines = store.seed_defaults(&defaults);
+        assert!(lines.iter().any(|l| l.contains("replaced by the new default")), "{lines:?}");
+        let locs: Vec<String> = store.list().iter().map(|s| s["location"].as_str().unwrap().to_string()).collect();
+        assert!(!locs.iter().any(|l| l == &old_loc), "the seeded old default is gone: {locs:?}");
+        assert!(locs.iter().any(|l| l == &hand_loc), "a hand-added source is never dropped: {locs:?}");
+        assert_eq!(locs.len(), 2);
+        // Once only: a later start changes nothing.
+        assert!(SourceStore::load(&state).seed_defaults(&defaults).is_empty());
+        for d in [state, old, new, hand, cfg] {
             let _ = std::fs::remove_dir_all(d);
         }
     }

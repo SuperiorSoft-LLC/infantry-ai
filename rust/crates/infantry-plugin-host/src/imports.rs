@@ -300,6 +300,9 @@ impl PluginImports {
         // The owner's authority is an explicit, per-frame-type grant of the manifest (`daemon.ownerFrames`), official and
         // core modules only; the `frames` grant alone sends every frame as a non-owner.
         let as_owner = self.tier != Tier::Community && self.decl.owner_frames.iter().any(|f| f == r#type);
+        if let Some(why) = undeclared_secret(&self.module_id, &self.decl.secrets, r#type, data) {
+            return Err(why);
+        }
         self.services.frame_request(&self.module_id, Frame { r#type: r#type.into(), data: data.into(), session_id, request_id: None }, caller.as_ref(), as_owner, timeout_ms)
     }
 
@@ -484,5 +487,36 @@ mod tests {
         // Allowed by the filter; MemoryServices has no network, so its own error comes back.
         assert!(i.http_send(req("https://api.example/v1/things?q=1")).unwrap_err().contains("no network"));
         assert!(glob("ticket.*", "ticket.moved") && !glob("ticket.*", "session.ended") && glob("*", "x"));
+    }
+}
+
+/// PLUGIN-GAPS-1: `daemon.secrets` is the list of vault fields a module may read, write or clear. A module that lists
+/// any is refused a `plugin_secret_get` / `_set` / `_clear` of a field the list does not name; an empty list (or none)
+/// leaves the field free, as before. The vault rules (own entry only, no `INFANTRY_` field) apply either way.
+pub fn undeclared_secret(module: &str, declared: &[String], r#type: &str, data: &str) -> Option<String> {
+    use infantry_protocol::frames::{PLUGIN_SECRET_CLEAR, PLUGIN_SECRET_GET, PLUGIN_SECRET_SET};
+    if declared.is_empty() || ![PLUGIN_SECRET_GET, PLUGIN_SECRET_SET, PLUGIN_SECRET_CLEAR].contains(&r#type) {
+        return None;
+    }
+    let field = serde_json::from_str::<serde_json::Value>(data).ok().and_then(|v| v.get("field").and_then(|f| f.as_str()).map(|f| f.trim().to_string())).unwrap_or_default();
+    if declared.iter().any(|d| d.trim() == field) {
+        return None;
+    }
+    Some(format!("{type} refused: field '{field}' is not in daemon.secrets of {module} ({})", declared.join(", "), type = r#type))
+}
+
+#[cfg(test)]
+mod secrets_tests {
+    use super::undeclared_secret;
+
+    #[test]
+    fn daemon_secrets_limits_the_vault_fields_a_module_reaches() {
+        let declared = vec!["API_KEY".to_string()];
+        assert_eq!(undeclared_secret("Acme", &declared, "plugin_secret_get", r#"{"field":"API_KEY"}"#), None);
+        let why = undeclared_secret("Acme", &declared, "plugin_secret_set", r#"{"field":"OTHER","value":"x"}"#).unwrap();
+        assert!(why.contains("not in daemon.secrets of Acme"), "{why}");
+        assert!(undeclared_secret("Acme", &declared, "plugin_secret_clear", "{}").is_some(), "no field is not a declared field");
+        assert_eq!(undeclared_secret("Acme", &[], "plugin_secret_get", r#"{"field":"ANY"}"#), None, "an empty list leaves the field free");
+        assert_eq!(undeclared_secret("Acme", &declared, "ticket_list", "{}"), None, "other frames are not touched");
     }
 }

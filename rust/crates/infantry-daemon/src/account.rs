@@ -215,7 +215,7 @@ fn now_ms() -> i64 {
 /// same environment as the plugin's own calls and no stage script has to render them.
 pub fn declared_providers(plugins_dir: &Path, environment: &str, log: &dyn Fn(&str)) -> Vec<Provider> {
     let mut out: Vec<Provider> = Vec::new();
-    for tier in crate::compose::plugins::TIERS {
+    for tier in crate::compose::plugins::TRUSTED_TIERS {
         let Ok(rd) = std::fs::read_dir(plugins_dir.join(tier)) else { continue };
         for e in rd.filter_map(|e| e.ok()) {
             let Some(v) = std::fs::read_to_string(e.path().join("module.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else { continue };

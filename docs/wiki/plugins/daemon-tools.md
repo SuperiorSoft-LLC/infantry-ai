@@ -78,3 +78,14 @@ A sidecar (`daemon.sidecar: {exe, args}`) implements the same world as JSON line
 module of `infantry-plugin-wit`); callers cannot tell it from a component. It runs with no console window, a scrubbed
 environment (only `daemon.env` names pass), and its stderr goes to the daemon log. Use one when the plugin needs
 something WASM cannot do (SSH, a native library). The Rust side of a sidecar builds with `infantry-plugin-sdk`.
+
+`infantry-plugin-sdk` (and `infantry-plugin-wit`, which it needs) are not on crates.io (`publish = false`). Outside the
+repository, take them from git, pinned to a commit or tag:
+
+```toml
+[dependencies]
+infantry-plugin-sdk = { git = "https://github.com/SuperiorSoft-LLC/infantry-ai", rev = "<commit>" }
+```
+
+or a `path` dependency into a local checkout (`<checkout>/rust/crates/infantry-plugin-sdk`), or a vendored copy of both
+crates. Publishing them to crates.io needs the owner (both crates flipped to publishable and released together).

@@ -100,6 +100,9 @@ Tickets:
   settings [get [<key>]]   The daemon's durable settings, one `key = value` per line
   settings set <key> <value>   Store one (a number, true/false, JSON, or text); a refusal names the accepted range
   settings limits     Every limit (caps, thresholds, timeouts): value, default, range, what 0 means, its env name
+  plugin <op> [id...] [--approve]   The plugin manager (owner): status, available, search, show, install, uninstall,
+                      enable, disable, updates, update, sources, source-add, source-remove, source-refresh; --approve
+                      accepts a module signed by a key that is not a trusted signer
   health [--json]     Daemon health and environment: up/down, pid, port, uptime, last restart and why, plugins (and any
                       PluginGuard disabled), MCP bridges, OS/shell/paths/off-limits ports. Works with the daemon or the MCP
                       bridge down (reads the state dir). Same report as the infantry_health MCP tool.

@@ -5,7 +5,8 @@ A plugin never keeps an API key in `module.json`, in its settings or in its stor
 
 Truth: `rust/crates/infantry-vault/src/handler.rs` (`plugin_secret_*`),
 `rust/crates/infantry-daemon/src/compose/scope.rs` (`own_secret_request`),
-`rust/crates/infantry-daemon/src/compose/plugins.rs` (the `frames` import).
+`rust/crates/infantry-daemon/src/compose/plugins.rs` (the `frames` import),
+`rust/crates/infantry-plugin-host/src/imports.rs` (`daemon.secrets`).
 
 ## Reading and writing from the daemon half
 
@@ -40,8 +41,11 @@ asks for it in its own UI and sends `plugin_secret_set`. Agents and scripts see 
 
 ## `daemon.secrets`
 
-`module.json` may list `daemon.secrets` (the field names the plugin uses). The daemon parses the list today but does not
-act on it: access is decided by the rules above, not by this list. Keep it as documentation of what the plugin needs.
+`module.json` may list `daemon.secrets`: the vault fields the plugin uses (`["API_KEY"]`). When the list is not empty,
+`plugin_secret_get`, `_set` and `_clear` of a field it does not name are refused
+(`plugin_secret_get refused: field 'X' is not in daemon.secrets of <Module> (API_KEY)`). An empty or missing list
+leaves the field free. The rules above apply either way. Truth: `undeclared_secret` in
+`rust/crates/infantry-plugin-host/src/imports.rs`.
 
 ## Sidecars
 

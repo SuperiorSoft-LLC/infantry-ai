@@ -1485,6 +1485,7 @@ dependencies = [
  "infantry-core",
  "infantry-plugin-wit",
  "infantry-proc",
+ "infantry-protocol",
  "rusqlite",
  "serde",
  "serde_json",

@@ -19,8 +19,14 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, RwLock, Weak};
 use std::time::Duration;
 
-/// The tiers loaded from the plugins folder (community modules need the owner's modules.json allow list: not yet).
-pub const TIERS: &[&str] = &["official", "core"];
+/// The tiers loaded from the plugins folder. A community module loads only with the grants the owner lists for it in
+/// [ALLOW_FILE] (the plugin host refuses it otherwise, and always refuses what a community module may never do).
+pub const TIERS: &[&str] = &["official", "core", "community"];
+/// The tiers whose manifests the daemon trusts for its own declarations (account providers): never community.
+pub const TRUSTED_TIERS: &[&str] = &["official", "core"];
+/// PLUGIN-GAPS-1: the owner's grants for community modules, in the state dir:
+/// `{"<Module>": {"allow": ["daemon.code", "daemon.tool", "daemon.import.http", ...]}}`. Read at start.
+pub const ALLOW_FILE: &str = "modules.json";
 /// Plugin settings (`<Module>.key` -> value), until the settings unit moves.
 pub const SETTINGS_FILE: &str = "plugin-settings.json";
 /// The longest a plugin's outbound HTTP call may take when it names no timeout.
@@ -712,6 +718,15 @@ impl HostServices for DaemonServices {
     }
 }
 
+/// The owner's community grants ([ALLOW_FILE]): module id -> the grants it lists. A missing or unreadable file grants nothing.
+pub fn read_allow(state_dir: &Path) -> BTreeMap<String, Vec<String>> {
+    let Some(v) = std::fs::read_to_string(state_dir.join(ALLOW_FILE)).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()) else { return BTreeMap::new() };
+    let Some(o) = v.as_object() else { return BTreeMap::new() };
+    o.iter()
+        .map(|(id, m)| (id.clone(), m.get("allow").and_then(|a| a.as_array()).into_iter().flatten().filter_map(|g| g.as_str().map(|g| g.trim().to_string())).filter(|g| !g.is_empty()).collect()))
+        .collect()
+}
+
 /// A folder's module id and declared frames, when its manifest has a daemon half.
 fn daemon_half(dir: &Path) -> Option<(String, Vec<String>)> {
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("module.json")).ok()?).ok()?;
@@ -761,6 +776,9 @@ pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: toki
             return None;
         }
     };
+    for (id, allow) in read_allow(state_dir) {
+        host.set_allow(&id, allow);
+    }
     let mut installed = BTreeMap::new();
     for tier in TIERS {
         let Ok(rd) = std::fs::read_dir(dir.join(tier)) else { continue };
@@ -823,4 +841,25 @@ pub fn attach(p: &Plugins, c: &Arc<Composed>) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod allow_tests {
+    use super::*;
+
+    #[test]
+    fn the_community_tier_is_loaded_with_the_owners_grants_and_never_trusted_for_providers() {
+        assert!(TIERS.contains(&"community"));
+        assert!(!TRUSTED_TIERS.contains(&"community"));
+        let dir = std::env::temp_dir().join(format!("infantry-allow-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(read_allow(&dir).is_empty(), "no file grants nothing");
+        std::fs::write(dir.join(ALLOW_FILE), r#"{"Acme_Hello": {"allow": ["daemon.code", " daemon.tool ", ""]}, "Bad": 3}"#).unwrap();
+        let a = read_allow(&dir);
+        assert_eq!(a["Acme_Hello"], vec!["daemon.code".to_string(), "daemon.tool".to_string()]);
+        assert!(a["Bad"].is_empty());
+        std::fs::write(dir.join(ALLOW_FILE), "not json").unwrap();
+        assert!(read_allow(&dir).is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

@@ -79,3 +79,7 @@ folder; at start the daemon adds each location once, off the boot path (`INFANTR
 The seeded locations are kept in `plugin-sources-seeded.json`, so a default the user removed is not added back; one that
 could not be added (offline) is tried again at the next start. The Sources tab shows the label as a badge and asks before
 removing a labelled source. Add a default source in that file, not in code.
+
+An entry may name the old locations it `replaces` (`"replaces": ["https://github.com/SuperiorSoft-LLC/infantry-plugins"]`,
+the git clone that was the Official source before the built catalog). At start, a host that seeded one of them and
+still lists it with its label drops it once; a source the user added by hand (no label) is never dropped.

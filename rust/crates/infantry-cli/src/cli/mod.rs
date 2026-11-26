@@ -22,6 +22,7 @@ pub mod plugin_tools;
 pub mod tools_cmds;
 pub mod usage_settings;
 pub mod cmd_worktrees;
+pub mod cmd_plugin;
 pub mod cmd_project;
 pub mod health;
 pub mod local_cmds;
@@ -186,7 +187,7 @@ pub const COMMANDS: &[&str] = &[
     "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
     "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness", "archive", "harness-install", "image", "session", "remote",
     "bg", "kill", "usage", "processes", "health", "settings", "agent", "agent-def", "run-cmd", "secret", "event", "tests", "card", "docs",
-    "account", "tool", "script", "worktrees", "runner", "install-cli", "uninstall-cli", "login", "logout", "whoami",
+    "account", "tool", "script", "worktrees", "plugin", "runner", "install-cli", "uninstall-cli", "login", "logout", "whoami",
 ];
 
 pub fn no_validation(_: &Parsed, _: Getenv) -> Option<String> {

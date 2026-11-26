@@ -99,6 +99,7 @@ const FLAGS: &[(&str, Kind, &str)] = &[
     ("--exclusive", Kind::Bool, ""),
     ("--append", Kind::Bool, ""),
     ("--edit", Kind::Bool, ""),
+    ("--approve", Kind::Bool, ""),
     ("--role", Kind::Value, "--role expects a role id (see: infantry role list)"),
     ("--provider", Kind::Value, "--provider expects a harness id (claude, opencode, pi, ...)"),
     ("--model", Kind::Value, "--model expects a model id the provider lists"),
