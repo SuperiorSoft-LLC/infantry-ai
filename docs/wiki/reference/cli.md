@@ -132,7 +132,7 @@ Tickets:
   stories              DEPRECATED: one notice, then the tickets filed under an epic (tickets --epic)
   stories --epic <id|prefix> --project <id>   The same rows as tickets --epic
   stories --status <column>      A ticket column; the old `doing` reads as in_progress
-  project create "<name>" [<directory>]   Create a project (the directory: its git repository); prints its id
+  project create "<name>" [--description <goal>] [--location <dir>]   Create a project (the location: its git repository); prints its id
   project base <projectId> [<branch>|--clear]   The branch new ticket starts in the project cut from:
   project rename <projectId> "<name>"   Rename a project; its id, tickets, sessions and mail are untouched
                       read it, set it (refused unless it resolves where tickets are cut), or clear it
