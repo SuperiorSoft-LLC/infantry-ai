@@ -65,6 +65,8 @@ export interface QrScanner {
   /** The code read; null when the user cancelled. */
   scan(): Promise<string | null>;
   cancel(): Promise<void>;
+  /** True when the scanner draws its own full screen (BattalionOS's Google scanner): the page shows no camera view or Cancel of its own. */
+  readonly ownScreen?: boolean;
 }
 
 /** The daemon a request goes to: its socket URL and the window's token. */

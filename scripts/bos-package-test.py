@@ -147,8 +147,12 @@ class PageOnly(unittest.TestCase):
             self.assertFalse([n for n in names if n.startswith(("lib/", "bin/", "plugins/"))], names)
             self.assertIn("shell/dist/index.html", names)
             base = json.loads((REPO / "packaging/app.json").read_text(encoding="utf-8"))
-            for k in ("id", "name", "publisher", "contract", "permissions", "process", "state"):
+            for k in ("id", "name", "publisher", "contract", "process", "state"):
                 self.assertEqual(m[k], base[k], k)
+            # PHONE-SCAN-1: the phone page declares the OS scanner and only what the page uses (no process.spawn, no files.user).
+            self.assertEqual(m["permissions"], ["network", "login.window", "scan.code"])
+            cat = json.loads((out / "catalog-entry.json").read_text())
+            self.assertEqual(cat["permissions"], list(dict.fromkeys(base["permissions"] + m["permissions"])))
             for c in ("ws:", "wss:", "http:", "https:"):
                 self.assertIn(c, m["ui"]["connect"])
             feed = json.loads((out / "feed.json").read_text())

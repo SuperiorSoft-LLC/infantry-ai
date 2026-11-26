@@ -3,7 +3,7 @@
 // AND-10: the page-only app on a phone pairs with the PC like the phone app (remote_save / remote_forget / remote_check), in the page.
 import { describe, expect, it } from "vitest";
 import type { FrameLink } from "../../../shell/src/host/battalion/frame";
-import { battalionRemoteHost, loadRemote, REMOTE_KEY, remoteCheck, type KeyStore, type Probes } from "../../../shell/src/host/battalion/remote";
+import { battalionRemoteHost, loadRemote, osScanner, REMOTE_KEY, remoteCheck, SCAN_WAIT_MS, type KeyStore, type Probes } from "../../../shell/src/host/battalion/remote";
 
 function memStore(): KeyStore & { m: Map<string, string> } {
   const m = new Map<string, string>();
@@ -66,5 +66,45 @@ describe("remote_check in the page", () => {
     expect(loadRemote(s)).toBeNull();
     s.setItem(REMOTE_KEY, JSON.stringify({ url: "" }));
     expect(loadRemote(s)).toBeNull();
+  });
+});
+
+/** A desktop that answers `os_scan_code` with [answer] (ok result or an error) and records what the page sent. */
+function scanDesk(answer: { ok: true; result: unknown } | { ok: false; error: string }) {
+  const parent = {};
+  const sent: { id: string; cmd: string }[] = [];
+  let deliver: (d: unknown, s: unknown) => void = () => {};
+  const link: FrameLink = {
+    parent,
+    post: (m) => {
+      const r = m as { id: string; cmd: string };
+      sent.push(r);
+      queueMicrotask(() => deliver({ bos: 1, id: r.id, ...answer }, parent));
+    },
+    listen: (cb) => ((deliver = cb), () => {}),
+  };
+  return { link, sent };
+}
+
+describe("PHONE-SCAN-1: the page-only app scans with BattalionOS's scanner", () => {
+  it("has a scanner that calls os_scan_code and returns the text", async () => {
+    const d = scanDesk({ ok: true, result: "infantry://connect?url=ws%3A%2F%2F10.0.2.2%3A18991%2Fws&token=t" });
+    const h = battalionRemoteHost("infantry-ai", d.link, memStore(), probes(true, true));
+    expect(h.scanner).not.toBeNull();
+    expect(h.scanner?.ownScreen).toBe(true);
+    expect(await h.scanner!.scan()).toContain("infantry://connect");
+    expect(d.sent.map((s) => s.cmd)).toEqual(["os_scan_code"]);
+    expect(d.sent[0].id.startsWith("s")).toBe(true);
+  });
+  it("a cancel is null, quietly", async () => {
+    const d = scanDesk({ ok: true, result: null });
+    expect(await osScanner(d.link).scan()).toBeNull();
+  });
+  it("a refusal carries the OS's own reason", async () => {
+    const d = scanDesk({ ok: false, error: "app 'infantry-ai' has no 'scan.code' permission in its manifest, so 'os_scan_code' is refused" });
+    await expect(osScanner(d.link).scan()).rejects.toThrow("scan.code");
+  });
+  it("waits far longer than an ordinary call", () => {
+    expect(SCAN_WAIT_MS).toBeGreaterThanOrEqual(5 * 60_000);
   });
 });

@@ -8,8 +8,8 @@
 // bos-android-design-2026-11-25 section 1, permission `secrets`), so this is the one place the token lives on the phone.
 // Built only when the shell is built with VITE_INFANTRY_BOS_REMOTE=1 (scripts/bos-package.py --page-only); the Windows package
 // keeps the frame host (./frame.ts) and its own daemon.
-import { browserTransport, httpBase, socketUrl, type Host, type HostEndpoint, type RemoteCheck } from "@infantry/client";
-import { battalionFrameHost, type FrameLink } from "./frame";
+import { browserTransport, httpBase, socketUrl, type Host, type HostEndpoint, type QrScanner, type RemoteCheck } from "@infantry/client";
+import { battalionFrameHost, frameCaller, type FrameLink } from "./frame";
 
 /** Where the page keeps its pairing (page storage of the app's own origin). */
 export const REMOTE_KEY = "infantry.bos.remote";
@@ -96,6 +96,29 @@ function pageProbes(): Probes {
   };
 }
 
+/** How long the page waits for the OS's scanner: the person is pointing the phone at the PC, so far longer than an ordinary call. */
+export const SCAN_WAIT_MS = 10 * 60_000;
+
+/**
+ * PHONE-SCAN-1: the QR reader of the page-only app is BattalionOS's own (`os_scan_code`, manifest permission `scan.code`): the OS runs
+ * Google's code scanner and hands the page only the text; the page never gets the camera. null = cancelled. A refusal is the OS's own
+ * plain reason (no permission, scanner not available on this phone). Its own caller (ids `s1`, `s2`...) so the long wait never holds
+ * the ordinary calls' timeout.
+ */
+export function osScanner(link: FrameLink, waitMs = SCAN_WAIT_MS): QrScanner {
+  let call: ReturnType<typeof frameCaller> | null = null; // made on the first scan: no second listener on the link until then
+  return {
+    ownScreen: true,
+    scan: async () => {
+      call ??= frameCaller(link, waitMs, undefined, "s");
+      const text = await call<unknown>("os_scan_code");
+      return typeof text === "string" && text ? text : null;
+    },
+    // Google's scanner has its own Back and close; the page has nothing to cancel.
+    cancel: async () => {},
+  };
+}
+
 /**
  * The Host of the page-only app: the OS frame host (os_* commands by message) plus the phone app's pairing commands done in the
  * page. kind is `phone`, so the shell starts as the phone app does (connect screen when not paired or the PC does not answer).
@@ -115,6 +138,7 @@ export function battalionRemoteHost(appId: string, link: FrameLink, store: KeySt
   return {
     ...frame,
     kind: "phone",
+    scanner: osScanner(link),
     endpoint: async () => remoteEndpoint(loadRemote(store)),
     transport: (url, token) => browserTransport(url, token),
     call: <T>(command: string, args?: Record<string, unknown>) => (pairing[command] ? (pairing[command](args) as Promise<T>) : frame.call<T>(command, args)),

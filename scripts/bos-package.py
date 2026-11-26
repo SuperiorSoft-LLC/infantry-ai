@@ -39,6 +39,10 @@ EXE = {"windows-x86_64": ".exe"}
 PAGE_PLATFORMS = ("android-aarch64",)
 # AND-10: a phone reaches the PC at an address known only at pairing (LAN, tailnet, a hosted daemon).
 REMOTE_CONNECT = ["ws:", "wss:", "http:", "https:"]
+# PHONE-SCAN-1: what the phone page asks the OS for, and nothing more: links to the browser (`network`), the sign-in window
+# (`login.window`) and the OS's QR scanner for pairing (`scan.code`, os_scan_code). No process.spawn (never on a phone), no
+# files.user (the folders are on the PC), no window.
+PAGE_PERMISSIONS = ["network", "login.window", "scan.code"]
 MAX_ENTRIES = 20000
 
 
@@ -172,6 +176,7 @@ def page_manifest(manifest):
     m = json.loads(json.dumps(manifest))
     ui = m.setdefault("ui", {})
     ui["connect"] = list(dict.fromkeys(ui.get("connect", []) + REMOTE_CONNECT))
+    m["permissions"] = list(PAGE_PERMISSIONS)
     return m
 
 
@@ -297,7 +302,9 @@ def main(argv=None):
     entry = {
         "id": manifest["id"], "name": manifest["name"], "publisher": manifest["publisher"], "license": manifest["license"],
         "summary": "A command post for coding agents: ticket board, agents on their own branches, mail and shared project knowledge.",
-        "publicKey": public, "contract": manifest["contract"], "permissions": manifest["permissions"],
+        "publicKey": public, "contract": manifest["contract"],
+        # One catalog entry for both packages: everything either asks for (the Windows app's list, then the phone page's).
+        "permissions": list(dict.fromkeys(stamp_manifest(version)["permissions"] + PAGE_PERMISSIONS)),
         "channels": {"stable": base + "feed.json"},
     }
     (out / "catalog-entry.json").write_text(json.dumps(entry, indent=2) + "\n")

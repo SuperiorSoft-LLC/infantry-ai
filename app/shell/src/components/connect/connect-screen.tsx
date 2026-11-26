@@ -36,9 +36,13 @@ async function save(p: Pairing): Promise<void> {
 /** Which PC the phone has saved: its name, else its address. */
 const pcLabel = () => remote?.name ?? remote?.url ?? null;
 
-/** Scans one QR code with the phone's camera (HC-1 host.scanner); null when cancelled. */
+/** Said only when this app truly has no QR reader (a browser, a desktop): what to do instead. */
+export const NO_SCANNER =
+  "This app cannot scan QR codes here. On your PC open Settings > Daemon > Allow phone connections, copy the pairing link it shows, and paste it below.";
+
+/** Scans one QR code (HC-1 host.scanner: the phone app's camera, or BattalionOS's scanner); null when cancelled. */
 async function scanQr(): Promise<string | null> {
-  if (!host.scanner) throw new Error("This device has no camera reader. Paste the pairing link below instead.");
+  if (!host.scanner) throw new Error(NO_SCANNER);
   return host.scanner.scan();
 }
 
@@ -115,7 +119,8 @@ export function ConnectScreen() {
 
   const scan = async () => {
     setError(null);
-    setScanning(true);
+    // A scanner with its own screen (BattalionOS) needs no see-through page or Cancel of ours.
+    if (!host.scanner?.ownScreen) setScanning(true);
     try {
       const text = await scanQr();
       if (!text) return;

@@ -43,7 +43,8 @@ const message = (e: unknown) => (e instanceof Error ? e.message : typeof e === "
 /** An event the desktop sends this frame (BOS-25: the sign-in window reached an address, or ended): `{bos: 1, event, ...}`, from the parent only. */
 export type FrameEventHandler = (event: string, data: Record<string, unknown>) => void;
 
-export function frameCaller(link: FrameLink, timeoutMs = 15_000, onEvent?: FrameEventHandler) {
+/** [prefix] keeps the request ids of two callers on one link apart (each caller answers only its own ids). */
+export function frameCaller(link: FrameLink, timeoutMs = 15_000, onEvent?: FrameEventHandler, prefix = "r") {
   let n = 0;
   const pending = new Map<string, { ok: (v: unknown) => void; fail: (e: Error) => void }>();
   link.listen((data, source) => {
@@ -59,7 +60,7 @@ export function frameCaller(link: FrameLink, timeoutMs = 15_000, onEvent?: Frame
   });
   return <T>(cmd: string, args?: Record<string, unknown>): Promise<T> =>
     new Promise<T>((resolve, reject) => {
-      const id = `r${++n}`;
+      const id = `${prefix}${++n}`;
       const timer = setTimeout(() => {
         pending.delete(id);
         reject(new Error(`${cmd}: the desktop did not answer`));
