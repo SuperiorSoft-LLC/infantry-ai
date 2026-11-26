@@ -3,12 +3,12 @@
 // The transcript building blocks: thinking, tool calls, file edit + diff, comms, the agent's reply, finished line, note,
 // spinner. Each renders one immutable item from @infantry/client.
 import { useState, type ReactNode } from "react";
-import { Brain, ChevronRight, Loader2, Mail, Wrench, RotateCw } from "lucide-react";
+import { Brain, ChevronRight, Cog, Loader2, Mail, Wrench, RotateCw } from "lucide-react";
 import { cn } from "@infantry/ui";
-import { imageRefs, type TranscriptItem } from "@infantry/client";
+import { imageRefs, type AutomationItem, type TranscriptItem } from "@infantry/client";
 import type { CommsBody } from "@/mock/types";
 import { Markdown } from "./markdown";
-import { ImageThumbs } from "./chat-images";
+import { ImageThumbs, Thumb } from "./chat-images";
 import { ChangeBox } from "./change-box";
 
 export function ThinkingBlock({ count, text }: { count: number; text: string }) {
@@ -124,6 +124,35 @@ export function FinishedLine({ outcome, exitCode, detail }: { outcome: string; e
 
 export function TranscriptNote({ text, danger }: { text: string; danger?: boolean }) {
   return <div className={cn("font-mono text-xs whitespace-pre-wrap break-words", danger ? "text-danger" : "text-muted-foreground")}>{text}</div>;
+}
+
+/** An automation card (script run, `infantry_chat_note`, `infantry_chat_image`): cog, time, text coloured by level, the image. */
+export function AutomationCard({ item }: { item: AutomationItem }) {
+  const [open, setOpen] = useState(false);
+  const level = item.level ?? (item.ok ? "info" : "fail");
+  const tone = level === "fail" ? "border-danger/50 text-danger" : level === "warn" ? "border-warn/50 text-warn" : level === "ok" ? "border-success/50" : "";
+  return (
+    <div className={cn("rounded-md border bg-card px-2.5 py-1.5 text-xs", tone)} data-testid="automation-card">
+      <div className="flex items-start gap-1.5">
+        <Cog className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <div className="min-w-0 flex-1 whitespace-pre-wrap break-words">{item.text || item.label}</div>
+        {item.at > 0 && <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{timeOf(item.at)}</span>}
+      </div>
+      {item.image && (
+        <div className="mt-1.5 pl-5">
+          <Thumb image={item.image} />
+        </div>
+      )}
+      {item.details.length > 0 && (
+        <div className="pl-5">
+          <button type="button" className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+            <ChevronRight className={cn("size-3 transition-transform", open && "rotate-90")} /> details
+          </button>
+          {open && <div className="mt-0.5 font-mono text-[11px] whitespace-pre-wrap break-words text-muted-foreground">{item.details.join("\n")}</div>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ThinkingSpinner({ label, elapsed }: { label: string; elapsed: ReactNode }) {

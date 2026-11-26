@@ -9,12 +9,13 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { ArrowDown, ChevronDown, ChevronUp, MessageSquareDashed, Search, X } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useShallow } from "zustand/react/shallow";
-import { CHAT_SEARCH_EVENT, searchItems, type PendingSend, type TranscriptItem } from "@infantry/client";
+import { CHAT_SEARCH_EVENT, mergeAutomation, searchItems, type AutomationItem, type PendingSend, type TranscriptItem } from "@infantry/client";
 import { EmptyState, IconButton, Input, cn } from "@infantry/ui";
 import type { Agent } from "@/mock/types";
 import { useDaemon } from "@/daemon/daemon";
 import { AgentAvatar } from "@/components/agents/agent-avatar";
-import { CommsCard, ThinkingSpinner, TranscriptItemView, timeOf } from "./transcript-items";
+import { useAutomationItems } from "@/daemon/use-timeline";
+import { AutomationCard, CommsCard, ThinkingSpinner, TranscriptItemView, timeOf } from "./transcript-items";
 
 /** Kinds that start an agent turn and so carry the avatar in the gutter. */
 const startsTurn = new Set<TranscriptItem["kind"]>(["thinking", "text", "note"]);
@@ -25,7 +26,21 @@ const OVERSCAN_ROWS = 8;
 /** Distance from the bottom (px) that still counts as "at the bottom". */
 const STICK_SLACK_PX = 48;
 
-type Row = { key: string; item: TranscriptItem; pending?: undefined } | { key: string; item?: undefined; pending: PendingSend };
+type Row =
+  | { key: string; item: TranscriptItem; pending?: undefined; auto?: undefined }
+  | { key: string; item?: undefined; pending: PendingSend; auto?: undefined }
+  | { key: string; item?: undefined; pending?: undefined; auto: AutomationItem };
+
+const AutoRow = memo(function AutoRow({ item }: { item: AutomationItem }) {
+  return (
+    <div className="grid grid-cols-[2.5rem_1fr] gap-2">
+      <div />
+      <div className="min-w-0">
+        <AutomationCard item={item} />
+      </div>
+    </div>
+  );
+});
 
 const ItemRow = memo(function ItemRow({ item, avatar }: { item: TranscriptItem; avatar: Agent }) {
   return (
@@ -66,9 +81,13 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
   const retry = useDaemon((s) => s.retry);
   // The avatar only reads hue and role: keep one object per session so rows do not re-render on every status change.
   const avatar = useMemo(() => agent, [agent.id, agent.hue, agent.roleId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const autos = useAutomationItems(sessionId);
   const rows = useMemo<Row[]>(
-    () => [...(items ?? []).map((item) => ({ key: item.id, item })), ...pending.map((p) => ({ key: p.clientId, pending: p }))],
-    [items, pending],
+    () => [
+      ...mergeAutomation<TranscriptItem & { at?: number }>(items ?? [], autos).map((r): Row => (r.auto ? { key: `auto:${r.auto.id}`, auto: r.auto } : { key: r.item.id, item: r.item })),
+      ...pending.map((p) => ({ key: p.clientId, pending: p })),
+    ],
+    [items, autos, pending],
   );
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -77,7 +96,9 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
   const [query, setQuery] = useState("");
   const [hit, setHit] = useState(0);
   const hits = useMemo(() => searchItems(items ?? [], query), [items, query]);
-  const current = hits.length ? hits[Math.min(hit, hits.length - 1)] : -1;
+  // Hits index the transcript items; automation cards sit among the rows, so find the hit item's row.
+  const hitId = hits.length ? items?.[hits[Math.min(hit, hits.length - 1)]]?.id : undefined;
+  const current = hitId ? rows.findIndex((r) => r.item?.id === hitId) : -1;
   useEffect(() => {
     const open = () => setSearching(true);
     window.addEventListener(CHAT_SEARCH_EVENT, open);
@@ -180,7 +201,7 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
                 className={cn("absolute top-3 right-4 left-4 pb-3", vi.index === current && "rounded-md ring-2 ring-warn/70")}
                 style={{ transform: `translateY(${vi.start}px)` }}
               >
-                {row.item ? <ItemRow item={row.item} avatar={avatar} /> : <PendingRow p={row.pending} onRetry={retry} />}
+                {row.item ? <ItemRow item={row.item} avatar={avatar} /> : row.auto ? <AutoRow item={row.auto} /> : <PendingRow p={row.pending} onRetry={retry} />}
               </li>
             );
           })}

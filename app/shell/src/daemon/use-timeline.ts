@@ -3,7 +3,7 @@
 // The one automation-count store of this window (@infantry/client createTimelineStore), bound to the daemon link.
 import { useEffect } from "react";
 import { useStore } from "zustand";
-import { createTimelineStore, type AutomationStats, type TimelineStore } from "@infantry/client";
+import { createTimelineStore, type AutomationItem, type AutomationStats, type TimelineStore } from "@infantry/client";
 import { daemonStore, useDaemon } from "./daemon";
 
 let store: TimelineStore | null = null;
@@ -19,4 +19,15 @@ export function useAutomationStats(sessionId: string): AutomationStats | undefin
     if (state === "open") timelineStore().getState().ask(sessionId);
   }, [state, sessionId]);
   return useStore(timelineStore(), (s) => s.stats[sessionId]);
+}
+
+const NONE: AutomationItem[] = [];
+
+/** [sessionId]'s automation cards (script runs, chat notes, chat images), oldest first; asks `timeline_list` once open. */
+export function useAutomationItems(sessionId: string): AutomationItem[] {
+  const state = useDaemon((s) => s.connection.state);
+  useEffect(() => {
+    if (state === "open") timelineStore().getState().ask(sessionId);
+  }, [state, sessionId]);
+  return useStore(timelineStore(), (s) => s.items[sessionId] ?? NONE);
 }
