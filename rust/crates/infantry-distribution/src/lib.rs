@@ -80,7 +80,16 @@ pub fn run_checked(a: Vec<String>) -> Result<(), String> {
     }
     // BOS-7: an app of BattalionOS only when the OS says so (`BATTALION_CONTRACT`); without it nothing below changes.
     let os_env = os_app::OsEnv::from_env(&auth::env).unwrap_or_else(|e| fail(e));
-    let state_dir = arg("--state-dir").or_else(|| auth::env("INFANTRY_STATE_DIR")).map(PathBuf::from).or_else(|| os_env.as_ref().and_then(|o| o.state_dir.clone())).unwrap_or_else(default_state_dir);
+    let explicit_state = arg("--state-dir").or_else(|| auth::env("INFANTRY_STATE_DIR")).map(PathBuf::from);
+    // TESTENV-2: an explicit data folder other than the OS's own is a normal daemon that inherited BATTALION_*.
+    let os_env = os_env.filter(|o| {
+        let applies = os_app::applies_to(o, explicit_state.as_deref());
+        if !applies {
+            eprintln!("[infantry] BATTALION_* present but the state dir was given explicitly and is not the OS's: not running as an OS app");
+        }
+        applies
+    });
+    let state_dir = explicit_state.clone().or_else(|| os_env.as_ref().and_then(|o| o.state_dir.clone())).unwrap_or_else(default_state_dir);
     if let Err(e) = std::fs::create_dir_all(&state_dir) {
         fail(format!("state dir {}: {e}", state_dir.display()));
     }

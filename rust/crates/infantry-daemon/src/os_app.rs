@@ -69,6 +69,20 @@ impl OsEnv {
     }
 }
 
+/// TESTENV-2: whether the OS env applies to a daemon given `explicit_state` (`--state-dir`, else `INFANTRY_STATE_DIR`).
+/// A daemon told to use another data folder than the OS's own (`BATTALION_STATE_DIR`) is a normal daemon that merely
+/// inherited BATTALION_* (a test daemon started from an agent session): no app mode, no plugin migration, no phone/LAN
+/// settings carried over. The same folder, or no explicit folder, keeps the app mode.
+pub fn applies_to(os: &OsEnv, explicit_state: Option<&Path>) -> bool {
+    let Some(explicit) = explicit_state else { return true };
+    let norm = |p: &Path| {
+        let s = p.to_string_lossy().replace('\\', "/");
+        let s = s.trim_end_matches('/').to_string();
+        if cfg!(windows) { s.to_lowercase() } else { s }
+    };
+    os.state_dir.as_deref().is_some_and(|o| norm(o) == norm(explicit))
+}
+
 /// The running side: the stop secret (kept as a digest) and the stop signal.
 pub struct OsRuntime {
     pub env: OsEnv,
@@ -300,6 +314,16 @@ mod tests {
     #[test]
     fn contract_names_match_the_battalion_app_api() {
         assert_eq!(CONTRACT_ENV, "BATTALION_CONTRACT");
+    }
+
+    #[test]
+    fn an_explicit_other_state_dir_is_not_an_os_app() {
+        let os = |sd: Option<&str>| OsEnv { ready_file: None, token_file: "t".into(), state_dir: sd.map(PathBuf::from), app_dir: None, ui_origin: None };
+        assert!(applies_to(&os(Some("/os/state")), None));
+        assert!(applies_to(&os(None), None));
+        assert!(applies_to(&os(Some("/os/state")), Some(Path::new("/os/state/"))));
+        assert!(!applies_to(&os(Some("/os/state")), Some(Path::new("/tmp/td-1"))));
+        assert!(!applies_to(&os(None), Some(Path::new("/tmp/td-1"))));
         assert_eq!((READY_FILE_ENV, TOKEN_FILE_ENV, STATE_DIR_ENV), ("BATTALION_READY_FILE", "BATTALION_TOKEN_FILE", "BATTALION_STATE_DIR"));
         assert_eq!((APP_DIR_ENV, UI_ORIGIN_ENV, CONTRACT), ("BATTALION_APP_DIR", "BATTALION_UI_ORIGIN", 1));
     }

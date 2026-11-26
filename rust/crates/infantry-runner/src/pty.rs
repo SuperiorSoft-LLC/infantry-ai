@@ -45,11 +45,21 @@ pub fn removed(name: &str, rules: &[String]) -> bool {
     })
 }
 
-/// The child's environment: the runner's own, minus [Command::env_remove], plus [Command::env].
+/// TESTENV-2: names never inherited by a child, whatever its [Command::env_remove]: the BattalionOS app contract
+/// (`BATTALION_CONTRACT`, the ready, token and state files, ...) belongs to the daemon the OS started, never to an agent
+/// session or a daemon a session starts. Case-blind, like [removed].
+pub const NEVER_INHERITED: [&str; 1] = ["BATTALION_*"];
+
+/// The child's environment: the runner's own, minus [NEVER_INHERITED] and [Command::env_remove], plus [Command::env].
 pub fn environment(cmd: &Command) -> Vec<(String, String)> {
-    let mut out: Vec<(String, String)> = std::env::vars_os()
-        .filter_map(|(k, v)| Some((k.into_string().ok()?, v.into_string().ok()?)))
-        .filter(|(k, _)| !removed(k, &cmd.env_remove))
+    environment_from(std::env::vars_os().filter_map(|(k, v)| Some((k.into_string().ok()?, v.into_string().ok()?))), cmd)
+}
+
+/// [environment] over a given inherited environment (tests).
+pub fn environment_from(inherited: impl Iterator<Item = (String, String)>, cmd: &Command) -> Vec<(String, String)> {
+    let never = NEVER_INHERITED.map(String::from);
+    let mut out: Vec<(String, String)> = inherited
+        .filter(|(k, _)| !removed(k, &never) && !removed(k, &cmd.env_remove))
         .filter(|(k, _)| !cmd.env.iter().any(|(n, _)| n.eq_ignore_ascii_case(k)))
         .collect();
     out.extend(cmd.env.iter().cloned());
@@ -356,6 +366,14 @@ mod tests {
             env_remove: vec!["*".into()],
         };
         assert_eq!(environment(&cmd), vec![("PATH_EXTRA_TEST".to_string(), "1".to_string())]);
+    }
+
+    #[test]
+    fn battalion_names_are_never_inherited_whatever_the_rules() {
+        let cmd = Command { program: "x".into(), args: vec![], cwd: ".".into(), env: vec![], env_remove: vec![] };
+        let inherited = [("BATTALION_CONTRACT", "1"), ("battalion_token_file", "t"), ("Battalion_Ready_File", "r"), ("BATTALION_STATE_DIR", "s"), ("KEEP_ME", "1")];
+        let out = environment_from(inherited.iter().map(|(k, v)| (k.to_string(), v.to_string())), &cmd);
+        assert_eq!(out, vec![("KEEP_ME".to_string(), "1".to_string())]);
     }
 
     #[cfg(windows)]
