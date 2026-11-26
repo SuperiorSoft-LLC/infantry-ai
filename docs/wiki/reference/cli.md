@@ -233,8 +233,8 @@ Daemon and pods:
   cancel <podId>      Cancel a pod gracefully (--force to kill the trees)
   mcp serve           Serve Infantry AI tools (read + spawn/prompt/message/kill) as an MCP server on stdio
   mcp serve --max-depth <n> --max-spawns <n> [--allow-kill-any] [--mcp-depth <n>]
-            [--project <id>]   defaults also read from ./.infantry/mcp.json (flags win), see docs/MCP.md
-                      Narrow the daemon's spawn limits (--allow-kill-any is moot), see docs/MCP.md
+            [--project <id>]   defaults also read from ./.infantry/mcp.json (flags win), see docs/wiki/reference/mcp-tools.md
+                      Narrow the daemon's spawn limits (--allow-kill-any is moot), see docs/wiki/reference/mcp-tools.md
 
 This machine:
   login [--url <ws://host:port>] [--token <t>]     Ask for the server URL and token, check them, save as this CLI's default connection (not Claude's /login)
