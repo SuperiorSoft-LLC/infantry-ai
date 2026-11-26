@@ -132,6 +132,9 @@
   html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    /* FOLD-RESIZE-1: app feel, not page feel: no grey tap flash, no rubber-band/glow at the page edge. */
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
   }
   /* Touch: tap targets of at least 40px (layout.ts `tapTarget`), no double-tap zoom delay, inputs at 16px (no zoom). */
   @media (pointer: coarse) {
