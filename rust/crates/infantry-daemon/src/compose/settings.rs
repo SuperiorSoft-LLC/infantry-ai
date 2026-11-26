@@ -4,7 +4,8 @@
 //! are the flat rows, a scoped value is the row `@scope/<scope>/<target>/<key>` (role target = `<project>/<role>`).
 //! Resolution: session > role > project > app > default. Answers `settings` with `{key, value, scope, layers}`.
 //!
-//! Not ported yet: the per-key allowed-scope table and value validation (every key accepts every scope).
+//! A declared key's range is checked by `config::CheckedSettingsUnit` (the registered door), the same check as `config_set`.
+//! Not ported yet: the per-key allowed-scope table (every key accepts every scope).
 use infantry_core::db::Db;
 use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Refusal};
 use serde_json::{json, Value};

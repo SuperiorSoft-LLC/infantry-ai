@@ -57,7 +57,9 @@ pub struct HostLimits {
     /// limits.plugins.toolTimeoutMs: a tool call's wall clock when the manifest sets none.
     pub tool_timeout_ms: u64,
     /// limits.plugins.maxDeclaredTimeoutMs: the most wall clock a manifest may grant ONE frame or tool with its own
-    /// `timeoutMs` (a declared budget is cut to this).
+    /// `timeoutMs` (a declared budget is cut to this). The cut is never below the call's own fallback budget
+    /// (`callTimeoutMs` / `toolTimeoutMs`, 10 s by default): the effective wall is `min(declared, max(cap, fallback))`.
+    /// Read from the settings table (what `settings_set` stores), plugin-settings.json as fallback.
     pub max_declared_timeout_ms: u64,
     /// limits.plugins.cpuMsPerCall: the CPU budget when the manifest sets none.
     pub cpu_ms_per_call: u64,

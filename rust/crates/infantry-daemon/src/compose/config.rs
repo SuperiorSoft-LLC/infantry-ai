@@ -65,6 +65,49 @@ fn checked(fl: &Value, raw: &Value) -> Result<Value, String> {
     Ok(if n.fract() == 0.0 && n.abs() < 9e15 { json!(n as i64) } else { json!(n) })
 }
 
+/// The value `raw` is stored as when some plugin declares `key` (any card), or why it is refused. An undeclared key
+/// passes unchanged. Every write route (`config_set`, `settings_set`) checks through here, so they share one range.
+pub fn declared_value(plugins_dir: &Option<PathBuf>, key: &str, raw: &Value) -> Result<Value, String> {
+    let cards = declarations(plugins_dir);
+    let fl = cards
+        .iter()
+        .flat_map(|c| c.get("fields").and_then(Value::as_array).into_iter().flatten())
+        .find(|fl| fl.get("key").and_then(Value::as_str) == Some(key));
+    match fl {
+        Some(fl) if !raw.is_null() => checked(fl, raw),
+        _ => Ok(raw.clone()),
+    }
+}
+
+/// `settings_get` / `settings_set` with the declared range applied to every write (any scope).
+pub struct CheckedSettingsUnit {
+    pub settings: SettingsUnit,
+    pub plugins_dir: Option<PathBuf>,
+}
+
+impl FrameUnit for CheckedSettingsUnit {
+    fn name(&self) -> &'static str {
+        self.settings.name()
+    }
+    fn frames(&self) -> &'static [&'static str] {
+        self.settings.frames()
+    }
+    fn handle(&self, env: &Envelope, ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
+        if env.r#type == super::settings::SETTINGS_SET {
+            if let Ok(mut d) = serde_json::from_str::<Value>(&env.data) {
+                if let (Some(key), Some(v)) = (d.get("key").and_then(Value::as_str).map(|k| k.trim().to_string()), d.get("value").cloned()) {
+                    let v = declared_value(&self.plugins_dir, &key, &v).map_err(|e| Refusal::new(super::settings::SETTINGS_SET, e))?;
+                    d["value"] = v;
+                    let mut e = env.clone();
+                    e.data = d.to_string();
+                    return self.settings.handle(&e, ctx);
+                }
+            }
+        }
+        self.settings.handle(env, ctx)
+    }
+}
+
 impl ConfigUnit {
     fn rows(&self, cards: &[Value]) -> Vec<Value> {
         let mut rows = vec![];
@@ -144,6 +187,21 @@ mod tests {
         assert_eq!(out[0].r#type, f::CONFIG_SCHEMA);
         assert_eq!(serde_json::from_str::<Value>(&out[0].data).unwrap()["declarations"][0]["node"], "Demo_Plug.tab");
         serde_json::from_str::<Value>(&out[1].data).unwrap()["rows"].clone()
+    }
+
+    #[test]
+    fn settings_set_obeys_the_declared_range_on_every_scope() {
+        let (u, root) = world();
+        let s = CheckedSettingsUnit { settings: SettingsUnit { db: u.settings.db.clone() }, plugins_dir: Some(root.clone()) };
+        let ctx = FrameCtx { conn_id: 1, owner: true, bus: Default::default() };
+        let set = |d: Value| s.handle(&Envelope::new(super::super::settings::SETTINGS_SET, d.to_string()), &ctx);
+        let e = set(json!({"key": "demo.refreshSeconds", "value": 99999})).err().unwrap().0;
+        assert!(e.contains("at most 3600"), "{e}");
+        assert!(set(json!({"key": "demo.refreshSeconds", "value": 99999, "scope": "project", "project": "p"})).is_err());
+        assert!(set(json!({"key": "demo.refreshSeconds", "value": "60"})).is_ok());
+        assert_eq!(u.settings.app("demo.refreshSeconds"), Some(json!(60)), "stored as the same number config_set stores");
+        assert!(set(json!({"key": "undeclared.key", "value": 99999})).is_ok());
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

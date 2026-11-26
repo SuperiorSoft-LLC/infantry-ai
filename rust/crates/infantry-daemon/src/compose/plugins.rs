@@ -745,6 +745,14 @@ pub fn read_allow(state_dir: &Path) -> BTreeMap<String, Vec<String>> {
         .collect()
 }
 
+/// SVC-FIX-7: `limits.plugins.maxDeclaredTimeoutMs` as `settings_set` stores it (the settings table, like the other
+/// `limits.*` keys); the old plugin-settings.json value is only a fallback. 0 / unparsable = the built-in default.
+fn declared_timeout_cap(services: &dyn HostServices) -> Option<u64> {
+    const KEY: &str = "limits.plugins.maxDeclaredTimeoutMs";
+    let parse = |v: String| v.trim().trim_matches('"').parse::<u64>().ok().filter(|v| *v > 0);
+    services.app_setting(KEY).and_then(parse).or_else(|| services.setting_get(KEY).and_then(parse))
+}
+
 /// A folder's module id and declared frames, when its manifest has a daemon half.
 fn daemon_half(dir: &Path) -> Option<(String, Vec<String>)> {
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("module.json")).ok()?).ok()?;
@@ -785,7 +793,7 @@ pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: toki
         http_manual: OnceLock::new(),
     });
     let mut limits = infantry_plugin_host::HostLimits::default();
-    if let Some(ms) = services.settings.lock().unwrap().get("limits.plugins.maxDeclaredTimeoutMs").and_then(|v| v.trim().parse::<u64>().ok()).filter(|v| *v > 0) {
+    if let Some(ms) = declared_timeout_cap(services.as_ref()) {
         limits.max_declared_timeout_ms = ms;
     }
     let host = match PluginHost::new(services.clone(), limits) {
@@ -880,5 +888,24 @@ mod allow_tests {
         std::fs::write(dir.join(ALLOW_FILE), "not json").unwrap();
         assert!(read_allow(&dir).is_empty());
         let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[cfg(test)]
+mod declared_cap_tests {
+    use super::*;
+    use infantry_plugin_host::MemoryServices;
+
+    #[test]
+    fn the_cap_comes_from_the_settings_table_first() {
+        const KEY: &str = "limits.plugins.maxDeclaredTimeoutMs";
+        let s = MemoryServices::new();
+        assert_eq!(declared_timeout_cap(&s), None, "nothing set: the built-in default");
+        s.settings.lock().unwrap().insert(KEY.into(), "20000".into());
+        assert_eq!(declared_timeout_cap(&s), Some(20_000), "plugin-settings.json is the fallback");
+        s.app_settings.lock().unwrap().insert(KEY.into(), "90000".into());
+        assert_eq!(declared_timeout_cap(&s), Some(90_000), "what settings_set stores wins");
+        s.app_settings.lock().unwrap().insert(KEY.into(), "0".into());
+        assert_eq!(declared_timeout_cap(&s), Some(20_000), "0 = unset");
     }
 }

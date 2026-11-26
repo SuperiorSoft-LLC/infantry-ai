@@ -4,12 +4,19 @@
 import type { ReactNode } from "react";
 import { Label } from "@infantry/ui";
 
+/** The card's "applies to" text without its label: a manifest may already start it with "Applies to:". */
+export function appliesText(applies?: string | null): string | null {
+  const t = (applies ?? "").trim().replace(/^applies to:\s*/i, "").trim();
+  return t ? t : null;
+}
+
 export function SettingsCard({ title, applies, children }: { title: string; applies?: string | null; children: ReactNode }) {
+  const shown = appliesText(applies);
   return (
     <section aria-label={title} className="space-y-2 rounded-lg border bg-card p-3">
       <div>
         <h3 className="text-[13px] font-semibold">{title}</h3>
-        {applies && <p className="text-xs text-muted-foreground">Applies to: {applies}</p>}
+        {shown && <p className="text-xs text-muted-foreground">Applies to: {shown}</p>}
       </div>
       <div className="divide-y">{children}</div>
     </section>
