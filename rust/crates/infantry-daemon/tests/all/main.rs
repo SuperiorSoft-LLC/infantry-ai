@@ -3,6 +3,7 @@
 //! One integration-test binary for infantry-daemon: each module is one former `tests/<name>.rs` file, so the crate links once.
 
 mod agent_frames;
+mod agent_owner_token;
 mod assistant;
 mod background_tasks;
 mod context_limit;

@@ -94,6 +94,11 @@ const CONTROLS: [&str; 8] = [
     infantry_protocol::frames::SESSION_SWAP,
 ];
 
+/// Whether [ty] is a frame that controls a session (see [owner_frame_refusal]).
+pub fn is_control(ty: &str) -> bool {
+    CONTROLS.contains(&ty)
+}
+
 /// OWNER-SESSION-GUARD-1 for a frame a plugin (or a script through it) sends: a control frame aimed at an owner-owned
 /// session is refused, whoever the plugin works for. The owner's own client never comes this way.
 pub fn owner_frame_refusal(ty: &str, data: &str, frame_session: Option<&str>, records: &[SessionRecord]) -> Option<String> {

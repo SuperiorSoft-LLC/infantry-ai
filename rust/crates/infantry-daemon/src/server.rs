@@ -70,9 +70,43 @@ fn check(app: &App, uri: &Uri, headers: &HeaderMap) -> Option<Response> {
     check_from(app, false, uri, headers)
 }
 
+/// AGENT-OWNER-TOKEN-1: the session whose own token this request presents (the bearer header, else the bearer subprotocol).
+/// Every session is lent its token as `INFANTRY_TOKEN` in place of the owner's, so its `infantry` CLI and MCP bridge are
+/// recognised here: such a connection is that session's agent, never the owner.
+fn agent_of(app: &App, headers: &HeaderMap) -> Option<String> {
+    let t = crate::tunnel::bearer(h(headers, header::AUTHORIZATION))
+        .map(String::from)
+        .or_else(|| auth::bearer_from_protocols(h(headers, header::SEC_WEBSOCKET_PROTOCOL)))?;
+    app.daemon.tunnel.resolve(&t)
+}
+
+fn host_is_loopback(headers: &HeaderMap) -> bool {
+    h(headers, header::HOST).is_some_and(|v| auth::is_loopback_host(&auth::host_name(v)))
+}
+
+/// Whether a `/ws` client is the owner: not an agent (no session token, no `X-Infantry-Session` header), and with the
+/// gateway, the owner credential too.
+fn is_owner(app: &App, headers: &HeaderMap, gateway: Option<&Gateway>) -> bool {
+    if agent_of(app, headers).is_some() || headers.contains_key("x-infantry-session") {
+        return false;
+    }
+    match gateway {
+        Some(g) => {
+            let owner_header = h(headers, header::HeaderName::from_static("x-infantry-owner"))
+                .or_else(|| h(headers, header::HeaderName::from_static("x-agenthq-owner")));
+            g.is_owner(owner_header, h(headers, header::SEC_WEBSOCKET_PROTOCOL))
+        }
+        None => true,
+    }
+}
+
 /// [check] knowing whether the peer is on this computer (BOS-33: the OS's own page skips the phone token only then).
 fn check_from(app: &App, peer_loopback: bool, uri: &Uri, headers: &HeaderMap) -> Option<Response> {
     let protocols = h(headers, header::SEC_WEBSOCKET_PROTOCOL);
+    // A live session's own token passes on a token daemon too (the session holds it in place of the daemon's token).
+    if h(headers, header::ORIGIN).is_none() && host_is_loopback(headers) && agent_of(app, headers).is_some() {
+        return None;
+    }
     app.policy
         .check_from(peer_loopback, uri.path(), h(headers, header::HOST), h(headers, header::ORIGIN), h(headers, header::AUTHORIZATION), protocols)
         .map(refuse)
@@ -198,14 +232,10 @@ async fn ws(
     } else {
         upgrade
     };
+    let owner = is_owner(&app, &headers, s.gateway.as_deref());
     match s.gateway {
-        Some(g) => {
-            let owner_header = h(&headers, header::HeaderName::from_static("x-infantry-owner"))
-                .or_else(|| h(&headers, header::HeaderName::from_static("x-agenthq-owner")));
-            let owner = g.is_owner(owner_header, h(&headers, header::SEC_WEBSOCKET_PROTOCOL));
-            upgrade.on_upgrade(move |socket| gateway_connection(app.daemon, g, owner, socket))
-        }
-        None => upgrade.on_upgrade(move |socket| connection(app.daemon, socket)),
+        Some(g) => upgrade.on_upgrade(move |socket| gateway_connection(app.daemon, g, owner, socket)),
+        None => upgrade.on_upgrade(move |socket| connection(app.daemon, owner, socket)),
     }
 }
 
@@ -238,6 +268,15 @@ async fn answer(daemon: &Arc<Daemon>, env: Envelope, conn: &mut Conn, owner: boo
     if env.r#type == crate::compose::PLUGIN_TOOL_CALL {
         if let Some(sid) = serde_json::from_str::<serde_json::Value>(&env.data).ok().and_then(|v| v["client"]["sessionId"].as_str().map(String::from)) {
             daemon.health.bridges.seen(&sid, &mut conn.bridges, &daemon.health.journal);
+        }
+    }
+    // AGENT-OWNER-TOKEN-1: an agent's raw connection may not control the owner's own sessions (OWNER-SESSION-GUARD-1).
+    if !owner && crate::compose::scope::is_control(&env.r#type) {
+        if let Some(why) = crate::compose::scope::owner_frame_refusal(&env.r#type, &env.data, env.session_id.as_deref(), &daemon.records()) {
+            let mut e = Envelope::new(crate::wire::ERROR, why);
+            e.request_id = env.request_id.clone();
+            e.session_id = env.session_id.clone();
+            return vec![serde_json::to_string(&e).unwrap_or_default()];
         }
     }
     let timings = hop_timings();
@@ -276,7 +315,7 @@ fn finished(done: Option<Result<Vec<String>, tokio::task::JoinError>>) -> Vec<St
     done.and_then(|r| r.ok()).unwrap_or_default()
 }
 
-async fn connection(daemon: Arc<Daemon>, mut socket: WebSocket) {
+async fn connection(daemon: Arc<Daemon>, owner: bool, mut socket: WebSocket) {
     // Subscribe first so nothing pushed during the burst is lost.
     let mut rx = daemon.subscribe();
     for f in hello(&daemon).await {
@@ -296,9 +335,9 @@ async fn connection(daemon: Arc<Daemon>, mut socket: WebSocket) {
                     None | Some(Err(_)) => break,
                     Some(Ok(_)) => continue,
                 };
-                // A client that passed the access policy without the gateway is the owner (local, or the token holder).
+                // A client that passed the access policy is the owner, unless it presented a session's own token (an agent).
                 let replies = match serde_json::from_str::<Envelope>(&text) {
-                    Ok(env) => answer(&daemon, env, &mut conn, true, &mut detached).await,
+                    Ok(env) => answer(&daemon, env, &mut conn, owner, &mut detached).await,
                     Err(e) => vec![serde_json::to_string(&Envelope::new(crate::wire::ERROR, format!("frame refused: not an envelope ({e})"))).unwrap_or_default()],
                 };
                 let mut gone = false;

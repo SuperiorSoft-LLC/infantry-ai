@@ -346,6 +346,7 @@ impl Daemon {
         self.emit(&mut e, wire::STATUS, wire::status("IDLE"));
         self.emit(&mut e, wire::STDERR, "[infantry] session restarted: the next turn starts a fresh conversation".into());
         if had_process {
+            self.tunnel.revoke(&e.rec.id);
             self.notify(|o| o.on_exit(&e.rec));
         }
         Ok(())

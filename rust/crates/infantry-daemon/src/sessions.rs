@@ -1577,10 +1577,12 @@ impl Daemon {
             let target = if tunnel_port != 0 { tunnel_port } else { port };
             if let Some(remote) = forward_to_runner(&entry, target)? {
                 reroute_daemon_env(&mut env, &mut mcp, port, remote);
-                let token = self.tunnel.mint(&e.rec.id);
-                set_token(&mut env, &mut mcp, &token);
             }
         }
+        // RR-6b / AGENT-OWNER-TOKEN-1: EVERY session (local or remote) carries its own scoped token instead of the owner's.
+        // On the main port a connection presenting it is that session's agent, never the owner (server.rs `agent_of`).
+        let token = self.tunnel.mint(&e.rec.id);
+        set_token(&mut env, &mut mcp, &token);
         let req = OpenRequest {
             runner: entry.runner,
             runner_name: entry.name,
@@ -1857,6 +1859,7 @@ impl Daemon {
                     self.push(&mut e);
                     self.release_held_done(&mut e);
                 }
+                self.tunnel.revoke(&e.rec.id);
                 self.notify(|o| o.on_exit(&e.rec));
                 if e.turn_active {
                     let end = if code == Some(0) { TurnEnd::Completed } else { TurnEnd::Failed };
@@ -2027,6 +2030,7 @@ impl Daemon {
         self.emit(&mut e, wire::STATUS, wire::status("EXITED"));
         let word = if force { "KILLED_FORCED" } else { "KILLED_GRACEFUL" };
         self.emit(&mut e, wire::FINISHED, wire::finished(None, word, ""));
+        self.tunnel.revoke(&e.rec.id);
         self.notify(|o| {
             o.on_turn_end(&e.rec, word, "");
             o.on_exit(&e.rec);
@@ -2237,10 +2241,15 @@ fn forward_to_runner(entry: &infantry_runner_source::RunnerEntry, port: u16) -> 
     }
 }
 
-/// RR-6b: lends the session's tunnel token as `INFANTRY_TOKEN` (and in its MCP servers' env), replacing any other.
+/// The token names a session must never inherit from the daemon (the owner's credential): blanked in its env.
+const OWNER_TOKEN_NAMES: [&str; 4] = ["INFANTRY_TOKEN", "INFANTRY_TOKEN_FILE", "AGENTHQ_TOKEN", "AGENTHQ_TOKEN_FILE"];
+
+/// RR-6b: lends the session's own token as `INFANTRY_TOKEN` (and in its MCP servers' env), replacing any other.
+/// AGENT-OWNER-TOKEN-1: the other token names are set blank, so the daemon's own (inherited) credential never reaches it.
 fn set_token(env: &mut Vec<(String, String)>, mcp: &mut infantry_harness::McpPlan, token: &str) {
     let put = |kv: &mut Vec<(String, String)>| {
-        kv.retain(|(k, _)| k != "INFANTRY_TOKEN" && k != "INFANTRY_TOKEN_FILE");
+        kv.retain(|(k, _)| !OWNER_TOKEN_NAMES.iter().any(|n| k.eq_ignore_ascii_case(n)));
+        kv.extend(OWNER_TOKEN_NAMES[1..].iter().map(|n| (n.to_string(), String::new())));
         kv.push(("INFANTRY_TOKEN".into(), token.to_string()));
     };
     put(env);
@@ -2426,4 +2435,23 @@ const DELIVERED_PREFIX: &str = "d-";
 
 fn is_owner_turn(q: &QueuedTurn) -> bool {
     !q.id.starts_with(DELIVERED_PREFIX)
+}
+
+#[cfg(test)]
+mod agent_token_tests {
+    use super::set_token;
+
+    #[test]
+    fn a_session_env_carries_its_own_token_and_never_the_owners() {
+        let mut env = vec![("INFANTRY_TOKEN".to_string(), "owner".to_string()), ("AGENTHQ_TOKEN_FILE".to_string(), "C:/owner.token".to_string()), ("X".to_string(), "1".to_string())];
+        let mut mcp = infantry_harness::McpPlan::default();
+        set_token(&mut env, &mut mcp, "session-token");
+        let get = |k: &str| env.iter().filter(|(n, _)| n == k).map(|(_, v)| v.as_str()).collect::<Vec<_>>();
+        assert_eq!(get("INFANTRY_TOKEN"), vec!["session-token"]);
+        // The inherited owner credentials are overridden blank (a child env entry wins over the inherited one).
+        for k in ["INFANTRY_TOKEN_FILE", "AGENTHQ_TOKEN", "AGENTHQ_TOKEN_FILE"] {
+            assert_eq!(get(k), vec![""], "{k}");
+        }
+        assert_eq!(get("X"), vec!["1"]);
+    }
 }

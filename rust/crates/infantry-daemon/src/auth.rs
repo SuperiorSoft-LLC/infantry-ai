@@ -108,7 +108,7 @@ fn is_loopback_origin(origin: &str) -> bool {
 }
 
 /// The host name of a Host header (port and IPv6 brackets dropped).
-fn host_name(header: &str) -> String {
+pub fn host_name(header: &str) -> String {
     let h = header.trim();
     if let Some(rest) = h.strip_prefix('[') {
         return rest.split(']').next().unwrap_or("").to_ascii_lowercase();

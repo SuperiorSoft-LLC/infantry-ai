@@ -6,6 +6,9 @@
 //! forward therefore targets a second listener (`serve_with` opens it) on which EVERY request needs a per-session token,
 //! minted at the session's start, lent in its env (`INFANTRY_TOKEN`, the MCP env too) and dropped when the session ends.
 //! A token is bound to one session id; its connection may only speak the MCP surface for that session.
+//! AGENT-OWNER-TOKEN-1: the same per-session token is lent to EVERY session (local ones too) in place of the owner's
+//! credential. On the main port it admits the session on a token daemon, and marks the connection as that session's
+//! agent, never the owner (`server.rs` `agent_of`), so owner-only frames and keys are refused to it.
 
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
