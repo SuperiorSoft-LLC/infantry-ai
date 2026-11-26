@@ -44,6 +44,12 @@ pub trait HostServices: Send + Sync + 'static {
     fn http_send_no_redirect(&self, module: &str, request: HttpRequest) -> Result<HttpResponse, String> {
         self.http_send(module, request)
     }
+    /// A no-redirect send that connects only to `addrs` (the addresses the host checked), keeping the URL's host
+    /// for TLS SNI and the Host header (HTTP-REBIND-1). A real network implementation must override this.
+    fn http_send_pinned(&self, module: &str, request: HttpRequest, addrs: &[std::net::SocketAddr]) -> Result<HttpResponse, String> {
+        let _ = addrs;
+        self.http_send_no_redirect(module, request)
+    }
     /// The daemon's SQLite database (plugin tables and the plugin key/value table live here).
     fn db(&self) -> Arc<Mutex<rusqlite::Connection>>;
 }

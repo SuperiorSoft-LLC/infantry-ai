@@ -731,9 +731,19 @@ impl HostServices for DaemonServices {
     fn http_send_no_redirect(&self, _module: &str, req: HttpRequest) -> Result<HttpResponse, String> {
         Self::send_with(self.agent_manual()?, req)
     }
+    fn http_send_pinned(&self, _module: &str, req: HttpRequest, addrs: &[std::net::SocketAddr]) -> Result<HttpResponse, String> {
+        Self::send_with(&pinned_agent(addrs.to_vec())?, req)
+    }
     fn db(&self) -> Arc<Mutex<rusqlite::Connection>> {
         self.db.clone()
     }
+}
+
+/// HTTP-REBIND-1: a no-redirect agent whose resolver answers only `addrs` (what the host checked), so ureq never
+/// looks the name up again; the URL keeps the name, so TLS SNI, the certificate check and Host stay the name's.
+fn pinned_agent(addrs: Vec<std::net::SocketAddr>) -> Result<ureq::Agent, String> {
+    let tls = native_tls::TlsConnector::new().map_err(|e| format!("no TLS for plugin HTTP calls: {e}"))?;
+    Ok(ureq::AgentBuilder::new().tls_connector(Arc::new(tls)).redirects(0).resolver(move |_netloc: &str| Ok(addrs.clone())).build())
 }
 
 /// The owner's community grants ([ALLOW_FILE]): module id -> the grants it lists. A missing or unreadable file grants nothing.

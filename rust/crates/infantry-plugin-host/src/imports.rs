@@ -28,6 +28,17 @@ pub struct PluginImports {
     next_subscription: AtomicU64,
     /// The callers of the calls running now, innermost last (see [`PluginImports::acting_for`]).
     active: Mutex<Vec<CallContext>>,
+    /// HTTP-REBIND-1: how a runtime-hosts fetch resolves a host (the system resolver; a fake in tests).
+    resolver: Arc<HostResolver>,
+}
+
+/// Resolves `(host, port)` to its addresses: the seam a runtime-hosts fetch checks and then pins.
+pub type HostResolver = dyn Fn(&str, u16) -> std::io::Result<Vec<std::net::IpAddr>> + Send + Sync;
+
+/// The system resolver.
+pub fn system_resolver(host: &str, port: u16) -> std::io::Result<Vec<std::net::IpAddr>> {
+    use std::net::ToSocketAddrs;
+    Ok((host, port).to_socket_addrs()?.map(|a| a.ip()).collect())
 }
 
 /// Pops the caller [`PluginImports::acting_for`] pushed, when the call ends (also on a fault).
@@ -41,7 +52,13 @@ impl Drop for ActingFor<'_> {
 
 impl PluginImports {
     pub fn new(module_id: &str, tier: Tier, decl: DaemonDecl, services: Arc<dyn HostServices>, granted: BTreeSet<String>, denied: BTreeSet<String>) -> Self {
-        PluginImports { module_id: module_id.into(), tier, decl, services, granted, denied, subscriptions: Mutex::default(), next_subscription: AtomicU64::new(1), active: Mutex::default() }
+        PluginImports { module_id: module_id.into(), tier, decl, services, granted, denied, subscriptions: Mutex::default(), next_subscription: AtomicU64::new(1), active: Mutex::default(), resolver: Arc::new(system_resolver) }
+    }
+
+    /// Replaces the resolver a runtime-hosts fetch uses (tests).
+    pub fn with_resolver(mut self, resolver: Arc<HostResolver>) -> Self {
+        self.resolver = resolver;
+        self
     }
 
     /// Whether interface `name` is linked (granted or linked-as-denied).
@@ -300,8 +317,10 @@ impl PluginImports {
             if !request.url.get(..8).is_some_and(|p| p.eq_ignore_ascii_case("https://")) {
                 return Err(format!("http refused: {} is not https", origin_of(&request.url)));
             }
-            public_https_host(&request.url)?;
-            let resp = self.services.http_send_no_redirect(&self.module_id, request.clone())?;
+            // Resolve once, check, then pin: the connection goes to exactly the checked addresses, so a DNS name
+            // that answers public now and 127.0.0.1 on the connect lookup cannot reach the owner's machine.
+            let pinned = checked_public_addrs(&request.url, self.resolver.as_ref())?;
+            let resp = self.services.http_send_pinned(&self.module_id, request.clone(), &pinned)?;
             let location = resp.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case("location")).map(|(_, v)| v.clone());
             match location {
                 Some(loc) if (300..400).contains(&resp.status) => {
@@ -433,7 +452,13 @@ const RUNTIME_HTTP_MAX_REDIRECTS: usize = 5;
 /// Ok when every address `url`'s host resolves to is public. Refuses loopback, private (RFC1918, fc00::/7),
 /// link-local (169.254/16, fe80::/10), unspecified, CGNAT (100.64/10, Tailscale), broadcast and multicast.
 pub fn public_https_host(url: &str) -> Result<(), String> {
-    use std::net::{IpAddr, ToSocketAddrs};
+    checked_public_addrs(url, &system_resolver).map(|_| ())
+}
+
+/// The checked socket addresses of `url`'s host (resolved once with `resolve`), refused unless every one is public.
+/// The caller connects to these and only these (HTTP-REBIND-1).
+pub fn checked_public_addrs(url: &str, resolve: &HostResolver) -> Result<Vec<std::net::SocketAddr>, String> {
+    use std::net::{IpAddr, SocketAddr};
     let rest = &url[url.find("://").map(|i| i + 3).unwrap_or(0)..];
     let auth = rest.split(['/', '?', '#']).next().unwrap_or_default();
     let auth = auth.rsplit('@').next().unwrap_or_default();
@@ -467,12 +492,12 @@ pub fn public_https_host(url: &str) -> Result<(), String> {
     }
     let addrs: Vec<IpAddr> = match host.parse::<IpAddr>() {
         Ok(ip) => vec![ip],
-        Err(_) => (host.as_str(), port).to_socket_addrs().map_err(|e| format!("http refused: {host} does not resolve: {e}"))?.map(|a| a.ip()).collect(),
+        Err(_) => resolve(&host, port).map_err(|e| format!("http refused: {host} does not resolve: {e}"))?,
     };
     if addrs.is_empty() || addrs.iter().any(|a| !public(*a)) {
         return Err(format!("http refused: {host} is not a public host"));
     }
-    Ok(())
+    Ok(addrs.into_iter().map(|ip| SocketAddr::new(ip, port)).collect())
 }
 
 pub fn origin_of(url: &str) -> String {
@@ -704,5 +729,43 @@ mod runtime_hosts_tests {
         let decl: DaemonDecl = serde_json::from_str(r#"{"wants":["http"],"httpRuntimeHosts":true}"#).unwrap();
         let c = PluginImports::new("Evil", Tier::Community, decl, Arc::new(MemoryServices::new()), ["http".to_string()].into(), BTreeSet::new());
         assert!(c.http_send(get(fav)).unwrap_err().contains("http refused"));
+    }
+
+    /// HTTP-REBIND-1: a name that answers public first and 127.0.0.1 after is resolved once; the send is pinned to
+    /// the checked public address, never to a second lookup.
+    #[test]
+    fn runtime_hosts_pin_the_checked_address_against_rebinding() {
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+        use std::sync::atomic::AtomicUsize;
+        struct Pinned(Mutex<Vec<Vec<SocketAddr>>>);
+        impl crate::services::HostServices for Pinned {
+            fn setting_get(&self, _: &str) -> Option<String> { None }
+            fn setting_set(&self, _: &str, _: &str) -> Result<(), String> { Ok(()) }
+            fn setting_remove(&self, _: &str) -> Result<(), String> { Ok(()) }
+            fn log(&self, _: &str, _: LogLevel, _: &str) {}
+            fn frame_request(&self, _: &str, f: Frame, _: Option<&CallContext>, _: bool, _: u32) -> Result<Frame, String> { Ok(f) }
+            fn publish(&self, _: &str, _: &str, _: &str, _: Option<&str>) -> Result<NamedEvent, String> { Err("no".into()) }
+            fn broadcast(&self, _: &str, _: &str, _: &str) {}
+            fn http_send(&self, _: &str, _: HttpRequest) -> Result<HttpResponse, String> { panic!("unpinned send") }
+            fn http_send_pinned(&self, _: &str, _: HttpRequest, addrs: &[SocketAddr]) -> Result<HttpResponse, String> {
+                self.0.lock().unwrap().push(addrs.to_vec());
+                Ok(HttpResponse { status: 200, headers: vec![], body: vec![] })
+            }
+            fn db(&self) -> Arc<Mutex<rusqlite::Connection>> { Arc::new(Mutex::new(rusqlite::Connection::open_in_memory().unwrap())) }
+        }
+        let calls = Arc::new(AtomicUsize::new(0));
+        let c = calls.clone();
+        let rebinding = move |_: &str, _: u16| -> std::io::Result<Vec<IpAddr>> {
+            Ok(vec![if c.fetch_add(1, Ordering::SeqCst) == 0 { IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34)) } else { IpAddr::V4(Ipv4Addr::LOCALHOST) }])
+        };
+        let svc = Arc::new(Pinned(Mutex::default()));
+        let decl: DaemonDecl = serde_json::from_str(r#"{"wants":["http"],"httpRuntimeHosts":true}"#).unwrap();
+        let i = PluginImports::new("Infantry_Cards", Tier::Official, decl, svc.clone(), ["http".to_string()].into(), BTreeSet::new()).with_resolver(Arc::new(rebinding));
+        assert_eq!(i.http_send(get("https://rebind.example/a.png")).unwrap().status, 200);
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "resolved more than once");
+        assert_eq!(*svc.0.lock().unwrap(), vec![vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34)), 443)]]);
+        // The next fetch sees the second answer (127.0.0.1) and is refused before any send.
+        assert!(i.http_send(get("https://rebind.example/a.png")).unwrap_err().contains("not a public host"));
+        assert_eq!(svc.0.lock().unwrap().len(), 1);
     }
 }
