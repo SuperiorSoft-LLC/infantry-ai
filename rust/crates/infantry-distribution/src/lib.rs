@@ -336,7 +336,7 @@ fn owner_ask(composed: &Arc<infantry_daemon::compose::Composed>) -> impl Fn(&str
 }
 
 fn read_setting(composed: &Arc<infantry_daemon::compose::Composed>, key: &str) -> Option<serde_json::Value> {
-    let ask = infantry_protocol::envelope::Envelope::new("settings", serde_json::json!({"key": key}).to_string());
+    let ask = infantry_protocol::envelope::Envelope::new(infantry_protocol::frames::SETTINGS_GET, serde_json::json!({"key": key}).to_string());
     let v = composed.request(&ask, true).ok()?.into_iter().next().and_then(|e| serde_json::from_str::<serde_json::Value>(&e.data).ok())?;
     Some(v["value"].clone()).filter(|v| !v.is_null())
 }

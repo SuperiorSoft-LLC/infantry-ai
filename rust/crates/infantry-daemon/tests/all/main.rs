@@ -11,6 +11,7 @@ mod gateway;
 mod hung_child;
 mod migrated_state;
 mod queue_ack;
+mod runner_setting_read;
 mod session_remove;
 mod slow_frame;
 mod sessions_suite;
