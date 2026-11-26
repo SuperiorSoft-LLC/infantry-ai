@@ -173,9 +173,22 @@ pub fn run_checked(a: Vec<String>) -> Result<(), String> {
     let daemon = Daemon::new(harness, cfg).unwrap_or_else(|e| fail(e));
     let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap_or_else(|e| fail(e.to_string()));
     // Every unit, registered over the session manager (inside the runtime: units start background tasks).
-    match rt.block_on(async { infantry_daemon::compose::build_with_mode(&daemon, &state_dir, mode) }) {
-        Ok(composed) => register_runner_pool(&composed, &state_dir, mode, &arg, rt.handle().clone()),
-        Err(e) => eprintln!("[infantry] units not composed, serving the sessions frames only: {e}"),
+    let composed = match rt.block_on(async { infantry_daemon::compose::build_with_mode(&daemon, &state_dir, mode) }) {
+        Ok(composed) => {
+            register_runner_pool(&composed, &state_dir, mode, &arg, rt.handle().clone());
+            Some(composed)
+        }
+        Err(e) => {
+            eprintln!("[infantry] units not composed, serving the sessions frames only: {e}");
+            None
+        }
+    };
+    // UPDATE-LIVE-1: how long a running turn may go on once the OS asks to get ready for an update (seconds, read each call).
+    if let (Some(os), Some(c)) = (&os_runtime, &composed) {
+        let c = c.clone();
+        let _ = os.turn_grace_ms.set(Arc::new(move || {
+            read_setting(&c, infantry_daemon::os_update::TURN_GRACE_KEY).and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))).unwrap_or(infantry_daemon::os_update::DEFAULT_TURN_GRACE_SEC) * 1000
+        }));
     }
     let gateway = arg("--legacy-backend").or_else(|| auth::env("INFANTRY_LEGACY_BACKEND")).map(|cmdline| {
         let legacy_port: u16 = match arg("--legacy-port").or_else(|| auth::env("INFANTRY_LEGACY_PORT")) {
@@ -224,6 +237,15 @@ pub fn run_checked(a: Vec<String>) -> Result<(), String> {
         }
         daemon.health.started(bound, server::BUILD);
         daemon.set_launch(infantry_daemon::harness::launch::LaunchBase::for_daemon(bound, &state_dir, token.as_deref(), &auth::env));
+        // UPDATE-LIVE-1: the first start after a prepared update resumes the agents it cut and says so in one line.
+        if os_runtime.is_some() {
+            if let Some(r) = infantry_daemon::os_update::after_restart(&daemon) {
+                if let Some(c) = &composed {
+                    let body = if r.sessions.is_empty() { String::new() } else { "Every agent continues where it left off; nothing was lost.".to_string() };
+                    c.notice(&r.line(), &body, "update");
+                }
+            }
+        }
         println!("[infantry] listening on ws://{host}:{bound}/ws (health: http://{host}:{bound}/health)");
         println!(
             "{}",

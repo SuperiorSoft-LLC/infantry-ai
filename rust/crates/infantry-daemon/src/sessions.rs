@@ -343,6 +343,8 @@ pub struct Daemon {
     workspace_spec: std::sync::OnceLock<Arc<dyn Fn() -> Option<WorkspaceSpec> + Send + Sync>>,
     /// RR-4: the runners a session can be placed on, by name (`local` built in; the composition root adds the paired ones).
     runners: std::sync::OnceLock<Arc<infantry_runner_source::RunnerRegistry>>,
+    /// UPDATE-LIVE-1: no new turn starts (an update is being prepared); a turn into a session at rest waits in its queue.
+    turns_paused: AtomicBool,
 }
 
 /// RR-6b: one encoded frame with no session or sequence (the tunnel's hello).
@@ -463,6 +465,7 @@ impl Daemon {
             role_policy: std::sync::OnceLock::new(),
             workspace_spec: std::sync::OnceLock::new(),
             runners: std::sync::OnceLock::new(),
+            turns_paused: AtomicBool::new(false),
         });
         d.refresh_held();
         Ok(d)
@@ -568,6 +571,40 @@ impl Daemon {
         self.cache.lock().unwrap().iter().find(|r| r.id == id).cloned()
     }
 
+    /// UPDATE-LIVE-1: while paused no new turn starts: a prompt, mail or board start into a session at rest is held in that
+    /// session's queue (stored with the session, so it survives a restart). Turns already running go on. Unpausing sends
+    /// every held message (one per session, the rest after each turn as usual).
+    pub fn pause_turns(self: &Arc<Self>, on: bool) {
+        let was = self.turns_paused.swap(on, Ordering::SeqCst);
+        if was && !on {
+            self.send_held();
+        }
+    }
+
+    pub fn turns_paused(&self) -> bool {
+        self.turns_paused.load(Ordering::SeqCst)
+    }
+
+    /// The sessions with a turn running now.
+    pub fn running_turns(&self) -> Vec<String> {
+        let entries: Vec<(String, Arc<Mutex<Entry>>)> = self.list.lock().unwrap().iter().map(|(id, e)| (id.clone(), e.clone())).collect();
+        entries.into_iter().filter(|(_, e)| e.lock().map(|e| !e.removed && e.turn_active).unwrap_or(false)).map(|(id, _)| id).collect()
+    }
+
+    /// Every session at rest with held messages takes the oldest as its next turn. Returns those sessions.
+    pub fn send_held(self: &Arc<Self>) -> Vec<String> {
+        let entries: Vec<(String, Arc<Mutex<Entry>>)> = self.list.lock().unwrap().iter().map(|(id, e)| (id.clone(), e.clone())).collect();
+        let mut sent = vec![];
+        for (id, e) in entries {
+            let waiting = e.lock().map(|e| !e.removed && !e.turn_active && e.rec.state != SessionState::Exited && !e.rec.queued.is_empty()).unwrap_or(false);
+            if waiting {
+                self.drain_later(&id);
+                sent.push(id);
+            }
+        }
+        sent
+    }
+
     /// Whether a turn of `id` is running now (None = no such session).
     pub fn turn_active(&self, id: &str) -> Option<bool> {
         self.find(id).map(|e| e.lock().unwrap().turn_active)
@@ -616,9 +653,14 @@ impl Daemon {
             if text.trim().is_empty() {
                 return Err("deliver_urgent refused: nothing to deliver".into());
             }
-            if !e.turn_active {
+            if !e.turn_active && !self.turns_paused() {
                 self.turn_into(&mut e, text.to_string());
                 return Ok("turn");
+            }
+            if !e.turn_active {
+                drop(e);
+                self.queue_add(id, text.to_string())?;
+                return Ok("queued");
             }
             e.hs.as_ref().and_then(|h| h.injector())
         };
@@ -1053,6 +1095,11 @@ impl Daemon {
             // Kotlin's typed refusal (1.96.0): nothing ran; the client queues it (`queue_add`) or sends it again later.
             return Err(Refusal::InFlight(format!("{} {sid}: session {sid} already has a run in flight", wire::RUN_IN_FLIGHT)));
         }
+        if self.turns_paused() {
+            // UPDATE-LIVE-1: an update is being prepared; the turn waits in the queue and runs after it.
+            drop(e);
+            return self.queue_add(sid, text).map_err(Refusal::Plain);
+        }
         self.turn_into(&mut e, text);
         Ok(())
     }
@@ -1064,7 +1111,7 @@ impl Daemon {
         if text.trim().is_empty() {
             return Err("queue_add refused: nothing to queue".into());
         }
-        if !e.turn_active {
+        if !e.turn_active && !self.turns_paused() {
             self.turn_into(&mut e, text);
             return Ok(());
         }
@@ -1165,7 +1212,7 @@ impl Daemon {
         crate::sessions::spawn_bg(async move {
             let Some(entry) = d.find(&sid) else { return };
             let mut e = entry.lock().unwrap();
-            if e.removed || e.turn_active || e.rec.state == SessionState::Exited || e.rec.queued.is_empty() {
+            if e.removed || e.turn_active || e.rec.state == SessionState::Exited || e.rec.queued.is_empty() || d.turns_paused() {
                 return;
             }
             let head = e.rec.queued.remove(0);

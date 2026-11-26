@@ -158,6 +158,23 @@ async fn stop(State(s): State<Shared>, headers: HeaderMap) -> Response {
     ([(header::CONTENT_TYPE, "application/json")], r#"{"ok":true,"stopping":true}"#).into_response()
 }
 
+/// UPDATE-LIVE-1: `POST /prepare-update` with the OS's per-start secret as bearer: get ready for an update ([crate::os_update]).
+async fn prepare_update(State(s): State<Shared>, headers: HeaderMap, body: axum::body::Bytes) -> Response {
+    let Some(os) = s.os.clone() else { return (StatusCode::NOT_FOUND, "not found").into_response() };
+    if !os.stop_authorized(h(&headers, header::AUTHORIZATION)) {
+        let mut r = (StatusCode::UNAUTHORIZED, "the prepare call needs the app's stop secret as a bearer token").into_response();
+        r.headers_mut().insert(header::WWW_AUTHENTICATE, "Bearer".parse().unwrap());
+        return r;
+    }
+    let req = match crate::os_update::Request::parse(&body) {
+        Ok(r) => r,
+        Err(e) => return (StatusCode::BAD_REQUEST, e).into_response(),
+    };
+    let daemon = s.app.daemon.clone();
+    let answer = tokio::task::spawn_blocking(move || crate::os_update::prepare(&daemon, &os, &req)).await.unwrap_or_else(|_| serde_json::json!({"ready": false, "reason": "it recovers from an internal error"}));
+    ([(header::CONTENT_TYPE, "application/json")], answer.to_string()).into_response()
+}
+
 async fn ws(
     State(s): State<Shared>,
     peer: Option<axum::Extension<ConnectInfo<std::net::SocketAddr>>>,
@@ -495,7 +512,7 @@ fn router_with(app: App, gateway: Option<Arc<Gateway>>, os: Option<Arc<crate::os
     let shared = Shared { app: app.clone(), gateway, os: os.clone() };
     let mut r = Router::new().route("/ws", get(ws)).route("/health", get(health));
     if os.is_some() {
-        r = r.route(crate::os_app::STOP_PATH, post(stop)).route("/os/phone", axum::routing::any(os_phone));
+        r = r.route(crate::os_app::STOP_PATH, post(stop)).route(crate::os_app::PREPARE_PATH, post(prepare_update)).route("/os/phone", axum::routing::any(os_phone));
     }
     let mut r = r.fallback(plugin_route).with_state(shared.clone());
     if let Some(extra) = app.daemon.units().and_then(|u| u.http()) {

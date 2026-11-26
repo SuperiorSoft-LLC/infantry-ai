@@ -119,6 +119,8 @@ pub struct Composed {
     pub remote_host: Arc<dyn infantry_runner_source::remote::RemoteHost>,
     /// The account hub; `account_token` is answered from it for a consumer plugin.
     pub account: Arc<crate::account::Account>,
+    /// The notification hub (the owner's notices and toasts).
+    pub hub: Arc<NotificationHub>,
     next_conn: AtomicU64,
 }
 
@@ -805,7 +807,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         Arc::new(UsageUnit::new(usage.clone())),
         board_side(Arc::new(MailUnit::new(mail.clone()))),
         Arc::new(AttentionUnit::new(attention.clone())),
-        Arc::new(NotificationsUnit::new(hub)),
+        Arc::new(NotificationsUnit::new(hub.clone())),
         Arc::new(NotifyUnit::new(notify)),
         Arc::new(PromptsUnit::new(prompts.clone(), Some(rules))),
         Arc::new(QuestionsUnit::new(questions.clone(), asker_of)),
@@ -894,6 +896,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         wake_gate: env.wake_gate(),
         remote_host,
         account: account.clone(),
+        hub: hub.clone(),
         next_conn: AtomicU64::new(1),
     });
     if let Some(p) = &plugin_set {
@@ -1032,6 +1035,11 @@ fn health_unit(
 }
 
 impl Composed {
+    /// One notice to the owner (an info toast and a row in the notifications), from `source`.
+    pub fn notice(&self, title: &str, body: &str, source: &str) {
+        self.hub.post(infantry_mail::notify::hub::Notification { title: title.into(), body: body.into(), ..Default::default() }, source);
+    }
+
     /// The unit that owns `env`'s frame: the registry's, else the one of a plugin installed after start.
     fn serve(&self, env: &Envelope, ctx: &FrameCtx) -> Option<Result<Vec<Envelope>, Refusal>> {
         self.registry.dispatch(env, ctx).or_else(|| self.late.owner(&env.r#type).map(|u| u.handle(env, ctx)))

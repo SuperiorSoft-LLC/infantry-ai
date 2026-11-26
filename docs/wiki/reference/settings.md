@@ -76,6 +76,7 @@ uses when the key is unset, where it sits next to the key; otherwise read the co
 | `limits.tools.inboxLimit` |  | `rust/crates/infantry-cli/src/cli/cmd_mail.rs`, `rust/plugins/official/Infantry_Chat/daemon/src/lib.rs` |
 | `limits.tools.listLimit` | `50` | `rust/crates/infantry-daemon/src/compose/agent_tools.rs` |
 | `limits.tools.sessionTailLines` | `5` | `rust/crates/infantry-daemon/src/compose/agent_tools.rs` |
+| `limits.update.turnGraceSec` |  | `rust/crates/infantry-daemon/src/os_update.rs` |
 | `limits.ws.frameDetachMs` |  | `rust/crates/infantry-daemon/src/sessions.rs` |
 | `scripting.chat.imageProjectOnly` |  | `rust/crates/infantry-scripting/src/chat.rs` |
 | `scripting.exec.defaultTimeoutSec` |  | `rust/crates/infantry-scripting/src/exec.rs` |

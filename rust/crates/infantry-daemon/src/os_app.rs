@@ -8,6 +8,7 @@
 //! - writes the ready file `{contract, pid, url, health, stop}` once it listens (and removes it on a clean stop),
 //! - `POST /stop` with the secret as bearer ends the daemon through the graceful path of `serve_with`,
 //! - `/health` carries `busy` (agent turns in flight), so the OS can ask before an update,
+//! - UPDATE-LIVE-1: `POST /prepare-update` (same bearer) gets the daemon ready for an update ([crate::os_update]),
 //! - the app's own origin joins the WebSocket allow list,
 //! - `<state>/launch.json` (host, port, tokenFile) gives phone access without window flags,
 //! - plugins live in `<state>/plugins-installed`; the package's plugins are only the bundled source they are synced from.
@@ -29,6 +30,8 @@ pub const UI_ORIGIN_ENV: &str = "BATTALION_UI_ORIGIN";
 pub const CONTRACT: u32 = 1;
 /// The route the OS stops the app through.
 pub const STOP_PATH: &str = "/stop";
+/// UPDATE-LIVE-1: the route the OS asks the app to get ready for an update through (named in the ready file).
+pub const PREPARE_PATH: &str = "/prepare-update";
 /// Where the plugins of an app daemon live, inside the state dir.
 pub const INSTALLED_DIR: &str = "plugins-installed";
 /// The launch file in the state dir.
@@ -90,6 +93,11 @@ pub struct OsRuntime {
     stop: tokio::sync::Notify,
     /// BOS-33: the port this daemon bound (set when the ready file is written), for the phone-access rows.
     bound_port: std::sync::atomic::AtomicU16,
+    /// UPDATE-LIVE-1: when the OS first asked to get ready for the update in progress (`None` = no update asked).
+    pub prepare_since: std::sync::Mutex<Option<std::time::Instant>>,
+    /// UPDATE-LIVE-1: how long a running turn may go on once an update is asked, in ms (the setting
+    /// `limits.update.turnGraceSec`, set by the composition root; unset = [crate::os_update::DEFAULT_TURN_GRACE_SEC]).
+    pub turn_grace_ms: std::sync::OnceLock<Arc<dyn Fn() -> u64 + Send + Sync>>,
 }
 
 fn digest(s: &str) -> [u8; 32] {
@@ -104,7 +112,7 @@ impl OsRuntime {
         if t.is_empty() {
             return Err(format!("{TOKEN_FILE_ENV} {} is empty", env.token_file.display()));
         }
-        Ok(Arc::new(OsRuntime { stop_digest: digest(t), env, stop: tokio::sync::Notify::new(), bound_port: Default::default() }))
+        Ok(Arc::new(OsRuntime { stop_digest: digest(t), env, stop: tokio::sync::Notify::new(), bound_port: Default::default(), prepare_since: Default::default(), turn_grace_ms: Default::default() }))
     }
 
     /// True when `Authorization: Bearer <secret>` carries the stop secret (constant time on the digests).
@@ -173,7 +181,7 @@ pub fn ready_json(bind_host: &str, port: u16, pid: u32) -> Result<String, String
         h if crate::auth::is_loopback_host(h) => if h.contains(':') { format!("[{h}]") } else { h.to_string() },
         _ => return Err(format!("bound to {bind_host}: an app daemon must bind a loopback or wildcard address (the OS reaches it on loopback)")),
     };
-    Ok(serde_json::json!({"contract": CONTRACT, "pid": pid, "url": format!("http://{url_host}:{port}"), "health": "/health", "stop": STOP_PATH}).to_string())
+    Ok(serde_json::json!({"contract": CONTRACT, "pid": pid, "url": format!("http://{url_host}:{port}"), "health": "/health", "stop": STOP_PATH, "prepare": PREPARE_PATH}).to_string())
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
@@ -365,6 +373,7 @@ mod tests {
     fn ready_file_is_loopback_json_and_removed_on_clear() {
         let v: serde_json::Value = serde_json::from_str(&ready_json("0.0.0.0", 4242, 7).unwrap()).unwrap();
         assert_eq!((v["contract"].as_u64(), v["pid"].as_u64(), v["url"].as_str(), v["stop"].as_str(), v["health"].as_str()), (Some(1), Some(7), Some("http://127.0.0.1:4242"), Some("/stop"), Some("/health")));
+        assert_eq!(v["prepare"].as_str(), Some("/prepare-update"), "UPDATE-LIVE-1: the OS asks before an update");
         assert_eq!(serde_json::from_str::<serde_json::Value>(&ready_json("::1", 1, 7).unwrap()).unwrap()["url"], "http://[::1]:1");
         assert!(ready_json("192.168.1.5", 1, 7).is_err());
         let d = tempfile::tempdir().unwrap();
