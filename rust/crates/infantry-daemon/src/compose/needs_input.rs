@@ -9,7 +9,7 @@
 //!   with `pm` the card goes to the project's PM session as ONE wake (kind `session.needs_input`, key = the prompt id,
 //!   through the WAKE-1 policy), the PM answers with `infantry prompt answer`, and with `pm-then-owner` it may escalate.
 //!   No live PM in the project = the owner's card, as before.
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use infantry_core::bus::EventBus;
 use infantry_core::db::Db;
@@ -68,14 +68,28 @@ pub fn wake_line(r: &PromptRequest, ticket_id: Option<&str>) -> (String, String)
     )
 }
 
+/// NEEDS-INPUT-2: whether [session] has an open card the OWNER must answer (a card routed to the PM is not one).
+pub fn owner_card_open(prompts: &PendingPrompts, session: &str) -> bool {
+    prompts.snapshot().iter().any(|p| p.session_id == session && p.route.is_none())
+}
+
+/// Holds the session as WAITING_INPUT while an owner card is open, BUSY again when the last one closes.
+fn sync_hold(prompts: &Weak<PendingPrompts>, daemon: &Daemon, session: &str) {
+    if let Some(p) = prompts.upgrade() {
+        daemon.set_answer_hold(session, owner_card_open(&p, session));
+    }
+}
+
 pub fn wire(prompts: &Arc<PendingPrompts>, daemon: &Arc<Daemon>, db: &Arc<Db>, env: &Arc<DaemonBoardEnv>, bus: &EventBus) {
     {
         let (d, s, e) = (daemon.clone(), SettingsUnit { db: db.clone() }, env.clone());
         prompts.set_router(move |session| route_for(&d, &s, &e, session));
     }
     let (d, env, bus) = (daemon.clone(), env.clone(), bus.clone());
+    let weak = Arc::downgrade(prompts);
     prompts.set_observer(move |ev| match ev {
         PromptEvent::Asked(r) => {
+            sync_hold(&weak, &d, &r.session_id);
             let rec = d.record(&r.session_id);
             let ticket = rec.as_ref().and_then(|x| x.ticket_id.clone());
             bus.emit(NEEDS_INPUT, asked_payload(r, ticket.as_deref(), rec.as_ref().and_then(|x| x.project_id.as_deref())));
@@ -87,6 +101,7 @@ pub fn wire(prompts: &Arc<PendingPrompts>, daemon: &Arc<Daemon>, db: &Arc<Db>, e
             }
         }
         PromptEvent::Resolved(r, done) => {
+            sync_hold(&weak, &d, &r.session_id);
             let ticket = d.record(&r.session_id).and_then(|x| x.ticket_id);
             bus.emit(INPUT_ANSWERED, json!({"sessionId": r.session_id, "ticketId": ticket, "promptId": r.prompt_id, "outcome": done.outcome, "resolvedBy": done.resolved_by}));
         }
@@ -133,5 +148,44 @@ mod tests {
         assert!(subject.contains("sess-123") && subject.contains("t1"));
         assert!(line.contains("infantry prompt answer p1") && !line.contains("--escalate"));
         assert!(wake_line(&card(Some("pm-then-owner")), None).1.contains("--escalate"));
+    }
+
+    /// NEEDS-INPUT-2 (ticket 97ecaf73): a busy session with an open owner card is WAITING_INPUT (the header's "Needs
+    /// input"), BUSY again once answered; a card routed to the PM does not hold it.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_open_owner_card_holds_the_session_as_waiting_input_until_answered() {
+        use infantry_mail::notify::prompts::{QuestionSpec, TimeoutPolicy};
+        use infantry_protocol::session::SessionState;
+        let dir = std::env::temp_dir().join(format!("infantry-needs-input-2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let daemon = Daemon::new(Arc::new(crate::harness::stub::Stub { start_ms: 60_000, line_ms: 25 }), crate::sessions::Config::new(dir.clone(), dir)).unwrap();
+        let sid = daemon.launch(crate::sessions::NewOpts { prompt: Some("work".into()), ..Default::default() }).unwrap();
+        let state = |d: &Daemon| d.record(&sid).unwrap().state;
+        for _ in 0..100 {
+            if state(&daemon) == SessionState::Busy { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert_eq!(state(&daemon), SessionState::Busy);
+
+        let prompts = Arc::new(PendingPrompts::new(None, Arc::new(|_| None), Arc::new(|_| TimeoutPolicy { timeout_ms: 0, on_timeout: infantry_mail::notify::prompts::Decision::Deny }), Arc::new(|| 0)));
+        let (weak, d) = (Arc::downgrade(&prompts), daemon.clone());
+        prompts.set_observer(move |ev| match ev {
+            PromptEvent::Asked(r) | PromptEvent::Resolved(r, _) => sync_hold(&weak, &d, &r.session_id),
+        });
+        let spec = QuestionSpec { question: "Allow Bash?".into(), options: vec![PromptOption { label: "Allow".into(), description: String::new() }], multi_select: false, allow_other: false, timeout_ms: None, recommended: None };
+        let (p2, s2) = (prompts.clone(), sid.clone());
+        let asker = tokio::spawn(async move { p2.ask_question(&s2, &spec).await });
+        for _ in 0..100 {
+            if !prompts.snapshot().is_empty() { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(owner_card_open(&prompts, &sid));
+        assert_eq!(state(&daemon), SessionState::WaitingInput, "an open card = needs input");
+
+        let id = prompts.snapshot()[0].prompt_id.clone();
+        prompts.respond(&infantry_protocol::prompts::PromptResponse { prompt_id: id, decision: None, answers: vec!["Allow".into()], other_text: None }, "owner").unwrap();
+        asker.await.unwrap();
+        assert_eq!(state(&daemon), SessionState::Busy, "answered = working again");
+        assert!(!daemon.set_answer_hold(&sid, false), "nothing to release");
     }
 }

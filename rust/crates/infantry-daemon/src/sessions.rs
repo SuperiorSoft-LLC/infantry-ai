@@ -573,6 +573,24 @@ impl Daemon {
         self.find(id).map(|e| e.lock().unwrap().turn_active)
     }
 
+    /// NEEDS-INPUT-2: a running session that waits on an owner answer (a tool approval or question card) is WAITING_INPUT
+    /// while the card is open, and BUSY again when it closes; pushed, so every client's counters see it. Only a running
+    /// turn is held: a session at rest, exited or failed keeps its state. Returns whether the state changed.
+    pub fn set_answer_hold(&self, id: &str, on: bool) -> bool {
+        let Some(entry) = self.find(id) else { return false };
+        let mut e = entry.lock().unwrap();
+        let next = match (on, e.rec.state) {
+            (true, SessionState::Busy | SessionState::Starting) => SessionState::WaitingInput,
+            (false, SessionState::WaitingInput) => SessionState::Busy,
+            _ => return false,
+        };
+        Self::set_state(&mut e, next);
+        self.push(&mut e);
+        let st = state_word(next).to_ascii_uppercase();
+        self.emit(&mut e, wire::STATUS, wire::status(&st));
+        true
+    }
+
     /// Creates a session at rest (running `opts.prompt` as its first turn when set) and returns its id: the board's
     /// session launcher uses this; a client sends `new`.
     pub fn launch(self: &Arc<Self>, opts: NewOpts) -> Result<String, String> {
