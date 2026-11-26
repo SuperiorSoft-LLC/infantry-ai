@@ -105,6 +105,11 @@ fn pm(inv: &ToolInvoker) -> bool {
     inv.owner || inv.session_id.is_none() || inv.role.as_deref().map(|r| r.eq_ignore_ascii_case("pm")).unwrap_or(false)
 }
 
+/// OWNER-SESSION-GUARD-1: an agent or script (anyone but the owner's own client) may not control an owner-owned session.
+fn owner_guard(inv: &ToolInvoker, action: &str, r: &SessionRecord) -> Option<String> {
+    (!inv.owner_client).then(|| super::scope::owner_session_refusal(action, r)).flatten()
+}
+
 fn short(id: &str) -> String {
     infantry_board::tools::short(id)
 }
@@ -284,6 +289,9 @@ impl AgentTools {
             })(),
             "infantry_prompt" => (|| {
                 let r = self.find(&s(a, "sessionId").unwrap_or_default())?;
+                if let Some(why) = owner_guard(inv, "prompt", &r) {
+                    return Err(why);
+                }
                 let text = a.get("prompt").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 if text.trim().is_empty() {
                     return Err("prompt is required".to_string());
@@ -297,6 +305,9 @@ impl AgentTools {
             })(),
             "infantry_kill" => (|| {
                 let r = self.find(&s(a, "sessionId").unwrap_or_default())?;
+                if let Some(why) = owner_guard(inv, "kill", &r) {
+                    return Err(why);
+                }
                 let mine = inv.session_id.is_some() && r.spawner_session_id == inv.session_id;
                 let same_project = self.caller_project(inv).is_none() || self.caller_project(inv) == r.project_id;
                 if !(mine || (pm(inv) && same_project)) {
@@ -402,6 +413,9 @@ impl AgentTools {
                     return Ok(format!("already-removed {want}"));
                 }
                 let r = self.find(want)?;
+                if let Some(why) = owner_guard(inv, "remove", &r) {
+                    return Err(why);
+                }
                 let mine = inv.session_id.is_some() && r.spawner_session_id == inv.session_id;
                 let same_project = self.caller_project(inv).is_none() || self.caller_project(inv) == r.project_id;
                 if !(mine || inv.owner || (pm(inv) && same_project)) {
@@ -524,6 +538,9 @@ impl AgentTools {
             })(),
             "infantry_session_restart" => (|| {
                 let r = self.find(&s(a, "sessionId").unwrap_or_default())?;
+                if let Some(why) = owner_guard(inv, "restart", &r) {
+                    return Err(why);
+                }
                 let mine = inv.session_id.is_some() && r.spawner_session_id == inv.session_id;
                 let itself = inv.session_id.as_deref() == Some(r.id.as_str());
                 let same_project = self.caller_project(inv).is_none() || self.caller_project(inv) == r.project_id;
@@ -636,6 +653,9 @@ impl AgentTools {
                     return Err("only the pm, the owner or a script may act on another session".to_string());
                 }
                 let r = self.find(&s(a, "sessionId").unwrap_or_default())?;
+                if let Some(why) = owner_guard(inv, "act on", &r) {
+                    return Err(why);
+                }
                 let action = s(a, "action").ok_or("needs an action (queue_add | deliver_urgent)")?;
                 let text = s(a, "text").ok_or("needs text")?;
                 let how = match action.as_str() {
@@ -764,6 +784,41 @@ mod wake_route_tests {
         assert!(act(json!({"sessionId": "ghost", "action": "queue_add", "text": "x"}), &inv).is_error);
         let worker = ToolInvoker::agent("w1", "backend", None, "agent");
         assert!(act(json!({"sessionId": pm, "action": "queue_add", "text": "x"}), &worker).text.contains("only the pm"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// OWNER-SESSION-GUARD-1: no agent or script may remove, kill, restart, prompt or act on the owner's Assistant; the
+    /// owner's own client may; reading it and mail to it still work.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn agents_and_scripts_cannot_control_the_owner_session() {
+        let (dir, daemon, c, pm) = setup();
+        let asst = daemon.ensure_assistant().unwrap().id;
+        let listed = c.tools.invoke("infantry_get_session", json!({"sessionId": asst}).as_object().unwrap(), &ToolInvoker::agent(&pm, "pm", None, "agent"));
+        assert!(!listed.is_error, "reading the owner's session stays open: {}", listed.text);
+        assert!(daemon.record(&asst).unwrap().is_owner_owned());
+        let script = ToolInvoker::automation(None, "script:worker-watch");
+        let agent_pm = ToolInvoker::agent(&pm, "pm", None, "agent");
+        let calls = [
+            ("infantry_session_remove", json!({"sessionId": asst, "force": true})),
+            ("infantry_kill", json!({"sessionId": asst})),
+            ("infantry_session_restart", json!({"sessionId": asst})),
+            ("infantry_prompt", json!({"sessionId": asst, "prompt": "hi"})),
+            ("infantry_session_act", json!({"sessionId": asst, "action": "queue_add", "text": "hi"})),
+        ];
+        for inv in [&script, &agent_pm] {
+            for (tool, args) in &calls {
+                let r = c.tools.invoke(tool, args.as_object().unwrap(), inv);
+                assert!(r.is_error && r.text.contains("OWNER-SESSION-GUARD-1"), "{tool} by {}: {}", inv.label, r.text);
+            }
+        }
+        assert!(daemon.record(&asst).is_some(), "the Assistant survives every refused call");
+        let mail = send(&c, &asst, "note", "owner-guard");
+        assert!(!mail.to_lowercase().contains("refused"), "mail to the owner's session is delivered: {mail}");
+        let owner = ToolInvoker { owner: true, owner_client: true, label: "tool:infantry_session_act".into(), ..Default::default() };
+        let r = c.tools.invoke("infantry_session_act", json!({"sessionId": asst, "action": "queue_add", "text": "from the owner"}).as_object().unwrap(), &owner);
+        assert!(!r.is_error, "the owner keeps control: {}", r.text);
+        let r = c.tools.invoke("infantry_session_remove", json!({"sessionId": asst, "force": true}).as_object().unwrap(), &owner);
+        assert!(!r.is_error, "the owner may remove it: {}", r.text);
         let _ = std::fs::remove_dir_all(dir);
     }
 

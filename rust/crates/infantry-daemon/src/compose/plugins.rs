@@ -669,6 +669,9 @@ impl HostServices for DaemonServices {
         if let Some(why) = super::scope::refusal(&frame.r#type, &frame.data, frame.session_id.as_deref(), caller, &c.daemon.records(), max_depth) {
             return Err(why);
         }
+        if let Some(why) = super::scope::owner_frame_refusal(&frame.r#type, &frame.data, frame.session_id.as_deref(), &c.daemon.records()) {
+            return Err(why);
+        }
         // `account_token`: answered here, never through the frame registry, so the module is the host's (the manifest id)
         // and no client can name another. The provider decides by its `consumers`.
         if frame.r#type == crate::account::frames::TOKEN {

@@ -71,6 +71,45 @@ pub fn own_secret_request(frame: &str, module: &str, data: &str) -> Result<Strin
     Ok(v.to_string())
 }
 
+/// OWNER-SESSION-GUARD-1: the refusal for an agent or script that would `action` the owner's own session `rec`, or None
+/// when the session is not owner-owned. Reading it and mailing it stay open (mail is the owner's inbox channel).
+pub fn owner_session_refusal(action: &str, rec: &SessionRecord) -> Option<String> {
+    rec.is_owner_owned().then(|| {
+        format!(
+            "{action} refused: session {} is the owner's own session (OWNER-SESSION-GUARD-1); agents and scripts may read it and mail it, but only the owner may {action} it",
+            rec.id
+        )
+    })
+}
+
+/// Session frames that control a session (end, remove, restart, prompt, queue into, interrupt or swap it).
+const CONTROLS: [&str; 8] = [
+    crate::wire::PROMPT,
+    crate::wire::QUEUE_ADD,
+    crate::wire::QUEUE_FORCE,
+    crate::wire::INTERRUPT,
+    crate::wire::KILL,
+    crate::wire::SESSION_DELETE,
+    infantry_protocol::frames::SESSION_RESTART,
+    infantry_protocol::frames::SESSION_SWAP,
+];
+
+/// OWNER-SESSION-GUARD-1 for a frame a plugin (or a script through it) sends: a control frame aimed at an owner-owned
+/// session is refused, whoever the plugin works for. The owner's own client never comes this way.
+pub fn owner_frame_refusal(ty: &str, data: &str, frame_session: Option<&str>, records: &[SessionRecord]) -> Option<String> {
+    if !CONTROLS.contains(&ty) {
+        return None;
+    }
+    let named = |k: &str| serde_json::from_str::<Value>(data).ok().and_then(|v| v.get(k).and_then(Value::as_str).map(str::to_string));
+    let target = match ty {
+        t if t == crate::wire::KILL || t == crate::wire::SESSION_DELETE || t == crate::wire::INTERRUPT => kill_target(frame_session, data),
+        t if t == infantry_protocol::frames::SESSION_RESTART || t == infantry_protocol::frames::SESSION_SWAP => named("sessionId").or_else(|| frame_session.map(str::to_string)),
+        _ => frame_session.map(str::to_string),
+    }?;
+    let target = target.trim();
+    records.iter().find(|r| r.id == target).and_then(|r| owner_session_refusal(ty, r))
+}
+
 /// Why `caller` may not send this frame, or None when it may.
 pub fn refusal(ty: &str, data: &str, frame_session: Option<&str>, ctx: Option<&CallContext>, records: &[SessionRecord], max_depth: i64) -> Option<String> {
     let me = caller_session(ctx)?;
@@ -154,6 +193,29 @@ mod tests {
     fn owner_and_plugin_work_are_not_scoped() {
         assert_eq!(refusal("kill", "x", None, None, &[], 1), None);
         assert_eq!(refusal("kill", "x", None, Some(&CallContext::default()), &[], 1), None);
+    }
+
+    #[test]
+    fn plugin_frames_never_control_an_owner_session() {
+        let mut a = rec("a", None, Some("assistant"), "");
+        a.global = true;
+        let mut o = rec("o", None, Some("dev"), "p");
+        o.owner_owned = true;
+        let rs = vec![a, o, rec("w", None, Some("dev"), "p")];
+        for (ty, data, sid) in [
+            ("kill", "a force", None),
+            ("session_delete", "", Some("o")),
+            ("prompt", "hi", Some("a")),
+            ("queue_add", "hi", Some("o")),
+            ("interrupt", "a", None),
+            ("session_restart", r#"{"sessionId":"o"}"#, None),
+        ] {
+            let why = owner_frame_refusal(ty, data, sid, &rs).unwrap_or_else(|| panic!("{ty} must be refused"));
+            assert!(why.contains("OWNER-SESSION-GUARD-1") && why.starts_with(ty), "{why}");
+        }
+        assert_eq!(owner_frame_refusal("kill", "w", None, &rs), None);
+        assert_eq!(owner_frame_refusal("sessions", "", Some("a"), &rs), None);
+        assert_eq!(owner_frame_refusal("replay_request", "", Some("a"), &rs), None);
     }
 
     #[test]

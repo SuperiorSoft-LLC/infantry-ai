@@ -1380,6 +1380,7 @@ impl ScriptHooks {
             role: hook.owner_role.clone(),
             project_id: Some(project.into()),
             label,
+            owner_client: false,
         }
     }
 

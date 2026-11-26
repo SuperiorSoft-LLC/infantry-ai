@@ -258,6 +258,8 @@ impl FrameUnit for ToolsUnit {
                 let s = |k: &str| client.get(k).and_then(Value::as_str).map(str::to_string).filter(|x| !x.trim().is_empty());
                 let session = s("sessionId");
                 let inv = ToolInvoker {
+                    // OWNER-SESSION-GUARD-1: the owner's connection with no session is the owner's own client.
+                    owner_client: ctx.owner && session.is_none(),
                     owner: ctx.owner && session.is_none(),
                     agent: session.is_some(),
                     active_session: session.clone(),

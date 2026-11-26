@@ -22,6 +22,9 @@ pub struct ToolInvoker {
     pub project_id: Option<String>,
     /// Audit label, e.g. `script:on-done`.
     pub label: String,
+    /// OWNER-SESSION-GUARD-1: the human owner's own client (the app, the CLI) asked, not a script or a plugin acting with
+    /// owner permissions. Only such a call may control an owner-owned session.
+    pub owner_client: bool,
 }
 
 impl ToolInvoker {
@@ -40,6 +43,7 @@ impl ToolInvoker {
             role: Some(role.to_string()),
             project_id: project.map(str::to_string),
             label: label.into(),
+            owner_client: false,
         }
     }
 }

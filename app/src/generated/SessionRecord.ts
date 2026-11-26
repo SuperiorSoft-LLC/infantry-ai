@@ -31,7 +31,12 @@ contextLimitHow: string | null, effortSupport: string | null, agentId: string | 
 /**
  * RR-4: the id of the harness process on `runner` (the placement is kept with the session across a daemon restart).
  */
-runnerProc: string | null, keptProcess: KeptProcess | null, backgroundWork: BackgroundWork | null, bgJobs: Array<BgJob>, backgroundTasks: Array<BackgroundTaskView>, automation: SessionAutomation | null, lastAction: string | null, lastOutputAt: bigint | null, lastEventAt: bigint | null, lastTurnAt: bigint | null, watch: AgentWatch | null, watchLabel: string | null, runPhase: string | null, spawnerSessionId: string | null, global: boolean, progress: SessionProgress | null, waiting: SessionWaiting | null, mcp: string | null, mcpChangedAt: bigint | null, mcpServers: Array<McpServerStatusView>, queued: Array<QueuedTurn>, 
+runnerProc: string | null, keptProcess: KeptProcess | null, backgroundWork: BackgroundWork | null, bgJobs: Array<BgJob>, backgroundTasks: Array<BackgroundTaskView>, automation: SessionAutomation | null, lastAction: string | null, lastOutputAt: bigint | null, lastEventAt: bigint | null, lastTurnAt: bigint | null, watch: AgentWatch | null, watchLabel: string | null, runPhase: string | null, spawnerSessionId: string | null, global: boolean, 
+/**
+ * OWNER-SESSION-GUARD-1: the owner's own session. No agent or script may remove, kill, restart, prompt or act on it
+ * (reading it and mail to it stay open). The Assistant (`global`) always counts as owner-owned: see [`SessionRecord::owner_owned`].
+ */
+ownerOwned: boolean, progress: SessionProgress | null, waiting: SessionWaiting | null, mcp: string | null, mcpChangedAt: bigint | null, mcpServers: Array<McpServerStatusView>, queued: Array<QueuedTurn>, 
 /**
  * RUST-MIGRATE-1 (additive, Rust daemon only): the other app that is running this session right now (a session
  * migrated from the Kotlin app that is live there). Computed per listing, never stored; a turn is refused while set.

@@ -198,6 +198,8 @@ macro_rules! session_record {
         impl From<SessionRecordRaw> for SessionRecord {
             fn from(r: SessionRecordRaw) -> Self {
                 let mut rec = SessionRecord { $($f: r.$f,)* };
+                // OWNER-SESSION-GUARD-1: the Assistant is the owner's own, and a listing says so.
+                rec.owner_owned |= rec.global;
                 if r.turn_active == Some(false) && rec.state == SessionState::Busy {
                     rec.state = SessionState::Idle;
                 }
@@ -268,6 +270,9 @@ session_record! {
     #[serde(default, skip_serializing_if = "Option::is_none")] run_phase: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")] spawner_session_id: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")] global: bool,
+    /// OWNER-SESSION-GUARD-1: the owner's own session. No agent or script may remove, kill, restart, prompt or act on it
+    /// (reading it and mail to it stay open). The Assistant (`global`) always counts as owner-owned: see [`SessionRecord::owner_owned`].
+    #[serde(default, skip_serializing_if = "is_false")] owner_owned: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")] progress: Option<SessionProgress>,
     #[serde(default, skip_serializing_if = "Option::is_none")] waiting: Option<SessionWaiting>,
     #[serde(default, skip_serializing_if = "Option::is_none")] mcp: Option<String>,
@@ -280,6 +285,10 @@ session_record! {
 }
 
 impl SessionRecord {
+    /// OWNER-SESSION-GUARD-1: the owner's own session (flagged, or the Assistant): agents and scripts may not control it.
+    pub fn is_owner_owned(&self) -> bool {
+        self.owner_owned || self.global
+    }
     /// STARTING, BUSY or WAITING_INPUT.
     pub fn is_busy(&self) -> bool {
         matches!(self.state, SessionState::Starting | SessionState::Busy | SessionState::WaitingInput)
