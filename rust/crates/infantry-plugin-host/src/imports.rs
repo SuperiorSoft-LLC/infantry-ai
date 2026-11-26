@@ -284,11 +284,43 @@ impl PluginImports {
         let allowed = self.decl.endpoint_addresses();
         // Self-declared, so honoured only above Community tier (as storage.adopt is): a community plugin cannot grant itself open egress.
         let runtime = self.decl.http_runtime_hosts && self.tier != Tier::Community && request.url.get(..8).is_some_and(|p| p.eq_ignore_ascii_case("https://"));
-        let ok = runtime || allowed.iter().any(|base| url_under(&request.url, base));
-        if !ok {
+        if allowed.iter().any(|base| url_under(&request.url, base)) {
+            return self.services.http_send(&self.module_id, request);
+        }
+        if !runtime {
             return Err(format!("http refused: {} is not one of {}'s daemon.endpoints", origin_of(&request.url), self.module_id));
         }
-        self.services.http_send(&self.module_id, request)
+        self.http_send_runtime(request)
+    }
+
+    /// The runtime-hosts grant: public https hosts only, every redirect hop checked again (no SSRF into the
+    /// owner's machine, LAN, tailnet or cloud metadata).
+    fn http_send_runtime(&self, mut request: HttpRequest) -> Result<HttpResponse, String> {
+        for _ in 0..=RUNTIME_HTTP_MAX_REDIRECTS {
+            if !request.url.get(..8).is_some_and(|p| p.eq_ignore_ascii_case("https://")) {
+                return Err(format!("http refused: {} is not https", origin_of(&request.url)));
+            }
+            public_https_host(&request.url)?;
+            let resp = self.services.http_send_no_redirect(&self.module_id, request.clone())?;
+            let location = resp.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case("location")).map(|(_, v)| v.clone());
+            match location {
+                Some(loc) if (300..400).contains(&resp.status) => {
+                    request.url = if loc.contains("://") {
+                        loc
+                    } else if loc.starts_with('/') && !loc.starts_with("//") {
+                        format!("{}{loc}", origin_of(&request.url))
+                    } else {
+                        return Err(format!("http refused: redirect to {loc}"));
+                    };
+                    if resp.status != 307 && resp.status != 308 {
+                        request.method = "GET".into();
+                        request.body = None;
+                    }
+                }
+                _ => return Ok(resp),
+            }
+        }
+        Err(format!("http refused: more than {RUNTIME_HTTP_MAX_REDIRECTS} redirects"))
     }
 
     /// Marks `ctx` as the caller this plugin works for until the guard drops: a frame the plugin asks meanwhile is
@@ -395,6 +427,54 @@ fn to_sql(v: &SqlValue) -> rusqlite::types::Value {
 }
 
 /// `scheme://host[:port]` of a URL (lower-cased), or the whole text when it has no scheme.
+/// Redirect hops a runtime-hosts fetch follows.
+const RUNTIME_HTTP_MAX_REDIRECTS: usize = 5;
+
+/// Ok when every address `url`'s host resolves to is public. Refuses loopback, private (RFC1918, fc00::/7),
+/// link-local (169.254/16, fe80::/10), unspecified, CGNAT (100.64/10, Tailscale), broadcast and multicast.
+pub fn public_https_host(url: &str) -> Result<(), String> {
+    use std::net::{IpAddr, ToSocketAddrs};
+    let rest = &url[url.find("://").map(|i| i + 3).unwrap_or(0)..];
+    let auth = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let auth = auth.rsplit('@').next().unwrap_or_default();
+    let (host, port) = if let Some(h) = auth.strip_prefix('[') {
+        let (h, tail) = h.split_once(']').ok_or("http refused: bad host")?;
+        (h.to_string(), tail.strip_prefix(':').and_then(|p| p.parse().ok()).unwrap_or(443u16))
+    } else {
+        match auth.rsplit_once(':') {
+            Some((h, p)) => (h.to_string(), p.parse().map_err(|_| "http refused: bad port".to_string())?),
+            None => (auth.to_string(), 443),
+        }
+    };
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    if host.is_empty() || host == "localhost" || host.ends_with(".localhost") {
+        return Err(format!("http refused: {host} is not a public host"));
+    }
+    fn public(ip: IpAddr) -> bool {
+        match ip {
+            IpAddr::V4(v) => {
+                let o = v.octets();
+                !(v.is_loopback() || v.is_private() || v.is_link_local() || v.is_unspecified() || v.is_broadcast() || v.is_multicast() || o[0] == 0 || (o[0] == 100 && (o[1] & 0xc0) == 64))
+            }
+            IpAddr::V6(v) => {
+                if let Some(m) = v.to_ipv4_mapped() {
+                    return public(IpAddr::V4(m));
+                }
+                let s = v.segments();
+                !(v.is_loopback() || v.is_unspecified() || v.is_multicast() || (s[0] & 0xfe00) == 0xfc00 || (s[0] & 0xffc0) == 0xfe80)
+            }
+        }
+    }
+    let addrs: Vec<IpAddr> = match host.parse::<IpAddr>() {
+        Ok(ip) => vec![ip],
+        Err(_) => (host.as_str(), port).to_socket_addrs().map_err(|e| format!("http refused: {host} does not resolve: {e}"))?.map(|a| a.ip()).collect(),
+    };
+    if addrs.is_empty() || addrs.iter().any(|a| !public(*a)) {
+        return Err(format!("http refused: {host} is not a public host"));
+    }
+    Ok(())
+}
+
 pub fn origin_of(url: &str) -> String {
     let Some((scheme, rest)) = url.split_once("://") else { return url.to_lowercase() };
     let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
@@ -589,8 +669,28 @@ mod runtime_hosts_tests {
     }
 
     #[test]
+    fn runtime_hosts_refuse_internal_hosts() {
+        let i = cards_like(true);
+        for u in ["https://127.0.0.1/x", "https://localhost/x", "https://10.0.0.5/x", "https://169.254.169.254/latest/meta-data", "https://100.100.100.100/", "https://192.168.1.2:8443/", "https://[::1]/", "https://[fe80::1]/", "https://[fd00::1]/", "https://[::ffff:127.0.0.1]/", "https://0.0.0.0/"] {
+            assert!(i.http_send(get(u)).unwrap_err().contains("not a public host"), "{u}");
+        }
+        assert!(public_https_host("https://8.8.8.8/x").is_ok());
+    }
+
+    #[test]
+    fn runtime_hosts_refuse_redirect_to_internal_host() {
+        let s = MemoryServices::new().with_http(|r: HttpRequest| {
+            assert!(r.url.contains("8.8.8.8"), "followed into {}", r.url);
+            Ok(HttpResponse { status: 302, headers: vec![("Location".into(), "https://169.254.169.254/".into())], body: vec![] })
+        });
+        let decl: DaemonDecl = serde_json::from_str(r#"{"wants":["http"],"httpRuntimeHosts":true}"#).unwrap();
+        let i = PluginImports::new("Infantry_Cards", Tier::Official, decl, Arc::new(s), ["http".to_string()].into(), BTreeSet::new());
+        assert!(i.http_send(get("https://8.8.8.8/img")).unwrap_err().contains("not a public host"));
+    }
+
+    #[test]
     fn runtime_hosts_grant_lets_https_through_and_nothing_else() {
-        let fav = "https://www.google.com/s2/favicons?domain=reuters.com&sz=64";
+        let fav = "https://8.8.8.8/s2/favicons?domain=reuters.com&sz=64"; // an IP: no DNS in the test
         // No grant: refused (CARDS-THUMBS-1).
         assert!(cards_like(false).http_send(get(fav)).unwrap_err().contains("http refused"));
         // Grant: passes the filter (MemoryServices has no network).

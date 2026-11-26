@@ -40,6 +40,10 @@ pub trait HostServices: Send + Sync + 'static {
     fn broadcast(&self, module: &str, r#type: &str, data: &str);
     /// Sends an outbound request the host already checked against the module's endpoints.
     fn http_send(&self, module: &str, request: HttpRequest) -> Result<HttpResponse, String>;
+    /// The same, but a 3xx comes back as the answer instead of being followed (the host checks each hop itself).
+    fn http_send_no_redirect(&self, module: &str, request: HttpRequest) -> Result<HttpResponse, String> {
+        self.http_send(module, request)
+    }
     /// The daemon's SQLite database (plugin tables and the plugin key/value table live here).
     fn db(&self) -> Arc<Mutex<rusqlite::Connection>>;
 }

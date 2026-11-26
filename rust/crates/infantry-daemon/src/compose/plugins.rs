@@ -586,18 +586,47 @@ pub struct DaemonServices {
     db: Arc<Mutex<rusqlite::Connection>>,
     composed: OnceLock<Weak<Composed>>,
     http: OnceLock<Result<ureq::Agent, String>>,
+    http_manual: OnceLock<Result<ureq::Agent, String>>,
 }
 
 impl DaemonServices {
     /// One agent for every plugin call, over the system TLS (Windows SChannel).
     fn agent(&self) -> Result<&ureq::Agent, String> {
-        self.http
-            .get_or_init(|| {
-                let tls = native_tls::TlsConnector::new().map_err(|e| format!("no TLS for plugin HTTP calls: {e}"))?;
-                Ok(ureq::AgentBuilder::new().tls_connector(Arc::new(tls)).build())
-            })
-            .as_ref()
-            .map_err(|e| e.clone())
+        Self::agent_in(&self.http, true)
+    }
+    /// The same over an agent that never follows a redirect (the plugin host checks each hop itself).
+    fn agent_manual(&self) -> Result<&ureq::Agent, String> {
+        Self::agent_in(&self.http_manual, false)
+    }
+    fn agent_in(cell: &OnceLock<Result<ureq::Agent, String>>, follow: bool) -> Result<&ureq::Agent, String> {
+        cell.get_or_init(|| {
+            let tls = native_tls::TlsConnector::new().map_err(|e| format!("no TLS for plugin HTTP calls: {e}"))?;
+            let b = ureq::AgentBuilder::new().tls_connector(Arc::new(tls));
+            Ok(if follow { b } else { b.redirects(0) }.build())
+        })
+        .as_ref()
+        .map_err(|e| e.clone())
+    }
+
+    fn send_with(agent: &ureq::Agent, req: HttpRequest) -> Result<HttpResponse, String> {
+        let timeout = req.timeout_ms.map(u64::from).unwrap_or(HTTP_TIMEOUT_MS);
+        let mut r = agent.request(&req.method, &req.url).timeout(Duration::from_millis(timeout));
+        for (k, v) in &req.headers {
+            r = r.set(k, v);
+        }
+        let resp = match &req.body {
+            Some(b) => r.send_bytes(b),
+            None => r.call(),
+        };
+        let resp = match resp {
+            Ok(r) | Err(ureq::Error::Status(_, r)) => r,
+            Err(e) => return Err(e.to_string()),
+        };
+        let status = resp.status();
+        let headers = resp.headers_names().into_iter().filter_map(|n| resp.header(&n).map(|v| (n.clone(), v.to_string()))).collect();
+        let mut body = Vec::new();
+        resp.into_reader().take(64 * 1024 * 1024).read_to_end(&mut body).map_err(|e| e.to_string())?;
+        Ok(HttpResponse { status, headers, body })
     }
 
     fn save_settings(&self, s: &BTreeMap<String, String>) -> Result<(), String> {
@@ -697,24 +726,10 @@ impl HostServices for DaemonServices {
         self.bus.publish(env);
     }
     fn http_send(&self, _module: &str, req: HttpRequest) -> Result<HttpResponse, String> {
-        let timeout = req.timeout_ms.map(u64::from).unwrap_or(HTTP_TIMEOUT_MS);
-        let mut r = self.agent()?.request(&req.method, &req.url).timeout(Duration::from_millis(timeout));
-        for (k, v) in &req.headers {
-            r = r.set(k, v);
-        }
-        let resp = match &req.body {
-            Some(b) => r.send_bytes(b),
-            None => r.call(),
-        };
-        let resp = match resp {
-            Ok(r) | Err(ureq::Error::Status(_, r)) => r,
-            Err(e) => return Err(e.to_string()),
-        };
-        let status = resp.status();
-        let headers = resp.headers_names().into_iter().filter_map(|n| resp.header(&n).map(|v| (n.clone(), v.to_string()))).collect();
-        let mut body = Vec::new();
-        resp.into_reader().take(64 * 1024 * 1024).read_to_end(&mut body).map_err(|e| e.to_string())?;
-        Ok(HttpResponse { status, headers, body })
+        Self::send_with(self.agent()?, req)
+    }
+    fn http_send_no_redirect(&self, _module: &str, req: HttpRequest) -> Result<HttpResponse, String> {
+        Self::send_with(self.agent_manual()?, req)
     }
     fn db(&self) -> Arc<Mutex<rusqlite::Connection>> {
         self.db.clone()
@@ -767,6 +782,7 @@ pub fn start(state_dir: &Path, dir: Option<PathBuf>, bus: EventBus, handle: toki
         db: Arc::new(Mutex::new(db)),
         composed: OnceLock::new(),
         http: OnceLock::new(),
+        http_manual: OnceLock::new(),
     });
     let mut limits = infantry_plugin_host::HostLimits::default();
     if let Some(ms) = services.settings.lock().unwrap().get("limits.plugins.maxDeclaredTimeoutMs").and_then(|v| v.trim().parse::<u64>().ok()).filter(|v| *v > 0) {
