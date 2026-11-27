@@ -12,6 +12,7 @@ import { Button, Chip, EmptyState, Input, PanelCard, Switch } from "@infantry/ui
 import { useDaemon } from "@/daemon/daemon";
 import { TabPage } from "@/components/tabs/tab-page";
 import { ProjectPicker, RefreshButton, Served } from "./parts";
+import { EpicArchiveButton } from "@/components/board/archive-dialog";
 import { epicsStore, podsStore, registryStore, useQuery, useQueryOnOpen } from "./use-panels";
 
 /** The picked project, defaulting to the daemon's first. */
@@ -68,7 +69,7 @@ export function EpicsTab() {
             ) : (
               <div className="grid gap-3 lg:grid-cols-2">
                 {shown.map((e) => (
-                  <PanelCard key={e.id} title={e.name} action={<Chip mono>{`${e.storyIds?.length ?? 0} tickets`}</Chip>}>
+                  <PanelCard key={e.id} title={e.name} action={<span className="flex items-center gap-1"><EpicArchiveButton epicId={e.id} projectId={project} /><Chip mono>{`${e.storyIds?.length ?? 0} tickets`}</Chip></span>}>
                     {e.goal && <p className="text-[13px]">{e.goal}</p>}
                     <p className="mt-1 font-mono text-xs text-muted-foreground">{e.baseBranch ? `base ${e.baseBranch}` : "no base branch yet"}</p>
                   </PanelCard>

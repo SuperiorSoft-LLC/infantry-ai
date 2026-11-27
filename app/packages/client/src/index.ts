@@ -9,6 +9,7 @@ export * from "./transcript";
 export * from "./store";
 export * from "./stress";
 export * from "./stores/board";
+export * from "./stores/archive";
 export * from "./stores/settings";
 export * from "./stores/prompts";
 export * from "./stores/mail";

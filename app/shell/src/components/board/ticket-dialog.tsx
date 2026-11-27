@@ -10,6 +10,7 @@ import { LANE_TITLES, type BoardTicket, type Lane } from "@infantry/client";
 import { AppDialog, Button, Chip, Input, Label, Textarea } from "@infantry/ui";
 import { AdvancedSection } from "@/components/dialogs/advanced-section";
 import { INHERIT, PickerField } from "@/components/dialogs/picker-field";
+import { TicketArchiveButton } from "./archive-dialog";
 import { shortId } from "./ticket-card";
 import { useBoard } from "./use-board";
 import { TicketComments } from "./ticket-comments";
@@ -79,6 +80,7 @@ export function TicketDialog({ ticketId, creating, onClose }: { ticketId: string
               {confirm ? "Confirm delete" : "Delete"}
             </Button>
           )}
+          {ticket && <TicketArchiveButton key={ticket.id} id={ticket.id} status={ticket.status} onArchived={onClose} />}
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>

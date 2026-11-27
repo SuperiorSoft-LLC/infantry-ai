@@ -7,6 +7,7 @@ import { daemonStore } from "@/daemon/daemon";
 import { useProjects } from "@/components/git/use-projects";
 import { ALL, NO_FILTER, assigneeOf, distinct, type BoardFilter } from "@infantry/client";
 import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@infantry/ui";
+import { EpicArchiveButton } from "./archive-dialog";
 import { shortId } from "./ticket-card";
 import { useBoard } from "./use-board";
 
@@ -48,6 +49,7 @@ export function FilterBar() {
           <X /> Clear
         </Button>
       )}
+      {filter.epic !== ALL && <EpicArchiveButton key={filter.epic} epicId={filter.epic} projectId={projectId} />}
       <span className="flex-1" />
       <Button size="sm" variant="outline" disabled={!todo} onClick={startNext} title="Start the top To Do ticket with its pinned role">
         <Play /> Start next

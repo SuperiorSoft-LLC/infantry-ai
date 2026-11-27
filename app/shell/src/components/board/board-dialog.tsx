@@ -5,10 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useLayout } from "@/state/ui-state";
 import { DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor, closestCorners, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { LayoutGrid, Plus, X } from "lucide-react";
+import { Archive, LayoutGrid, Plus, X } from "lucide-react";
 import { LANES, LANE_TITLES, hop, laneOf, matchesFilter } from "@infantry/client";
 import { AppDialog, Button, EmptyState } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
+import { ArchiveDialog } from "./archive-dialog";
 import { FilterBar } from "./filter-bar";
 import { Lane } from "./lane";
 import { TicketCardView } from "./ticket-card";
@@ -32,6 +33,7 @@ export function BoardDialog({ onClose }: { onClose: () => void }) {
   const link = useDaemon((s) => s.connection.state);
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overLane, setOverLane] = useState<string | null>(null);
   useEffect(() => {
@@ -76,7 +78,7 @@ export function BoardDialog({ onClose }: { onClose: () => void }) {
     <AppDialog
       open
       // A ticket's detail stacks above the board: Esc closes that first, never the board under it.
-      onOpenChange={(o) => !o && !openId && !creating && onClose()}
+      onOpenChange={(o) => !o && !openId && !creating && !archiveOpen && onClose()}
       title="Board"
       description="ticket → dev → staging → main"
       wide="screen"
@@ -86,6 +88,9 @@ export function BoardDialog({ onClose }: { onClose: () => void }) {
           <div className="min-w-0 flex-1">
             <FilterBar />
           </div>
+          <Button size="sm" variant="outline" onClick={() => setArchiveOpen(true)} title="Archived tickets: search and restore">
+            <Archive /> Archive
+          </Button>
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus /> New ticket
           </Button>
@@ -110,6 +115,7 @@ export function BoardDialog({ onClose }: { onClose: () => void }) {
           <DragOverlay dropAnimation={{ duration: 180 }}>{dragged ? <TicketCardView t={dragged} overlay /> : null}</DragOverlay>
         </DndContext>
       )}
+      <ArchiveDialog open={archiveOpen} onClose={() => setArchiveOpen(false)} />
       <TicketDialog ticketId={openId} creating={creating} onClose={() => (setOpenId(null), setCreating(false))} />
       </div>
     </AppDialog>
