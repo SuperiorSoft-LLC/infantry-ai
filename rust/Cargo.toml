@@ -6,7 +6,7 @@ members = ["crates/*", "plugins/official/Infantry_Health/daemon", "plugins/offic
 # Real releases keep the full `release` profile. Build with `--profile owner-test`.
 [workspace.package]
 # The ONE version of the app, daemon, CLI and APK: the release bump edits this and tauri.conf.json + app/src-tauri/Cargo.toml.
-version = "0.8.10"
+version = "0.8.8"
 
 # Dev and test builds (`cargo build`, `cargo run`, `cargo test`; tests inherit `dev`): optimize the
 # DEPENDENCIES only (wasmtime, SQLite, serde, tokio run 10-50x slower unoptimized). Workspace crates
