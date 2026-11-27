@@ -426,7 +426,7 @@ fn check_call(state: &mut State, params: &Map<String, Value>) -> Result<String, 
     let Some(name) = tools::content_or_null(params.get("name")).map(canonical_tool_name) else {
         return Err((INVALID_PARAMS, "Invalid params: tools/call requires a tool name".into()));
     };
-    if name != tools::WATCH_FILE && !state.tools.is_plugin_tool(&name) && state.tools.daemon_answered {
+    if name != tools::WATCH_FILE && name != crate::localrepo::MCP_NAME && !state.tools.is_plugin_tool(&name) && state.tools.daemon_answered {
         return Err((INVALID_PARAMS, format!("Unknown tool: {name}")));
     }
     Ok(name)
@@ -455,7 +455,7 @@ fn handle_parsed(state: &mut State, out: &Output, parsed: Parsed) -> Option<Valu
                 state.fingerprint = Some(fingerprint(&plugin));
             }
             let own: Value = serde_json::from_str(tools::WATCH_FILE_DESCRIPTOR).unwrap_or(Value::Null);
-            let mut all = vec![own];
+            let mut all = vec![own, serde_json::from_str(crate::localrepo::MCP_DESCRIPTOR).unwrap_or(Value::Null)];
             all.extend(plugin);
             result(id, obj(vec![("tools", Value::Array(all))]))
         }

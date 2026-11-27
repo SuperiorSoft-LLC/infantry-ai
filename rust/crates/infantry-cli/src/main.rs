@@ -9,6 +9,7 @@ mod config;
 mod env;
 mod frames;
 mod kjson;
+mod localrepo;
 mod launcher;
 mod output;
 mod server;

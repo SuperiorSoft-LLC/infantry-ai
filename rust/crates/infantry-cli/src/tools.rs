@@ -318,6 +318,9 @@ impl Tools {
 
     /// [call], handing `opened` a clone of the call's socket once it is open so another thread can cut the call short.
     pub fn call_with(&mut self, name: &str, arguments: Map<String, Value>, opened: &dyn Fn(Option<std::net::TcpStream>)) -> ToolResult {
+        if name == crate::localrepo::MCP_NAME {
+            return app_publish(&self.cwd, &arguments);
+        }
         let mut stream = match self.connect() {
             Ok(s) => {
                 opened(s.abort_handle());
@@ -511,6 +514,25 @@ fn with_detail(d: &mut Map<String, Value>) {
     max_chars.insert("description".into(), Value::String(MAX_CHARS_DESCRIPTION.into()));
     props.insert("detail".into(), detail);
     props.insert("maxChars".into(), Value::Object(max_chars));
+}
+
+/// LOCAL-REPO-1: `infantry_app_publish`, served by the bridge itself (local files, no daemon).
+fn app_publish(cwd: &Path, a: &Map<String, Value>) -> ToolResult {
+    let Some(dir) = content_or_null(a.get("dir")) else { return ToolResult::error("dir is required") };
+    let env = |k: &str| std::env::var(k).ok();
+    let home = match crate::localrepo::os_home(None, &env) {
+        Ok(h) => h,
+        Err(e) => return ToolResult::error(e),
+    };
+    let dir = resolve(cwd, &dir);
+    let repo = content_or_null(a.get("repo")).unwrap_or_else(|| crate::localrepo::DEFAULT_REPO.into());
+    let channel = content_or_null(a.get("channel")).unwrap_or_else(|| crate::localrepo::DEFAULT_CHANNEL.into());
+    let notes = content_or_null(a.get("notes"));
+    let args = crate::localrepo::PublishArgs { dir: &dir, repo: &repo, channel: &channel, platform: None, notes: notes.as_deref(), home: &home };
+    match crate::localrepo::publish(&args) {
+        Ok(p) => ToolResult { text: crate::localrepo::summary(&p), is_error: false },
+        Err(e) => ToolResult::error(e),
+    }
 }
 
 #[cfg(test)]

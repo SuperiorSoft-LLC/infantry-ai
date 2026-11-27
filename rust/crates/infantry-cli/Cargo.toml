@@ -25,6 +25,10 @@ tungstenite = { version = "0.24", default-features = false, features = ["handsha
 native-tls = "0.2"
 base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
+# LOCAL-REPO-1: `infantry app publish` packs (.bosapp is a zip), hashes and signs (minisign, the format the Armory verifies).
+minisign = "0.10"
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+sha2 = "0.10"
 
 serde = { version = "1", features = ["derive"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

@@ -10,6 +10,7 @@
 
 #![allow(dead_code)]
 pub mod args;
+pub mod cmd_app;
 pub mod cmd_mail;
 pub mod cmd_sessions;
 pub mod cmd_runner;

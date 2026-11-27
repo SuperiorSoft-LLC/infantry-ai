@@ -286,6 +286,14 @@ Options:
 
 The usage a command prints when its words are wrong.
 
+### cmd_app (`USAGE`)
+
+```text
+usage: infantry app publish <dir> [--repo <name>] [--channel stable|prerelease|...] [--notes <text>] [--os-home <dir>]
+       infantry app repos [--os-home <dir>]
+Publishes a built BattalionOS app (a folder with app.json) to a private local repo on this machine, signed with this device's local key. The Armory installs and updates it from there.
+```
+
 ### cmd_ask (`USAGE`)
 
 ```text

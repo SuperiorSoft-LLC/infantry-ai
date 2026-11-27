@@ -8,6 +8,7 @@ use super::{cmd_board, cmd_ticket, Command, Needs, RawCommand};
 pub static RAW: &[RawCommand] = &[
     // -- raw commands --
     super::cmd_mail::WAITING_FLAG,
+    super::cmd_app::APP,
     RawCommand { matches: super::progress::is_progress, run: super::progress::progress },
     RawCommand { matches: is_secret_run, run: super::run_secret::run },
     RawCommand { matches: super::progress::is_run, run: super::progress::run },
