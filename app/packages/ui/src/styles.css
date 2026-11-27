@@ -226,6 +226,15 @@
       transform: scale(0.8);
     }
   }
+  /* PULSE-BORDER-1: a working agent card's border breathes (border-color only, so the selected amber and stale red ring stay). */
+  .border-pulse {
+    animation: border-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes border-pulse {
+    50% {
+      border-color: var(--info);
+    }
+  }
   /* Pixel avatar motion (compositor only: transform and opacity). */
   .px-bob {
     animation: px-bob 0.9s steps(2, jump-none) infinite;
@@ -275,7 +284,8 @@
     .selected-stripes,
     .stripes-info,
     .busy-pulse,
-    .wait-pulse {
+    .wait-pulse,
+    .border-pulse {
       animation: none;
     }
   }

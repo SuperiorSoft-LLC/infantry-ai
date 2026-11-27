@@ -48,6 +48,12 @@ const chipTone: Record<Agent["status"], string> = {
   idle: "border-border text-muted-foreground",
 };
 
+/** PULSE-BORDER-1: the border pulses while a turn runs (not idle, not "idle · N background");
+ *  a stale turn (CARD-STALE-1) adds its red ring on top, so both show as a red ring around a pulsing border. */
+export function cardStateClasses(working: boolean, stale: boolean): string {
+  return cn(working && "border-pulse", stale && "ring-1 ring-danger/50");
+}
+
 /** Memoised: a card re-renders only when its own session (or the selection) changed. */
 export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: { agent: Agent; selected: boolean; onSelect: (id: string) => void }) {
   const working = agent.status === "working";
@@ -68,9 +74,10 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
         "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
         selected ? "border-warn" : "border-info/25",
         compact && "border",
-        stale !== null && "ring-1 ring-danger/50",
+        cardStateClasses(working, stale !== null),
       )}
       data-stale={stale !== null || undefined}
+      data-working={working || undefined}
     >
       {/* Only the selected card gets the plaid; it animates only while the agent is working. */}
       <SelectedStripes active={selected} animate={working} />
