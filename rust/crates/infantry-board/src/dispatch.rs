@@ -1281,8 +1281,10 @@ impl Dispatcher {
             None => CommentAuthor::owner(),
         };
         let p = row.project_id.as_deref();
+        // DONE-ONCE-1: a close of a ticket already done is a later finish: its summary is kept as a note, no new notice.
+        let already = if row.status == status::DONE { Some(self.completed_line(&row.id)?) } else { None };
         if let Some(sum) = req.summary.as_deref().filter(|s| !s.trim().is_empty()) {
-            self.comment(&row.id, sum, "done", author.clone())?;
+            self.comment(&row.id, sum, if already.is_some() { "note" } else { "done" }, author.clone())?;
         }
         let sid = row.session_id.clone();
         if row.status != status::DONE {
@@ -1313,6 +1315,9 @@ impl Dispatcher {
             None => seat_of_row(self.env.as_ref(), &row),
         };
         let mut warnings = Vec::new();
+        if let Some(line) = already {
+            warnings.push(format!("{line}; {}", if req.summary.is_some() { "your summary was added as a note" } else { "nothing re-sent" }));
+        }
         let worker_removed = match &sid {
             Some(s) if self.sessions.remove(s, "ticket closed") => Some(s.clone()),
             Some(s) => {

@@ -680,3 +680,31 @@ fn a_close_marks_its_move_so_done_ping_skips_it() {
     }
     assert_eq!(via, vec![serde_json::json!("close")]);
 }
+
+/// DONE-ONCE-1: every way of finishing counts once. A move first; then a plain done comment and the lead's close are
+/// later finishes: notes, the "already completed" line, no new event.
+#[test]
+fn the_first_finish_wins_and_later_ones_are_notes() {
+    use infantry_orchestrator_api::dto::{status, CommentAuthor, TicketMove};
+    let f = fixture("work-first-wins", kotlin_daemon_env());
+    let ws = Arc::new(FakeWorkspaces { verdict: Mutex::new(Ok(())), released: Mutex::new(Vec::new()) });
+    let d = Dispatcher::new(f.board.clone(), ws, Arc::new(FakeLauncher::default()), f.bus.clone());
+    let o = infantry_board::LocalOrchestrator::with_dispatcher(d.clone(), f.bus.clone());
+    let ids = tickets(&f, 1);
+    start(&o, &ids[0]);
+    let mut rx = f.bus.subscribe_events();
+    d.move_lane(TicketMove { id: ids[0].clone(), status: Some(status::DONE.into()), position: None, wont_fix: None }, None).unwrap();
+    assert_eq!(completions(&mut rx), (1, 1), "the move is the first finish");
+    let worker = CommentAuthor { kind: CommentAuthor::SESSION.into(), session_id: Some("s1".into()), agent_id: None };
+    let plain = d.complete(&ids[0], "commit abc", worker, false).unwrap();
+    assert!(plain.already.as_deref().is_some_and(|l| l.starts_with("already completed ")));
+    let c = block_on(o.close(close(&ids[0]))).unwrap();
+    assert!(c.warnings.iter().any(|w| w.starts_with("already completed ") && w.contains("added as a note")), "{:?}", c.warnings);
+    assert_eq!(completions(&mut rx), (0, 0), "later finishes send nothing");
+    let kinds: Vec<String> = block_on(o.comments(infantry_orchestrator_api::CommentQuery { ticket_id: ids[0].clone(), which: Some("all".into()), kind: None, limit: None }))
+        .unwrap()
+        .into_iter()
+        .map(|c| c.kind)
+        .collect();
+    assert!(!kinds.contains(&"done".to_string()), "later finishes are notes: {kinds:?}");
+}

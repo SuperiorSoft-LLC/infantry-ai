@@ -967,6 +967,16 @@ fn move_ticket(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
         };
     }
     let named = p.flag("top") || p.flag("bottom") || p.val("before").is_some() || p.val("after").is_some() || p.val("position").is_some();
+    // DONE-ONCE-1: a move to done on a ticket already done changes nothing; the daemon's tool says who completed it.
+    if !named && status.as_deref().map(str::to_lowercase).as_deref() == Some("done") && s(&ticket, "status").as_deref() == Some("done") {
+        let mut a = Map::new();
+        a.insert("ticketId".into(), Value::String(full.clone()));
+        a.insert("status".into(), Value::String("done".into()));
+        if let Some((text, false)) = plugin_tool_call(ctx, "infantry_ticket_move", a).ok() {
+            ctx.out(text);
+            return Ok(0);
+        }
+    }
     let position = if named {
         let board = if p.val("before").is_some() || p.val("after").is_some() { fetch_board(ctx, &project, None)? } else { vec![] };
         match resolve_placement(p, &ticket, status.as_deref(), &board) {
