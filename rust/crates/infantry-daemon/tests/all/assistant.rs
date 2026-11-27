@@ -171,7 +171,7 @@ async fn the_assistant_is_the_same_session_after_a_restart() {
 async fn the_model_of_the_assistant_can_be_switched_but_not_its_role() {
     let f = bare();
     let id = assistant(&f.daemon, "assistant:1").id;
-    let swap = |role: Option<&str>| SessionSwap { session_id: id.clone(), provider: "stub".into(), model: Some("model-two".into()), effort: None, role: role.map(String::from) };
+    let swap = |role: Option<&str>| SessionSwap { session_id: id.clone(), provider: "stub".into(), model: Some("model-two".into()), effort: None, role: role.map(String::from), display_name: None };
     f.daemon.swap(swap(None)).expect("a model switch is allowed");
     assert_eq!(f.daemon.record(&id).unwrap().model.as_deref(), Some("model-two"));
     let refused = f.daemon.swap(swap(Some("backend"))).unwrap_err();

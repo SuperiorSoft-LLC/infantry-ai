@@ -6,7 +6,7 @@
 // profile, so a session with no profile says so instead. Move to project lists the daemon's projects and sends
 // `session_project` {sessionId, projectId}; the session push moves the card, a refusal toasts.
 import { useEffect, useMemo, useState } from "react";
-import { FolderInput, ListPlus, MoreHorizontal, Play, SquareArrowOutUpRight, Ticket, Trash2, Unlink } from "lucide-react";
+import { ArrowLeftRight, FolderInput, ListPlus, MoreHorizontal, Play, SquareArrowOutUpRight, Ticket, Trash2, Unlink } from "lucide-react";
 import {
   AppDialog,
   Button,
@@ -73,6 +73,9 @@ export function AgentMenu({ sessionId, open, onOpenChange }: { sessionId: string
               <Play /> Resume session
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem onSelect={() => (ui.set("selectedAgentId", sessionId), openSessionDialog("swap", sessionId))}>
+            <ArrowLeftRight /> Switch agent
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
             {r.ticketId ? `Ticket: ${ticket?.title ?? r.ticketId}` : "No ticket"}

@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
 import { chatKey, createSessionActions, dropChatDraft, formatContextLimit, isMidTurnRefusal, parseContextLimit, type SessionActions } from "@infantry/client";
-import { AppDialog, Button } from "@infantry/ui";
+import { AppDialog, Button, Input } from "@infantry/ui";
 import { daemonStore, useDaemon } from "@/daemon/daemon";
 import { useLauncher } from "@/components/dialogs/new-agent-dialog";
 import { ContextLimitField } from "@/components/dialogs/context-limit-field";
@@ -184,6 +184,7 @@ function SwapDialog({ sessionId, onClose }: { sessionId: string; onClose: () => 
   const { harnesses, catalog } = useLauncher();
   const record = useDaemon((s) => s.sessions[sessionId]?.record);
   const [pick, setPick] = useState<ExecutorValue>({ harness: record?.provider ?? null, group: null, model: null, effort: null });
+  const [name, setName] = useState(record?.displayName ?? "");
   const [busy, setBusy] = useState(false);
   const [why, setWhy] = useState<string | null>(null);
 
@@ -195,7 +196,7 @@ function SwapDialog({ sessionId, onClose }: { sessionId: string; onClose: () => 
     setBusy(true);
     setWhy(null);
     sessionActions()
-      .swap({ sessionId, provider: pick.harness ?? "", model: pick.model ?? undefined, effort: pick.effort ?? undefined })
+      .swap({ sessionId, provider: pick.harness ?? "", model: pick.model ?? undefined, effort: pick.effort ?? undefined, displayName: name })
       .then(onClose, (e) => setWhy(String(e)))
       .finally(() => setBusy(false));
   };
@@ -217,6 +218,11 @@ function SwapDialog({ sessionId, onClose }: { sessionId: string; onClose: () => 
       }
     >
       <div className="space-y-3">
+        <label htmlFor="swap-name" className="block space-y-1 text-xs">
+          <span className="text-muted-foreground">Display name</span>
+          <Input id="swap-name" value={name} maxLength={80} placeholder={record?.role ?? "role name"} onChange={(e) => setName(e.target.value)} />
+          <span className="block text-muted-foreground">Only how this session shows; the role, its mail and permissions stay. Blank = the role name.</span>
+        </label>
         <ExecutorPicker idPrefix="swap" value={pick} harnesses={harnesses} catalog={catalog} onChange={setPick} />
         <Refusal text={why} />
       </div>

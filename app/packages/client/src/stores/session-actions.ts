@@ -70,6 +70,8 @@ export interface SwapRequest {
   provider: string;
   model?: string;
   effort?: string;
+  /** SESSION-NAME-1: how the session shows on its card; "" clears it (back to the role name), absent keeps it. */
+  displayName?: string;
 }
 
 export interface SessionActions {
@@ -142,6 +144,7 @@ export function createSessionActions(link: FrameLink, timeoutMs = 30_000): Sessi
       const body: Record<string, string> = { sessionId: req.sessionId, provider: req.provider };
       if (req.model) body.model = req.model;
       if (req.effort) body.effort = req.effort;
+      if (req.displayName !== undefined) body.displayName = req.displayName.trim();
       const e = await request("session_swap", req.sessionId, body, ["session_swapped"]);
       return json<SessionSwapped>(e.data) ?? { sessionId: req.sessionId, provider: req.provider };
     },

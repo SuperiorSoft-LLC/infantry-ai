@@ -15,6 +15,7 @@ mod migrated_state;
 mod owner_first;
 mod queue_ack;
 mod runner_setting_read;
+mod session_display_name;
 mod session_remove;
 mod slow_frame;
 mod sessions_suite;

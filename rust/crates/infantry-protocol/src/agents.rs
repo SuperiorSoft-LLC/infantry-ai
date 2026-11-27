@@ -66,6 +66,8 @@ dto! {
         #[serde(default)] pub model: Option<String>,
         #[serde(default)] pub effort: Option<String>,
         #[serde(default)] pub role: Option<String>,
+        /// SESSION-NAME-1: absent = keep the display name; empty = clear it (back to the role name).
+        #[serde(default, skip_serializing_if = "Option::is_none")] pub display_name: Option<String>,
     }
 }
 dto! {

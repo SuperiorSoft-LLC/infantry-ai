@@ -392,6 +392,28 @@ impl Daemon {
         self.not_held("session_swap", &sid)?;
         let harness = self.harness_for(Some(&provider)).ok_or_else(|| format!("'{}' isn't available here; pick another provider", trunc(&provider, 40)))?;
         let mut e = entry.lock().unwrap();
+        let clean = |v: &Option<String>| v.as_deref().map(str::trim).filter(|v| !v.is_empty()).map(String::from);
+        // SESSION-NAME-1: the display name is only how the session shows; it never touches role, routing or the process.
+        let renamed = req.display_name.as_ref().map(|n| n.trim().chars().take(80).collect::<String>()).map(|n| Some(n).filter(|n| !n.is_empty()));
+        if let Some(name) = renamed.clone() {
+            let same_role = req.role.as_deref().map(|r| r.trim().to_lowercase()).is_none_or(|r| Some(r.as_str()).filter(|x| !x.is_empty()) == e.rec.role.as_deref().filter(|x| !x.is_empty()));
+            let same_exec = harness.name() == e.rec.provider && clean(&req.model) == e.rec.model && clean(&req.effort) == e.rec.effort;
+            if same_role && same_exec {
+                e.rec.display_name = name;
+                e.gen += 1;
+                self.push(&mut e);
+                return Ok(SessionSwapped {
+                    session_id: e.rec.id.clone(),
+                    provider: e.rec.provider.clone(),
+                    model: e.rec.model.clone(),
+                    default_model: None,
+                    from: SwapExecutor { provider: Some(e.rec.provider.clone()), model: e.rec.model.clone(), effort: e.rec.effort.clone() },
+                    new_conversation: false,
+                    role: e.rec.role.clone(),
+                    from_role: e.rec.role.clone(),
+                });
+            }
+        }
         if !of_agent && e.rec.agent_id.as_deref().is_some_and(|a| !a.trim().is_empty()) {
             return Err("this session belongs to an agent; switch the agent instead (agent_swap)".into());
         }
@@ -411,7 +433,9 @@ impl Daemon {
                 }
             }
         }
-        let clean = |v: &Option<String>| v.as_deref().map(str::trim).filter(|v| !v.is_empty()).map(String::from);
+        if let Some(name) = renamed {
+            e.rec.display_name = name;
+        }
         let from = SwapExecutor { provider: Some(e.rec.provider.clone()), model: e.rec.model.clone(), effort: e.rec.effort.clone() };
         let from_role = e.rec.role.clone();
         let crosses = harness.name() != e.rec.provider;

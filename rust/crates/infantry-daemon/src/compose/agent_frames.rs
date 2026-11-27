@@ -272,6 +272,7 @@ impl AgentFrames {
                         model: stored.model.clone(),
                         effort: stored.effort.clone(),
                         role: None,
+                        display_name: None,
                     });
                     match moved {
                         Ok(m) => session_id = Some(m.session_id),

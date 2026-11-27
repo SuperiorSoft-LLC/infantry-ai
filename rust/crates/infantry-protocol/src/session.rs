@@ -246,6 +246,9 @@ session_record! {
     #[serde(default, skip_serializing_if = "Option::is_none")] effort_support: Option<String>,
     #[serde(default)] agent_id: Option<String>,
     #[serde(default)] role: Option<String>,
+    /// SESSION-NAME-1: how this session shows on its card and in lists (e.g. "PM - releases"); the role is unchanged.
+    /// Absent = the role name.
+    #[serde(default, skip_serializing_if = "Option::is_none")] display_name: Option<String>,
     #[serde(default)] ticket_id: Option<String>,
     #[serde(default)] context_sources: Vec<ContextSource>,
     #[serde(default)] project_id: Option<String>,

@@ -80,7 +80,7 @@ export function toAgent(
   const status = statusOf(v, r.ticketId ? tickets[r.ticketId]?.status : undefined);
   return {
     id: r.id,
-    name: profile?.name ?? (r.role ? title(r.role) : "Session"),
+    name: r.displayName?.trim() || profile?.name || (r.role ? title(r.role) : "Session"),
     roleId: r.role ?? "assistant",
     sessionId: r.id.slice(0, 8),
     status,

@@ -27,7 +27,12 @@ contextLimitSource: string | null,
 /**
  * How the harness applies it (or why it does not).
  */
-contextLimitHow: string | null, effortSupport: string | null, agentId: string | null, role: string | null, ticketId: string | null, contextSources: Array<ContextSource>, projectId: string | null, unattended: boolean, report: SessionReport | null, isProcessAlive: boolean, dormant: boolean, runner: string, 
+contextLimitHow: string | null, effortSupport: string | null, agentId: string | null, role: string | null, 
+/**
+ * SESSION-NAME-1: how this session shows on its card and in lists (e.g. "PM - releases"); the role is unchanged.
+ * Absent = the role name.
+ */
+displayName: string | null, ticketId: string | null, contextSources: Array<ContextSource>, projectId: string | null, unattended: boolean, report: SessionReport | null, isProcessAlive: boolean, dormant: boolean, runner: string, 
 /**
  * RR-4: the id of the harness process on `runner` (the placement is kept with the session across a daemon restart).
  */
