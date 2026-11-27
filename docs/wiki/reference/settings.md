@@ -28,6 +28,7 @@ uses when the key is unset, where it sits next to the key; otherwise read the co
 | Key | Default | Read in |
 |---|---|---|
 | `limits.chat.queueMax` | `20` | `rust/crates/infantry-daemon/src/sessions.rs` |
+| `limits.chat.replayTurns` | `50` | `rust/crates/infantry-daemon/src/sessions.rs` |
 | `limits.chat.sentIdsKept` | `500` | `rust/crates/infantry-daemon/src/sessions.rs` |
 | `limits.cli.answerTimeoutMs` | `60_000` | `rust/crates/infantry-cli/src/env.rs` |
 | `limits.cli.connectTimeoutMs` | `10_000` | `rust/crates/infantry-cli/src/env.rs` |
