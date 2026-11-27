@@ -24,6 +24,7 @@ export * from "./stores/secrets";
 export * from "./stores/launcher";
 export * from "./context-limit";
 export * from "./stores/runs";
+export * from "./stores/host-stats";
 export * from "./stores/session-actions";
 export * from "./stores/assistant";
 export * from "./stores/stats";

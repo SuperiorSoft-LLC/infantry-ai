@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 // Bottom status bar: connection, processes, an update the app found, keyboard hints, version.
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useStore } from "zustand";
 import { Cpu } from "lucide-react";
-import { shortcutHints } from "@infantry/client";
-import { localMode } from "@/daemon/daemon";
+import { createHostStatsStore, hostStatsParts, shortcutHints, type HostStatsStore } from "@infantry/client";
+import { daemonStore, localMode } from "@/daemon/daemon";
 import { useAttention } from "@/components/mail/use-mail";
 import { useAppVersionLine } from "./app-version";
 import { KeyHint } from "@infantry/ui";
@@ -28,6 +29,23 @@ function ProcessesBadge() {
   );
 }
 
+let hostStats: HostStatsStore | null = null;
+
+/** STATUS-LINE-1: "last frame 5s ago · RAM 10.6 GB free · agents CPU 0.1%" (the daemon's `host_stats` frame). */
+function HostStatsLine() {
+  const store = (hostStats ??= createHostStatsStore(daemonStore().getState()));
+  const stats = useStore(store, (s) => s.stats);
+  const lastFrameAt = useStore(store, (s) => s.lastFrameAt);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const parts = hostStatsParts(stats, lastFrameAt, now);
+  if (parts.length === 0) return null;
+  return <span className="truncate text-muted-foreground" data-testid="host-stats">{parts.join(" · ")}</span>;
+}
+
 /** The "update available" notice the start check posted (RUST-UPD-1); opens Settings > About. */
 function UpdatePill() {
   const ui = useUi();
@@ -49,6 +67,7 @@ export function StatusBar({ leading }: { leading?: ReactNode } = {}) {
   const status = (
     <>
       <ConnectionBadge />
+      <HostStatsLine />
       <ProcessesBadge />
       <UpdatePill />
     </>

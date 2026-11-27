@@ -30,6 +30,33 @@ pub fn process_mb(pid: u32) -> Option<u64> {
     l.split_whitespace().nth(1)?.parse::<u64>().ok().map(|kb| kb / 1024)
 }
 
+/// Total CPU time (kernel + user) a process has used, in ms; None when the OS does not answer.
+#[cfg(windows)]
+pub fn cpu_time_ms(pid: u32) -> Option<u64> {
+    use windows_sys::Win32::Foundation::{CloseHandle, FILETIME};
+    use windows_sys::Win32::System::Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    let ft = |f: &FILETIME| ((f.dwHighDateTime as u64) << 32 | f.dwLowDateTime as u64) / 10_000;
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if h.is_null() {
+            return None;
+        }
+        let (mut a, mut b, mut k, mut u): (FILETIME, FILETIME, FILETIME, FILETIME) = std::mem::zeroed();
+        let ok = GetProcessTimes(h, &mut a, &mut b, &mut k, &mut u) != 0;
+        CloseHandle(h);
+        ok.then(|| ft(&k) + ft(&u))
+    }
+}
+
+/// Linux: utime + stime from `/proc/<pid>/stat` (clock ticks, taken as the usual 100 a second).
+#[cfg(not(windows))]
+pub fn cpu_time_ms(pid: u32) -> Option<u64> {
+    let t = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let rest = &t[t.rfind(')')? + 2..];
+    let f: Vec<&str> = rest.split_whitespace().collect();
+    Some((f.get(11)?.parse::<u64>().ok()? + f.get(12)?.parse::<u64>().ok()?) * 10)
+}
+
 /// (free, total) physical memory.
 #[cfg(windows)]
 pub fn machine_mb() -> (Option<u64>, Option<u64>) {
@@ -56,5 +83,6 @@ mod tests {
         assert!(super::process_mb(std::process::id()).is_some());
         let (free, total) = super::machine_mb();
         assert!(total.unwrap() >= free.unwrap());
+        assert!(super::cpu_time_ms(std::process::id()).is_some());
     }
 }

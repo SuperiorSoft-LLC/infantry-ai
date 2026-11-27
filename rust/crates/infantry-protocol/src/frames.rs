@@ -87,6 +87,8 @@ pub const PLUGIN_ADMIN: &str = "plugin_admin";
 /// WEBUI-1: pushed to every client after a plugin is enabled or disabled, `{"id", "enabled"}`: re-read the plugin list.
 pub const PLUGINS_CHANGED: &str = "plugins_changed";
 pub const PROCESS_PRESSURE: &str = "process_pressure";
+/// STATUS-LINE-1: daemon -> clients every few seconds: `{freeMb, totalMb, agents, agentsCpuPercent}`.
+pub const HOST_STATS: &str = "host_stats";
 pub const MAIL_REFUSED: &str = "mail_refused";
 pub const TEXT_DELTA: &str = "text_delta";
 pub const STATUS: &str = "status";
@@ -415,6 +417,7 @@ pub const ALL: &[&str] = &[
     PLUGIN_ADMIN,
     PLUGINS_CHANGED,
     PROCESS_PRESSURE,
+    HOST_STATS,
     MAIL_REFUSED,
     TEXT_DELTA,
     STATUS,

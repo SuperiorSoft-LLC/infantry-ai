@@ -6,6 +6,7 @@
 //! Frames and limits are the Kotlin `Infantry_Run` plugin's (contract 1.33 / 1.108 / 1.134): `command_list|save|delete`,
 //! `run_start|stop|list|attach|resize|input`, `run`, `run_bytes`, `run_finished`, `processes`, `processes_reap`.
 
+pub mod host_stats;
 pub mod mem;
 pub mod prep;
 pub mod tools;
@@ -739,6 +740,22 @@ impl RunManager {
             "freeMb": free, "totalMb": total, "floorMb": self.limits.floor_mb, "underPressure": free.is_some_and(|f| f < self.limits.floor_mb),
             "autoReap": false, "tracked": self.processes(), "unattributed": [],
         })
+    }
+
+    /// STATUS-LINE-1: one `host_stats` frame (free RAM, agent session processes' CPU) to every client.
+    pub fn publish_host_stats(&self, cpu: &mut host_stats::CpuSampler) {
+        let times: Vec<(u32, u64)> = self
+            .daemon
+            .records()
+            .iter()
+            .filter(|s| s.is_process_alive)
+            .filter_map(|s| u32::try_from(s.child_pid?).ok())
+            .filter_map(|pid| mem::cpu_time_ms(pid).map(|t| (pid, t)))
+            .collect();
+        let cores = std::thread::available_parallelism().map(|n| n.get() as u32).unwrap_or(1);
+        let pct = cpu.sample(now_ms() as u64, &times, cores);
+        let (free, total) = mem::machine_mb();
+        self.publish(f::HOST_STATS, host_stats::body(free, total, times.len(), pct).to_string());
     }
 
     /// `processes_reap {op: reap_rogue}`: every rogue process (a session's process alive after its session ended).

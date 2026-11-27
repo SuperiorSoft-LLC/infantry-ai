@@ -1021,6 +1021,26 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             }
         });
     }
+    {
+        // STATUS-LINE-1: the footer's RAM / agents CPU line; the interval is re-read each tick (0 = off, checked every 5 s).
+        let (r, st) = (runs.clone(), settings::SettingsUnit { db: db.clone() });
+        tokio::spawn(async move {
+            let mut cpu = crate::run::host_stats::CpuSampler::default();
+            loop {
+                let secs = st.app(crate::run::host_stats::INTERVAL_SETTING).and_then(|v| v.as_u64()).unwrap_or(crate::run::host_stats::INTERVAL_DEFAULT_SECS);
+                tokio::time::sleep(Duration::from_secs(if secs == 0 { 5 } else { secs.min(3600) })).await;
+                if secs > 0 {
+                    let r = r.clone();
+                    cpu = tokio::task::spawn_blocking(move || {
+                        r.publish_host_stats(&mut cpu);
+                        cpu
+                    })
+                    .await
+                    .unwrap_or_default();
+                }
+            }
+        });
+    }
     hooks.attach(&bus);
     hooks.spawn_timers(Arc::new(|| TIMER_MIN_SECS));
     exec.spawn_ticker();

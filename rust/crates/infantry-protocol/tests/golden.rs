@@ -133,7 +133,7 @@ fn progress_omits_never_defaults() {
 #[test]
 fn frame_table() {
     let all = frames::ALL;
-    assert_eq!(all.len(), 309, "309 frame names");
+    assert_eq!(all.len(), 310, "310 frame names");
     let mut sorted = all.to_vec();
     sorted.sort();
     sorted.dedup();

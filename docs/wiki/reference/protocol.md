@@ -32,7 +32,7 @@ pub struct Envelope {
 The full history of every frame and field, with the version that added it, is the wire contract text
 `rust/crates/infantry-protocol/CONTRACT.md` in the repository. The protocol crate's test `contract_md_and_constants_agree` keeps it complete.
 
-## Core frames (309)
+## Core frames (310)
 
 From `rust/crates/infantry-protocol/src/frames.rs`. *Contract sections* counts the sections of CONTRACT.md that
 name the frame and gives the newest one.
@@ -115,6 +115,7 @@ name the frame and gives the newest one.
 | `plugin_admin` | `PLUGIN_ADMIN` |  |  | 1: PLUGIN-CLI-HOT-1 |
 | `plugins_changed` | `PLUGINS_CHANGED` |  | WEBUI-1: pushed to every client after a plugin is enabled or disabled, `{"id", "enabled"}`: re-read the plugin list. | 1: 2.2 Session and worktree frames |
 | `process_pressure` | `PROCESS_PRESSURE` |  |  | 2: What changed in 1.120.0 |
+| `host_stats` | `HOST_STATS` |  | STATUS-LINE-1: daemon -> clients every few seconds: `{freeMb, totalMb, agents, agentsCpuPercent}`. | 1: 2.2 Session and worktree frames |
 | `mail_refused` | `MAIL_REFUSED` |  |  | 2: What changed in 1.101.0 |
 | `text_delta` | `TEXT_DELTA` |  |  | 12: What changed in 1.23.0 |
 | `status` | `STATUS` |  |  | 28: ARCHIVE-1 |
