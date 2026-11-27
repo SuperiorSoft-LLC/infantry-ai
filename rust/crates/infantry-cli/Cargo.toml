@@ -33,3 +33,10 @@ infantry-vault = { path = "../infantry-vault" }
 # RUST-CLI-1 ops: the usage DTOs and the one usage text renderer the daemon uses; timestamps as Kotlin prints them.
 infantry-protocol = { path = "../infantry-protocol" }
 infantry-usage = { path = "../infantry-usage" }
+
+# SECRETS-3: `infantry run --secret` forwards Ctrl+C to the daemon-spawned run instead of dying.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

@@ -451,6 +451,38 @@ impl RunManager {
     /// `run_start`: the command in a new pseudo-terminal; the `run` record (also pushed).
     pub fn start(self: &Arc<Self>, command_id: &str, branch: Option<String>) -> Result<Value, String> {
         let cmd = self.commands.get(command_id).ok_or_else(|| format!("no saved command '{command_id}'"))?;
+        self.start_spec(cmd, branch)
+    }
+
+    /// SECRETS-3: `run_start {"argv", "cwd"?, "secrets"?, "project"?}`: an unsaved command (`infantry run --secret`).
+    /// The daemon spawns it and injects the secret fields; no value ever goes back to the caller.
+    pub fn start_inline(self: &Arc<Self>, argv: Vec<String>, cwd: Option<String>, secrets: Vec<String>, project: Option<String>) -> Result<Value, String> {
+        if argv.first().is_none_or(|a| a.trim().is_empty()) {
+            return Err("an inline run needs argv (the command words)".into());
+        }
+        let cwd = cwd.filter(|c| !c.trim().is_empty());
+        if cwd.as_deref().is_some_and(|c| !Path::new(c).is_absolute()) {
+            return Err("an inline run's cwd must be an absolute folder".into());
+        }
+        let name: String = argv.join(" ").chars().take(80).collect();
+        let cmd = CommandSpec {
+            id: "inline".into(),
+            name,
+            cwd,
+            argv,
+            grace_millis: default_grace(),
+            secrets: dedup(secrets),
+            project,
+            rooted: true,
+            renders: Vec::new(),
+            detached: false,
+            branch: false,
+        };
+        self.start_spec(cmd, None)
+    }
+
+    fn start_spec(self: &Arc<Self>, cmd: CommandSpec, branch: Option<String>) -> Result<Value, String> {
+        let command_id = cmd.id.as_str();
         let root = self.command_root(&cmd).ok_or_else(|| match &cmd.project {
             Some(p) => format!("project '{p}' has no folder registered; set the project folder first"),
             None => "the command belongs to no project".to_string(),
@@ -818,6 +850,12 @@ impl FrameUnit for RunUnit {
                 Ok(Vec::new())
             }
             f::RUN_START => {
+                if v["argv"].is_array() {
+                    let words = |k: &str| v[k].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+                    let opt = |k: &str| v[k].as_str().map(str::trim).filter(|s| !s.is_empty()).map(String::from);
+                    let rec = m.start_inline(words("argv"), opt("cwd"), words("secrets"), opt("project")).map_err(rf)?;
+                    return Ok(vec![reply(env, f::RUN, rec.to_string())]);
+                }
                 let id = if v.is_object() { field(&v, "commandId").to_string() } else { env.data.trim().to_string() };
                 let branch = v["branch"].as_str().map(String::from);
                 let rec = m.start(&id, branch).map_err(rf)?;
@@ -870,6 +908,20 @@ mod tests {
     fn a_shell_line_splits_like_a_shell() {
         assert_eq!(split_line(r#"npm run "dev server" -- --port 0"#), vec!["npm", "run", "dev server", "--", "--port", "0"]);
         assert_eq!(split_line(r#"echo "" 'a b'"#), vec!["echo", "", "a b"]);
+    }
+
+    #[test]
+    fn an_inline_start_refuses_without_argv_or_with_a_relative_cwd() {
+        let dir = std::env::temp_dir().join(format!("infantry-run-inline-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let daemon = Daemon::new(Arc::new(crate::harness::stub::Stub::default()), crate::sessions::Config::new(dir.clone(), dir.clone())).unwrap();
+        let m = RunManager::new(&dir, dir.clone(), EventBus::default(), daemon, Arc::new(|_: &str| None));
+        assert!(m.start_inline(vec![], None, vec![], None).unwrap_err().contains("argv"));
+        assert!(m.start_inline(vec!["x".into()], Some("rel".into()), vec![], None).unwrap_err().contains("absolute"));
+        // A secret with no vault composed is refused before anything spawns; nothing is saved to the Run tab list.
+        assert!(m.start_inline(vec!["x".into()], None, vec!["db".into()], None).unwrap_err().contains("secrets are not available"));
+        assert_eq!(m.commands_json(None), "[]");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

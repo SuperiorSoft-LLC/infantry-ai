@@ -9,6 +9,7 @@ pub static RAW: &[RawCommand] = &[
     // -- raw commands --
     super::cmd_mail::WAITING_FLAG,
     RawCommand { matches: super::progress::is_progress, run: super::progress::progress },
+    RawCommand { matches: is_secret_run, run: super::run_secret::run },
     RawCommand { matches: super::progress::is_run, run: super::progress::run },
 ];
 
@@ -48,6 +49,11 @@ pub static COMMANDS: &[&Command] = &[
     // -- runner --
     &super::cmd_runner::RUNNER,
 ];
+
+/// SECRETS-3: `run --secret ...` runs in the daemon; plain `run` stays local.
+fn is_secret_run(a: &[String]) -> bool {
+    super::progress::is_run(a) && super::run_secret::wants_secret(a)
+}
 
 pub fn find(name: &str) -> Option<&'static Command> {
     COMMANDS.iter().copied().find(|c| c.name == name)

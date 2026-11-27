@@ -30,6 +30,7 @@ pub mod progress;
 pub mod issue;
 pub mod conn;
 pub mod registry;
+pub mod run_secret;
 pub mod usage;
 
 use args::Parsed;

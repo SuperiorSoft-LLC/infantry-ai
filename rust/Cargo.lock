@@ -1202,11 +1202,13 @@ dependencies = [
  "infantry-protocol",
  "infantry-usage",
  "infantry-vault",
+ "libc",
  "native-tls",
  "serde",
  "serde_json",
  "tungstenite 0.24.0",
  "uuid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
