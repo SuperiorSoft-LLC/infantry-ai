@@ -71,6 +71,8 @@ pub const QUEUE_MAX: usize = 20;
 pub const SENT_IDS_KEPT: usize = 500;
 /// Frames kept per session for `replay_request` (a reconnecting or late client rebuilds the transcript from them).
 pub const REPLAY_KEPT: usize = 5_000;
+/// `limits.chat.replayTurns` default (ANDROID-REPLAY-1): turns a first `replay_request` (and each "older" page) sends.
+pub const REPLAY_TURNS: usize = 50;
 
 /// Spawns a background task from any thread. `tokio::spawn` panics with "there is no reactor running" on a thread that
 /// is not inside the runtime (a std thread, a script hook, a plugin host thread) and the session-open path ran into
@@ -111,6 +113,8 @@ pub struct Config {
     pub sent_ids_kept: usize,
     /// Frames kept per session for `replay_request`.
     pub replay_kept: usize,
+    /// `limits.chat.replayTurns`: turns a window `replay_request` sends when the client names none.
+    pub replay_turns: usize,
     /// The agent-CLI harnesses this daemon can run (built by the composition root; empty = only the one `Daemon::new` got).
     pub registry: crate::harness::HarnessRegistry,
 }
@@ -118,7 +122,7 @@ pub struct Config {
 impl Config {
     /// The defaults Kotlin ships with.
     pub fn new(state_dir: PathBuf, default_cwd: PathBuf) -> Config {
-        Config { state_dir, default_cwd, kill_settle_ms: KILL_SETTLE_MS, frame_detach_ms: FRAME_DETACH_MS, queue_max: QUEUE_MAX, sent_ids_kept: SENT_IDS_KEPT, replay_kept: REPLAY_KEPT, registry: Default::default() }
+        Config { state_dir, default_cwd, kill_settle_ms: KILL_SETTLE_MS, frame_detach_ms: FRAME_DETACH_MS, queue_max: QUEUE_MAX, sent_ids_kept: SENT_IDS_KEPT, replay_kept: REPLAY_KEPT, replay_turns: REPLAY_TURNS, registry: Default::default() }
     }
 }
 
@@ -832,10 +836,12 @@ impl Daemon {
 
     fn replay(&self, sid: &str, data: &str) -> Result<Vec<String>, String> {
         let entry = self.find(sid).ok_or_else(|| format!("replay_request refused: unknown session {sid}"))?;
-        let last = serde_json::from_str::<serde_json::Value>(data).ok().and_then(|v| v["lastSequence"].as_i64()).unwrap_or(0);
+        let v = serde_json::from_str::<serde_json::Value>(data).unwrap_or_default();
+        let last = v["lastSequence"].as_i64().unwrap_or(0);
+        let before = v["beforeSequence"].as_i64();
+        let turns = v["turns"].as_u64().map(|n| n as usize).unwrap_or(self.cfg.replay_turns);
         let e = entry.lock().unwrap();
-        let out = replay_frames(&e.history, sid, last);
-        Ok(out)
+        Ok(replay_answer(&e.history, sid, last, before, turns))
     }
 
     fn broadcast(&self, ty: &str, data: String) {
@@ -2201,6 +2207,39 @@ fn unusable_in(providers: &str, provider: &str, runner: &str) -> Option<String> 
 /// The frames a `replay_request` after `last` answers with: a `replay_gap` first when older frames were evicted, and one
 /// in place at every hole inside the kept history (frames lost to a failed disk write), so the client moves past a hole
 /// at once instead of holding every later frame for the missing ones.
+/// ANDROID-REPLAY-1: the whole answer to a `replay_request`, always ended by one `replay_done`.
+/// - `before` set: a page of OLDER history, the last `turns` turns below that sequence (lazy-load on scroll up).
+/// - `last` 0 and `turns` > 0: the first open, only the latest `turns` turns (a `turn` frame starts each one).
+/// - otherwise (a resync from a cursor, or `turns` 0): every kept frame after `last`, as before.
+fn replay_answer(history: &VecDeque<(i64, String)>, sid: &str, last: i64, before: Option<i64>, turns: usize) -> Vec<String> {
+    let window = before.is_some() || (last <= 0 && turns > 0);
+    let (mut out, from, has_more) = if window {
+        let below: Vec<&(i64, String)> = history.iter().filter(|(s, _)| before.map_or(true, |b| *s < b)).collect();
+        let starts: Vec<usize> = below.iter().enumerate().filter(|(_, (_, f))| is_turn(f)).map(|(i, _)| i).collect();
+        // Fewer turns than asked (or none at all): the whole range, and nothing older is kept.
+        let cut = if turns > 0 && starts.len() > turns { starts[starts.len() - turns] } else { 0 };
+        let slice: VecDeque<(i64, String)> = below[cut..].iter().map(|x| (*x).clone()).collect();
+        let from = slice.front().map(|h| h.0);
+        let has_more = cut > 0;
+        let out = match from {
+            Some(f) if has_more => replay_frames(&slice, sid, f - 1),
+            _ => replay_frames(&slice, sid, before.map_or(last, |_| 0)),
+        };
+        (out, from, has_more)
+    } else {
+        (replay_frames(history, sid, last), history.iter().find(|(s, _)| *s > last).map(|h| h.0), false)
+    };
+    let to = history.iter().filter(|(s, _)| before.map_or(true, |b| *s < b)).last().map(|h| h.0);
+    let done = json!({"fromSequence": from, "toSequence": to, "hasMore": has_more});
+    out.push(encode(wire::REPLAY_DONE, done.to_string(), Some(sid), None));
+    out
+}
+
+/// A kept frame that starts a turn (the encoded envelope's own type, never a quote inside its data).
+fn is_turn(frame: &str) -> bool {
+    frame.contains(r#""type":"turn""#)
+}
+
 fn replay_frames(history: &VecDeque<(i64, String)>, sid: &str, last: i64) -> Vec<String> {
     let mut out = Vec::new();
     let latest = history.back().map(|h| h.0);
@@ -2245,6 +2284,35 @@ mod replay_hole_tests {
         assert!(out[0].contains("replay_gap"));
         assert_eq!(out[1], "f7");
         assert_eq!(replay_frames(&h(&[1, 2, 3]), "s", 1), vec!["f2", "f3"]);
+    }
+
+    /// 6 turns of 3 frames each: a `turn` frame (seq 1, 4, 7, ...) then two frames of output.
+    fn turns() -> VecDeque<(i64, String)> {
+        (1..=18).map(|s| (s, if s % 3 == 1 { format!(r#"{{"type":"turn","data":"t{s}"}}"#) } else { format!("f{s}") })).collect()
+    }
+
+    #[test]
+    fn a_first_open_sends_only_the_latest_turns_then_the_done_marker() {
+        let out = replay_answer(&turns(), "s", 0, None, 2);
+        assert_eq!(out.len(), 7, "{out:?}"); // turns at 13 and 16: frames 13..=18, then replay_done
+        assert!(out[0].contains("t13"));
+        assert!(out[6].contains("replay_done") && out[6].contains(r#"\"fromSequence\":13"#) && out[6].contains(r#"\"hasMore\":true"#));
+    }
+
+    #[test]
+    fn an_older_page_is_the_turns_below_the_sequence_and_the_last_page_says_no_more() {
+        let out = replay_answer(&turns(), "s", 0, Some(13), 2);
+        assert!(out[0].contains("t7") && out[5] == "f12" && out[6].contains("replay_done"));
+        let out = replay_answer(&turns(), "s", 0, Some(7), 5);
+        assert_eq!(out.len(), 7);
+        assert!(out[6].contains(r#"\"hasMore\":false"#));
+    }
+
+    #[test]
+    fn a_resync_from_a_cursor_sends_everything_after_it_and_still_ends_with_done() {
+        let out = replay_answer(&turns(), "s", 15, None, 2);
+        assert_eq!(out.len(), 4);
+        assert!(out[0].contains("t16") && out[3].contains("replay_done"));
     }
 }
 

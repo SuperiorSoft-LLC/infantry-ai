@@ -46,6 +46,8 @@ export const Frame = {
   REASONING: "reasoning",
   REPLAY_REQUEST: "replay_request",
   REPLAY_GAP: "replay_gap",
+  /** ANDROID-REPLAY-1: ends a history answer: `{fromSequence, toSequence, hasMore}`. */
+  REPLAY_DONE: "replay_done",
   USAGE: "usage",
   AGENT_LIST: "agent_list",
   AGENTS: "agents",

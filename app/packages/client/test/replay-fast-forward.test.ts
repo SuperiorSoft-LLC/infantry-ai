@@ -51,6 +51,11 @@ async function openChatOverSlowLink(chunks: number) {
     const v = s.getState().sessions.s1;
     seen.push({ state: v.record.state, title: (v.record as { name?: string }).name ?? "", items: v.items.length });
   }
+  // The daemon ends every history answer with replay_done (sessions.rs replay_answer).
+  d.push({ type: "replay_done", sessionId: "s1", data: JSON.stringify({ fromSequence: 1, toSequence: frames.length, hasMore: false }) });
+  await tick();
+  const v = s.getState().sessions.s1;
+  seen.push({ state: v.record.state, title: (v.record as { name?: string }).name ?? "", items: v.items.length });
   return { seen, renders: s.getState().stats.flushes - flushesBefore, final: s.getState().sessions.s1 };
 }
 
@@ -66,5 +71,43 @@ describe("ANDROID-REPLAY-1: opening a long chat", () => {
     // Today: the transcript grows part by part (8 renders of a partial chat): the "fast forward".
     const partial = seen.filter((x) => x.items > 0 && x.items < final.items.length);
     expect(partial).toEqual([]);
+    expect(final.items.length).toBeGreaterThan(0); // and it is shown in full in the end
+    expect(final.cursor).toBe(80);
+  });
+});
+
+describe("ANDROID-REPLAY-1: older turns on demand", () => {
+  it("asks the latest turns first, then the page before the oldest shown, and puts it above", async () => {
+    const sent: Envelope[] = [];
+    let h: TransportHandlers | null = null;
+    const factory = () => ({ open(x: TransportHandlers) { h = x; }, send(t: string) { sent.push(JSON.parse(t)); }, close() {} });
+    store = createDaemonStore({ url: "ws://test/ws", transport: factory, settings: { flushFallbackMs: 1, replayTurns: 1 } });
+    const s = store;
+    s.getState().connect();
+    h!.onOpen();
+    const push = (e: Envelope) => h!.onText(JSON.stringify(e));
+    push({ type: "ready", data: "instance=i1 since=0" });
+    push({ type: "sessions", data: JSON.stringify([rec("s1", "IDLE", "t")]) });
+    await tick();
+    s.getState().requestHistory("s1");
+    expect(JSON.parse(sent.at(-1)!.data)).toEqual({ lastSequence: 0, turns: 1 });
+    expect(s.getState().sessions.s1.loadingHistory).toBe(true);
+    push({ type: "turn", sessionId: "s1", sequence: 3, data: "second" });
+    push({ type: "text_delta", sessionId: "s1", sequence: 4, data: "b" });
+    push({ type: "replay_done", sessionId: "s1", data: JSON.stringify({ fromSequence: 3, toSequence: 4, hasMore: true }) });
+    await tick();
+    let v = s.getState().sessions.s1;
+    expect([v.loadingHistory, v.hasOlder, v.oldestSequence, v.cursor]).toEqual([false, true, 3, 4]);
+    expect(v.items.map((i) => i.kind)).toEqual(["user", "text"]); // no "output missing" above a window
+    s.getState().requestOlder("s1");
+    expect(JSON.parse(sent.at(-1)!.data)).toEqual({ lastSequence: 0, beforeSequence: 3, turns: 1 });
+    push({ type: "turn", sessionId: "s1", sequence: 1, data: "first" });
+    push({ type: "text_delta", sessionId: "s1", sequence: 5, data: "c" }); // live, while the page loads
+    push({ type: "text_delta", sessionId: "s1", sequence: 2, data: "a" });
+    push({ type: "replay_done", sessionId: "s1", data: JSON.stringify({ fromSequence: 1, toSequence: 2, hasMore: false }) });
+    await tick();
+    v = s.getState().sessions.s1;
+    expect(v.items.map((i) => (i as { text?: string }).text)).toEqual(["first", "a", "second", "bc"]);
+    expect([v.hasOlder, v.oldestSequence, v.cursor]).toEqual([false, 1, 5]);
   });
 });

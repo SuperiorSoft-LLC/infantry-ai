@@ -28,7 +28,7 @@ afterEach(() => store?.getState().disconnect());
 
 function connected() {
   const d = fakeDaemon();
-  store = createDaemonStore({ url: "ws://test/ws", transport: d.factory, settings: { flushFallbackMs: 1, sendAckSeconds: 1, historyOnConnect: "all" } });
+  store = createDaemonStore({ url: "ws://test/ws", transport: d.factory, settings: { flushFallbackMs: 1, sendAckSeconds: 1, historyOnConnect: "all", replayDoneWaitMs: 1 } });
   store.getState().connect();
   d.open();
   return { d, s: store };
@@ -40,11 +40,12 @@ describe("daemon store", () => {
     d.push({ type: "ready", data: "provider=stub instance=i1 since=0" });
     d.push({ type: "sessions", data: JSON.stringify([rec("s1")]) });
     await tick();
-    expect(d.sent.find((e) => e.type === "replay_request")).toMatchObject({ sessionId: "s1", data: '{"lastSequence":0}' });
+    expect(d.sent.find((e) => e.type === "replay_request")).toMatchObject({ sessionId: "s1", data: '{"lastSequence":0,"turns":50}' });
     // Frames out of order: 2 is held until 1 arrives.
     d.push({ type: "text_delta", data: "b", sessionId: "s1", sequence: 2 });
     d.push({ type: "text_delta", data: "a", sessionId: "s1", sequence: 1 });
     d.push({ type: "text_delta", data: "a", sessionId: "s1", sequence: 1 }); // a replay overlap is dropped
+    d.push({ type: "replay_done", sessionId: "s1", data: JSON.stringify({ fromSequence: 1, toSequence: 2, hasMore: false }) }); // ANDROID-REPLAY-1
     await tick();
     const v = s.getState().sessions.s1;
     expect(v.cursor).toBe(2);
@@ -58,6 +59,7 @@ describe("daemon store", () => {
     d.push({ type: "sessions", data: JSON.stringify([rec("s1")]) });
     d.push({ type: "replay_gap", sessionId: "s1", data: JSON.stringify({ requestedAfterSequence: 0, oldestAvailableSequence: 41, latestAvailableSequence: 296, evictedCount: 40 }) });
     d.push({ type: "text_delta", data: "late", sessionId: "s1", sequence: 41 });
+    d.push({ type: "replay_done", sessionId: "s1", data: JSON.stringify({ fromSequence: 41, toSequence: 41, hasMore: false }) }); // ANDROID-REPLAY-1
     await tick();
     const v = s.getState().sessions.s1;
     expect(v.cursor).toBe(41);
@@ -77,7 +79,7 @@ describe("daemon store", () => {
     d.push({ type: "ready", data: "instance=i1 since=0" });
     d.push({ type: "sessions", data: JSON.stringify([rec("s1")]) });
     await tick();
-    expect(d.sent.find((e) => e.type === "replay_request")?.data).toBe('{"lastSequence":1}');
+    expect(d.sent.find((e) => e.type === "replay_request")?.data).toBe('{"lastSequence":1,"turns":50}');
     d.push({ type: "ready", data: "instance=i2 since=0" });
     await tick();
     expect(s.getState().sessions.s1.cursor).toBe(0);
@@ -261,11 +263,13 @@ describe("daemon store", () => {
 describe("a hole in the sequence", () => {
   it("is skipped after gapWaitMs, marked as missing, and the later frames show (also with no more frames coming)", async () => {
     const d = fakeDaemon();
-    store = createDaemonStore({ url: "ws://test/ws", transport: d.factory, settings: { flushFallbackMs: 1, gapWaitMs: 30, historyOnConnect: "all" } });
+    store = createDaemonStore({ url: "ws://test/ws", transport: d.factory, settings: { flushFallbackMs: 1, gapWaitMs: 30, historyOnConnect: "all", replayDoneWaitMs: 1 } });
     store.getState().connect();
     d.open();
     d.push({ type: "ready", data: "instance=i1 since=0" });
     d.push({ type: "sessions", data: JSON.stringify([rec("s1")]) });
+    // ANDROID-REPLAY-1: the history answer (empty here) ends with replay_done; the hole below is in the LIVE stream.
+    d.push({ type: "replay_done", sessionId: "s1", data: JSON.stringify({ fromSequence: null, toSequence: null, hasMore: false }) });
     d.push({ type: "text_delta", data: "a", sessionId: "s1", sequence: 1 });
     d.push({ type: "text_delta", data: "z", sessionId: "s1", sequence: 5777 }); // 2..5776 were lost on the daemon's disk
     await tick();
@@ -280,7 +284,7 @@ describe("a hole in the sequence", () => {
 describe("first sync (FIRST-SYNC-1)", () => {
   function fresh() {
     const d = fakeDaemon();
-    store = createDaemonStore({ url: "ws://test/ws", transport: d.factory, settings: { flushFallbackMs: 1, gapWaitMs: 30 } });
+    store = createDaemonStore({ url: "ws://test/ws", transport: d.factory, settings: { flushFallbackMs: 1, gapWaitMs: 30, replayDoneWaitMs: 1 } });
     store.getState().connect();
     d.open();
     return { d, s: store };
@@ -317,7 +321,7 @@ describe("first sync (FIRST-SYNC-1)", () => {
     expect(v.cursor).toBe(0);
     expect(v.items).toHaveLength(0);
     s.getState().requestHistory("s1");
-    expect(d.sent.find((e) => e.type === "replay_request")).toMatchObject({ sessionId: "s1", data: '{"lastSequence":0}' });
+    expect(d.sent.find((e) => e.type === "replay_request")).toMatchObject({ sessionId: "s1", data: '{"lastSequence":0,"turns":50}' });
     d.push({ type: "text_delta", data: "a", sessionId: "s1", sequence: 1 });
     await tick();
     v = s.getState().sessions.s1;

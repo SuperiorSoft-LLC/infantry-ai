@@ -27,6 +27,8 @@ pub const SESSION_DELETE: &str = "session_delete";
 pub const PROMPT_ACK: &str = "prompt_ack";
 pub const REPLAY_REQUEST: &str = "replay_request";
 pub const REPLAY_GAP: &str = "replay_gap";
+/// ANDROID-REPLAY-1: ends every `replay_request` answer: `{fromSequence, toSequence, hasMore}` (no sequence of its own).
+pub const REPLAY_DONE: &str = "replay_done";
 pub const AGENT_LIST: &str = "agent_list";
 pub const AGENTS: &str = "agents";
 pub const PROJECT_LIST: &str = "project_list";

@@ -31,9 +31,13 @@ export interface StoreSettings {
   flushFallbackMs: number;
   /** Ask every session's history on connect ("all") or only the one the user opens ("selected"). */
   historyOnConnect: "all" | "selected";
+  /** `limits.chat.replayTurns` (ANDROID-REPLAY-1): turns a chat shows when opened, and per "older" page. 0 = all kept. */
+  replayTurns: number;
+  /** A replay with no `replay_done` (an older daemon) is applied this long after its last frame, ms. */
+  replayDoneWaitMs: number;
 }
 
-export const DEFAULT_SETTINGS: StoreSettings = { sendAckSeconds: 45, maxHeldFrames: 512, gapWaitMs: 2000, flushFallbackMs: 250, historyOnConnect: "selected" };
+export const DEFAULT_SETTINGS: StoreSettings = { sendAckSeconds: 45, maxHeldFrames: 512, gapWaitMs: 2000, flushFallbackMs: 250, historyOnConnect: "selected", replayTurns: 50, replayDoneWaitMs: 3000 };
 
 export interface PendingSend {
   clientId: string;
@@ -82,6 +86,11 @@ export interface SessionView {
   activityLog: ActivityEntry[];
   /** History was asked from this daemon instance. */
   historyAsked: boolean;
+  /** ANDROID-REPLAY-1: a history answer is on its way; the chat shows "Loading chat…" and is drawn once it ends. */
+  loadingHistory?: boolean;
+  /** The oldest sequence shown, and whether the daemon keeps older turns (scrolling up asks them). */
+  oldestSequence?: number;
+  hasOlder?: boolean;
 }
 
 export interface Connection {
@@ -123,6 +132,8 @@ export interface DaemonActions {
   /** CHAT-GONE-1: the refused text of a gone session, once (then cleared); undefined when there is none. */
   takeGoneText(sessionId: string): string | undefined;
   requestHistory(sessionId: string): void;
+  /** ANDROID-REPLAY-1: the page of turns before the oldest one shown (lazy-load when the chat is scrolled to the top). */
+  requestOlder(sessionId: string): void;
   /** Feed frames as if the daemon sent them (stress mode, tests). */
   ingest(env: Envelope): void;
   /** Send any frame (the board and settings stores use it); false when the link is not open. */
@@ -147,16 +158,39 @@ interface Internal {
   listUnconfirmed: boolean;
   /** CHAT-GONE-2: a refused session's `lastHeartbeat` at the refusal; a listed record newer than it is alive. */
   goneBeat: Map<string, number>;
+  /** ANDROID-REPLAY-1: frames of a history answer, held until its `replay_done` so the chat is drawn once. */
+  replays: Map<string, { frames: Envelope[]; older: boolean; timer?: ReturnType<typeof setTimeout> }>;
 }
 
 export function createDaemonStore(opts: { url: string; transport: TransportFactory; settings?: Partial<StoreSettings>; offline?: boolean }): DaemonStore {
   const cfg: StoreSettings = { ...DEFAULT_SETTINGS, ...opts.settings };
-  const io: Internal = { queue: [], held: new Map(), raf: null, fallback: null, ackTimers: new Map(), gapTimers: new Map(), lastText: new Map(), listUnconfirmed: false, goneBeat: new Map() };
+  const io: Internal = { queue: [], held: new Map(), raf: null, fallback: null, ackTimers: new Map(), gapTimers: new Map(), lastText: new Map(), listUnconfirmed: false, goneBeat: new Map(), replays: new Map() };
   let conn: DaemonConnection | null = null;
   const taps = new Set<(env: Envelope) => void>();
 
   const store = createStore<DaemonState & DaemonActions>()((set, get) => {
     const out = (env: Envelope) => conn?.send(env) ?? false;
+
+    /** A history answer that never says `replay_done` (an older daemon) still lands, once, after a quiet spell. */
+    const armReplay = (sid: string) => {
+      const r = io.replays.get(sid);
+      if (!r) return;
+      if (r.timer) clearTimeout(r.timer);
+      r.timer = setTimeout(() => {
+        if (io.replays.get(sid) !== r) return;
+        io.queue.push({ type: Frame.REPLAY_DONE, sessionId: sid, data: JSON.stringify({ hasMore: false }) });
+        schedule();
+      }, cfg.replayDoneWaitMs);
+    };
+    /** Ask a history answer: the latest turns on a first open, everything after the cursor on a resync, or an older page. */
+    const askReplay = (sid: string, ask: { lastSequence: number; beforeSequence?: number }) => {
+      const prev = io.replays.get(sid);
+      if (prev?.timer) clearTimeout(prev.timer);
+      io.replays.set(sid, { frames: [], older: ask.beforeSequence != null });
+      armReplay(sid);
+      replayUntil.set(sid, Date.now() + REPLAY_WINDOW_MS);
+      out({ type: Frame.REPLAY_REQUEST, data: JSON.stringify({ ...ask, turns: cfg.replayTurns }), sessionId: sid });
+    };
 
     const schedule = () => {
       if (io.raf != null || io.fallback != null) return;
@@ -224,8 +258,39 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
         cursors.clear();
       };
       const askHistory = (sid: string, from: number) => {
-        replayUntil.set(sid, Date.now() + REPLAY_WINDOW_MS);
-        out({ type: Frame.REPLAY_REQUEST, data: JSON.stringify({ lastSequence: from }), sessionId: sid });
+        askReplay(sid, { lastSequence: from });
+        const v = sessions[sid];
+        if (v && !v.loadingHistory) { writeSessions(); sessions[sid] = { ...v, loadingHistory: true }; }
+      };
+      /** ANDROID-REPLAY-1: the whole history answer in one update. The card keeps its CURRENT record, status and
+       *  activity (the sessions list is the truth); only the transcript, usage and last line come from history. */
+      const finishReplay = (sid: string, done: { fromSequence?: number | null; hasMore?: boolean }) => {
+        const r = io.replays.get(sid);
+        io.replays.delete(sid);
+        if (r?.timer) clearTimeout(r.timer);
+        const v = sessions[sid];
+        if (!r || !v) return;
+        writeSessions();
+        const seen = new Set<number>();
+        // In sequence order (a daemon gap marker sits just before the frame it names), then each sequence once.
+        const key = (f: Envelope) => f.sequence ?? ((json<ReplayGap>(f.data)?.oldestAvailableSequence ?? 0) - 0.5);
+        const frames = r.frames.map((f, i) => ({ f, i })).sort((a, b) => key(a.f) - key(b.f) || a.i - b.i).map((x) => x.f).filter((f) => f.sequence == null || (!seen.has(f.sequence) && seen.add(f.sequence)));
+        const from = done.fromSequence ?? frames.find((f) => f.sequence != null)?.sequence ?? undefined;
+        if (r.older) {
+          const floor = v.oldestSequence ?? Infinity;
+          const older = frames.filter((f) => f.sequence == null || f.sequence < floor);
+          sessions[sid] = { ...v, items: [...applyFrames([], older), ...v.items], oldestSequence: from ?? v.oldestSequence, hasOlder: !!done.hasMore, loadingHistory: false };
+          return;
+        }
+        const fresh = markHoles(sid, frames.filter((f) => f.sequence == null || f.sequence > v.cursor), v.cursor, done.fromSequence ?? undefined);
+        const top = fresh.reduce((m, f) => Math.max(m, f.sequence ?? 0), v.cursor);
+        const applied = applyToView({ ...v, cursor: top }, fresh);
+        io.held.delete(sid);
+        const first = v.cursor === 0;
+        sessions[sid] = {
+          ...applied, record: v.record, status: v.status, activityAt: v.activityAt, activityLog: v.activityLog, cursor: top, loadingHistory: false,
+          oldestSequence: first ? from : v.oldestSequence ?? from, hasOlder: first ? !!done.hasMore : v.hasOlder,
+        };
       };
 
       for (const env of batch) {
@@ -260,6 +325,20 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
             const { [sid]: _, ...rest } = gone;
             gone = rest;
           }
+        }
+        // ANDROID-REPLAY-1: while a history answer is on its way, its frames (and live ones) wait for `replay_done`.
+        const pendingReplay = sid ? io.replays.get(sid) : undefined;
+        // An "older" page holds only frames below the oldest one shown; live frames go on as usual.
+        const olderFloor = sid && pendingReplay?.older ? sessions[sid]?.oldestSequence ?? Infinity : Infinity;
+        if (sid && pendingReplay && (env.type === Frame.REPLAY_GAP || (STREAM_FRAMES.has(env.type) && (env.sequence ?? 0) < olderFloor))) {
+          io.replays.get(sid)!.frames.push(env);
+          armReplay(sid);
+          continue;
+        }
+        if (sid && env.type === Frame.REPLAY_DONE) {
+          flushStreams();
+          finishReplay(sid, json<{ fromSequence?: number | null; hasMore?: boolean }>(env.data) ?? {});
+          continue;
         }
         if (sid && STREAM_FRAMES.has(env.type) && env.sequence != null) {
           if (!sessions[sid] && env.type === Frame.SESSION) {
@@ -544,8 +623,14 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
       requestHistory(sessionId) {
         const v = get().sessions[sessionId];
         if (!v || v.historyAsked) return;
-        set({ sessions: { ...get().sessions, [sessionId]: { ...v, historyAsked: true } } });
-        out({ type: Frame.REPLAY_REQUEST, data: JSON.stringify({ lastSequence: v.cursor }), sessionId });
+        set({ sessions: { ...get().sessions, [sessionId]: { ...v, historyAsked: true, loadingHistory: true } } });
+        askReplay(sessionId, { lastSequence: v.cursor });
+      },
+      requestOlder(sessionId) {
+        const v = get().sessions[sessionId];
+        if (!v || !v.hasOlder || v.oldestSequence == null || io.replays.has(sessionId)) return;
+        set({ sessions: { ...get().sessions, [sessionId]: { ...v, loadingHistory: true } } });
+        askReplay(sessionId, { lastSequence: 0, beforeSequence: v.oldestSequence });
       },
       sendFrame(env) {
         return out(env);
@@ -585,6 +670,27 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
 
 function newView(record: SessionRecord, historyAsked: boolean): SessionView {
   return { record, items: [], cursor: 0, status: null, usage: {}, lastLine: "", activityAt: record.lastEventAt ?? record.lastHeartbeat, activityLog: [], historyAsked };
+}
+
+/** A history answer's frames with a `replay_gap` put where the sequence jumps and the daemon marked nothing (a range lost
+ *  on its disk), so the chat shows "output missing" there. A first open of a window starts at `from`: no gap before it. */
+function markHoles(sid: string, frames: Envelope[], cursor: number, from?: number): Envelope[] {
+  const out: Envelope[] = [];
+  let prev = cursor === 0 && from != null ? from - 1 : cursor;
+  let marked = false;
+  for (const f of frames) {
+    if (f.type === Frame.REPLAY_GAP) { marked = true; out.push(f); continue; }
+    if (f.sequence != null) {
+      if (f.sequence > prev + 1 && !marked && !(prev === 0 && cursor === 0 && from == null)) {
+        const data = JSON.stringify({ requestedAfterSequence: prev, oldestAvailableSequence: f.sequence, latestAvailableSequence: f.sequence, evictedCount: f.sequence - prev - 1 });
+        out.push({ type: Frame.REPLAY_GAP, sessionId: sid, data });
+      }
+      prev = Math.max(prev, f.sequence);
+      marked = false;
+    }
+    out.push(f);
+  }
+  return out;
 }
 
 /** Apply in-order frames to one session view (items, record, status, usage, last line). */

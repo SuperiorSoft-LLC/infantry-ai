@@ -79,6 +79,11 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
   const since = useDaemon((s) => s.sessions[sessionId]?.status?.runActivity?.turnStartedAt ?? s.sessions[sessionId]?.record.lastHeartbeat);
   const pending = useDaemon(useShallow((s) => Object.values(s.pending).filter((p) => p.sessionId === sessionId && p.state !== "accepted")));
   const retry = useDaemon((s) => s.retry);
+  // ANDROID-REPLAY-1: the history answer is drawn once it ends; older turns load when the reader reaches the top.
+  const loading = useDaemon((s) => !!s.sessions[sessionId]?.loadingHistory);
+  const hasOlder = useDaemon((s) => !!s.sessions[sessionId]?.hasOlder);
+  const oldest = useDaemon((s) => s.sessions[sessionId]?.oldestSequence);
+  const requestOlder = useDaemon((s) => s.requestOlder);
   // The avatar only reads hue and role: keep one object per session so rows do not re-render on every status change.
   const avatar = useMemo(() => agent, [agent.id, agent.hue, agent.roleId]); // eslint-disable-line react-hooks/exhaustive-deps
   const autos = useAutomationItems(sessionId);
@@ -123,7 +128,19 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_SLACK_PX;
     stick.current = atBottom;
     setAway(!atBottom);
-  }, []);
+    if (el.scrollTop <= STICK_SLACK_PX && hasOlder && !loading) {
+      olderFrom.current = el.scrollHeight - el.scrollTop;
+      requestOlder(sessionId);
+    }
+  }, [hasOlder, loading, requestOlder, sessionId]);
+  // An older page landed above: keep the reader on the line they were reading.
+  const olderFrom = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || olderFrom.current == null) return;
+    el.scrollTop = el.scrollHeight - olderFrom.current;
+    olderFrom.current = null;
+  }, [oldest]);
 
   const toBottom = useCallback(() => {
     stick.current = true;
@@ -153,6 +170,13 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [total, rows.length, sessionId]);
 
+  if (rows.length === 0 && loading) {
+    return (
+      <div className="grid flex-1 place-items-center p-6">
+        <EmptyState icon={<MessageSquareDashed className="size-7" />} title="Loading chat…" hint="Fetching the latest messages." />
+      </div>
+    );
+  }
   if (rows.length === 0) {
     return (
       <div className="grid flex-1 place-items-center p-6">
