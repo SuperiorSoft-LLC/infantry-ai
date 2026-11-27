@@ -337,14 +337,7 @@ impl AgentFrames {
             .map(|(agent_id, name, role)| {
                 let mut theirs: Vec<&SessionRecord> = sessions.iter().filter(|s| s.agent_id.clone().filter(|a| !a.trim().is_empty()).unwrap_or_else(|| s.id.clone()) == agent_id).collect();
                 theirs.sort_by_key(|s| std::cmp::Reverse(s.spawned_at));
-                let running = |s: &SessionRecord| s.is_busy() || s.background_work.is_some() || !s.bg_jobs.is_empty();
-                let session = theirs.iter().find(|s| running(s)).or(theirs.first()).copied();
-                let status = match session {
-                    None => "OFFLINE",
-                    Some(s) if running(s) => "BUSY",
-                    Some(s) if !s.is_busy() && (s.resumable() || s.never_run()) => "IDLE",
-                    Some(_) => "OFFLINE",
-                };
+                let (session, status) = agent_status(&theirs);
                 let pending = self.mailbox.pending_count(&agent_id) + session.map(|s| self.mailbox.pending_count(&s.id)).unwrap_or(0);
                 json!({
                     "agentId": agent_id, "name": name, "role": role, "status": status,
@@ -354,6 +347,21 @@ impl AgentFrames {
             .collect();
         Ok(Value::Array(rows))
     }
+}
+
+/// An agent's shown session and status. BUSY only while a turn runs (same rule as the session
+/// wire state): background work on an idle session keeps it IDLE, so no view says Running when
+/// the agent is at rest. A session with background work is still preferred as the one shown.
+fn agent_status<'a>(theirs: &[&'a SessionRecord]) -> (Option<&'a SessionRecord>, &'static str) {
+    let has_background = |s: &SessionRecord| s.background_work.is_some() || !s.bg_jobs.is_empty() || !s.background_tasks.is_empty();
+    let session = theirs.iter().find(|s| s.is_busy()).or_else(|| theirs.iter().find(|s| has_background(s))).or(theirs.first()).copied();
+    let status = match session {
+        None => "OFFLINE",
+        Some(s) if s.is_busy() => "BUSY",
+        Some(s) if has_background(s) || s.resumable() || s.never_run() => "IDLE",
+        Some(_) => "OFFLINE",
+    };
+    (session, status)
 }
 
 impl FrameUnit for AgentFrames {
@@ -402,5 +410,31 @@ impl FrameUnit for AgentFrames {
             }
             other => Err(Refusal::new(other, "not an agent frame")),
         }
+    }
+}
+
+#[cfg(test)]
+mod status_tests {
+    use super::agent_status;
+    use infantry_protocol::session::{SessionRecord, SessionState};
+
+    fn rec(state: SessionState) -> SessionRecord {
+        let mut r: SessionRecord = serde_json::from_value(serde_json::json!({"id": "s1", "provider": "stub", "workingDir": ".", "spawnedAt": 0, "lastHeartbeat": 0, "state": "IDLE"})).unwrap();
+        r.state = state;
+        r.provider_session_id = Some("p".into());
+        r
+    }
+
+    #[test]
+    fn an_idle_agent_with_background_work_reads_idle_not_busy() {
+        let mut s = rec(SessionState::Idle);
+        s.bg_jobs = vec![serde_json::from_value(serde_json::json!({"id": "b1", "label": "sleep", "pid": 1, "startedAt": 0})).unwrap()];
+        assert_eq!(agent_status(&[&s]).1, "IDLE");
+    }
+
+    #[test]
+    fn an_agent_in_a_turn_reads_busy() {
+        let s = rec(SessionState::Busy);
+        assert_eq!(agent_status(&[&s]).1, "BUSY");
     }
 }
