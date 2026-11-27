@@ -7,8 +7,8 @@ import { isMobile } from "@/daemon/daemon";
 import { RemoteRow } from "@/components/connect/connect-screen";
 import { CliPathRow, PairingRows, UpdaterRows } from "@/components/settings/desktop-install";
 import { cn } from "@infantry/ui";
-import { useUi } from "@/state/ui-state";
-import { Button, Switch } from "@infantry/ui";
+import { UI_SCALES, useUi } from "@/state/ui-state";
+import { Button, Switch, ToggleGroup, ToggleGroupItem } from "@infantry/ui";
 import { Label } from "@infantry/ui";
 import { appVersionLine } from "@/components/layout/app-version";
 import { SecretsPanel } from "@/components/settings/secrets-panel";
@@ -80,6 +80,15 @@ export function SettingsBody() {
           <>
             <SettingRow id="set-workers" title="Global workers board" hint="The Working counter opens every project's working agents">
               <Switch id="set-workers" checked={ui.globalWorkers} onCheckedChange={(v) => ui.set("globalWorkers", v)} />
+            </SettingRow>
+            <SettingRow id="set-ui-scale" title="UI size" hint="Text and controls size on this device">
+              <ToggleGroup type="single" id="set-ui-scale" size="sm" variant="outline" value={String(ui.uiScale)} onValueChange={(v) => v && ui.set("uiScale", Number(v))}>
+                {UI_SCALES.map((s) => (
+                  <ToggleGroupItem key={s} value={String(s)} aria-label={`${Math.round(s * 100)}%`}>
+                    {Math.round(s * 100)}%
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
             </SettingRow>
             <SettingRow id="set-dark" title="Dark theme" hint="Light theme when off">
               <Switch id="set-dark" checked={ui.theme === "dark"} onCheckedChange={ui.toggleTheme} />

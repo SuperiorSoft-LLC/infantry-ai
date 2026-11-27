@@ -2,6 +2,7 @@ package com.superiorsoft.infantry
 
 import android.os.Bundle
 import android.view.View
+import android.webkit.WebView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 
@@ -20,5 +21,17 @@ class MainActivity : TauriActivity() {
             WindowInsetsCompat.CONSUMED
         }
         ViewCompat.requestApplyInsets(content)
+    }
+
+    // ANDROID-PINCH-1: the app page never zooms (pinch, double-tap or zoom buttons) and the system font size does not
+    // distort the layout; Settings > Appearance > UI size is the size control. The viewport meta locks the page too.
+    override fun onWebViewCreate(webView: WebView) {
+        super.onWebViewCreate(webView)
+        webView.settings.apply {
+            setSupportZoom(false)
+            builtInZoomControls = false
+            displayZoomControls = false
+            textZoom = 100
+        }
     }
 }

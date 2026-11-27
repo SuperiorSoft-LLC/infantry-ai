@@ -34,6 +34,8 @@ interface UiState {
   workersOpen: boolean;
   /** The Working counter opens the lanes modal (Settings > Appearance; on by default). */
   globalWorkers: boolean;
+  /** ANDROID-PINCH-1: in-app UI size (Settings > Appearance), saved per device; replaces pinch zoom on phones. */
+  uiScale: number;
 }
 
 interface UiActions {
@@ -63,6 +65,18 @@ function initialGlobalWorkers(): boolean {
   }
 }
 
+/** The UI size choices (a fraction of the base 16px root font; the rem-based layout scales with it). */
+export const UI_SCALES = [0.85, 1, 1.15, 1.3] as const;
+const UI_SCALE_STORE = "infantry.uiScale";
+export function initialUiScale(): number {
+  try {
+    const v = Number(localStorage.getItem(UI_SCALE_STORE));
+    return (UI_SCALES as readonly number[]).includes(v) ? v : 1;
+  } catch {
+    return 1;
+  }
+}
+
 export function UiProvider({ children }: { children: ReactNode }) {
   const narrow = typeof window !== "undefined" && window.innerWidth < 1100;
   const [state, setState] = useState<UiState>({
@@ -81,7 +95,17 @@ export function UiProvider({ children }: { children: ReactNode }) {
     popouts: [],
     workersOpen: false,
     globalWorkers: initialGlobalWorkers(),
+    uiScale: initialUiScale(),
   });
+
+  useEffect(() => {
+    document.documentElement.style.fontSize = state.uiScale === 1 ? "" : `${state.uiScale * 100}%`;
+    try {
+      localStorage.setItem(UI_SCALE_STORE, String(state.uiScale));
+    } catch {
+      /* storage unavailable: the size still applies for this run */
+    }
+  }, [state.uiScale]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", state.theme === "dark");

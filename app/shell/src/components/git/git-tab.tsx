@@ -343,8 +343,8 @@ export function GitTab() {
           </IconButton>
         </div>
       )}
-      <div className="flex min-h-0 flex-1">
-        <Tabs value={pane} onValueChange={setPane} className="flex w-80 shrink-0 flex-col gap-0 border-r">
+      <div className="flex min-h-0 flex-1 max-sm:flex-col">
+        <Tabs value={pane} onValueChange={setPane} className="flex w-80 shrink-0 flex-col gap-0 border-r max-sm:max-h-[45%] max-sm:w-full max-sm:border-r-0 max-sm:border-b">
           <TabsList className="m-2 grid grid-cols-3">
             <TabsTrigger value="changes">Changes</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
