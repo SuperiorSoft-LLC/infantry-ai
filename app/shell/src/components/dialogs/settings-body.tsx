@@ -12,9 +12,10 @@ import { Button, Switch } from "@infantry/ui";
 import { Label } from "@infantry/ui";
 import { appVersionLine } from "@/components/layout/app-version";
 import { SecretsPanel } from "@/components/settings/secrets-panel";
+import { ProvidersPanel } from "@/components/settings/providers-panel";
 import { DeclaredSettings, SettingsSearch, useDeclaredTabs } from "@/components/settings/declared-settings";
 
-const sections = ["Appearance", "Daemon", "Secrets", "About"] as const;
+const sections = ["Appearance", "Daemon", "Providers", "Secrets", "About"] as const;
 
 function SettingRow({ id, title, hint, children }: { id: string; title: string; hint: string; children: React.ReactNode }) {
   return (
@@ -98,6 +99,7 @@ export function SettingsBody() {
             </SettingRow>}
           </>
         )}
+        {!searching && section === "Providers" && <ProvidersPanel />}
         {!searching && section === "Secrets" && <SecretsPanel />}
         {!searching && section === "About" && (
           <div className="rounded-lg border bg-card p-3 text-[13px]">

@@ -10,7 +10,7 @@
 // Every decision is `@infantry/client` setup-wizard.ts (tested); this file draws the daemon's answers.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
-import { SubscriptionSignIn } from "@/components/setup/subscription-sign-in";
+import { ChoiceCard, ProviderSetup } from "@/components/setup/provider-setup";
 import {
   defaultPick,
   credentialOk,
@@ -19,7 +19,6 @@ import {
   INSTALL_REASSURE_SECONDS,
   installProgress,
   followInstalled,
-  signInChoices,
   autoOpens,
   markSetupDone,
   setupDone,
@@ -42,7 +41,7 @@ import {
   type SecretRow,
   type SetupStep,
 } from "@infantry/client";
-import { AppDialog, Button, cn, Input, ProgressLine } from "@infantry/ui";
+import { AppDialog, Button, cn, ProgressLine } from "@infantry/ui";
 import { runnerRequest } from "@infantry/client";
 import { daemonStore, isMobile, useDaemon } from "@/daemon/daemon";
 import { runnerStores, type RunnerStores } from "@/daemon/runner-stores";
@@ -215,56 +214,10 @@ function HarnessStep({ report, pick, onPick, st }: { report: HarnessInstallRepor
 }
 
 /** A bordered card for one way to connect (Kotlin `ChoiceCard`). */
-function ChoiceCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-2 rounded-lg border bg-card p-3">
-      <p className="text-[13px] font-semibold">{title}</p>
-      {subtitle ? <p className="text-xs text-muted-foreground">{subtitle}</p> : null}
-      {children}
-    </div>
-  );
-}
 
 /** The sign-in step, as the Kotlin screen: the harness's name, then the ways it declares (a subscription login, an API key). */
 function SignInStep({ id, label, rows, recheck, st }: { id: string; label: string; rows: SecretRow[]; recheck: () => void; st: RunnerStores }) {
-  const [key, setKey] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const { login, key: keyRowOf, keyNeeded } = signInChoices(id, rows);
-  const showKey = !!keyRowOf && keyRowOf.authModes?.includes("api-key") !== false;
-  return (
-    <div className="space-y-2.5">
-      <p className="text-[13px] font-semibold">{label}</p>
-      <p className="text-xs text-muted-foreground">{login && showKey ? `Choose one way to connect ${label}.` : `Connect ${label} so your agent can answer.`}</p>
-      {login && (
-        <ChoiceCard title={`Log in with your ${label} subscription`} subtitle={`A login window opens so you can log in to your ${label} account.`}>
-          <SubscriptionSignIn id={id} label={label} onSignedIn={recheck} secrets={st.secrets} runner={st.runner} named={false} />
-        </ChoiceCard>
-      )}
-      {showKey && keyRowOf && (
-        <ChoiceCard title={login ? `Use an API key` : `${label} API key`} subtitle={keyRowOf.help}>
-          {keyNeeded ? (
-            <div className="flex gap-2">
-              <Input aria-label="API key" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder="API key" />
-              <Button
-                size="sm"
-                disabled={!key.trim()}
-                onClick={() => st.secrets.getState().setField(keyRowOf.name, "value", key.trim()).then(() => (setKey(""), recheck()), (why: unknown) => setError(String(why)))}
-              >
-                Save key
-              </Button>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">Not needed: you are logged in with your subscription.</p>
-          )}
-        </ChoiceCard>
-      )}
-      {error ? (
-        <p role="alert" className="text-xs text-danger">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
+  return <ProviderSetup id={id} label={label} rows={rows} recheck={recheck} st={st} />;
 }
 
 /** The project the first agent runs in: the first there is, else a starter the daemon makes (zero typing). */
