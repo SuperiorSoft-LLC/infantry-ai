@@ -16,33 +16,57 @@ import { archiveStore, useArchive } from "./use-board";
 export const AUTO_ARCHIVE_KEY = "board.archive.doneAfterDays";
 const AUTO_DAYS = ["0", "7", "14", "30", "60", "90"];
 
-/** The auto-archive picker: done tickets older than N days leave the board (the daemon checks hourly). */
-export function AutoArchiveSetting() {
+/** The setting key archive.rs reads: the app value, or `<key>.<projectId>` (the project value wins). */
+export function autoArchiveKey(projectId?: string | null): string {
+  return projectId ? `${AUTO_ARCHIVE_KEY}.${projectId}` : AUTO_ARCHIVE_KEY;
+}
+
+function daysOf(v: { value?: unknown } | undefined): string {
+  return String(Number(typeof v?.value === "string" ? v.value.replace(/"/g, "") : (v?.value ?? 0)) || 0);
+}
+
+/** The auto-archive picker: done tickets older than N days leave the board (the daemon checks hourly), for this project
+ *  or for all projects. Both are written at app scope under the key archive.rs reads. */
+export function AutoArchiveSetting({ projectId }: { projectId?: string | null }) {
   const store = scopedStore();
   const link = useDaemon((s) => s.connection.state);
-  const v = useQuery(store, (s) => s.data[AUTO_ARCHIVE_KEY]);
+  const [target, setTarget] = useState<"project" | "all">(projectId ? "project" : "all");
+  const scope = projectId && target === "project" ? "project" : "all";
+  const key = autoArchiveKey(scope === "project" ? projectId : null);
+  const v = useQuery(store, (s) => s.data[key]);
   useEffect(() => {
-    if (link === "open") store.getState().send("settings_get", scopedBody(AUTO_ARCHIVE_KEY, {}));
-  }, [link, store]);
-  const days = String(Number(typeof v?.value === "string" ? v.value.replace(/"/g, "") : (v?.value ?? 0)) || 0);
+    if (link === "open") store.getState().send("settings_get", scopedBody(key, {}));
+  }, [link, store, key]);
+  const days = daysOf(v);
   const options = AUTO_DAYS.includes(days) ? AUTO_DAYS : [...AUTO_DAYS, days];
   return (
-    <div className="flex items-center gap-2 text-xs">
+    <div className="flex flex-wrap items-center gap-2 text-xs">
       <label htmlFor="auto-archive" className="text-muted-foreground">
         Archive done tickets older than
       </label>
-      <Select value={days} onValueChange={(d) => store.getState().send("settings_set", scopedBody(AUTO_ARCHIVE_KEY, {}, { scope: "app", value: Number(d) }))}>
+      <Select value={days} onValueChange={(d) => store.getState().send("settings_set", scopedBody(key, {}, { scope: "app", value: Number(d) }))}>
         <SelectTrigger id="auto-archive" aria-label="Auto-archive done tickets after" className="h-7 w-28 text-xs">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {options.map((d) => (
             <SelectItem key={d} value={d}>
-              {d === "0" ? "Off" : `${d} days`}
+              {d === "0" ? (scope === "project" ? "All-projects value" : "Off") : `${d} days`}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
+      {projectId && (
+        <Select value={scope} onValueChange={(t) => setTarget(t as "project" | "all")}>
+          <SelectTrigger aria-label="Auto-archive applies to" className="h-7 w-32 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="project">This project</SelectItem>
+            <SelectItem value="all">All projects</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
     </div>
   );
 }
@@ -67,7 +91,7 @@ export function ArchiveDialog({ open, onClose }: { open: boolean; onClose: () =>
   return (
     <AppDialog open={open} wide onOpenChange={(o) => !o && onClose()} title="Archive" description="Archived tickets keep everything. Restore puts one back where it was.">
       <div className="space-y-3">
-        <AutoArchiveSetting />
+        <AutoArchiveSetting projectId={project} />
         <Input aria-label="Search archived tickets" placeholder="Search archived tickets" className="h-8 text-xs" value={query} onChange={(e) => setQuery(e.target.value)} />
         <p className="text-xs text-muted-foreground" aria-live="polite">
           {loaded ? `${count} archived` : "Loading…"}
