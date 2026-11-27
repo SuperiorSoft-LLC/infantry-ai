@@ -67,6 +67,14 @@ pub fn board_catalog() -> Vec<ToolInfo> {
     infos(&serde_json::to_string(&infantry_board::tools::descriptors()).unwrap_or_default())
 }
 
+/// AR-6: each board tool's `instructions` paragraph, by tool name (the MCP server instructions carry it).
+pub fn board_instructions() -> std::collections::HashMap<String, Value> {
+    infantry_board::tools::descriptors()
+        .into_iter()
+        .filter_map(|d| Some((d.get("name")?.as_str()?.to_string(), d.get("instructions")?.clone())))
+        .collect()
+}
+
 /// The agent + usage tools' catalog entries.
 pub fn agent_catalog() -> Vec<ToolInfo> {
     infos(DESCRIPTORS)

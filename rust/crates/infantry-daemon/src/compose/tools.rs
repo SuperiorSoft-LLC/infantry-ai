@@ -88,10 +88,7 @@ impl Tools {
     pub fn descriptors(&self) -> Vec<Value> {
         // AR-6: a board tool's `instructions` paragraph rides along, so the MCP server instructions carry the board's
         // text only when the board tools are in the catalog.
-        let paragraphs: std::collections::HashMap<String, Value> = infantry_board::tools::descriptors()
-            .into_iter()
-            .filter_map(|d| Some((d.get("name")?.as_str()?.to_string(), d.get("instructions")?.clone())))
-            .collect();
+        let paragraphs = super::agent_tools::board_instructions();
         self.catalog()
             .into_iter()
             .map(|t| {
