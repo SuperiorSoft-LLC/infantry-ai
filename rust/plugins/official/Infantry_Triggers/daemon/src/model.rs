@@ -154,6 +154,8 @@ pub mod disposition {
     pub const REFUSED: &str = "refused";
     pub const REFUSED_UNKNOWN_ACTION: &str = "refused_unknown_action";
     pub const MISSED: &str = "missed";
+    /// TOKEN-13: a prompt trigger skipped because nothing needed its target.
+    pub const SKIPPED_IDLE: &str = "skipped_idle";
 }
 
 /// Trigger states on the wire.

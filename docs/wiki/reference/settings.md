@@ -18,6 +18,7 @@ Declared by the official plugins (`module.json` `daemon.config`); the Settings t
 | `knowledge.globalWriteRoles` | text | `pm` | daemon | Infantry_Notes / Knowledge | Roles that may write global notes. Comma-separated role ids. The owner (no session) may always write. Every agent may read. |
 | `sites.refreshSeconds` | number | `30` | app | Infantry_Sites / Sites | Re-read the server list every (seconds, 0 = off) |
 | `triggers.at.maxLateMs` | number | `900000` | daemon | Infantry_Triggers / Triggers | A one-shot found this many milliseconds late still fires; later is recorded missed |
+| `limits.triggers.skipWhenIdle` | boolean | `true` | daemon | Infantry_Triggers / Triggers | Skip a prompt trigger when its target has no unread mail and the project has no In Progress or To Do ticket |
 
 ## Settings the core reads
 

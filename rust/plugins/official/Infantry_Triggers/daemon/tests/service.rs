@@ -66,6 +66,9 @@ struct Log {
     sessions: RefCell<Vec<SessionInfo>>,
     started_prompts: RefCell<Vec<String>>,
     actions: RefCell<Vec<String>>,
+    skip_idle: Cell<bool>,
+    unread: Cell<bool>,
+    open_work: Cell<bool>,
 }
 
 #[derive(Clone)]
@@ -107,6 +110,15 @@ impl Ports for Fake {
     fn call_action(&self, kind: &str, _fire: Value) -> ActionAnswer {
         self.0.actions.borrow_mut().push(kind.into());
         if kind == "acme.notify" { ActionAnswer::Done } else { ActionAnswer::NoHandler }
+    }
+    fn skip_when_idle(&self) -> bool {
+        self.0.skip_idle.get()
+    }
+    fn has_unread_mail(&self, _to: &str) -> bool {
+        self.0.unread.get()
+    }
+    fn has_open_work(&self, _project: Option<&str>) -> bool {
+        self.0.open_work.get()
     }
 }
 
@@ -259,4 +271,36 @@ fn a_plugin_action_kind_runs_its_handler() {
     let u = save(&mut s, json!({"name": "nobody", "coalesceMs": 0, "action": {"kind": "gone.kind"}}));
     s.fire(&u.id, "manual", None, None).unwrap();
     assert_eq!(s.events(&u.id).unwrap()[0].disposition, "refused_unknown_action");
+}
+
+fn idle_setup() -> (Service<Lite, Fake>, Rc<Log>, TriggerView) {
+    let (mut s, log) = service();
+    log.skip_idle.set(true);
+    log.sessions.borrow_mut().push(SessionInfo { id: "pm1".into(), role: Some("pm".into()), project_id: Some("p1".into()), reachable: true, live: true, ..Default::default() });
+    let t = save(&mut s, json!({"name": "pm wake", "coalesceMs": 0, "projectId": "p1", "action": {"kind": "prompt", "agentId": "role:pm", "prompt": "check board"}}));
+    (s, log, t)
+}
+
+#[test]
+fn token13_a_prompt_trigger_is_skipped_when_the_project_is_idle() {
+    let (mut s, log, t) = idle_setup();
+    s.fire(&t.id, "manual", None, None).unwrap();
+    assert!(log.mails.borrow().is_empty());
+    assert!(log.started_prompts.borrow().is_empty());
+    let e = &s.events(&t.id).unwrap()[0];
+    assert_eq!(e.disposition, "skipped_idle");
+    assert_eq!(e.digest.as_deref(), Some("idle project"));
+}
+
+#[test]
+fn token13_a_prompt_trigger_delivers_with_an_in_progress_ticket_or_unread_mail() {
+    let (mut s, log, t) = idle_setup();
+    log.open_work.set(true);
+    s.fire(&t.id, "manual", None, None).unwrap();
+    assert_eq!(log.mails.borrow()[0].to, "pm1");
+    assert_eq!(s.events(&t.id).unwrap()[0].disposition, "mailed");
+    let (mut s, log, t) = idle_setup();
+    log.unread.set(true);
+    s.fire(&t.id, "manual", None, None).unwrap();
+    assert_eq!(log.mails.borrow().len(), 1);
 }

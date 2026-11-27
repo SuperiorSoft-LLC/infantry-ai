@@ -96,6 +96,18 @@ pub trait Ports {
     fn call_action(&self, _kind: &str, _fire: Value) -> ActionAnswer {
         ActionAnswer::NoHandler
     }
+    /// TOKEN-13 (`limits.triggers.skipWhenIdle`): skip a prompt delivery when nothing needs the target.
+    fn skip_when_idle(&self) -> bool {
+        false
+    }
+    /// True when mailbox `to` holds unread mail.
+    fn has_unread_mail(&self, _to: &str) -> bool {
+        true
+    }
+    /// True when the project (every project when None) has an In Progress or ready To Do ticket.
+    fn has_open_work(&self, _project_id: Option<&str>) -> bool {
+        true
+    }
 }
 
 /// What a plugin's action handler did with a fire (Kotlin `TriggerActionResult`).
@@ -119,6 +131,8 @@ pub enum Delivery {
     Busy(String),
     TargetGone(String),
     Refused(String),
+    /// TOKEN-13: nothing needs the target (no unread mail, no open work in the project); nothing was sent.
+    Idle,
 }
 
 pub struct Service<S: Sql, P: Ports> {
@@ -690,7 +704,21 @@ impl<S: Sql, P: Ports> Service<S, P> {
                 self.redispose(run, d::TARGET_GONE, None);
             }
             Delivery::Refused(why) => self.finish_refused(run, &why),
+            Delivery::Idle => {
+                self.refund(&t.id, &run.run_id);
+                self.complete(&run.run_id, Outcome::Succeeded);
+                self.redispose(run, d::SKIPPED_IDLE, Some("idle project".into()));
+            }
         }
+    }
+
+    /// TOKEN-13: true when the setting is on, the target has no unread mail and the project no open work.
+    fn idle(&self, to: Option<&str>, project: Option<&str>) -> bool {
+        if !self.ports.skip_when_idle() {
+            return false;
+        }
+        let project = project.filter(|p| !p.trim().is_empty());
+        !to.is_some_and(|to| self.ports.has_unread_mail(to)) && !self.ports.has_open_work(project)
     }
 
     /// TRIGGER-NUDGE: the prompt as mail to the target's session, else a started session.
@@ -698,6 +726,10 @@ impl<S: Sql, P: Ports> Service<S, P> {
         let agent = t.action.agent_id.clone().unwrap_or_default();
         let prompt = t.action.prompt.clone().unwrap_or_default();
         let target = self.target(&agent, t.project_id.as_deref());
+        let to = target.as_ref().map(|s| s.agent_id.clone().filter(|a| !a.trim().is_empty()).unwrap_or(s.id.clone()));
+        if self.idle(to.as_deref(), t.project_id.as_deref()) {
+            return Delivery::Idle;
+        }
         let Some(target) = target else {
             if let Some(sid) = agent.strip_prefix(SESSION_PREFIX) {
                 return Delivery::TargetGone(sid.into());
@@ -710,7 +742,7 @@ impl<S: Sql, P: Ports> Service<S, P> {
         };
         let req = MailRequest {
             from: format!("{SENDER_PREFIX}{}", t.id),
-            to: target.agent_id.clone().filter(|a| !a.trim().is_empty()).unwrap_or(target.id.clone()),
+            to: to.unwrap_or(target.id.clone()),
             subject: format!("Trigger: {}", t.name),
             body: prompt,
             thread_id: format!("{SENDER_PREFIX}{}:{}", t.id, self.ports.now()),

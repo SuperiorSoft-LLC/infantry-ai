@@ -31,6 +31,8 @@ use store::{Row, Sql, Store, V};
 /// How long one port call into the daemon may take.
 pub const FRAME_TIMEOUT_MS: u32 = 15_000;
 pub const AT_MAX_LATE_KEY: &str = "triggers.at.maxLateMs";
+/// TOKEN-13: skip a prompt trigger's delivery when nothing needs its target (default on).
+pub const SKIP_WHEN_IDLE_KEY: &str = "limits.triggers.skipWhenIdle";
 pub const TRIPPED_FIELD: &str = "triggersTripped";
 pub const HOOK_ROUTE_PREFIX: &str = "/hooks/";
 /// The bus events this half listens to (the first is the host's generic clock).
@@ -120,6 +122,16 @@ pub fn session_info(r: &Value) -> Option<SessionInfo> {
         reachable: live || s(r, "providerSessionId").is_some(),
         live,
     })
+}
+
+/// TOKEN-13: a mail record not yet read (nor filed away).
+pub fn unread(m: &Value) -> bool {
+    m.get("readAt").is_none_or(Value::is_null) && m.get("archivedAt").is_none_or(Value::is_null)
+}
+
+/// TOKEN-13: a ticket that is In Progress or ready in To Do (a blocked one sits in pending).
+pub fn open_work(t: &Value) -> bool {
+    matches!(s(t, "status").as_deref(), Some("in_progress" | "todo"))
 }
 
 impl Ports for HostPorts {
@@ -214,6 +226,19 @@ impl Ports for HostPorts {
         };
         let text = serde_json::from_str::<Value>(&f.data).ok().and_then(|v| s(&v, "text")).unwrap_or_default();
         action_answer(&text)
+    }
+    fn skip_when_idle(&self) -> bool {
+        host::config::get(SKIP_WHEN_IDLE_KEY).is_none_or(|v| !v.trim().eq_ignore_ascii_case("false"))
+    }
+    fn has_unread_mail(&self, to: &str) -> bool {
+        // An unanswerable inbox counts as mail: the skip only fires when idleness is known.
+        let Ok(f) = request("mail_inbox", to) else { return true };
+        serde_json::from_str::<Vec<Value>>(&f.data).map_or(true, |ms| ms.iter().any(unread))
+    }
+    fn has_open_work(&self, project_id: Option<&str>) -> bool {
+        let body = json!({ "projectId": project_id, "compact": true }).to_string();
+        let Ok(f) = request("ticket_list", &body) else { return true };
+        serde_json::from_str::<Vec<Value>>(&f.data).map_or(true, |ts| ts.iter().any(open_work))
     }
     fn at_max_late_ms(&self) -> i64 {
         host::config::get(AT_MAX_LATE_KEY).and_then(|v| v.trim().parse::<f64>().ok()).map(|f| (f as i64).max(0)).unwrap_or(service::DEFAULT_AT_MAX_LATE_MS)

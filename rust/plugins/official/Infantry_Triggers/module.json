@@ -87,6 +87,14 @@
         "fields": [
           { "key": "triggers.at.maxLateMs", "type": "number", "label": "A one-shot found this many milliseconds late still fires; later is recorded missed", "default": 900000, "min": 0, "max": 604800000, "step": 60000, "scope": "daemon", "order": 1 }
         ]
+      },
+      {
+        "node": "infantry.triggers.idle", "group": "Triggers", "title": "Triggers: idle skip", "tab": "Plugins", "order": 941,
+        "applies": "Applies to: prompt triggers (a timed wake of an agent).",
+        "keywords": ["trigger", "prompt", "idle", "skip", "wake", "tokens"],
+        "fields": [
+          { "key": "limits.triggers.skipWhenIdle", "type": "boolean", "label": "Skip a prompt trigger when its target has no unread mail and the project has no In Progress or To Do ticket", "default": true, "scope": "daemon", "order": 1 }
+        ]
       }
     ],
     "storage": { "adopt": ["triggers", "trigger_events", "trigger_webhooks"] },
