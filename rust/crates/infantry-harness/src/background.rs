@@ -103,9 +103,10 @@ fn background_label(name: &str, input: &str) -> Option<String> {
     Some(label.chars().take(120).collect())
 }
 
-/// The task id a background tool's result names ("... running in background with ID: b1abc. ...").
+/// The task id a background tool's result names: a Bash "... running in background with ID: b1abc. ...",
+/// a "task_id: x" line, or a Monitor "Monitor started (task bbshdwne2, expires in 30m ...)".
 fn task_id_in(output: &str) -> Option<String> {
-    let at = output.find("with ID:").map(|i| i + "with ID:".len()).or_else(|| output.find("task_id:").map(|i| i + "task_id:".len()))?;
+    let at = ["with ID:", "task_id:", "(task "].iter().find_map(|m| output.find(m).map(|i| i + m.len()))?;
     let id: String = output[at..].trim_start().chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').collect();
     Some(id).filter(|s| !s.is_empty())
 }
@@ -159,6 +160,17 @@ mod tests {
         assert_eq!(t.count(), 1);
         let c = t.observe(&notice(&["b1x"], "completed"), 5000);
         assert!(matches!(&c[0], BackgroundChange::Finished { ran_ms: 3000, .. }));
+        assert_eq!(t.count(), 0);
+    }
+
+    #[test]
+    fn a_monitor_counts_under_its_task_id_until_its_notice() {
+        let mut t = BackgroundTracker::default();
+        let mon = HarnessEvent::ToolStarted { id: "toolu_01V8".into(), name: "Monitor".into(), input: r#"{"command":"until grep -q NEVER /tmp/x; do sleep 5; done"}"#.into() };
+        t.observe(&mon, 0);
+        let c = t.observe(&result("toolu_01V8", "Monitor started (task bbshdwne2, expires in 30m). You will be notified"), 1);
+        assert!(matches!(&c[0], BackgroundChange::Started(k) if k.id == "bbshdwne2"));
+        t.observe(&notice(&["bbshdwne2"], "stopped"), 2);
         assert_eq!(t.count(), 0);
     }
 

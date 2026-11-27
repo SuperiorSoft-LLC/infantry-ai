@@ -59,11 +59,12 @@ fn session_record_computed_fields_and_never_defaults() {
 }
 
 #[test]
-fn idle_session_with_background_work_reads_busy() {
+fn idle_session_with_background_work_stays_idle() {
     let json = r#"{"id":"s","provider":"p","workingDir":"w","spawnedAt":1,"lastHeartbeat":2,"state":"IDLE","backgroundWork":{"pid":5,"label":"x","startedAt":3,"count":1}}"#;
     let r: SessionRecord = serde_json::from_str(json).unwrap();
     let v: serde_json::Value = serde_json::to_value(&r).unwrap();
-    assert_eq!(v["state"], "BUSY");
+    assert_eq!(v["state"], "IDLE");
+    assert_eq!(v["turnActive"], false);
     assert_eq!(v["backgroundWork"]["count"], 1);
 }
 

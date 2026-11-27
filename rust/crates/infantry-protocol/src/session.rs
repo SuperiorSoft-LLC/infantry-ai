@@ -318,10 +318,8 @@ impl Serialize for SessionRecord {
             #[serde(rename = "turnActive")]
             turn_active: bool,
         }
-        let mut rec = self.clone();
-        if (rec.background_work.is_some() || !rec.bg_jobs.is_empty() || !rec.background_tasks.is_empty()) && rec.state == SessionState::Idle {
-            rec.state = SessionState::Busy;
-        }
-        Out { base: &rec, live: self.live(), turn_active: self.is_busy() }.serialize(s)
+        // STUCK-RUNNING-1: background work never turns an idle record BUSY on the wire; the card shows Running
+        // only while a turn runs, and lists the background tasks beside it.
+        Out { base: self, live: self.live(), turn_active: self.is_busy() }.serialize(s)
     }
 }
