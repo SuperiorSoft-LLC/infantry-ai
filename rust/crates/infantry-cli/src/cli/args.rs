@@ -50,6 +50,7 @@ const FLAGS: &[(&str, Kind, &str)] = &[
     ("--title", Kind::Value, "--title expects a value"),
     ("--kind", Kind::Value, "--kind expects a comment kind: done, issue, note or handoff"),
     ("--state", Kind::Value, "--state expects open or resolved"),
+    ("--complete", Kind::Bool, ""),
     ("--query", Kind::Value, "--query expects text"),
     ("--sort", Kind::Value, "--sort expects used, recent, failing or unused"),
     ("--tags", Kind::Value, "--tags expects comma-separated tags"),

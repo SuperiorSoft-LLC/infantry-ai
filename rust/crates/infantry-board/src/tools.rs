@@ -329,6 +329,10 @@ pub fn call(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> Opti
             if target.is_none() && position.is_none() {
                 return Err("give a status and/or one of before, after, top, bottom, position".to_string());
             }
+            // DONE-ONCE-1: a move to done on a done ticket changes nothing and sends no event; say who completed it.
+            if target.as_deref() == Some(status::DONE) && t.status == status::DONE && position.is_none() {
+                return Ok(format!("{}; nothing changed", ctx.work.completed_line(&t.id).map_err(err)?));
+            }
             let req = TicketMove { id: t.id.clone(), status: target, position, wont_fix: None };
             let moved = ctx.work.move_lane(req, Some(&who.started_by())).map_err(err)?.ticket;
             Ok(saved("moved", &moved, b(a, "verbose")))
@@ -395,8 +399,25 @@ pub fn call(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> Opti
                 let c = board.comment_resolve(&cid, &who.author()).map_err(err)?;
                 return Ok(format!("resolved comment {} on {}", short(&c.id), short(&c.ticket_id)));
             }
+            let tid = tid.ok_or("ticketId is required")?;
+            let complete = b(a, "complete");
+            let kind = s(a, "kind");
+            if complete && kind.as_deref() != Some("done") {
+                return Err("complete is valid only with kind=done".to_string());
+            }
+            // DONE-ONCE-1: complete:true finishes the ticket in one step; a done comment on a done ticket is kept as a note.
+            if kind.as_deref() == Some("done") {
+                let t = board.find(&tid).map_err(err)?;
+                if complete || t.status == status::DONE {
+                    let c = ctx.work.complete(&t.id, body.as_deref().ok_or("body is required")?, who.author(), complete).map_err(err)?;
+                    return Ok(match c.already {
+                        Some(line) => format!("{line}; your text was added as a note (comment {}). Nothing else changed.", short(&c.comment.id)),
+                        None => format!("comment {} (done) on {}; ticket completed: moved to done", short(&c.comment.id), short(&c.comment.ticket_id)),
+                    });
+                }
+            }
             let req = CommentAdd {
-                ticket_id: tid.ok_or("ticketId is required")?,
+                ticket_id: tid,
                 body: body.ok_or("body is required")?,
                 kind: s(a, "kind"),
                 state: s(a, "state"),

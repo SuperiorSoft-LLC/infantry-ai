@@ -336,7 +336,7 @@ usage: infantry runner bearer [--name <n>] [--host <h>] [--port <p>] [--allow-pr
 ### cmd_ticket (`COMMENT_USAGE`)
 
 ```text
-infantry ticket comment <id> [--kind done|issue|note|handoff] [--state open|resolved] <text...> | infantry ticket comment <id> [done|issue|note] <text...> | infantry ticket comment resolve <commentId> | infantry ticket comment list <id> [latestOpen|latest|first|all] [done|issue|note]
+infantry ticket comment <id> [--kind done|issue|note|handoff] [--state open|resolved] [--complete] <text...> | infantry ticket comment <id> [done|issue|note] <text...> | infantry ticket comment resolve <commentId> | infantry ticket comment list <id> [latestOpen|latest|first|all] [done|issue|note]
 ```
 
 ### cmd_ticket (`EPIC_USAGE`)
@@ -444,6 +444,7 @@ with `-`), `any` (any next word), `multi` / `multi-any` (repeatable), `switch` (
 | `--title` | value | --title expects a value |
 | `--kind` | value | --kind expects a comment kind: done, issue, note or handoff |
 | `--state` | value | --state expects open or resolved |
+| `--complete` | switch |  |
 | `--query` | value | --query expects text |
 | `--sort` | value | --sort expects used, recent, failing or unused |
 | `--tags` | value | --tags expects comma-separated tags |

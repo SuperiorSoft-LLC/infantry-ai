@@ -38,6 +38,14 @@ use crate::brief::{self, BriefInput};
 use crate::env::{BoardAgent, BoardEnv, WorkerFailed};
 use crate::rules::{self, board_order, holders, take};
 use crate::store::{self, LinkRow, TicketRow};
+/// DONE-ONCE-1: what a completing done comment did. `completed` = this call moved the ticket to done; `already` = the
+/// ticket was done before, the text was stored as a note, and this is the "already completed <time> by <who>" line.
+pub struct Completion {
+    pub comment: infantry_orchestrator_api::Comment,
+    pub completed: bool,
+    pub already: Option<String>,
+}
+
 use crate::views::{executor_of, effort_of, resolve_context_limit, routing_choice};
 
 /// `TicketStart.reason` values.
@@ -1195,6 +1203,54 @@ impl Dispatcher {
         Ok(DoneAnswer { ticket: answer.ticket, next })
     }
 
+    /// DONE-ONCE-1: "already completed <time> by <who>" for a ticket that is done: the latest done comment's author and
+    /// time, or the ticket's last change when it was moved to done without one.
+    pub fn completed_line(&self, ticket_id: &str) -> Result<String, OrchError> {
+        let (rows, _, _) = self.board.rows()?;
+        let row = rows.get(ticket_id).ok_or_else(|| OrchError::Refused(format!("no ticket '{}'", take(ticket_id, 80))))?;
+        let last = self.board.comment_store().ok().and_then(|c| c.read(&row.id, "latest", Some("done"), None).ok()).and_then(|v| v.into_iter().next());
+        let (at, who) = match &last {
+            Some(c) => (c.created_at, c.author.session_id.clone().or_else(|| c.author.agent_id.clone()).unwrap_or_else(|| c.author.kind.clone())),
+            None => (row.updated_at, "a move".to_string()),
+        };
+        let when = chrono::DateTime::from_timestamp_millis(at).map(|d| d.format("%Y-%m-%d %H:%M:%S UTC").to_string()).unwrap_or_else(|| at.to_string());
+        Ok(format!("already completed {when} by {who}"))
+    }
+
+    /// DONE-ONCE-1: a done comment that completes the ticket (`complete`), or any done comment on a ticket already done.
+    /// On a done ticket nothing moves and no event fires: the text is stored as a note and the answer says who completed
+    /// it. Otherwise (`complete`) the ticket's own worker goes through [`Self::done`] (comment, move, ONE `ticket.done`)
+    /// and keeps its session; anyone else stores the done comment and moves the ticket with [`Self::move_lane`].
+    pub fn complete(&self, ticket_id: &str, body: &str, author: CommentAuthor, complete: bool) -> Result<Completion, OrchError> {
+        let t = self.board.find(ticket_id)?;
+        if body.trim().is_empty() {
+            return Err(OrchError::Refused("a done comment needs a body: the commit, what changed, what was tested".into()));
+        }
+        if t.status == status::DONE {
+            let line = self.completed_line(&t.id)?;
+            let comment = self.comment(&t.id, body, "note", author)?;
+            return Ok(Completion { comment, completed: false, already: Some(line) });
+        }
+        if !complete {
+            return Err(OrchError::Refused("complete needs the ticket not done yet; a plain done comment goes through comment_add".into()));
+        }
+        let sid = author.session_id.clone();
+        if t.status == status::IN_PROGRESS && sid.is_some() && t.session_id == sid {
+            self.done(&TicketDone { ticket_id: t.id.clone(), session_id: sid.unwrap_or_default(), summary: body.to_string(), stop_worker: false })?;
+            let comment = self
+                .board
+                .comment_store()?
+                .read(&t.id, "latest", Some("done"), None)?
+                .into_iter()
+                .next()
+                .ok_or_else(|| OrchError::Failed("the done comment was not stored".into()))?;
+            return Ok(Completion { comment, completed: true, already: None });
+        }
+        let comment = self.comment(&t.id, body, "done", author.clone())?;
+        self.move_lane(TicketMove { id: t.id.clone(), status: Some(status::DONE.into()), position: None, wont_fix: None }, sid.as_deref())?;
+        Ok(Completion { comment, completed: true, already: None })
+    }
+
     /// PIPE-CLOSE-1, the lead's one-call close. In this order: (0) a read-only check that the ticket's worktree may go
     /// (clean and merged, else the close is REFUSED with the reason and nothing changes, unless `keep_worktree`),
     /// (1) the ticket is done, (2) its worker is stopped and its session removed, (3) the worktree is removed,
@@ -1245,8 +1301,11 @@ impl Dispatcher {
                 },
                 &self.publish(),
             )?;
-            self.hook(hooks::TICKET_MOVED, &row.id, p, Self::moved(&row, &row.status, status::DONE, None));
-            self.hook(hooks::TICKET_DONE, &row.id, p, json!({ "sessionId": sid, "commentId": null }));
+            // DONE-ONCE-1: `via: close` lets a lane hook (DONE-PING) skip a close the lead made itself.
+            let mut moved = Self::moved(&row, &row.status, status::DONE, None);
+            moved["via"] = json!("close");
+            self.hook(hooks::TICKET_MOVED, &row.id, p, moved);
+            self.hook(hooks::TICKET_DONE, &row.id, p, json!({ "sessionId": sid, "commentId": null, "via": "close" }));
             self.report_done(&row, req.summary.as_deref());
         }
         let seat = match &sid {

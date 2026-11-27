@@ -24,9 +24,10 @@ pub const RELATED_MAX_FILES: usize = 3;
 pub const LEDGER_RUNS: usize = 5;
 pub const LEDGER_COMMENTS: usize = 8;
 
-pub const FINISH_LINE: &str = "WHEN YOU ARE FINISHED: post a done comment (`infantry ticket comment <id> --kind done \"<summary>\"`: \
-the commit sha, what changed, what you tested and did not test, any problem, and a line 'Files read: <paths>'), \
-then run `infantry ticket move <id> done`. The board then starts the next ticket of your lane. Then stop.";
+pub const FINISH_LINE: &str = "WHEN YOU ARE FINISHED: finish with ONE done comment that also completes the ticket \
+(`infantry ticket comment <id> --kind done --complete \"<summary>\"`, MCP: infantry_ticket_comment kind=done complete=true): \
+the commit sha, what changed, what you tested and did not test, any problem, and a line 'Files read: <paths>'. \
+It moves the ticket to done in the same step; no separate move is needed. The board then starts the next ticket of your lane. Then stop.";
 
 pub const BLOCKED_LINE: &str = "If you are blocked, leave the ticket in_progress and post an issue comment saying what blocks you \
 (pending is set by the daemon from a blocked_by link; a move there by hand is refused).";

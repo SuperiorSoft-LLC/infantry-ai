@@ -43,7 +43,7 @@ const FILES_TIMEOUT_MS: u64 = 45_000;
 /// `ArchiveCli.request`.
 const ARCHIVE_TIMEOUT_MS: u64 = 120_000;
 
-pub const COMMENT_USAGE: &str = "infantry ticket comment <id> [--kind done|issue|note|handoff] [--state open|resolved] <text...> | infantry ticket comment <id> [done|issue|note] <text...> | infantry ticket comment resolve <commentId> | infantry ticket comment list <id> [latestOpen|latest|first|all] [done|issue|note]";
+pub const COMMENT_USAGE: &str = "infantry ticket comment <id> [--kind done|issue|note|handoff] [--state open|resolved] [--complete] <text...> | infantry ticket comment <id> [done|issue|note] <text...> | infantry ticket comment resolve <commentId> | infantry ticket comment list <id> [latestOpen|latest|first|all] [done|issue|note]";
 const COMMENT_KINDS: [&str; 4] = ["done", "issue", "note", "handoff"];
 const COMMENT_STATES: [&str; 2] = ["open", "resolved"];
 pub const EPIC_USAGE: &str = "infantry ticket epic <id|prefix>... <epic id|epic name|none> [--force]";
@@ -264,7 +264,7 @@ pub fn run(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
         Some("link") => link(ctx, p),
         Some("files") => files(ctx, p),
         Some("archive") | Some("restore") => archive_command(ctx, p),
-        Some("comment") => comment(ctx, &args_from(p, 1), p.val("kind"), p.val("state")),
+        Some("comment") => comment(ctx, &args_from(p, 1), p.val("kind"), p.val("state"), p.flag("complete")),
         Some("comments") => comments(ctx, p),
         Some("epic") => epic(ctx, &args_from(p, 1), p.flag("force")),
         Some("related") => related(ctx, p),
@@ -1568,8 +1568,12 @@ fn comments(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
 }
 
 /// `TicketCommentCli.run`.
-fn comment(ctx: &mut Ctx, args: &[String], kind_flag: Option<&str>, state_flag: Option<&str>) -> CmdResult {
-    let (tool, a) = comment_tool(args, kind_flag, state_flag);
+fn comment(ctx: &mut Ctx, args: &[String], kind_flag: Option<&str>, state_flag: Option<&str>, complete: bool) -> CmdResult {
+    let (tool, mut a) = comment_tool(args, kind_flag, state_flag);
+    // DONE-ONCE-1: --complete (with done) also moves the ticket to done in the same step.
+    if complete && tool == "infantry_ticket_comment" {
+        a.insert("complete".into(), Value::Bool(true));
+    }
     run_comment_tool(ctx, tool, a)
 }
 

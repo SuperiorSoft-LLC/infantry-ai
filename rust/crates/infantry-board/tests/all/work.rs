@@ -613,3 +613,70 @@ fn a_clean_end_while_background_tasks_run_is_no_failure_until_they_end() {
     block_on(o.on_done(report(0))).unwrap();
     assert!(ticket_notes(&o, &ids[0]).iter().any(|b| b.contains("without a done comment")), "after they all end, the missing done comment fails it");
 }
+
+/// DONE-ONCE-1: drains the bus and counts the `ticket.done` and `ticket.moved`-to-done events (the lane hook DONE-PING runs on).
+fn completions(rx: &mut tokio::sync::broadcast::Receiver<infantry_core::bus::NamedEvent>) -> (usize, usize) {
+    use infantry_orchestrator_api::hooks;
+    let (mut done, mut moved) = (0, 0);
+    while let Ok(e) = rx.try_recv() {
+        if e.name == hooks::TICKET_DONE {
+            done += 1;
+        }
+        if e.name == hooks::TICKET_MOVED && e.payload["to"] == "done" {
+            moved += 1;
+        }
+    }
+    (done, moved)
+}
+
+/// DONE-ONCE-1: complete:true completes in one step with one event; later done comments and moves are notes, silent.
+#[test]
+fn a_completing_done_comment_moves_once_and_later_dones_are_notes() {
+    use infantry_orchestrator_api::dto::{status, CommentAuthor, TicketMove};
+    use infantry_orchestrator_api::DoneReport;
+    let (f, _l, d, o) = setup("work-done-once", StaticEnv { lead_mail: true, ..kotlin_daemon_env() }, Duration::ZERO);
+    let ids = tickets(&f, 1);
+    start_by(&o, &ids[0], "lead-1");
+    let mut rx = f.bus.subscribe_events();
+    let worker = CommentAuthor { kind: CommentAuthor::SESSION.into(), session_id: Some("s1".into()), agent_id: None };
+    // 1. complete:true: the done comment and the move, ONE completion event, one lane move (one DONE-PING).
+    let c = d.complete(&ids[0], "commit abc: did it", worker.clone(), true).unwrap();
+    assert!(c.completed && c.already.is_none());
+    assert_eq!(c.comment.kind, "done");
+    assert_eq!(block_on(o.get(ids[0].clone())).unwrap().status, status::DONE);
+    assert_eq!(completions(&mut rx), (1, 1), "one completion event, one lane move");
+    // 2. a second done comment (plain or complete): the "already completed" answer, kept as a note, no event.
+    for complete in [false, true] {
+        let again = d.complete(&ids[0], "more detail", worker.clone(), complete).unwrap();
+        let line = again.already.expect("already completed answer");
+        assert!(line.starts_with("already completed ") && line.ends_with("by s1"), "{line}");
+        assert!(!again.completed);
+        assert_eq!(again.comment.kind, "note");
+        assert_eq!(again.comment.body, "more detail");
+    }
+    // 3. a move to done on the done ticket: no event.
+    d.move_lane(TicketMove { id: ids[0].clone(), status: Some(status::DONE.into()), position: None, wont_fix: None }, None).unwrap();
+    assert_eq!(completions(&mut rx), (0, 0), "later done comments and moves send nothing");
+    // 4. the worker's clean end after complete:true is no "ended without a done comment" failure.
+    block_on(o.on_done(DoneReport { ticket_id: ids[0].clone(), session_id: "s1".into(), outcome: "SUCCEEDED".into(), detail: None, background_running: 0 })).unwrap();
+    assert!(!ticket_notes(&o, &ids[0]).iter().any(|b| b.contains("without a done comment")), "{:?}", ticket_notes(&o, &ids[0]));
+    assert!(!notes(&f).iter().any(|n| n.contains("without a done comment")), "{:?}", notes(&f));
+}
+
+/// DONE-ONCE-1: a ticket the lead closes itself carries `via: close`, so DONE-PING skips it.
+#[test]
+fn a_close_marks_its_move_so_done_ping_skips_it() {
+    use infantry_orchestrator_api::hooks;
+    let (f, _l, _ws, o) = close_setup("work-close-via", Ok(()));
+    let ids = tickets(&f, 1);
+    start(&o, &ids[0]);
+    let mut rx = f.bus.subscribe_events();
+    block_on(o.close(close(&ids[0]))).unwrap();
+    let mut via = Vec::new();
+    while let Ok(e) = rx.try_recv() {
+        if e.name == hooks::TICKET_MOVED {
+            via.push(e.payload["via"].clone());
+        }
+    }
+    assert_eq!(via, vec![serde_json::json!("close")]);
+}

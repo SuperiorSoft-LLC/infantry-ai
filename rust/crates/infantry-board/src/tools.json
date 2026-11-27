@@ -353,7 +353,7 @@
  {
   "name": "infantry_ticket_comment",
   "readOnly": false,
-  "description": "Comment on a ticket (the extra channel next to mail): every agent on the ticket's notify list gets ONE short mail line at once. kind done = the work is finished (say the commit), issue = a problem to answer, note = anything else (default). With commentId and no ticketId/body, RESOLVES that comment (no mail). Read them with infantry_ticket_comments.",
+  "description": "Comment on a ticket (the extra channel next to mail): every agent on the ticket's notify list gets ONE short mail line at once. kind done = the work is finished (say the commit); finish a ticket with kind=done complete=true, which stores the done comment and moves the ticket to done in one step (ONE completion notice). A done comment or move on a ticket already done changes nothing: the answer says who completed it and when, and the text is kept as a note. issue = a problem to answer, note = anything else (default). With commentId and no ticketId/body, RESOLVES that comment (no mail). Read them with infantry_ticket_comments.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -368,6 +368,10 @@
     "kind": {
      "type": "string",
      "description": "done | issue | note (default note)."
+    },
+    "complete": {
+     "type": "boolean",
+     "description": "With kind=done: also move the ticket to done in the same step and send one completion event. On a ticket already done: nothing changes and the text is stored as a note."
     },
     "wakeKind": {
      "type": "string",

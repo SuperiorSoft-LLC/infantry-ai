@@ -4,6 +4,9 @@
 -- Hook: "lane enter done". Args: pm (session id to notify).
 local a = input.args
 local pm = a.pm or error("pm-done-ping needs pm")
+-- DONE-ONCE-1: lane hooks fire once per completion (a later done comment or move changes nothing); a close the lead
+-- made itself (via = "close") needs no ping.
+if a.via == "close" then return end
 local t = a.ticketId or "?"
 ih.infantry_message{to = pm, subject = "[DONE-PING] ticket " .. tostring(t) .. " entered done",
   body = "[DONE-PING] ticket " .. tostring(t) .. " entered done. Check its merge, make sure the next worker started, keep the todo queue full of Rust tickets.",
