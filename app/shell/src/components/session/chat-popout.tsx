@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as RPointer
 import { Maximize2, Minimize2, Minus, X, Square } from "lucide-react";
 import { IconButton, cn } from "@infantry/ui";
 import { ChatPanel, type ChatVariant } from "./chat-panel";
-import { clampBox, dragBox, resizeBox, type Box, type Bounds } from "@infantry/client";
+import { bindPopoutWindow, clampBox, dragBox, minimizeGeometry, minimizeMode, popoutWindows, resizeBox, type Box, type Bounds, type PopoutWindow, type WindowBadge } from "@infantry/client";
 
 const KEY = "infantry.popout.";
 // x < 0 means "right". The default starts below the tab bar and tab headers (Sign out, header buttons), so it never covers them.
@@ -52,6 +52,10 @@ export interface ChatPopoutProps {
   /** Stack order among popouts. */
   z?: number;
   onFocus?: () => void;
+  /** The taskbar / dock item: its text (defaults to a string title), badge and attention mark (WINDOW-MIN-1). */
+  taskTitle?: string;
+  taskBadge?: WindowBadge | null;
+  attention?: boolean;
 }
 
 const HANDLE: Record<string, string> = {
@@ -65,11 +69,44 @@ const HANDLE: Record<string, string> = {
   se: "right-0 bottom-0 size-3 cursor-nwse-resize",
 };
 
-export function ChatPopout({ id, title, sessionId, variant = "popout", onClose, empty, sessionRequired, badge, z = 40, onFocus }: ChatPopoutProps) {
+export function ChatPopout({ id, title, sessionId, variant = "popout", onClose, empty, sessionRequired, badge, z = 40, onFocus, taskTitle, taskBadge, attention }: ChatPopoutProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [saved, setSaved] = useState<Saved>(() => load(id));
   const [bounds, setBounds] = useState<Bounds>({ w: 1200, h: 800 });
   const { box, minimized, maximized } = saved;
+  // WINDOW-MIN-1: in "taskbar" mode minimize hides the window into the BattalionOS taskbar or the in-app dock; "fold" is the old title-bar fold.
+  const [mode] = useState(minimizeMode);
+  const [hidden, setHidden] = useState(false);
+  const win = useRef<PopoutWindow | null>(null);
+  const label = taskTitle ?? (typeof title === "string" ? title : id);
+  useEffect(() => {
+    if (mode !== "taskbar") return;
+    let gone = false;
+    let w: PopoutWindow | null = null;
+    popoutWindows()
+      .then((ws) => bindPopoutWindow(ws, { key: `infantry.popout.${id}`, title: label }, setHidden))
+      .then((b) => {
+        if (gone) void b.close();
+        else win.current = w = b;
+      })
+      .catch(() => {
+        /* no window manager: Minimize falls back to the fold */
+      });
+    return () => {
+      gone = true;
+      win.current = null;
+      void w?.close();
+    };
+    // The window lives as long as this popout; title changes go through set() below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, mode]);
+  useEffect(() => {
+    void win.current?.set({ title: label, badge: taskBadge ?? null, attention: attention ?? false }).catch(() => {});
+  }, [label, taskBadge, attention, hidden]);
+  const onMinimize = () => {
+    if (mode === "taskbar" && win.current) void win.current.minimize();
+    else patch(minimizeGeometry(saved, "fold"));
+  };
 
   // The work area is the parent (below the title bar); measure it and keep the box inside when it shrinks.
   useEffect(() => {
@@ -117,7 +154,7 @@ export function ChatPopout({ id, title, sessionId, variant = "popout", onClose, 
   const style = maximized ? { inset: 0 } : { left: shown.x, top: shown.y, width: shown.w, height: minimized ? undefined : shown.h };
 
   return (
-    <div ref={hostRef} className="pointer-events-none absolute inset-0" style={{ zIndex: z }}>
+    <div ref={hostRef} className="pointer-events-none absolute inset-0" style={{ zIndex: z }} hidden={hidden}>
       <section
         role="dialog"
         aria-label={typeof title === "string" ? title : "Chat"}
@@ -137,7 +174,7 @@ export function ChatPopout({ id, title, sessionId, variant = "popout", onClose, 
           <span className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
           {badge}
           <span onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} className="flex items-center gap-0.5">
-            <IconButton label={minimized ? "Restore" : "Minimize"} className="size-7" onClick={() => patch({ minimized: !minimized, maximized: false })}>
+            <IconButton label={minimized ? "Restore" : "Minimize"} className="size-7" onClick={onMinimize}>
               {minimized ? <Square /> : <Minus />}
             </IconButton>
             <IconButton label={maximized ? "Restore size" : "Maximize"} className="size-7" onClick={() => patch({ maximized: !maximized, minimized: false })}>
