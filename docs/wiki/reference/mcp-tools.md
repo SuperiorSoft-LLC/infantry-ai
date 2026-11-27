@@ -60,7 +60,7 @@ Kill a session (id or unique prefix). A pm (or the owner) may kill any session i
 
 ### `infantry_list_harnesses` (read-only)
 
-List the harnesses a ticket can run on: each harness id (the value of a ticket's provider) with its models (the values of its model), which one is the default, and whether its CLI is available. Pin them with infantry_ticket_create / infantry_ticket_update, then start the ticket with infantry_ticket_start.
+List the harnesses an agent can run on: each harness id (a provider value) with its models, which one is the default, and whether its CLI is available.
 
 ### `infantry_usage` (read-only)
 

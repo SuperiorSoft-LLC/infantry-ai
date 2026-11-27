@@ -15,6 +15,8 @@ pub const WATCH_FILE: &str = "infantry_watch_file";
 pub const DAEMON_UNREACHABLE: &str =
     "Infantry AI daemon is not reachable. Start it with `infantry daemon` (or check --url / --port), then retry.";
 const LOCAL_FILES_KEY: &str = "localFiles";
+/// A descriptor's paragraph for the MCP server instructions (AR-6); stripped from `tools/list`.
+const INSTRUCTIONS_KEY: &str = "instructions";
 const LOCAL_FILE_MAX_BYTES: u64 = 10 * 1024 * 1024;
 const DETAIL_DESCRIPTION: &str =
     "How much to send back: ack (tiny), summary (compact), full. Default: the tool's own, or setting limits.mcp.defaultDetail.";
@@ -194,6 +196,8 @@ pub struct Tools {
     local_files: HashMap<String, Vec<String>>,
     verbose_tools: HashSet<String>,
     own_detail_tools: HashSet<String>,
+    /// The instruction paragraphs the daemon's tools contribute, in list order, deduplicated.
+    pub instructions: Vec<String>,
     plugin_names: Option<HashSet<String>>,
     pub daemon_answered: bool,
 }
@@ -218,6 +222,7 @@ impl Tools {
             local_files: HashMap::new(),
             verbose_tools: HashSet::new(),
             own_detail_tools: HashSet::new(),
+            instructions: Vec::new(),
             plugin_names: None,
             daemon_answered: true,
         }
@@ -267,6 +272,7 @@ impl Tools {
         let Value::Array(all) = parsed else { return Ok(Vec::new()) };
         self.timeouts.clear();
         self.local_files.clear();
+        self.instructions.clear();
         let mut out = Vec::new();
         for d in all {
             let Value::Object(mut d) = d else { continue };
@@ -291,7 +297,12 @@ impl Tools {
                     }
                 }
             }
-            for k in ["module", "action", "timeoutMs", LOCAL_FILES_KEY] {
+            if let Some(p) = content_or_null(d.get(INSTRUCTIONS_KEY)) {
+                if !self.instructions.contains(&p) {
+                    self.instructions.push(p);
+                }
+            }
+            for k in ["module", "action", "timeoutMs", LOCAL_FILES_KEY, INSTRUCTIONS_KEY] {
                 d.shift_remove(k);
             }
             with_detail(&mut d);

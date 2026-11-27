@@ -69,9 +69,16 @@ impl Tools {
 
     /// The `plugin_tools` descriptors (MCP tool shape).
     pub fn descriptors(&self) -> Vec<Value> {
+        // AR-6: a board tool's `instructions` paragraph rides along, so the MCP server instructions carry the board's
+        // text only when the board tools are in the catalog.
+        let paragraphs: std::collections::HashMap<String, Value> = infantry_board::tools::descriptors()
+            .into_iter()
+            .filter_map(|d| Some((d.get("name")?.as_str()?.to_string(), d.get("instructions")?.clone())))
+            .collect();
         self.catalog()
             .into_iter()
             .map(|t| {
+                let paragraph = paragraphs.get(&t.name).cloned();
                 let mut d = json!({
                     "name": t.name, "description": t.description, "inputSchema": t.input_schema,
                     "annotations": {"readOnlyHint": t.read_only},
@@ -80,6 +87,9 @@ impl Tools {
                 let own = self.plugins().and_then(|h| h.tools().into_iter().find(|e| e.decl.name == t.name).filter(|e| e.decl.timeout_ms.is_some()).and_then(|e| h.get(&e.module_id).map(|p| p.tool_timeout_ms(&t.name))));
                 if let Some(ms) = own {
                     d["timeoutMs"] = json!(ms);
+                }
+                if let Some(p) = paragraph {
+                    d["instructions"] = p;
                 }
                 d
             })

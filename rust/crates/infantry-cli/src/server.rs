@@ -28,14 +28,21 @@ const INVALID_PARAMS: i64 = -32602;
 /// A `tools/call` past `limits.mcp.maxConcurrentCalls` (JSON-RPC server-error range).
 const SERVER_BUSY: i64 = -32000;
 
-const INSTRUCTIONS: &str = "Infantry AI daemon: list sessions, inspect one session's status and transcript, summarise the \
-agents/roles of the pod; spawn, prompt and kill sessions and send COMMS mail, within this server's depth, concurrency and \
-kill-scope guardrails; create, update and read board tickets. To put an agent to work on a ticket, pin its role / provider \
-/ model (infantry_list_harnesses lists the harnesses and their models), then start it with infantry_ticket_start: the \
-worker runs on the ticket's own branch and the ticket goes In Progress. infantry_spawn alone works outside the board. \
-Every tool is named infantry_<area>[_<verb>] (areas such as ticket, board, message, ask, script, secret, run, project); \
-when your client loads tools on demand, search by area. A tool that needs a project takes projectId; left out, it is the \
-project registered for this folder, if any.";
+/// The core text every agent gets (communication: sessions, message, inbox, read, ask). A feature adds its own
+/// paragraph through the `instructions` key of one of its tool descriptors (AR-6): no board, no ticket text.
+const INSTRUCTIONS: &str = "Infantry AI daemon: list sessions, inspect one session's status and transcript, summarise the agents/roles of the pod; spawn, prompt and kill sessions and send COMMS mail, within this server's depth, concurrency and kill-scope guardrails. Every tool is named infantry_<area>[_<verb>] (areas such as message, ask, script, secret, run, project); when your client loads tools on demand, search by area. A tool that needs a project takes projectId; left out, it is the project registered for this folder, if any.";
+
+/// The server instructions: the core text, then each paragraph the listed tools contribute, in list order.
+pub fn instructions(contributed: &[String]) -> String {
+    let mut out = INSTRUCTIONS.to_string();
+    for p in contributed {
+        out.push_str("
+
+");
+        out.push_str(p);
+    }
+    out
+}
 
 struct State {
     tools: Tools,
@@ -361,7 +368,7 @@ fn check_tools_changed(state: &mut State, out: &Output) -> bool {
     }
 }
 
-fn initialize_result(params: &Map<String, Value>) -> Value {
+fn initialize_result(params: &Map<String, Value>, contributed: &[String]) -> Value {
     let requested = tools::content_or_null(params.get("protocolVersion"));
     let version = requested
         .filter(|r| SUPPORTED_PROTOCOL_VERSIONS.contains(&r.as_str()))
@@ -373,7 +380,7 @@ fn initialize_result(params: &Map<String, Value>) -> Value {
             "serverInfo",
             obj(vec![("name", Value::String(SERVER_NAME.into())), ("version", Value::String(SERVER_VERSION.into()))]),
         ),
-        ("instructions", Value::String(INSTRUCTIONS.into())),
+        ("instructions", Value::String(instructions(contributed))),
     ])
 }
 
@@ -436,7 +443,11 @@ fn handle_parsed(state: &mut State, out: &Output, parsed: Parsed) -> Option<Valu
         return None;
     };
     Some(match method.as_str() {
-        "initialize" => result(id, initialize_result(&params)),
+        "initialize" => {
+            state.tools.plugin_descriptors();
+            let contributed = state.tools.instructions.clone();
+            result(id, initialize_result(&params, &contributed))
+        }
         "ping" => result(id, Value::Object(Map::new())),
         "tools/list" => {
             let plugin = state.tools.plugin_descriptors();
@@ -601,8 +612,26 @@ mod tests {
     fn initialize_picks_a_supported_version() {
         let mut p = Map::new();
         p.insert("protocolVersion".into(), Value::String("2025-03-26".into()));
-        assert_eq!(initialize_result(&p)["protocolVersion"], "2025-03-26");
+        assert_eq!(initialize_result(&p, &[])["protocolVersion"], "2025-03-26");
         p.insert("protocolVersion".into(), Value::String("1999-01-01".into()));
-        assert_eq!(initialize_result(&p)["protocolVersion"], "2025-06-18");
+        assert_eq!(initialize_result(&p, &[])["protocolVersion"], "2025-06-18");
+    }
+
+    /// AR-6 (NoBoardToolsTest): with no board tools listed, the instructions carry no ticket text.
+    #[test]
+    fn no_board_tools_means_no_ticket_sentence() {
+        let text = initialize_result(&Map::new(), &[])["instructions"].as_str().unwrap().to_string();
+        assert!(!text.to_lowercase().contains("ticket"), "{text}");
+        assert!(text.starts_with("Infantry AI daemon:"));
+    }
+
+    /// AR-6: a contributed paragraph follows the core text.
+    #[test]
+    fn contributed_paragraphs_follow_the_core_text() {
+        let text = instructions(&["Board: tickets.".to_string()]);
+        assert!(text.starts_with(INSTRUCTIONS));
+        assert!(text.ends_with("
+
+Board: tickets."));
     }
 }

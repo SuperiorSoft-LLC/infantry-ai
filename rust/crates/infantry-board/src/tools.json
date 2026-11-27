@@ -282,6 +282,7 @@
  {
   "name": "infantry_ticket_start",
   "readOnly": false,
+  "instructions": "Board: create, update and read board tickets. To put an agent to work on a ticket, pin its role / provider / model (infantry_list_harnesses lists the harnesses and their models) with infantry_ticket_create / infantry_ticket_update, then start it with infantry_ticket_start: the worker runs on the ticket's own branch and the ticket goes In Progress. infantry_spawn alone works outside the board.",
   "description": "Start ONE ticket: THE way to put an agent to work on a ticket. The worker runs the ticket's role, provider and model, in its own git worktree on branch ticket/<short-id>-<slug>, and the ticket goes In Progress with you recorded as its starter. Pin role / provider / model first with infantry_ticket_create or infantry_ticket_update. A ticket whose lane is busy is queued; one held by open prerequisites, or that cannot start, is refused with the reason. Starting a ticket already in progress returns its worker.",
   "inputSchema": {
    "type": "object",
