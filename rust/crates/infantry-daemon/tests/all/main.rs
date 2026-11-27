@@ -4,6 +4,7 @@
 
 mod agent_frames;
 mod agent_owner_token;
+mod agent_tool_allow_list;
 mod assistant;
 mod background_tasks;
 mod context_limit;

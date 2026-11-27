@@ -24,6 +24,23 @@ pub const CAPABILITY_RESULT: &str = "capability_result";
 pub const CHAT_IMAGE: &str = "chat_image";
 pub const CHAT_IMAGE_RESULT: &str = "chat_image_result";
 
+/// AR-8: the communication family (AR-6) every agent keeps, whatever its role's `tools` list names.
+pub const COMMUNICATION_TOOLS: &[&str] =
+    &["infantry_list_sessions", "infantry_get_session", "infantry_message", "infantry_inbox", "infantry_read", "infantry_ask"];
+
+/// AR-8: whether [name] passes an agent's allow-list (`None`: the role names no tools, so every tool passes).
+pub fn tool_allowed(allow: Option<&[String]>, name: &str) -> bool {
+    match allow {
+        None => true,
+        Some(list) => COMMUNICATION_TOOLS.contains(&name) || list.iter().any(|t| t == name),
+    }
+}
+
+/// AR-8: the refusal for a tool the agent's role does not list.
+pub fn not_enabled(name: &str) -> String {
+    format!("tool {name} is not enabled for this agent")
+}
+
 pub struct Tools {
     daemon: Arc<Daemon>,
     scripting: OnceLock<ScriptingTools>,
@@ -225,6 +242,23 @@ impl ScriptHost for Tools {
         }
         ToolResult::err(format!("{name} refused: no such tool on this daemon"))
     }
+}
+
+impl Tools {
+    /// AR-8: the allow-list of the agent behind [session]: its role's `tools` (the session record's role, else the
+    /// client's), or None when there is no session, no such role, or the role names no tools (the full set).
+    pub fn allow_list(&self, session: Option<&str>, client_role: Option<&str>) -> Option<Vec<String>> {
+        let session = session.filter(|s| !s.trim().is_empty())?;
+        let role = self.daemon.record(session).and_then(|r| r.role).filter(|r| !r.trim().is_empty()).or_else(|| client_role.map(str::to_string))?;
+        let tools = self.knowledge.get()?.roles.role(&role)?.tools;
+        (!tools.is_empty()).then_some(tools)
+    }
+
+    /// The `plugin_tools` descriptors this caller may use (AR-8).
+    pub fn descriptors_for(&self, session: Option<&str>, client_role: Option<&str>) -> Vec<Value> {
+        let allow = self.allow_list(session, client_role);
+        self.descriptors().into_iter().filter(|d| tool_allowed(allow.as_deref(), d.get("name").and_then(Value::as_str).unwrap_or(""))).collect()
+    }
 
     fn session_project(&self, session: &str) -> Option<String> {
         self.daemon.record(session)?.project_id
@@ -252,7 +286,13 @@ impl FrameUnit for ToolsUnit {
     }
     fn handle(&self, env: &Envelope, ctx: &FrameCtx) -> Result<Vec<Envelope>, Refusal> {
         match env.r#type.as_str() {
-            PLUGIN_TOOLS => Ok(vec![reply(env, PLUGIN_TOOLS, Value::Array(self.tools.descriptors()).to_string())]),
+            PLUGIN_TOOLS => {
+                // AR-8: an agent's client (`{client: {sessionId, role}}`) gets only the tools its role enables.
+                let v: Value = serde_json::from_str(&env.data).unwrap_or(Value::Null);
+                let s = |k: &str| v.get("client").and_then(|c| c.get(k)).and_then(Value::as_str).map(str::to_string);
+                let list = self.tools.descriptors_for(s("sessionId").as_deref(), s("role").as_deref());
+                Ok(vec![reply(env, PLUGIN_TOOLS, Value::Array(list).to_string())])
+            }
             CHAT_IMAGE => {
                 let v: Value = serde_json::from_str(&env.data).map_err(|e| Refusal::new(CHAT_IMAGE, format!("bad payload ({e})")))?;
                 let mut args = v.as_object().cloned().ok_or_else(|| Refusal::new(CHAT_IMAGE, "the payload is not an object"))?;
@@ -282,6 +322,10 @@ impl FrameUnit for ToolsUnit {
                 let client = v.get("client").and_then(Value::as_object).cloned().unwrap_or_default();
                 let s = |k: &str| client.get(k).and_then(Value::as_str).map(str::to_string).filter(|x| !x.trim().is_empty());
                 let session = s("sessionId");
+                // AR-8: enforced here, not only by hiding the tool from the list.
+                if !tool_allowed(self.tools.allow_list(session.as_deref(), s("role").as_deref()).as_deref(), name) {
+                    return Ok(vec![reply(env, PLUGIN_TOOL_RESULT, json!({"text": not_enabled(name), "isError": true}).to_string())]);
+                }
                 let inv = ToolInvoker {
                     // OWNER-SESSION-GUARD-1: the owner's connection with no session is the owner's own client.
                     owner_client: ctx.owner && session.is_none(),

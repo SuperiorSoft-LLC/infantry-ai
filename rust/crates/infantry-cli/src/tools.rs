@@ -267,7 +267,7 @@ impl Tools {
     /// `McpPluginTools.descriptors`.
     fn descriptors(&mut self, stream: &mut FrameStream) -> Result<Vec<Value>, FrameError> {
         let answer =
-            stream.request("plugin_tools", "", "plugin_tools", "plugin_tools", true, self.target.answer_timeout_ms)?;
+            stream.request("plugin_tools", &self.list_request(), "plugin_tools", "plugin_tools", true, self.target.answer_timeout_ms)?;
         let parsed: Value = serde_json::from_str(&answer.data).map_err(|e| FrameError::Failed(e.to_string()))?;
         let Value::Array(all) = parsed else { return Ok(Vec::new()) };
         self.timeouts.clear();
@@ -361,6 +361,22 @@ impl Tools {
             Some(m) => ToolResult { text: capped(&result.text, m), is_error: result.is_error },
             None => result,
         })
+    }
+
+    /// AR-8: the `plugin_tools` payload: empty for a client with no session (the owner's), else `{client: {sessionId, role}}`
+    /// so the daemon lists only the tools the agent's role enables.
+    fn list_request(&self) -> String {
+        let c = self.client();
+        if !c.contains_key("sessionId") {
+            return String::new();
+        }
+        let mut who = Map::new();
+        for k in ["sessionId", "role"] {
+            if let Some(v) = c.get(k) {
+                who.insert(k.into(), v.clone());
+            }
+        }
+        serde_json::json!({ "client": who }).to_string()
     }
 
     fn client(&self) -> Map<String, Value> {

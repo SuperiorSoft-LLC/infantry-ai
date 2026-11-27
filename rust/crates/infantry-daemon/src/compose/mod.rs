@@ -70,7 +70,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-pub use tools::{Tools, PLUGIN_TOOL_CALL};
+pub use tools::{Tools, COMMUNICATION_TOOLS, PLUGIN_TOOL_CALL};
 
 /// Core bus capacity (frames + named events buffered per subscriber).
 pub const BUS_CAPACITY: usize = 4096;
