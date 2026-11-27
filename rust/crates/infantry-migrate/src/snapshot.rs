@@ -208,9 +208,23 @@ pub fn resolve(from: &Path, to: &Path) -> Result<(PathBuf, PathBuf), String> {
     let from = std::fs::canonicalize(from).map_err(|e| format!("source {}: {e}", from.display()))?;
     let from = crate::plain(&from);
     let to = std::path::absolute(to).map_err(|e| format!("destination {}: {e}", to.display()))?;
-    let to = match std::fs::canonicalize(&to) {
-        Ok(c) => crate::plain(&c),
-        Err(_) => to,
+    // A destination that does not exist yet is resolved through its deepest existing folder, so an alias in its path
+    // (an 8.3 short name such as RUNNER~1, a junction, a symlink) cannot hide that it lies inside the source.
+    let to = {
+        let mut base = to.clone();
+        let mut rest = Vec::new();
+        loop {
+            if let Ok(c) = std::fs::canonicalize(&base) {
+                break rest.iter().rev().fold(crate::plain(&c), |p: PathBuf, n| p.join(n));
+            }
+            match (base.file_name().map(|n| n.to_os_string()), base.parent().map(Path::to_path_buf)) {
+                (Some(n), Some(parent)) => {
+                    rest.push(n);
+                    base = parent;
+                }
+                _ => break to.clone(),
+            }
+        }
     };
     let lower = |p: &Path| p.to_string_lossy().to_lowercase().replace('\\', "/").trim_end_matches('/').to_string();
     let (f, t) = (lower(&from), lower(&to));

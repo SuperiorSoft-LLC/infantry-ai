@@ -151,7 +151,7 @@ async fn a_user_role_file_wins_over_the_plugin() {
 #[tokio::test(flavor = "multi_thread")]
 async fn other_roles_keep_their_text() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let backend = std::fs::read_to_string(kotlin_roles().join("backend.md")).unwrap().replace("\r\n", "\n");
+    let backend = std::fs::read_to_string(plugin_src().join("roles").join("backend.md")).unwrap().replace("\r\n", "\n");
     let p = first_prompt("backend", true, None);
     assert!(p.contains(backend.trim()), "a backend session gets the backend text unchanged:\n{p}");
     let mut compared = 0;
@@ -161,7 +161,13 @@ async fn other_roles_keep_their_text() {
             continue;
         }
         let ported = std::fs::read(plugin_src().join("roles").join(&name)).unwrap_or_else(|_| panic!("{name} is not in the plugin"));
-        assert_eq!(ported, std::fs::read(e.path()).unwrap(), "{name} changed in the port");
+        // SCRIPT-TOOLS-MISSING-1 (1f39d7687) deliberately replaced the non-existent tool infantry_ticket_related_files in
+        // the briefs with the CLI form; that one edit is applied to the Kotlin text, every other byte must match.
+        let kotlin = std::fs::read_to_string(e.path()).unwrap().replace(
+            "call infantry_ticket_related_files (or `infantry ticket files <id> --related`)",
+            "run `infantry ticket files <id> --related`",
+        );
+        assert_eq!(String::from_utf8(ported).unwrap().replace("\r\n", "\n"), kotlin.replace("\r\n", "\n"), "{name} changed in the port");
         compared += 1;
     }
     assert!(compared >= 16, "every non-pm role was compared ({compared})");

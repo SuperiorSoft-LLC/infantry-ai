@@ -150,7 +150,10 @@ fn a_ticket_on_a_remote_runner_works_in_its_own_branch_and_pushes_it_to_origin()
     assert_eq!(w.base, base_sha, "cut from origin/main");
     let wt = PathBuf::from(&w.path);
     assert!(wt.join(".git").exists(), "the worktree is on the runner's host: {}", w.path);
-    assert!(wt.starts_with(rdir.join("runner")), "under the runner's own folder, never the orchestrator's checkout: {}", w.path);
+    // Compared canonically: the temp dir may be reached through an alias (CI's 8.3 name RUNNER~1, a junction) while the
+    // runner reports the resolved path.
+    let canon = |p: &Path| std::fs::canonicalize(p).unwrap();
+    assert!(canon(&wt).starts_with(canon(&rdir.join("runner"))), "under the runner's own folder, never the orchestrator's checkout: {}", w.path);
     assert_eq!(git(&wt, &["rev-parse", "--abbrev-ref", "HEAD"]), w.branch);
     assert_eq!(git(&wt, &["config", "user.email"]), "owner@example.com", "the orchestrator's git identity is in the clone");
 
