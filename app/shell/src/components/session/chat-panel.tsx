@@ -19,7 +19,7 @@ import { toggleExpanded, toggleMinimized } from "@infantry/client";
 import { useChatView } from "./use-chat-view";
 import { Transcript } from "./transcript";
 import { Composer } from "./composer";
-import { ActivityBox } from "./activity-box";
+import { ActivityBox, ChatTopChips } from "./activity-box";
 import { BgJobsRow } from "./bg-jobs-row";
 import { FloatingChip } from "./floating-chip";
 
@@ -92,10 +92,17 @@ export function ChatPanel({ sessionId, variant = "full", windowId = "main", empt
             />
           </div>
         )}
-        {!waiting && <ActivityBox sessionId={agent?.id ?? null} floaters={<ComposerFloaters windowId={windowId} minimized={minimized} expanded={expanded} />} />}
+        {!waiting && <ActivityBox sessionId={agent?.id ?? null} rowless={!minimized} floaters={<ComposerFloaters windowId={windowId} minimized={minimized} expanded={expanded} />} />}
       </div>
       {agent && variant !== "compact" && <BgJobsRow sessionId={agent.id} />}
-      {!waiting && !minimized && <Composer sessionId={agent?.id ?? goneId} busy={busy && !gone} windowId={windowId} />}
+      {!waiting && !minimized && (
+        <Composer
+          sessionId={agent?.id ?? goneId}
+          busy={busy && !gone}
+          windowId={windowId}
+          topTray={<ChatTopChips sessionId={agent?.id ?? null} floaters={<ComposerFloaters windowId={windowId} minimized={minimized} expanded={expanded} />} />}
+        />
+      )}
     </div>
   );
 }

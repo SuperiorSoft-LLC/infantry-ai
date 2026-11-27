@@ -5,22 +5,53 @@
 // the Activity chip (a clock, icon only, no count; only when the session has activity). The Activity chip toggles the
 // activity lines above the row: newest first, timestamped, monospace, at most ~160px tall, scrolling. It starts
 // collapsed and the choice is remembered for the window.
-import { useState, type ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { Clock, Search } from "lucide-react";
 import { CHAT_SEARCH_EVENT } from "@infantry/client";
 import { useDaemon } from "@/daemon/daemon";
 import { ChangeBoxOfWrite } from "./change-box";
 import { FloatingChip } from "./floating-chip";
 
+// The Activity toggle is shared by the log (here) and its chip, which may sit in the composer's top tray
+// (CHAT-TOOLBAR-TOP-1), so the remembered choice is a tiny module store.
 let remembered = false;
+const listeners = new Set<() => void>();
+function useActivityOpen(): [boolean, (o: boolean) => void] {
+  const open = useSyncExternalStore(
+    (l) => (listeners.add(l), () => listeners.delete(l)),
+    () => remembered,
+  );
+  return [open, (o) => ((remembered = o), listeners.forEach((l) => l()))];
+}
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
 
-/** `floaters`: the host's chips (Expand, Minimize / Restore), drawn first in the row. No session: floaters only. */
-export function ActivityBox({ sessionId, floaters }: { sessionId: string | null; floaters?: ReactNode }) {
+/** The row's chips: the host's floaters, then Search, then Activity. Drawn in the float row, or in the composer's top tray. */
+export function ChatTopChips({ sessionId, floaters }: { sessionId: string | null; floaters?: ReactNode }) {
+  const has = useDaemon((s) => (sessionId ? (s.sessions[sessionId]?.activityLog?.length ?? 0) > 0 : false));
+  const [open, setOpen] = useActivityOpen();
+  return (
+    <>
+      {floaters}
+      {sessionId && (
+        <FloatingChip label="Search this chat" shortcut="Ctrl+F" onClick={() => window.dispatchEvent(new Event(CHAT_SEARCH_EVENT))}>
+          <Search />
+        </FloatingChip>
+      )}
+      {has && (
+        <FloatingChip label="Activity" onClick={() => setOpen(!open)}>
+          <Clock />
+        </FloatingChip>
+      )}
+    </>
+  );
+}
+
+/** `floaters`: the host's chips (Expand, Minimize / Restore), drawn first in the row. No session: floaters only.
+ *  `rowless`: the chips are in the composer's top tray instead (CHAT-TOOLBAR-TOP-1); only the log is drawn here. */
+export function ActivityBox({ sessionId, floaters, rowless = false }: { sessionId: string | null; floaters?: ReactNode; rowless?: boolean }) {
   const log = useDaemon((s) => (sessionId ? s.sessions[sessionId]?.activityLog : undefined));
-  const [open, setOpenState] = useState(remembered);
-  const setOpen = (o: boolean) => ((remembered = o), setOpenState(o));
+  const [open] = useActivityOpen();
   const lines = [...(log ?? [])].reverse();
   const has = lines.length > 0;
   return (
@@ -41,19 +72,11 @@ export function ActivityBox({ sessionId, floaters }: { sessionId: string | null;
           ))}
         </div>
       )}
-      <div className="pointer-events-auto flex items-center pr-1.5 pb-0.5" data-testid="chat-float-row">
-        {floaters}
-        {sessionId && (
-          <FloatingChip label="Search this chat" shortcut="Ctrl+F" onClick={() => window.dispatchEvent(new Event(CHAT_SEARCH_EVENT))}>
-            <Search />
-          </FloatingChip>
-        )}
-        {has && (
-          <FloatingChip label="Activity" onClick={() => setOpen(!open)}>
-            <Clock />
-          </FloatingChip>
-        )}
-      </div>
+      {!rowless && (
+        <div className="pointer-events-auto flex items-center pr-1.5 pb-0.5" data-testid="chat-float-row">
+          <ChatTopChips sessionId={sessionId} floaters={floaters} />
+        </div>
+      )}
     </div>
   );
 }

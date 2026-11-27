@@ -71,6 +71,27 @@ interface Act {
  * and round the bottom (12px corners). It is pulled up over the box's bottom line, which its fill hides under the
  * opening; at each top corner a concave 6px fillet turns that line down into the group's side.
  */
+/** HangingGroup mirrored: a tray standing on the box's top line, its fillets joining that line (CHAT-TOOLBAR-TOP-1). */
+function StandingGroup({ label, children }: { label: string; children: ReactNode }) {
+  const fillet = (side: "left" | "right") => ({
+    [side]: -JOIN,
+    background: `radial-gradient(circle at ${side === "left" ? "0" : "100%"} 0, transparent calc(${JOIN}px - var(--ring-w)), var(--ring-c) calc(${JOIN}px - var(--ring-w)), var(--ring-c) ${JOIN}px, var(--color-card) ${JOIN}px)`,
+  });
+  return (
+    <div
+      role="toolbar"
+      aria-label={label}
+      data-testid="chat-top-tray"
+      className="relative z-[1] flex min-w-0 shrink-0 items-center rounded-t-xl bg-card px-0.5"
+      style={{ marginBottom: "calc(-1 * var(--ring-w))", border: "var(--ring-w) solid var(--ring-c)", borderBottom: 0, transition: "border-color 120ms" }}
+    >
+      <span aria-hidden className="pointer-events-none absolute bottom-0" style={{ width: JOIN, height: JOIN, ...fillet("left") }} />
+      <span aria-hidden className="pointer-events-none absolute bottom-0" style={{ width: JOIN, height: JOIN, ...fillet("right") }} />
+      {children}
+    </div>
+  );
+}
+
 function HangingGroup({ label, children }: { label: string; children: ReactNode }) {
   const fillet = (side: "left" | "right") => ({
     [side]: -JOIN,
@@ -119,7 +140,8 @@ function ComposerMore({ rest }: { rest: Act[] }) {
 }
 
 /** `windowId` keys the remembered draft / expanded state (CHAT-MINIMIZE-1); minimize itself is ChatPanel's floater. */
-export function Composer({ sessionId, busy, windowId = "main" }: { sessionId: string | null; busy: boolean; windowId?: string }) {
+/** `topTray`: the chat's top-right chips, stood on the box's top line like the bottom groups (CHAT-TOOLBAR-TOP-1). */
+export function Composer({ sessionId, busy, windowId = "main", topTray }: { sessionId: string | null; busy: boolean; windowId?: string; topTray?: ReactNode }) {
   const { expanded } = useChatView(windowId);
   // CHAT-DRAFT-1: the draft is this chat's in this window, never the window's (it must not follow into another chat).
   const chat = chatKey(sessionId);
@@ -370,10 +392,13 @@ ${cur}` : back);
           {goneLine}
         </p>
       )}
-      <div className="truncate pb-0.5 pl-1.5 text-[11px] text-muted-foreground" data-testid="composer-status">
-        {syncing ? `Syncing with ${host}…` : composerStatusLine(null, agentCount, gone ? "gone" : record ? (busy ? "working" : String(record.state).toLowerCase()) : null)}
-      </div>
       <div style={ring} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+        <div className="flex items-end justify-between" style={{ paddingRight: topTray ? COMPOSER_GROUP_INSET_PX : 0, columnGap: COMPOSER_GROUP_GAP_PX }}>
+          <div className="min-w-0 truncate pb-0.5 pl-1.5 text-[11px] text-muted-foreground" data-testid="composer-status">
+            {syncing ? `Syncing with ${host}…` : composerStatusLine(null, agentCount, gone ? "gone" : record ? (busy ? "working" : String(record.state).toLowerCase()) : null)}
+          </div>
+          {topTray && <StandingGroup label="Chat view">{topTray}</StandingGroup>}
+        </div>
         <div className="relative rounded-2xl bg-card" style={{ border: "var(--ring-w) solid var(--ring-c)", transition: "border-color 120ms" }}>
           <input
             ref={fileInput}
