@@ -6,8 +6,9 @@ use infantry_protocol::Envelope;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
-/// Pushes the daemon sends on its own clock (plan meters, limits, the Armory update check): not part of any session scenario.
-pub const AMBIENT: &[&str] = &["usage_report", "usage_meter", "limits", "provider_state", "provider_states", "usage", "armory_updates"];
+/// Pushes the daemon sends on its own clock (plan meters, limits, the Armory update check, the host RAM/CPU line):
+/// not part of any session scenario.
+pub const AMBIENT: &[&str] = &["usage_report", "usage_meter", "limits", "provider_state", "provider_states", "usage", "armory_updates", "host_stats"];
 
 #[derive(Default)]
 pub struct Normalizer {

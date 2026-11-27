@@ -28,13 +28,24 @@ impl Drop for Scratch {
     }
 }
 
+/// HOSTSTATS-CI-1: `INFANTRY_PLUGINS_DIR` is process-wide and the tests run in parallel. A folder per test let one test's
+/// Drop delete the folder another test's compose was about to read, so `plugins::start` found no folder and the host was
+/// None ("the plugin host is up" panic in CI). One empty folder for the whole binary, set once, never removed mid-run.
+fn shared_plugins_dir() -> &'static std::path::Path {
+    static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let d = std::env::temp_dir().join(format!("infantry-sec-plugin-1-plugins-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(d.join("official")).unwrap();
+        d
+    })
+}
+
 /// A composed daemon with no plugin installed, a scratch vault, and the three secrets the owner saved.
 fn scratch() -> Scratch {
     let dir = std::env::temp_dir().join(format!("infantry-sec-plugin-1-{}", uuid::Uuid::new_v4()));
-    let (state, plugins) = (dir.join("state"), dir.join("plugins"));
-    std::fs::create_dir_all(plugins.join("official")).unwrap();
+    let state = dir.join("state");
     std::fs::create_dir_all(&state).unwrap();
-    std::env::set_var("INFANTRY_PLUGINS_DIR", &plugins);
+    std::env::set_var("INFANTRY_PLUGINS_DIR", shared_plugins_dir());
     let daemon = Daemon::new(Arc::new(Stub::default()), Config::new(state.clone(), dir.clone())).unwrap();
     let c = infantry_daemon::compose::build(&daemon, &state).unwrap();
     let s = Scratch { dir, c };
