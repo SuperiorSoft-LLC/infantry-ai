@@ -173,3 +173,15 @@ export function useAllAgentList(): Agent[] {
     [sessions, agents, tickets, projects],
   );
 }
+
+/** CARD-STALE-1: the setting key (minutes) and its default; 0 turns the red timer off. */
+export const STALE_RUNNING_KEY = "limits.ui.staleRunningMinutes";
+export const STALE_RUNNING_DEFAULT = 30;
+
+/** Minutes a Running session has gone without new activity, when that is past [minutes]; otherwise null.
+ *  Only `working` (a turn actually running) counts: idle with background tasks, waiting or finished never do. */
+export function staleRunningMinutes(status: Agent["status"], activityAt: number, now: number, minutes: number): number | null {
+  if (status !== "working" || !(minutes > 0)) return null;
+  const gone = Math.floor((now - activityAt) / 60_000);
+  return gone >= minutes ? gone : null;
+}

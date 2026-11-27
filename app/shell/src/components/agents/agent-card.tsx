@@ -6,7 +6,9 @@ import { cn } from "@infantry/ui";
 import type { Agent } from "@/mock/types";
 import { AgentAvatar } from "./agent-avatar";
 import { AgentMenu } from "./agent-menu";
-import { ActivityAgo } from "./activity-ago";
+import { ActivityAgo, useNow } from "./activity-ago";
+import { useStaleRunningMinutes } from "./use-stale-running";
+import { staleRunningMinutes } from "@/daemon/agents";
 import { ProgressLine, SelectedStripes, Tooltip, TooltipContent, TooltipTrigger } from "@infantry/ui";
 
 const running = (since: number) => {
@@ -51,6 +53,10 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
   const working = agent.status === "working";
   const compact = agent.group === "quiet";
   const [menu, setMenu] = useState(false);
+  // CARD-STALE-1: a Running turn with no new activity past the threshold turns the timer red (the timer's meaning is unchanged).
+  const threshold = useStaleRunningMinutes();
+  const now = useNow(working && threshold > 0);
+  const stale = staleRunningMinutes(agent.status, agent.activityAt, now, threshold);
   return (
     <div className="group/card relative" onContextMenu={(e) => (e.preventDefault(), setMenu(true))}>
     <button
@@ -62,7 +68,9 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
         "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
         selected ? "border-warn" : "border-info/25",
         compact && "border",
+        stale !== null && "ring-1 ring-danger/50",
       )}
+      data-stale={stale !== null || undefined}
     >
       {/* Only the selected card gets the plaid; it animates only while the agent is working. */}
       <SelectedStripes active={selected} animate={working} />
@@ -71,7 +79,11 @@ export const AgentCard = memo(function AgentCard({ agent, selected, onSelect }: 
         <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
           <div className="flex min-w-0 items-baseline justify-between gap-2">
             <span className="min-w-0 truncate text-[15px] font-semibold">{agent.name}</span>
-            <span className="shrink-0 text-xs text-muted-foreground" title="Last activity"><ActivityAgo at={agent.activityAt} />
+            <span
+              className={cn("shrink-0 text-xs", stale !== null ? "font-medium text-danger" : "text-muted-foreground")}
+              title={stale !== null ? `Running ${stale} min without a new turn` : "Last activity"}
+              data-testid="card-timer"
+            ><ActivityAgo at={agent.activityAt} />
           </span>
           </div>
 

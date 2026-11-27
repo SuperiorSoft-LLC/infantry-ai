@@ -24,6 +24,12 @@ function subscribe(fn: () => void) {
   };
 }
 
+const idle = () => () => {};
+/** The shared clock's time; [live] false reads it once and does not tick (so a quiet card never re-renders). */
+export function useNow(live = true): number {
+  return useSyncExternalStore(live ? subscribe : idle, () => now);
+}
+
 export function ActivityAgo({ at }: { at: number }) {
   const t = useSyncExternalStore(subscribe, () => now);
   return <>{ago(at, Math.max(t, at))} ago</>;
