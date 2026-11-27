@@ -272,7 +272,15 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
                 .map(|r| infantry_usage::pacing::meter_for(&r.provider, r.model.as_deref()))
                 .collect()
         });
-        let svc = UsageService::open(UsageDeps::new(state_dir, meters));
+        let store: Arc<dyn infantry_usage::config::UsageStore> = Arc::new(settings::UsageSettingsStore(settings::SettingsUnit { db: db.clone() }));
+        // PACE-UNIFY-1: the old private file's keys move into settings once (the file is kept).
+        let moved = infantry_usage::config::migrate_file(&state_dir.join("usage-settings.json"), store.as_ref());
+        if !moved.is_empty() {
+            eprintln!("usage: copied {} from usage-settings.json into settings", moved.join(", "));
+        }
+        let mut deps = UsageDeps::new(state_dir, meters);
+        deps.store = Some(store);
+        let svc = UsageService::open(deps);
         // The Stats "Job watcher" line: the mail crate's watcher counters on the meter report.
         svc.set_watch_counts(Arc::new(|| infantry_mail::mail::watch_meter::WATCH_METER.counts()));
         svc

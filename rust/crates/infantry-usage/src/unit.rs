@@ -85,7 +85,7 @@ impl FrameUnit for UsageUnit {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::MemoryStore;
+    use crate::config::{MemoryStore, UsageStore};
     use crate::limits::{FixedSource, LimitService, LimitSource};
     use crate::service::UsageDeps;
     use infantry_core::bus::EventBus;
@@ -123,6 +123,32 @@ mod tests {
         assert!(w[0].data.contains("\"freeSlots\":null"));
         assert!(unit.handle(&Envelope::new(PACE_GET, "{}"), &ctx).unwrap()[0].data.contains("\"series\":[]"));
         assert!(unit.handle(&Envelope::new(frames::USAGE_METER_GET, ""), &ctx).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// PACE-UNIFY-1: pace mode + maxWorkers 1 + a window WITH reset data allows 1, so a 2nd worker is refused.
+    #[test]
+    fn pace_with_reset_data_and_max_workers_one_refuses_a_second_worker() {
+        let dir = std::env::temp_dir().join(format!("infantry-usage-unify-{}", std::process::id()));
+        let now = 1_800_000_000_000i64;
+        // 20% used half way through a week: projected 40% at reset, well under okProjected, so only maxWorkers caps it.
+        let src: Arc<dyn LimitSource> = Arc::new(FixedSource::new(
+            "claude",
+            Arc::new(move |t| {
+                vec![LimitWindow { provider: "claude".into(), label: "Current week".into(), window_minutes: 10_080, percent: Some(20.0), resets_at: Some(t + 84 * 3_600_000), observed_at: t, source: "live".into(), pace_delta: Some(-30.0) }]
+            }),
+        ));
+        let store = Arc::new(MemoryStore::default());
+        store.set("usage.pacing", serde_json::json!({"enabled": true, "mode": "pace", "maxWorkers": 1, "tiers": [{"below": null, "workers": 1}], "okProjected": 100, "hardStopPercent": 95})).unwrap();
+        let mut deps = UsageDeps::new(&dir, Arc::new(|| vec!["claude".into()]));
+        deps.store = Some(store);
+        deps.limits = Some(Arc::new(LimitService::new(vec![src], Arc::new(|| true), Arc::new(move || now), 0, Arc::new(|_| {}))));
+        deps.clock = Arc::new(move || now);
+        let svc = UsageService::open(deps);
+        let r = svc.report_fresh(true);
+        assert_eq!(r.rule.max_workers, 1);
+        assert_eq!((r.meters[0].allowance, r.meters[0].running, r.meters[0].can_start), (Some(1), 1, false));
+        assert!(matches!(svc.check("claude"), crate::pacing::PacingVerdict::Over { .. }), "the board's start gate refuses the 2nd worker");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

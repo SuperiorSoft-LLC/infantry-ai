@@ -92,6 +92,8 @@ describe("usage lines", () => {
   it("says the rule, the pace, the workers and the override", () => {
     expect(ruleLine(rule)).toBe("pace · up to 5 ticket workers while projected <= 100% at reset · 1 from 95% used");
     expect(ruleLine({ ...rule, mode: "bands" })).toBe("<60% -> 3 · else -> 1 ticket workers");
+    // PACE-UNIFY-1: the panel says the maxWorkers the user set.
+    expect(ruleLine({ ...rule, maxWorkers: 1 })).toBe("pace · up to 1 ticket workers while projected <= 100% at reset · 1 from 95% used");
     expect(paceWords(-12.4)).toBe("12 pts under pace");
     expect(paceWords(0.2)).toBe("on pace");
     expect(workersLine(meter())).toBe("1 of 1 workers running");

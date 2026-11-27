@@ -64,6 +64,9 @@ pub struct UsageService {
     watch_counts: std::sync::OnceLock<Arc<dyn Fn() -> Value + Send + Sync>>,
 }
 
+/// The bus event the daemon's `settings_set` emits (`{"key": ...}`).
+pub const SETTINGS_CHANGED_EVENT: &str = "settings.changed";
+
 fn file_in(dir: &Path, name: &str) -> PathBuf {
     dir.join(name)
 }
@@ -347,6 +350,22 @@ impl UsageService {
             m.set_on_recorded(Arc::new(move || {
                 b.emit("usage.meter.recorded", Value::Null);
             }));
+        }
+        // PACE-UNIFY-1: a `usage.*` setting written through settings_set reaches the Usage panel at once.
+        {
+            let (me, b, mut rx) = (Arc::downgrade(self), bus.clone(), bus.subscribe_events());
+            let _ = std::thread::Builder::new().name("infantry-usage-settings".into()).spawn(move || loop {
+                match rx.blocking_recv() {
+                    Ok(ev) if ev.name == SETTINGS_CHANGED_EVENT && ev.payload["key"].as_str().is_some_and(|k| k.starts_with("usage.")) => {
+                        let Some(s) = me.upgrade() else { break };
+                        b.publish(s.report_envelope(&s.report()));
+                    }
+                    // A lagged receiver keeps reading; a closed bus (every sender gone) or a dropped service ends it.
+                    Ok(_) if me.strong_count() > 0 => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) if me.strong_count() > 0 => {}
+                    _ => break,
+                }
+            });
         }
         let (me, b) = (Arc::downgrade(self), bus.clone());
         let read_me = me.clone();

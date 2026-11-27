@@ -82,6 +82,16 @@ impl UsageStore for FileStore {
     }
 }
 
+/// PACE-UNIFY-1: copies every key of the old private file (`usage-settings.json`) into `store` where `store` has no
+/// value yet, so a store wired to the daemon settings keeps what was set before. The file is kept, never deleted.
+/// Returns the keys copied.
+pub fn migrate_file(path: &std::path::Path, store: &dyn UsageStore) -> Vec<String> {
+    let Some(old) = std::fs::read_to_string(path).ok().and_then(|t| serde_json::from_str::<BTreeMap<String, Value>>(&t).ok()) else {
+        return Vec::new();
+    };
+    old.into_iter().filter(|(k, v)| store.get(k).is_none() && store.set(k, v.clone()).is_ok()).map(|(k, _)| k).collect()
+}
+
 /// Typed access over a [`UsageStore`].
 #[derive(Clone)]
 pub struct UsageConfig {

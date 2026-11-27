@@ -14,6 +14,8 @@ use std::sync::Arc;
 pub const SETTINGS_GET: &str = "settings_get";
 pub const SETTINGS_SET: &str = "settings_set";
 pub const SETTINGS: &str = "settings";
+/// The bus event a `settings_set` emits: `{"key": ...}`.
+pub const SETTINGS_CHANGED_EVENT: &str = "settings.changed";
 
 pub struct SettingsUnit {
     pub db: Arc<Db>,
@@ -195,6 +197,8 @@ impl FrameUnit for SettingsUnit {
                 return Err(Refusal::new(ty, why));
             }
             self.set(&key, d.get("value"), &d).map_err(|e| Refusal::new(ty, e))?;
+            // PACE-UNIFY-1: a named event, so a unit that reads this key (e.g. usage pacing) can answer the change live.
+            ctx.bus.emit(SETTINGS_CHANGED_EVENT, json!({"key": key}));
         }
         let mut out = self.resolve(&key, &d);
         if text(&d, "explain").as_deref() == Some("true") {
@@ -305,5 +309,18 @@ mod context_default_tests {
         assert_eq!(at(Some("p2"), None), (250_000, "app".into()));
         u.set(DEFAULT_CONTEXT_KEY, Some(&json!(0)), &json!({"scope":"role","project":"p1","role":"pm"})).unwrap();
         assert_eq!(at(Some("p1"), Some("pm")), (0, "role".into()));
+    }
+}
+
+/// PACE-UNIFY-1: the usage service's store is the daemon settings (app scope), so `usage.pacing`, `usage.manual` and
+/// `usage.overrides` have one source: what `settings_set` writes is what pacing enforces and the Usage panel shows.
+pub struct UsageSettingsStore(pub SettingsUnit);
+
+impl infantry_usage::config::UsageStore for UsageSettingsStore {
+    fn get(&self, key: &str) -> Option<Value> {
+        self.0.app(key).filter(|v| !v.is_null())
+    }
+    fn set(&self, key: &str, value: Value) -> Result<(), String> {
+        self.0.set(key, Some(&value), &json!({}))
     }
 }
