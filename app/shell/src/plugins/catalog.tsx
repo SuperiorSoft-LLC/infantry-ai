@@ -83,11 +83,11 @@ type Def = Omit<TabEntry, "plugin">;
 const CENTRE: Def[] = [
   { id: "cli", declared: "infantry.cli", builtin: true, label: "CLI", icon: SquareTerminal, hint: "^1", render: () => null },
   { id: "mail", builtin: true, label: "Mail", icon: Mail, render: () => <MailTab /> },
-  { id: "pods", declared: "infantry.pods", label: "Pods", icon: Box, hint: "^2", render: () => <PodsTab /> },
+  { id: "pods", builtin: true, label: "Pods", icon: Box, hint: "^2", render: () => <PodsTab /> },
   { id: "roles", declared: "infantry.roles", label: "Roles", icon: User, hint: "^5", render: () => <RolesTab /> },
-  { id: "profiles", declared: "infantry.profiles", label: "Profiles", icon: IdCard, hint: "^9", render: () => <ProfilesTab /> },
+  { id: "profiles", builtin: true, label: "Profiles", icon: IdCard, hint: "^9", render: () => <ProfilesTab /> },
   { id: "calendar", declared: "infantry.calendar", label: "Calendar", icon: Calendar, render: () => <CalendarTab /> },
-  { id: "epics", declared: "infantry.epics", label: "Epics", icon: Layers, render: () => <EpicsTab /> },
+  { id: "epics", builtin: true, label: "Epics", icon: Layers, render: () => <EpicsTab /> },
   { id: "notes", declared: "infantry.notes", label: "Notes", icon: FileText, render: () => <NotesTab /> },
   { id: "skills", builtin: true, label: "Skills", icon: Sparkles, render: () => <SkillsTab /> },
   { id: "scripts", builtin: true, label: "Scripts", icon: ScrollText, render: () => <ScriptsTab /> },
@@ -106,7 +106,7 @@ const RIGHT: Def[] = [
   { id: "prompts", declared: "infantry.prompts", builtin: true, label: "Prompts", icon: MessageSquare, render: () => <PromptsTab /> },
   { id: "changes", declared: "infantry.changes", label: "Changes", icon: GitCompare, hint: "^3", render: () => <ChangesPanel /> },
   { id: "mcp", declared: "infantry.mcp", label: "MCP", icon: Plug, render: () => <McpPanel /> },
-  { id: "review", declared: "infantry.review", label: "Review", icon: GitPullRequest, hint: "^4", render: () => <ReviewPanel /> },
+  { id: "review", builtin: true, label: "Review", icon: GitPullRequest, hint: "^4", render: () => <ReviewPanel /> },
   { id: "skills", declared: "infantry.skills", builtin: true, label: "Skills", icon: Star, render: () => <SkillsTab /> },
 ];
 
