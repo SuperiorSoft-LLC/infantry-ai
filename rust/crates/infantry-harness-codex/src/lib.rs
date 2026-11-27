@@ -115,6 +115,19 @@ impl Harness for CodexHarness {
         parse_models_cache(&text)
     }
 
+    /// PROVIDERS-2: an OpenAI API key (codex reads OPENAI_API_KEY), or the ChatGPT sign-in (`codex login`).
+    fn credential(&self) -> Option<infantry_harness::Credential> {
+        Some(infantry_harness::Credential {
+            env: "OPENAI_API_KEY".into(),
+            label: "Codex (OpenAI)".into(),
+            help: "Create an API key at platform.openai.com. Only needed when you choose API key; with a ChatGPT plan you sign in instead.".into(),
+            auth_modes: vec![infantry_harness::AUTH_API_KEY.into(), infantry_harness::AUTH_SUBSCRIPTION.into()],
+            login_argv: vec![self.program.clone(), "login".into()],
+            logout_argv: vec![self.program.clone(), "logout".into()],
+            ..Default::default()
+        })
+    }
+
     fn sign_in_problem(&self, probe: &dyn Probe) -> Option<String> {
         let on_path = probe.env("PATH").is_some_and(|path| {
             let exts: &[&str] = if cfg!(windows) { &[".cmd", ".exe", ".ps1", ""] } else { &[""] };

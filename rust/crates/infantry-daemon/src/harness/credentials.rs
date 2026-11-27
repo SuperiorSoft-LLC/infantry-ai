@@ -8,7 +8,7 @@
 //! A session's launch gets the key ([`HarnessCredentials::session_env`]): in api-key mode the stored key under the
 //! harness's variable; in subscription mode the variable blanked, so a subscription session never bills an API key.
 //! Output lines are never logged or kept beyond the link and one short message (a pasted code is never echoed).
-use infantry_harness::{Credential, Harness, LocalProbe, Probe, AUTH_API_KEY, AUTH_SUBSCRIPTION};
+use infantry_harness::{Credential, Harness, ProviderKey, LocalProbe, Probe, AUTH_API_KEY, AUTH_SUBSCRIPTION};
 use infantry_vault::handler::KnownSecret;
 use infantry_vault::keystore::{Keystore, VALUE_FIELD};
 use std::any::Any;
@@ -25,6 +25,11 @@ const SHOWN_MESSAGE_LENGTH: usize = 300;
 /// The vault name of a harness's API key.
 pub fn key_name(id: &str) -> String {
     format!("harness.{id}.key")
+}
+
+/// The vault name of one of a harness's provider keys (`harness.opencode.deepseek.key`; Kotlin `secretNameOf`).
+pub fn provider_key_name(harness: &str, key: &str) -> String {
+    key_name(&format!("{harness}.{key}"))
 }
 
 /// The vault name of a harness's long-lived subscription token (the browser sign-in's result).
@@ -231,11 +236,34 @@ impl HarnessCredentials {
                 rows.push(k);
                 rows
             })
+            .chain(self.harnesses.iter().flat_map(|h| {
+                let id = h.id().to_string();
+                h.provider_keys().into_iter().map(move |p| {
+                    let mut k = KnownSecret::new(&provider_key_name(&id, &p.id), &p.label, Some(&p.env));
+                    k.help = p.help;
+                    k.auth_mode = AUTH_API_KEY.into();
+                    k
+                })
+            }))
             .collect()
     }
 
     /// The env a session of [provider] gets: the key in api-key mode, the variable blanked in subscription mode.
     pub fn session_env(&self, provider: &str) -> Vec<(String, String)> {
+        let mut env = self.account_env(provider);
+        // PROVIDERS-2: each saved provider key under its variable (the account's own variable is never overwritten).
+        for k in self.harnesses.iter().filter(|h| h.id() == provider).flat_map(|h| h.provider_keys()) {
+            if env.iter().any(|(n, _)| *n == k.env) {
+                continue;
+            }
+            if let Some(v) = self.provider_key(provider, &k) {
+                env.push((k.env.clone(), v));
+            }
+        }
+        env
+    }
+
+    fn account_env(&self, provider: &str) -> Vec<(String, String)> {
         let Some((_, c)) = self.declared().find(|(h, _)| h.id() == provider) else { return Vec::new() };
         if self.mode(provider, &c) == AUTH_SUBSCRIPTION {
             // The API key variable stays blank (a subscription session never bills a key); the stored token goes under its own.
@@ -246,6 +274,11 @@ impl HarnessCredentials {
             return env;
         }
         self.key(provider).map(|k| vec![(c.env.clone(), k)]).unwrap_or_default()
+    }
+
+    /// A provider key's saved value: its own row, else a row under one of its older ids (a key saved before the merge).
+    fn provider_key(&self, harness: &str, k: &ProviderKey) -> Option<String> {
+        std::iter::once(&k.id).chain(k.old_ids.iter()).find_map(|id| self.key(&format!("{harness}.{id}")))
     }
 
     /// start / input / cancel the sign-in of the harness whose key or token is [secret] ([`infantry_vault::handler::LoginFn`]).
@@ -846,6 +879,72 @@ mod tests {
         assert_eq!(k[0].login_code_urls, vec!["https://login.example/callback".to_string()], "the harness declares where the code shows; the wire carries it");
         assert_eq!(k[1].login_allowed_hosts, vec!["login.example".to_string()], "the harness declares the hosts the login may stay on");
         assert_eq!(k[1].auth_modes, vec![AUTH_API_KEY.to_string(), AUTH_SUBSCRIPTION.to_string()]);
+    }
+
+    /// A harness with no account of its own and two provider keys (pi's shape); Command Code keeps the older id `cmd`.
+    struct Keyed;
+    impl Harness for Keyed {
+        fn id(&self) -> &str {
+            "pk"
+        }
+        fn capabilities(&self) -> Capabilities {
+            Fake(None).capabilities()
+        }
+        fn models(&self, _: &dyn Probe) -> Vec<ModelInfo> {
+            Vec::new()
+        }
+        fn sign_in_problem(&self, _: &dyn Probe) -> Option<String> {
+            None
+        }
+        fn launch(&self, _: &LaunchRequest) -> Result<LaunchPlan, LaunchError> {
+            Err(LaunchError("no".into()))
+        }
+        fn provider_keys(&self) -> Vec<ProviderKey> {
+            let mut cmd = ProviderKey::new("commandcode", "CMD_API_KEY", "Command Code", "h");
+            cmd.old_ids = vec!["cmd".into()];
+            vec![cmd, ProviderKey::new("deepseek", "DEEPSEEK_API_KEY", "DeepSeek", "h")]
+        }
+    }
+
+    fn keyed() -> (tempfile::TempDir, Arc<HarnessCredentials>) {
+        let dir = tempfile::tempdir().unwrap();
+        let ks = Arc::new(Keystore::with(dir.path(), Arc::new(|_| None), None, infantry_vault::limits::Limits::default()));
+        (dir, HarnessCredentials::new(vec![Arc::new(Keyed)], ks, Arc::new(|_| None)))
+    }
+
+    /// The value of [var] in [env], compared inside the test and never printed.
+    fn has(env: &[(String, String)], var: &str, value: &str) -> bool {
+        env.iter().any(|(k, v)| k == var && v == value)
+    }
+
+    #[test]
+    fn provider_keys_are_vault_rows_under_their_variables() {
+        let (_d, hc) = keyed();
+        let rows: Vec<(String, Option<String>)> = hc.known().into_iter().map(|k| (k.name, k.env_alias)).collect();
+        assert!(rows.contains(&("harness.pk.commandcode.key".into(), Some("CMD_API_KEY".into()))));
+        assert!(rows.contains(&("harness.pk.deepseek.key".into(), Some("DEEPSEEK_API_KEY".into()))));
+        assert!(!rows.iter().any(|(n, _)| n.contains(".cmd.")), "one Command Code row, not two");
+    }
+
+    #[test]
+    fn a_saved_provider_key_reaches_the_session_env() {
+        let (_d, hc) = keyed();
+        assert!(hc.session_env("pk").is_empty(), "nothing saved, nothing set");
+        hc.keystore.set(&provider_key_name("pk", "deepseek"), "ds-value-1").unwrap();
+        let env = hc.session_env("pk");
+        assert!(has(&env, "DEEPSEEK_API_KEY", "ds-value-1"), "the saved DeepSeek key is the session's variable");
+        assert!(!env.iter().any(|(k, _)| k == "CMD_API_KEY"));
+    }
+
+    #[test]
+    fn a_command_code_key_saved_under_the_old_id_still_works() {
+        let (_d, hc) = keyed();
+        hc.keystore.set(&provider_key_name("pk", "cmd"), "old-value").unwrap();
+        assert!(has(&hc.session_env("pk"), "CMD_API_KEY", "old-value"), "the old row is read as a fallback");
+        hc.keystore.set(&provider_key_name("pk", "commandcode"), "new-value").unwrap();
+        let env = hc.session_env("pk");
+        assert!(has(&env, "CMD_API_KEY", "new-value"), "the merged row wins");
+        assert_eq!(env.iter().filter(|(k, _)| k == "CMD_API_KEY").count(), 1);
     }
 
     #[test]

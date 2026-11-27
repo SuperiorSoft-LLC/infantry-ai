@@ -201,6 +201,18 @@ const KEY_VARS: &[&str] = &[
 ];
 
 impl Harness for PiHarness {
+    /// PROVIDERS-2: pi has no account of its own; each model provider takes its own key (Kotlin module.json `credentials`).
+    fn provider_keys(&self) -> Vec<infantry_harness::ProviderKey> {
+        use infantry_harness::ProviderKey as K;
+        vec![
+            K::new("anthropic", "ANTHROPIC_API_KEY", "Anthropic", "Create an API key in the Anthropic Console (console.anthropic.com). Only needed for the anthropic/* models."),
+            K::new("deepseek", "DEEPSEEK_API_KEY", "DeepSeek", "Create an API key at platform.deepseek.com. Only needed for the deepseek/* models."),
+            K::new("google", "GEMINI_API_KEY", "Google Gemini", "Create an API key in Google AI Studio (aistudio.google.com). Only needed for the google/* models."),
+            K::new("commandcode", "CMD_API_KEY", "Command Code", "Create an API key at commandcode.ai. Only needed for the commandcode/* models."),
+            K::new("opencode-go", "OPENCODE_API_KEY", "OpenCode Go", "Create an API key in your OpenCode account (opencode.ai). Only needed for the opencode-go/* models."),
+        ]
+    }
+
     fn id(&self) -> &str {
         ID
     }

@@ -162,6 +162,21 @@ impl Harness for OpenCodeHarness {
         })
     }
 
+    /// PROVIDERS-2: opencode's other providers (Kotlin module.json `credentials`). Command Code is the one `commandcode`
+    /// row shared with pi; a key saved under the older id `cmd` still counts.
+    fn provider_keys(&self) -> Vec<infantry_harness::ProviderKey> {
+        use infantry_harness::ProviderKey as K;
+        let mut cmd = K::new("commandcode", "CMD_API_KEY", "Command Code", "Create an API key at commandcode.ai. Only needed for the commandcode/* models.");
+        cmd.old_ids = vec!["cmd".into()];
+        vec![
+            cmd,
+            K::new("deepseek", "DEEPSEEK_API_KEY", "DeepSeek", "Create an API key at platform.deepseek.com. Only needed for the deepseek/* models."),
+            K::new("google", "GOOGLE_GENERATIVE_AI_API_KEY", "Google Gemini", "Create an API key in Google AI Studio (aistudio.google.com). Only needed for the google/* models."),
+            K::new("moonshot", "MOONSHOT_API_KEY", "Moonshot (Kimi)", "Create an API key at platform.moonshot.ai. Only needed for the moonshotai/* models."),
+            K::new("alibaba", "DASHSCOPE_API_KEY", "Alibaba (Qwen)", "Create an API key in Alibaba Cloud Model Studio (DashScope). Only needed for the alibaba/* models."),
+        ]
+    }
+
     /// opencode has no sign-in: every provider it talks to is reached with an API key.
     fn auth_kinds(&self) -> Vec<&'static str> {
         vec![infantry_harness::AUTH_API_KEY]

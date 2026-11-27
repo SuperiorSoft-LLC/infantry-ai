@@ -522,11 +522,35 @@ pub trait Harness: Send + Sync {
     fn credential(&self) -> Option<Credential> {
         None
     }
+    /// PROVIDERS-2: the extra API keys the CLI reads for its other model providers (opencode's DeepSeek, pi's Anthropic):
+    /// each is a vault row `harness.<id>.<key id>.key` that a session gets under its variable. Empty = none.
+    fn provider_keys(&self) -> Vec<ProviderKey> {
+        Vec::new()
+    }
     /// What the Usage tab says about a CLI whose plan limits the daemon does not read (it has no meter card), in one or
     /// two plain sentences: why there is none and what is still counted. The `providers` row carries it as `usageNote`
     /// so the tab lists the CLI with this text instead of leaving it out. None = it has a meter, or says nothing.
     fn usage_note(&self) -> Option<String> {
         None
+    }
+}
+
+/// One extra provider key a harness declares ([`Harness::provider_keys`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProviderKey {
+    /// The row id, one per provider across harnesses (`commandcode`, `deepseek`).
+    pub id: String,
+    /// The environment variable the CLI reads it from.
+    pub env: String,
+    pub label: String,
+    pub help: String,
+    /// Older row ids whose saved key still counts when this row is empty (`cmd` before `commandcode`).
+    pub old_ids: Vec<String>,
+}
+
+impl ProviderKey {
+    pub fn new(id: &str, env: &str, label: &str, help: &str) -> Self {
+        ProviderKey { id: id.into(), env: env.into(), label: label.into(), help: help.into(), old_ids: Vec::new() }
     }
 }
 
