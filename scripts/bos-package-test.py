@@ -201,10 +201,11 @@ class Workflows(unittest.TestCase):
         self.assertEqual(d[True]["push"]["tags"], ["os-app-v*"])  # `on` parses as True
         steps = [s.get("run", "") for j in d["jobs"].values() for s in j.get("steps", [])]
         creates = [s for s in steps if "gh release create" in s]
-        self.assertEqual(len(creates), 1)
-        self.assertIn("--prerelease", creates[0])
-        self.assertNotIn("--draft", creates[0])
-        self.assertIn("--latest=false", creates[0])
+        self.assertEqual(len(creates), 2)  # the os-app-v<version> release and (ARMORY-UPDATE-1) the bos-prerelease channel
+        for c in creates:
+            self.assertIn("--prerelease", c)
+            self.assertNotIn("--draft", c)
+            self.assertIn("--latest=false", c)
         self.assertNotIn("--latest=true", text)
         # no step publishes or uploads a Tauri updater manifest, and no other release call exists
         code = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
@@ -214,8 +215,13 @@ class Workflows(unittest.TestCase):
         self.assertIn("bos-crt-check.py", code)
         self.assertIn("TAURI_SIGNING_PRIVATE_KEY", code)
         self.assertNotIn("BOS_APP_SIGNING_KEY", code)
-        for bad in ("gh release edit", "gh release upload", "make_latest: true", "softprops/action-gh-release", "git push"):
+        for bad in ("gh release edit", "make_latest: true", "softprops/action-gh-release", "git push", "bos-stable", "bos-nightly"):
             self.assertNotIn(bad, code)
+        # ARMORY-UPDATE-1: the one upload moves the prerelease channel feed only (bos-stable stays by hand)
+        uploads = [l.strip() for l in code.splitlines() if "gh release upload" in l]
+        self.assertEqual(len(uploads), 1)
+        self.assertTrue(uploads[0].startswith('gh release upload "$ch" ') and uploads[0].endswith("feed.json\" --clobber"), uploads[0])
+        self.assertIn("ch=bos-prerelease", code)
         for s in d["jobs"].values():
             self.assertNotIn("workflow_call", str(s))
 

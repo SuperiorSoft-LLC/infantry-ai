@@ -11,9 +11,10 @@
 #   1. The release is a PRERELEASE and never latest (`gh release create --prerelease --latest=false`): this repo's "latest"
 #      release is what every standalone updater reads (rust-promote.yml), so a package must never become it.
 #   2. No latest.json is uploaded: that name is the Tauri updater manifest. The OS app's feed is feed.json.
-#   3. Nothing here pushes a feed, a branch or the catalog. The channel feed (release bos-stable / bos-nightly) is moved
-#      by hand after the release is tested: scripts/bos-feed.py rebuilds it from the release's own assets and refuses a
-#      mismatch; the commands are in the BOS-PUB-0 done comment.
+#   3. Nothing here pushes a branch or the catalog. ARMORY-UPDATE-1: the PRERELEASE channel feed (release bos-prerelease,
+#      prerelease, never latest) is moved here on every tag, rebuilt by scripts/bos-feed.py from the new release's own
+#      assets. bos-stable is still moved by hand after the release is tested (same script; commands in the BOS-PUB-0 done
+#      comment). bos-nightly is reserved for future scheduled builds and is never touched here.
 #
 # Signing: the SAME secrets rust-release.yml uses, TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, the
 # private half of plugins.updater.pubkey in app/src-tauri/tauri.conf.json, which is the key the catalog pins. They exist
@@ -139,3 +140,15 @@ jobs:
           files=(dist-bosapp/*.bosapp dist-bosapp/*.bosapp.sig dist-bosapp/feed.json dist-bosapp/catalog-entry.json dist-bosapp/public.key)
           gh release create "$tag" "${files[@]}" --prerelease --latest=false --title "Infantry AI $v (BattalionOS app)" \
             --notes "$(python3 -c 'import json;print(json.load(open("dist-bosapp/feed.json")).get("notes",""))')"
+      - name: Prerelease channel feed (bos-prerelease; the stable channel stays a by-hand promote)
+        run: |
+          set -euo pipefail
+          v="$(python3 -c 'import json;print(json.load(open("dist-bosapp/feed.json"))["version"])')"
+          mkdir -p "$RUNNER_TEMP/channel"
+          python3 scripts/bos-feed.py --assets dist-bosapp --repo "$GITHUB_REPOSITORY" --out "$RUNNER_TEMP/channel/feed.json" --pubkey "$(cat dist-bosapp/public.key)"
+          ch=bos-prerelease
+          if ! gh release view "$ch" >/dev/null 2>&1; then
+            gh release create "$ch" --prerelease --latest=false --title "Infantry AI prerelease channel (BattalionOS app)" --notes "The prerelease channel feed of the Infantry AI BattalionOS app. Moved by os-app-release on every os-app tag."
+          fi
+          gh release upload "$ch" "$RUNNER_TEMP/channel/feed.json" --clobber
+          echo "bos-prerelease feed -> $v"
