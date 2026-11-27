@@ -22,3 +22,21 @@ describe("toAgent display name", () => {
     expect(toAgent(view(null), {}, {}).name).toBe("Pm");
   });
 });
+
+// STUCK-RUNNING-1: an idle session with background tasks reads idle, never Running.
+describe("toAgent background at rest", () => {
+  const bgView = (state: string, turnActive: boolean) =>
+    ({
+      record: { id: "s-1", provider: "claude", workingDir: "/w", spawnedAt: 0, lastHeartbeat: 0, state, turnActive, backgroundTasks: [{ id: "b1", label: "sleep 600", startedAt: 0 }, { id: "m1", label: "Monitor", startedAt: 0 }] },
+      items: [], cursor: 0, status: null, usage: {}, lastLine: "", activityAt: 0, activityLog: [],
+    }) as unknown as SessionView;
+  it("idle with tasks: status idle, line 'idle · 2 background'", () => {
+    const a = toAgent(bgView("IDLE", false), {}, {});
+    expect(a.status).toBe("idle");
+    expect(a.statusLine).toBe("idle · 2 background");
+    expect(a.backgroundTasks?.length).toBe(2);
+  });
+  it("a running turn still reads working", () => {
+    expect(toAgent(bgView("BUSY", true), {}, {}).status).toBe("working");
+  });
+});

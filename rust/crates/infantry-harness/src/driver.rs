@@ -419,7 +419,8 @@ impl HarnessDriver {
     /// Bookkeeping over a batch: the resume token, the turn state, interrupts reported as such.
     fn account(&mut self, mut out: Vec<HarnessEvent>) -> Vec<HarnessEvent> {
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
-        let changes: Vec<HarnessEvent> = out.iter().flat_map(|e| self.tracker.observe(e, now)).map(HarnessEvent::Background).collect();
+        let mut changes: Vec<HarnessEvent> = out.iter().flat_map(|e| self.tracker.observe(e, now)).map(HarnessEvent::Background).collect();
+        changes.extend(self.tracker.expire(now).into_iter().map(HarnessEvent::Background));
         out.extend(changes);
         for e in out.iter_mut() {
             match e {

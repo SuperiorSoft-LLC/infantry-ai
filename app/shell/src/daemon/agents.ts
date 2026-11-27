@@ -36,7 +36,10 @@ function statusLine(v: SessionView): string {
   if (isRunning(r) && st?.runActivity?.label) return st.runActivity.label;
   if (r.progress?.label) return r.progress.label;
   if (r.lastError && r.state === "FAILED") return r.lastError;
-  return isRunning(r) ? (st?.runActivity?.state ?? "working") : r.state.toLowerCase().replace(/_/g, " ");
+  if (isRunning(r)) return st?.runActivity?.state ?? "working";
+  // STUCK-RUNNING-1: at rest with tasks of the CLI's own still going reads idle, never Running.
+  const bg = r.backgroundTasks?.length ?? 0;
+  return bg && r.state === "IDLE" ? `idle · ${bg} background` : r.state.toLowerCase().replace(/_/g, " ");
 }
 
 export function ago(ms: number, now = Date.now()): string {

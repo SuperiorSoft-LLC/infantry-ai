@@ -37,6 +37,8 @@ pub struct BackgroundTracker {
     running: Vec<BackgroundTask>,
     /// Task ids whose end was seen: an end that arrives before the start (out of order) must not leave a ghost.
     ended: HashSet<String>,
+    /// Task id -> the time it expires (a Monitor states "expires in 30m"); the CLI sends no notice for that end.
+    expires: HashMap<String, i64>,
 }
 
 impl BackgroundTracker {
@@ -46,6 +48,21 @@ impl BackgroundTracker {
 
     pub fn count(&self) -> usize {
         self.running.len()
+    }
+
+    /// Drops the tasks whose stated expiry has passed (STUCK-RUNNING-1: a Monitor that expired must not stay a ghost).
+    pub fn expire(&mut self, now: i64) -> Vec<BackgroundChange> {
+        let due: Vec<String> = self.expires.iter().filter(|(_, at)| **at <= now).map(|(id, _)| id.clone()).collect();
+        let mut out = Vec::new();
+        for id in due {
+            self.expires.remove(&id);
+            if let Some(at) = self.running.iter().position(|t| t.id == id) {
+                let task = self.running.remove(at);
+                let ran_ms = (now - task.started_at).max(0);
+                out.push(BackgroundChange::Finished { task, status: "expired".into(), exit_code: None, ran_ms });
+            }
+        }
+        out
     }
 
     /// Feeds one event; returns the changes it caused (usually none).
@@ -66,6 +83,9 @@ impl BackgroundTracker {
                 if self.ended.remove(&task_id) || self.running.iter().any(|t| t.id == task_id) {
                     return Vec::new();
                 }
+                if let Some(ms) = expiry_in(output) {
+                    self.expires.insert(task_id.clone(), now + ms);
+                }
                 let task = BackgroundTask { id: task_id, label, started_at: now };
                 self.running.push(task.clone());
                 vec![BackgroundChange::Started(task)]
@@ -76,6 +96,7 @@ impl BackgroundTracker {
                     match self.running.iter().position(|t| &t.id == id) {
                         Some(at) => {
                             let task = self.running.remove(at);
+                            self.expires.remove(id);
                             let ran_ms = (now - task.started_at).max(0);
                             out.push(BackgroundChange::Finished { task, status: status.clone(), exit_code: *exit_code, ran_ms });
                         }
@@ -109,6 +130,21 @@ fn task_id_in(output: &str) -> Option<String> {
     let at = ["with ID:", "task_id:", "(task "].iter().find_map(|m| output.find(m).map(|i| i + m.len()))?;
     let id: String = output[at..].trim_start().chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').collect();
     Some(id).filter(|s| !s.is_empty())
+}
+
+/// The lifetime a result states, in ms: "expires in 30m" / "45s" / "2h" (None when it states none).
+fn expiry_in(output: &str) -> Option<i64> {
+    let at = output.find("expires in ")? + "expires in ".len();
+    let rest = &output[at..];
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    let n: i64 = digits.parse().ok()?;
+    let unit = match rest[digits.len()..].chars().next()? {
+        's' => 1_000,
+        'm' => 60_000,
+        'h' => 3_600_000,
+        _ => return None,
+    };
+    Some(n * unit)
 }
 
 /// "turn ended, 2 background tasks still running: a, b" (None when nothing runs).
@@ -172,6 +208,26 @@ mod tests {
         assert!(matches!(&c[0], BackgroundChange::Started(k) if k.id == "bbshdwne2"));
         t.observe(&notice(&["bbshdwne2"], "stopped"), 2);
         assert_eq!(t.count(), 0);
+    }
+
+    #[test]
+    fn a_monitor_leaves_at_its_stated_expiry() {
+        let mut t = BackgroundTracker::default();
+        let mon = HarnessEvent::ToolStarted { id: "toolu_m".into(), name: "Monitor".into(), input: r#"{"command":"sleep 9"}"#.into() };
+        t.observe(&mon, 0);
+        t.observe(&result("toolu_m", "Monitor started (task m1, expires in 30m). You will be notified"), 1_000);
+        assert!(t.expire(1_000 + 29 * 60_000).is_empty());
+        assert_eq!(t.count(), 1);
+        let c = t.expire(1_000 + 30 * 60_000);
+        assert!(matches!(&c[0], BackgroundChange::Finished { task, status, .. } if task.id == "m1" && status == "expired"));
+        assert_eq!(t.count(), 0);
+    }
+
+    #[test]
+    fn expiry_units_parse() {
+        assert_eq!(expiry_in("(task x, expires in 45s)"), Some(45_000));
+        assert_eq!(expiry_in("expires in 2h"), Some(7_200_000));
+        assert_eq!(expiry_in("running in background with ID: b1"), None);
     }
 
     #[test]
