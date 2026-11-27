@@ -9,6 +9,7 @@
 pub mod host_stats;
 pub mod mem;
 pub mod prep;
+pub mod proctable;
 pub mod tools;
 
 use crate::sessions::{now_ms, Daemon};
@@ -300,6 +301,12 @@ pub struct RunManager {
     project_dir: Arc<dyn Fn(&str) -> Option<PathBuf> + Send + Sync>,
     daemon: Arc<Daemon>,
     ext: OnceLock<prep::Extras>,
+    /// ROGUE-PROC-1: descendants once seen under a tracked pid (so an orphan stays attributed).
+    seen: Mutex<std::collections::HashMap<u32, proctable::Seen>>,
+    /// `limits.processes.rogueAfterMinutes` (0 = off): a descendant running longer is rogue.
+    rogue_after_min: std::sync::atomic::AtomicU64,
+    /// `limits.processes.autoReapMinutes` (0 = off, the default): reap rogues older than this on each tick.
+    auto_reap_min: std::sync::atomic::AtomicU64,
 }
 
 fn env_of(ty: &str, data: String) -> Envelope {
@@ -324,6 +331,14 @@ fn command_for(argv: &[String], cwd: PathBuf, env: Vec<(String, String)>) -> pty
 /// process is never rogue by idleness (Kotlin `ProcessWatch.rogueReason`).
 fn rogue_reason(s: &infantry_protocol::session::SessionRecord) -> Option<String> {
     (s.is_process_alive && s.state == infantry_protocol::session::SessionState::Exited).then(|| "session ended (EXITED)".to_string())
+}
+
+/// Average CPU % over a process's life (its CPU time over its age, across all cores); None when either is unknown.
+fn cpu_avg(pid: i64, started_ms: Option<i64>) -> Option<f64> {
+    let age = now_ms() - started_ms?;
+    let cpu = mem::cpu_time_ms(u32::try_from(pid).ok()?)? as f64;
+    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1) as f64;
+    (age > 0).then(|| (cpu * 100.0 / age as f64 / cores * 10.0).round() / 10.0)
 }
 
 /// Splits a shell line into argv (quotes and backslash-escaped quotes respected), for the tools' `command`.
@@ -371,6 +386,9 @@ impl RunManager {
             project_dir,
             daemon,
             ext: OnceLock::new(),
+            seen: Mutex::new(Default::default()),
+            rogue_after_min: Default::default(),
+            auto_reap_min: Default::default(),
         })
     }
 
@@ -727,18 +745,67 @@ impl RunManager {
                 let reason = rogue_reason(&s);
                 out.push(json!({
                     "pid": pid, "command": cmd, "sessionId": s.id, "startedAt": s.last_turn_at, "memoryMb": u32::try_from(pid).ok().and_then(mem::process_mb),
-                    "rogue": reason.is_some(), "reason": reason, "inferred": false, "cpuPercent": null, "stuck": null,
+                    "rogue": reason.is_some(), "reason": reason, "inferred": false, "cpuPercent": cpu_avg(pid, s.child_started_at), "stuck": null,
+                    "kind": "agent", "ticketId": s.ticket_id, "ageMs": s.child_started_at.map(|t| now_ms() - t),
                 }));
             }
         }
+        for d in self.descendants() {
+            let p = &d.proc;
+            out.push(json!({
+                "pid": p.pid, "command": p.name, "sessionId": d.session, "ticketId": d.ticket, "startedAt": p.created_ms, "ageMs": p.created_ms.map(|t| now_ms() - t),
+                "memoryMb": mem::process_mb(p.pid), "cpuPercent": cpu_avg(i64::from(p.pid), p.created_ms), "rogue": d.rogue.is_some(), "reason": d.rogue,
+                "inferred": true, "stuck": null, "kind": d.kind, "shared": d.shared,
+            }));
+        }
         out
+    }
+
+    /// ROGUE-PROC-1: every process a tracked pid started (and orphans of ones it did), classified; protected pids excluded.
+    pub fn descendants(&self) -> Vec<proctable::Found> {
+        let table = proctable::snapshot();
+        let mut roots: Vec<proctable::Root> = self
+            .runs
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|r| !r.finished())
+            .filter_map(|r| Some(proctable::Root { pid: r.pid?, session: None, ticket: None, owner_alive: true }))
+            .collect();
+        for s in self.daemon.records() {
+            if let (Some(pid), true) = (s.child_pid.and_then(|p| u32::try_from(p).ok()), s.is_process_alive) {
+                roots.push(proctable::Root { pid, owner_alive: rogue_reason(&s).is_none(), session: Some(s.id.clone()), ticket: s.ticket_id.clone() });
+            }
+        }
+        let mut protected = proctable::ancestors(&table, std::process::id());
+        protected.extend(proctable::PROTECTED_PORTS.iter().filter_map(|p| crate::listen::listener_pid(*p)));
+        let after = self.rogue_after_min.load(std::sync::atomic::Ordering::Relaxed) as i64 * 60_000;
+        proctable::classify(&table, &roots, &mut self.seen.lock().unwrap(), &protected, now_ms(), (after > 0).then_some(after))
+    }
+
+    /// The tick: re-reads the limits, and with `autoReapMinutes` > 0 reaps rogue (never shared) descendants older than it.
+    pub fn auto_tick(self: &Arc<Self>, rogue_after_min: u64, auto_reap_min: u64) -> Vec<i64> {
+        use std::sync::atomic::Ordering::Relaxed;
+        self.rogue_after_min.store(rogue_after_min, Relaxed);
+        self.auto_reap_min.store(auto_reap_min, Relaxed);
+        if auto_reap_min == 0 {
+            return Vec::new();
+        }
+        let limit = auto_reap_min as i64 * 60_000;
+        let now = now_ms();
+        self.descendants()
+            .into_iter()
+            .filter(|d| d.rogue.is_some() && !d.shared && d.proc.created_ms.is_some_and(|c| now - c > limit))
+            .filter(|d| infantry_proc::kill_pid(d.proc.pid))
+            .map(|d| i64::from(d.proc.pid))
+            .collect()
     }
 
     pub fn report(&self) -> Value {
         let (free, total) = mem::machine_mb();
         json!({
             "freeMb": free, "totalMb": total, "floorMb": self.limits.floor_mb, "underPressure": free.is_some_and(|f| f < self.limits.floor_mb),
-            "autoReap": false, "tracked": self.processes(), "unattributed": [],
+            "autoReap": self.auto_reap_min.load(std::sync::atomic::Ordering::Relaxed) > 0, "autoReapMinutes": self.auto_reap_min.load(std::sync::atomic::Ordering::Relaxed), "tracked": self.processes(), "unattributed": [],
         })
     }
 
@@ -771,6 +838,18 @@ impl RunManager {
                 Err(e) => refused.push(format!("pid {pid}: {e}")),
             }
         }
+        for d in self.descendants() {
+            if d.rogue.is_none() {
+                continue;
+            }
+            if d.shared {
+                refused.push(format!("pid {}: shared build daemon, reap it by pid if no job uses it", d.proc.pid));
+            } else if infantry_proc::kill_pid(d.proc.pid) {
+                reaped.push(i64::from(d.proc.pid));
+            } else {
+                refused.push(format!("pid {}: could not be stopped", d.proc.pid));
+            }
+        }
         (reaped, (!refused.is_empty()).then(|| refused.join("; ")))
     }
 
@@ -787,7 +866,11 @@ impl RunManager {
                 self.daemon.stop_session(&s.id, "processes_reap")?;
                 Ok(vec![pid])
             }
-            None => Err(format!("pid {pid} is not a process this daemon started")),
+            None => match self.descendants().into_iter().find(|d| i64::from(d.proc.pid) == pid) {
+                Some(d) if d.rogue.is_some() => infantry_proc::kill_pid(d.proc.pid).then(|| vec![pid]).ok_or_else(|| format!("pid {pid} could not be stopped")),
+                Some(_) => Err(format!("pid {pid} is not rogue: its owner is still live (or it is protected)")),
+                None => Err(format!("pid {pid} is not a process this daemon started")),
+            },
         }
     }
 

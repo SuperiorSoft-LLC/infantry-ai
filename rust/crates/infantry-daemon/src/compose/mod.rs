@@ -1029,6 +1029,10 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             loop {
                 let secs = st.app(crate::run::host_stats::INTERVAL_SETTING).and_then(|v| v.as_u64()).unwrap_or(crate::run::host_stats::INTERVAL_DEFAULT_SECS);
                 tokio::time::sleep(Duration::from_secs(if secs == 0 { 5 } else { secs.min(3600) })).await;
+                // ROGUE-PROC-1: the rogue age limit and the opt-in auto-reap (both 0 = off, the default).
+                let (after, auto) = (st.app("limits.processes.rogueAfterMinutes").and_then(|v| v.as_u64()).unwrap_or(0), st.app("limits.processes.autoReapMinutes").and_then(|v| v.as_u64()).unwrap_or(0));
+                let r2 = r.clone();
+                let _ = tokio::task::spawn_blocking(move || r2.auto_tick(after, auto)).await;
                 if secs > 0 {
                     let r = r.clone();
                     cpu = tokio::task::spawn_blocking(move || {

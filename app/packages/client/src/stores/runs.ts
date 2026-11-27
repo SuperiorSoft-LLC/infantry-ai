@@ -81,6 +81,16 @@ export interface TrackedProcess {
   memoryMb?: number | null;
   rogue?: boolean;
   reason?: string | null;
+  /** ROGUE-PROC-1: agent, run, test daemon, dev server, build, shell or child. */
+  kind?: string | null;
+  ticketId?: string | null;
+  ageMs?: number | null;
+  /** Average CPU % over the process's life. */
+  cpuPercent?: number | null;
+  /** True for a descendant found under a tracked pid (not started by the daemon directly). */
+  inferred?: boolean;
+  /** A shared build daemon: flagged, never killed by Clean up. */
+  shared?: boolean;
 }
 
 export interface ProcessesReport {

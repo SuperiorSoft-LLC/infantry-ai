@@ -48,6 +48,8 @@ uses when the key is unset, where it sits next to the key; otherwise read the co
 | `limits.mcp.toolsWatchSeconds` | `5` | `rust/crates/infantry-cli/src/env.rs` |
 | `limits.plugins.maxDeclaredTimeoutMs` |  | `rust/crates/infantry-daemon/src/compose/plugins.rs` |
 | `limits.plugins.toolTimeoutMs` | `60_000` | `rust/crates/infantry-cli/src/env.rs` |
+| `limits.processes.autoReapMinutes` |  | `rust/crates/infantry-daemon/src/compose/mod.rs` |
+| `limits.processes.rogueAfterMinutes` |  | `rust/crates/infantry-daemon/src/compose/mod.rs` |
 | `limits.runners.addHostTimeoutSec` | `5` | `rust/crates/infantry-cli/src/cli/cmd_runner.rs` |
 | `limits.runners.auditShown` | `50` | `rust/crates/infantry-cli/src/cli/cmd_runner.rs` |
 | `limits.runners.checkGitSec` | `15` | `rust/crates/infantry-cli/src/cli/cmd_runner.rs` |

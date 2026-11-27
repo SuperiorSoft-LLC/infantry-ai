@@ -290,12 +290,15 @@ function ProcessRow({ p }: { p: TrackedProcess }) {
       <span className="min-w-0 flex-1 truncate font-mono" title={p.command}>
         {p.command}
       </span>
-      {p.sessionId && <Chip className="h-5 text-[10px]">{p.sessionId.slice(0, 8)}</Chip>}
+      {p.kind && <Chip className="h-5 text-[10px]">{p.kind}</Chip>}
+      {p.sessionId && <span title={p.ticketId ?? undefined}><Chip className="h-5 text-[10px]">{p.sessionId.slice(0, 8)}</Chip></span>}
+      {p.cpuPercent != null && <span className="shrink-0 text-muted-foreground">{p.cpuPercent}% CPU</span>}
+      {p.ageMs != null && <span className="shrink-0 text-muted-foreground">{Math.round(p.ageMs / 60_000)} min</span>}
       {p.memoryMb != null && <span className="shrink-0 text-muted-foreground">{Math.round(p.memoryMb)} MB</span>}
       {p.rogue && (
         <span title={p.reason ?? undefined}>
           <Chip tone="red" className="h-5 text-[10px]">
-            rogue
+            {p.shared ? "rogue · shared" : "rogue"}
           </Chip>
         </span>
       )}
@@ -308,17 +311,33 @@ function ProcessRow({ p }: { p: TrackedProcess }) {
 
 export function ProcessesPanel() {
   const answer = useRuns((s) => s.processes);
+  const [confirm, setConfirm] = useState(false);
   useEffect(() => runsStore().getState().listProcesses(), []);
   const r = answer?.report;
   if (!r) return <EmptyState icon={<Cpu className="size-6" />} title="No process report yet" />;
-  const rogue = [...r.tracked, ...r.unattributed].some((p) => p.rogue);
+  const rogues = [...r.tracked, ...r.unattributed].filter((p) => p.rogue);
+  const rogue = rogues.length > 0;
   return (
     <div className="space-y-3">
+      <AppDialog
+        open={confirm}
+        onOpenChange={setConfirm}
+        title={`Clean up ${rogues.filter((p) => !p.shared).length} rogue process(es)?`}
+        description="Each is stopped by PID with its process tree. Only processes Infantry started; shared build daemons are kept."
+        footer={
+          <div className="flex w-full justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setConfirm(false)}>Cancel</Button>
+            <Button variant="destructive" size="sm" onClick={() => { setConfirm(false); runsStore().getState().reapRogue(); }}>Clean up</Button>
+          </div>
+        }
+      >
+        <ul className="space-y-1">{rogues.map((p) => <li key={p.pid} className="font-mono text-xs">{p.pid} · {p.kind ?? "process"} · {p.command}{p.shared ? " (kept: shared)" : ""} · {p.reason}</li>)}</ul>
+      </AppDialog>
       <PanelCard
         title="Memory"
         action={
-          <Button variant="destructive" size="xs" disabled={!rogue} onClick={() => runsStore().getState().reapRogue()}>
-            Reap rogue
+          <Button variant="destructive" size="xs" disabled={!rogue} onClick={() => setConfirm(true)}>
+            Clean up
           </Button>
         }
       >
