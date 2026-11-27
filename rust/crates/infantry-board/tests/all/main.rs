@@ -3,6 +3,7 @@
 //! One integration-test binary for infantry-board: each module is one former `tests/<name>.rs` file, so the crate links once.
 
 mod common;
+mod archive;
 mod board;
 mod features;
 mod kotlin_xcheck;

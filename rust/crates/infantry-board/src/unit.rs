@@ -34,6 +34,8 @@ pub const FRAMES: &[&str] = &[
     "epic_save",
     "epic_list",
     "epic_base",
+    "archive_query",
+    "archive_apply",
 ];
 
 /// Every frame of a unit with the work half ([`FRAMES`] plus the work frames).
@@ -49,6 +51,8 @@ pub const ALL_FRAMES: &[&str] = &[
     "epic_save",
     "epic_list",
     "epic_base",
+    "archive_query",
+    "archive_apply",
     "ticket_start",
     "ticket_start_next",
     "ticket_assign",
@@ -212,6 +216,12 @@ impl FrameUnit for BoardUnit {
             "epic_list" => {
                 let es = self.board.epics(&env.data).map_err(r)?;
                 Ok(answer(false, Envelope::new("epics", serde_json::to_string(&es).expect("epics json"))))
+            }
+            // ARCHIVE-1: answered directly with `archive_report`; a move also pushes the board (`tickets`).
+            "archive_query" | "archive_apply" => {
+                let req: crate::archive::ArchiveRequest = serde_json::from_str(&env.data).map_err(|e| r(OrchError::Refused(format!("{frame} payload: {e}"))))?;
+                let rep = if frame == "archive_query" { self.board.archive_query(&req) } else { self.board.archive_apply(&req, &publish) }.map_err(r)?;
+                Ok(answer(false, rep.envelope()))
             }
             other => Err(Refusal(format!("{other} refused: not a board frame"))),
         }

@@ -107,7 +107,7 @@ pub struct RunRow {
     pub detail: Option<String>,
 }
 
-const COLUMNS: &str = "id, title, description, ticket_type, status, position, wont_fix, created_at, updated_at, agent_id, \
+pub(crate) const COLUMNS: &str = "id, title, description, ticket_type, status, position, wont_fix, created_at, updated_at, agent_id, \
     provider, model, use_worktree, worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, \
     project_id, epic_id, branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, \
     weight, context_limit, effort, queued_agent, queue_rank, runner, mcp";
@@ -129,7 +129,7 @@ fn ids_text(ids: &[String]) -> String {
     serde_json::to_string(ids).expect("string list")
 }
 
-fn row_of(r: &Row<'_>) -> rusqlite::Result<TicketRow> {
+pub(crate) fn row_of(r: &Row<'_>) -> rusqlite::Result<TicketRow> {
     Ok(TicketRow {
         id: r.get(0)?,
         title: r.get(1)?,

@@ -97,6 +97,10 @@ pub struct WorkerFailed<'a> {
 /// profiles, no sessions, no settings), which is Kotlin's `TicketBoard` with its defaults.
 pub trait BoardEnv: Send + Sync {
     fn now_ms(&self) -> i64;
+    /// ARCHIVE-1: a JSON snapshot of a project, kept on each ticket archived from it (None = none kept).
+    fn project_json(&self, _project_id: &str) -> Option<String> {
+        None
+    }
     fn new_ticket_id(&self) -> String {
         format!("ticket-{}", &uuid::Uuid::new_v4().to_string()[..8])
     }

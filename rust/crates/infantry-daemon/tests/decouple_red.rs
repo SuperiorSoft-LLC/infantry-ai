@@ -38,6 +38,8 @@ const ORCHESTRATION_FRAMES: &[&str] = &[
     "epic_save",
     "epic_list",
     "epic_base",
+    "archive_query",
+    "archive_apply",
     // the board's work half (infantry-board/src/unit.rs ALL_FRAMES): ticket starts, agent queues, the done protocol
     "ticket_start",
     "ticket_start_next",
@@ -61,7 +63,7 @@ const ORCHESTRATION_FRAMES: &[&str] = &[
 /// An orchestrator tool (infantry-board/src/tools.rs and the pod tool in compose/agent_tools.rs).
 fn is_orchestration_tool(name: &str) -> bool {
     ["infantry_ticket_", "infantry_epic_", "infantry_pod_"].iter().any(|p| name.starts_with(p))
-        || ["infantry_board", "infantry_agent_queue", "infantry_agent_switch"].contains(&name)
+        || ["infantry_board", "infantry_archive", "infantry_agent_queue", "infantry_agent_switch"].contains(&name)
 }
 
 /// An orchestrator table of the shared schema (tickets.sq, epics.sq, pods.sq, pipeline.sq, archive.sq, ticket_*.sq).

@@ -192,6 +192,9 @@ impl BoardEnv for DaemonBoardEnv {
     fn now_ms(&self) -> i64 {
         super::now_ms()
     }
+    fn project_json(&self, project_id: &str) -> Option<String> {
+        self.projects.store.get(project_id).ok().and_then(|p| serde_json::to_string(&p).ok())
+    }
     fn agents(&self) -> Vec<BoardAgent> {
         self.profiles
             .agents(None)

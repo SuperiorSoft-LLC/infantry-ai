@@ -295,6 +295,12 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         },
     });
     let dispatcher = Dispatcher::new(board.clone(), workspaces, launcher, bus.clone());
+    {
+        let bus = bus.clone();
+        board.spawn_auto_archive(move |e| {
+            bus.publish(e);
+        });
+    }
     let orchestrator = Arc::new(LocalOrchestrator::with_dispatcher(dispatcher.clone(), bus.clone()));
 
     // ---- mail + notifications -------------------------------------------------------------------------------

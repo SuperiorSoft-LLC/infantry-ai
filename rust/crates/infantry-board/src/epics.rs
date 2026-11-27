@@ -35,7 +35,7 @@ fn row_of(r: &Row<'_>) -> rusqlite::Result<Epic> {
     })
 }
 
-fn get_row(c: &Connection, id: &str) -> rusqlite::Result<Option<Epic>> {
+pub(crate) fn get_row(c: &Connection, id: &str) -> rusqlite::Result<Option<Epic>> {
     c.query_row("SELECT * FROM epics WHERE id = ?1", [id], row_of).optional()
 }
 

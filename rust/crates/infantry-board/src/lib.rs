@@ -12,6 +12,7 @@
 //! `ticket_start_next`, a move into in_progress), lane caps, routing rules, the start brief ([`brief`]) and the done
 //! protocol. Worktrees and workers come through the orchestrator-api `WorkspaceProvider` and `SessionLauncher` traits;
 //! hook points are named events on the bus (`infantry_orchestrator_api::hooks`).
+pub mod archive;
 pub mod board;
 pub mod brief;
 pub mod comments;

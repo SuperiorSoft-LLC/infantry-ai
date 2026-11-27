@@ -477,6 +477,7 @@ pub fn call(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> Opti
             }
             Ok(out.join("\n"))
         })(),
+        "infantry_ticket_archive" | "infantry_ticket_restore" | "infantry_archive" => archive_tool(ctx, name, a, who),
         _ => return None,
     };
     Some(r)
@@ -512,4 +513,34 @@ pub fn display_stamp(epoch_ms: i64) -> String {
         Some(t) => t.format("%Y-%m-%d %H:%M %:z").to_string(),
         None => epoch_ms.to_string(),
     }
+}
+
+/// ARCHIVE-1: `infantry_ticket_archive` / `infantry_ticket_restore` (PM and owner) and `infantry_archive` (read), each one
+/// `archive_apply` / `archive_query` request answered with the report's text (Kotlin `ArchiveTools`).
+fn archive_tool(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> Result<String, String> {
+    use crate::archive::ArchiveRequest;
+    let read = name == "infantry_archive";
+    if !read && !who.privileged() {
+        return Err(format!("{name} is for the PM and the owner"));
+    }
+    let op = match name {
+        "infantry_ticket_archive" => "archive".to_string(),
+        "infantry_ticket_restore" => "restore".to_string(),
+        _ => s(a, "op").unwrap_or_else(|| "list".into()),
+    };
+    let req = ArchiveRequest {
+        op,
+        ids: list(a, "ids").unwrap_or_default(),
+        project_id: s(a, "projectId"),
+        epic_id: s(a, "epicId"),
+        status: s(a, "status"),
+        older_than_days: i(a, "olderThanDays"),
+        text: s(a, "text"),
+        limit: i(a, "limit"),
+        offset: i(a, "offset"),
+        dry_run: b(a, "dryRun"),
+    };
+    let board = ctx.work.board();
+    let rep = if read { board.archive_query(&req) } else { board.archive_apply(&req, ctx.publish) }.map_err(err)?;
+    Ok(rep.text)
 }
