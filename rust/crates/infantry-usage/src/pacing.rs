@@ -67,6 +67,16 @@ pub fn judge(rule: &PacingRule, w: &LimitWindow, now: i64) -> Option<Judgement> 
     let percent = w.percent?;
     let resets = match w.resets_at {
         Some(r) if rule.mode == MODE_PACE && w.window_minutes > 0 => r,
+        _ if rule.mode == MODE_PACE => {
+            // Pace mode without reset / length data: the bands judge, but never above maxWorkers.
+            let bands = allowance(rule, Some(percent)).unwrap_or(0);
+            let missing = if w.resets_at.is_none() { "no reset time" } else { "no window length" };
+            return Some(Judgement {
+                allowance: bands.min(rule.max_workers.max(1)),
+                projected: None,
+                reason: format!("bands fallback ({missing}), capped at maxWorkers {}", rule.max_workers.max(1)),
+            });
+        }
         _ => return Some(Judgement { allowance: allowance(rule, Some(percent)).unwrap_or(0), projected: None, reason: "bands".into() }),
     };
     let window_ms = w.window_minutes as f64 * 60_000.0;
@@ -88,6 +98,11 @@ pub fn judge(rule: &PacingRule, w: &LimitWindow, now: i64) -> Option<Judgement> 
     } else {
         Judgement { allowance: by_projection, projected: Some(projected), reason: format!("projected {}% at reset", fmt_num(projected)) }
     })
+}
+
+/// In pace mode no fallback (bands, unknown reading) may allow more than `maxWorkers`.
+fn cap_pace(rule: &PacingRule, n: i32) -> i32 {
+    if rule.mode == MODE_PACE { n.min(rule.max_workers.max(1)) } else { n }
 }
 
 /// Validates a rule (setting `usage.pacing`); the error names the problem.
@@ -220,9 +235,10 @@ fn meter_usage(meter: &str, live: Option<&ProviderLimits>, manual: Option<&Manua
     // No reading although one was expected (not read yet, or the read failed and nothing is kept): fail closed to the
     // safe allowance. A provider that is simply not signed in has no reading to wait for and stays unjudged.
     let expected = live.is_some_and(|l| l.reason.as_deref().is_none_or(|r| r == crate::limits::reason::NOT_READ_YET || crate::limits::reason::is_transient(r)));
-    let closed = if rule.enabled && percent.is_none() && expected { unknown } else { None };
-    let rule_allowance = if closed.is_some() { closed } else if !rule.enabled || percent.is_none() { None } else { judgement.map(|j| j.allowance).or_else(|| allowance(rule, percent)) };
-    let reasoning = rule_allowance.map(|_| judgement.map(|j| j.reason.clone()).unwrap_or_else(|| "bands".into()));
+    let closed = if rule.enabled && percent.is_none() && expected { unknown.map(|u| cap_pace(rule, u)) } else { None };
+    let rule_allowance = if closed.is_some() { closed } else if !rule.enabled || percent.is_none() { None } else { judgement.map(|j| j.allowance).or_else(|| allowance(rule, percent).map(|a| cap_pace(rule, a))) };
+    let fallback = if rule.mode == MODE_PACE { format!("bands fallback, capped at maxWorkers {}", rule.max_workers.max(1)) } else { "bands".into() };
+    let reasoning = rule_allowance.map(|_| judgement.map(|j| j.reason.clone()).unwrap_or(fallback));
     let allowance_now = if let Some(o) = ov { o.workers } else { rule_allowance };
     let stale = live.is_some_and(|l| l.stale);
     let warning = if ov.is_some() {
@@ -421,6 +437,12 @@ mod tests {
         let j = judge(&rule, &w("Current week", 10_080, 55.0, 84 * H, 0), 0).unwrap();
         assert_eq!((j.allowance, j.projected), (3, Some(110.0)));
         assert_eq!(judge(&rule, &w("Current week", 10_080, 96.0, 1, 0), 0).unwrap().reason, "at 96% (hard stop 95%)");
+        let mut no_reset = w("Current week", 10_080, 10.0, H, 0);
+        no_reset.resets_at = None;
+        let one = PacingRule { max_workers: 1, ..rule.clone() };
+        let j = judge(&one, &no_reset, 0).unwrap();
+        assert_eq!(j.allowance, 1, "pace + maxWorkers 1 + no reset time must not fall back to the 3-worker bands");
+        assert!(j.reason.starts_with("bands fallback (no reset time)"), "{}", j.reason);
         let bands = PacingRule { mode: MODE_BANDS.into(), ..rule };
         assert_eq!(judge(&bands, &w("x", 300, 70.0, H, 0), 0).unwrap().allowance, 2);
     }
