@@ -13,6 +13,7 @@ import { AppWindow, ExternalLink } from "lucide-react";
 import { useNativePopout } from "./use-native-popout";
 import { IconButton } from "@infantry/ui";
 import { useUi } from "@/state/ui-state";
+import { ReportChip } from "./chat-extras";
 
 const tokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 
@@ -32,6 +33,7 @@ export function SessionHeader({ agent }: { agent: Agent }) {
           <span className="font-mono text-xs text-muted-foreground">{agent.sessionId}</span>
           <Chip tone="red">{agent.roleId}</Chip>
           <Chip tone={agent.status === "working" ? "blue" : "neutral"}>{agent.status}</Chip>
+          <ReportChip report={rec?.report} />
         </div>
         <div className="truncate font-mono text-xs text-muted-foreground">{agent.statusLine}</div>
       </div>

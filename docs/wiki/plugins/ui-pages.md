@@ -44,6 +44,7 @@ Acme_Hello/
 | `settings.card` | a card on the Settings page | none |
 | `plugin.config` | a card in this plugin's own settings, under Plugins | `{ plugin }` |
 | `card.badge` | a badge on every board ticket card | `{ ticket: {id, title, status, ...} }` |
+| `chat.message.actions` | small buttons under each chat message (agent text, owner prompt, mail) | `{ sessionId, message: {id, kind, text, from?} }` |
 | `layout` | a whole-window layout the user can pick; `"defaultLayout": true` makes it the default of a new device | `LayoutViewProps` (the shell is handed in as `Shell`) |
 
 ## The entry

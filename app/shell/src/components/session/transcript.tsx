@@ -12,10 +12,13 @@ import { useShallow } from "zustand/react/shallow";
 import { CHAT_SEARCH_EVENT, mergeAutomation, searchItems, type AutomationItem, type PendingSend, type TranscriptItem } from "@infantry/client";
 import { EmptyState, IconButton, Input, cn } from "@infantry/ui";
 import type { Agent } from "@/mock/types";
-import { useDaemon } from "@/daemon/daemon";
+import { localMode, useDaemon } from "@/daemon/daemon";
 import { AgentAvatar } from "@/components/agents/agent-avatar";
 import { useAutomationItems } from "@/daemon/use-timeline";
 import { AutomationCard, CommsCard, ThinkingSpinner, TranscriptItemView, timeOf } from "./transcript-items";
+import { EmptyPaneActions, MessageActions, TodoBox, paneActionOf } from "./chat-extras";
+import { sessionActions } from "./session-actions";
+import { useUi } from "@/state/ui-state";
 
 /** Kinds that start an agent turn and so carry the avatar in the gutter. */
 const startsTurn = new Set<TranscriptItem["kind"]>(["thinking", "text", "note"]);
@@ -42,12 +45,13 @@ const AutoRow = memo(function AutoRow({ item }: { item: AutomationItem }) {
   );
 });
 
-const ItemRow = memo(function ItemRow({ item, avatar }: { item: TranscriptItem; avatar: Agent }) {
+const ItemRow = memo(function ItemRow({ item, avatar, sessionId }: { item: TranscriptItem; avatar: Agent; sessionId: string }) {
   return (
     <div className="grid grid-cols-[2.5rem_1fr] gap-2">
       <div>{startsTurn.has(item.kind) ? <AgentAvatar agent={avatar} size="sm" showStatus={false} /> : null}</div>
       <div className="min-w-0">
         <TranscriptItemView item={item} />
+        <MessageActions sessionId={sessionId} item={item} />
       </div>
     </div>
   );
@@ -87,6 +91,10 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
   // The avatar only reads hue and role: keep one object per session so rows do not re-render on every status change.
   const avatar = useMemo(() => agent, [agent.id, agent.hue, agent.roleId]); // eslint-disable-line react-hooks/exhaustive-deps
   const autos = useAutomationItems(sessionId);
+  const todos = useDaemon((s) => s.sessions[sessionId]?.todos);
+  const record = useDaemon((s) => s.sessions[sessionId]?.record);
+  const spawnWith = useDaemon((s) => s.spawnWith);
+  const ui = useUi();
   const rows = useMemo<Row[]>(
     () => [
       ...mergeAutomation<TranscriptItem & { at?: number }>(items ?? [], autos).map((r): Row => (r.auto ? { key: `auto:${r.auto.id}`, auto: r.auto } : { key: r.item.id, item: r.item })),
@@ -180,12 +188,28 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
   if (rows.length === 0) {
     return (
       <div className="grid flex-1 place-items-center p-6">
-        <EmptyState icon={<MessageSquareDashed className="size-7" />} title="No output yet" hint="Send a prompt to start this session." />
+        <EmptyState
+          icon={<MessageSquareDashed className="size-7" />}
+          title="No output yet"
+          hint="Send a prompt to start this session."
+          action={
+            <EmptyPaneActions
+              action={paneActionOf(record, localMode)}
+              onStart={() => {
+                void sessionActions().restart(sessionId).catch(() => {});
+                ui.set("sessionTab", "cli");
+                setTimeout(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')?.focus(), 0);
+              }}
+              onResume={() => spawnWith({ resume: sessionId })}
+            />
+          }
+        />
       </div>
     );
   }
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
+      <TodoBox sessionId={sessionId} todos={todos} />
       {searching && (
         <div className="flex items-center gap-1.5 border-b px-4 py-1.5" role="search" aria-label="Search this chat">
           <Search className="size-3.5 text-muted-foreground" />
@@ -225,7 +249,7 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
                 className={cn("absolute top-3 right-4 left-4 pb-3", vi.index === current && "rounded-md ring-2 ring-warn/70")}
                 style={{ transform: `translateY(${vi.start}px)` }}
               >
-                {row.item ? <ItemRow item={row.item} avatar={avatar} /> : row.auto ? <AutoRow item={row.auto} /> : <PendingRow p={row.pending} onRetry={retry} />}
+                {row.item ? <ItemRow item={row.item} avatar={avatar} sessionId={sessionId} /> : row.auto ? <AutoRow item={row.auto} /> : <PendingRow p={row.pending} onRetry={retry} />}
               </li>
             );
           })}

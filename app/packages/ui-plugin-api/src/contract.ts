@@ -36,8 +36,10 @@ export const SCOPE_ATTRIBUTE: string = host.scopeAttribute;
  * - `chat.card` (PLUGIN-AGENTS-1): draws one chat card type in every chat (desktop, browser, phone). The contribution names
  *   the type it draws, `"card": "<type>"` (the type the module declares in module.json `cards`); its view gets the card
  *   as [ChatCardProps]. While the plugin is not loaded, or its view fails, the chat draws the generic card instead.
+ * - `chat.message.actions` (PARITY-AUDIT-1 #8): small buttons under one chat message (an agent's text, the owner's prompt, a
+ *   mail), drawn in every chat. The view gets the message as [ChatMessageActionProps]; draw nothing for a message you skip.
  */
-export const SLOTS = ["tab", "panel", "settings.card", "plugin.config", "card.badge", "layout", "chat.card"] as const;
+export const SLOTS = ["tab", "panel", "settings.card", "plugin.config", "card.badge", "layout", "chat.card", "chat.message.actions"] as const;
 export type Slot = (typeof SLOTS)[number];
 
 /** The modules the app lends: a plugin's imports of these are the app's own copy (one React, one UI kit). */
@@ -67,6 +69,14 @@ export interface SlotProps {
   "card.badge": { ticket: { id: string; title: string; status: string; [k: string]: unknown } };
   layout: LayoutViewProps;
   "chat.card": ChatCardProps;
+  "chat.message.actions": ChatMessageActionProps;
+}
+
+/** One chat message as a `chat.message.actions` view gets it. */
+export interface ChatMessageActionProps {
+  sessionId: string;
+  /** `text` (the agent), `user` (the owner's prompt) or `comms` (a mail into the chat). */
+  message: { id: string; kind: "text" | "user" | "comms"; text: string; from?: string };
 }
 
 /**

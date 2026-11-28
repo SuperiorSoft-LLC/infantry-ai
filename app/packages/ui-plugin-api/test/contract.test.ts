@@ -18,7 +18,7 @@ describe("the UI API contract", () => {
     expect(HOST_GLOBAL).toBe(host.global);
     expect(SCOPE_ATTRIBUTE).toBe(host.scopeAttribute);
     expect([...HOST_MODULES]).toEqual(["react", "react/jsx-runtime", "react-dom", "@infantry/ui"]);
-    expect([...SLOTS]).toEqual(["tab", "panel", "settings.card", "plugin.config", "card.badge", "layout", "chat.card"]);
+    expect([...SLOTS]).toEqual(["tab", "panel", "settings.card", "plugin.config", "card.badge", "layout", "chat.card", "chat.message.actions"]);
   });
 
   it("lets a layout hand the shell header actions and status-line entries, both optional", () => {

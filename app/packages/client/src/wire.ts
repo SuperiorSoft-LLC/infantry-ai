@@ -121,13 +121,21 @@ export interface RunActivity {
   lastEventAt: number;
 }
 
+/** One line of an agent's to-do list (`status` frame `todos`). */
+export interface TodoItem {
+  text: string;
+  /** `pending`, `in_progress` or `completed` (other words draw as pending). */
+  status: string;
+  activeText?: string | null;
+}
+
 export interface StatusPayload {
   state: SessionState;
   detail?: string;
   tool?: string | null;
   activity?: string | null;
   write?: FileWrite | null;
-  todos?: { text: string; status: string; activeText?: string | null }[] | null;
+  todos?: TodoItem[] | null;
   runActivity?: RunActivity | null;
 }
 
