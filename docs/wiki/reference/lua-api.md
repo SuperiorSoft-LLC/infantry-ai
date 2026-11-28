@@ -66,6 +66,24 @@ setting `scripting.aliases` is unset (a stored JSON object replaces it).
 usage: infantry script hook list | add <on> <script> [--payload <args json>|-] | remove <id> | save <name> --title <t> --description <d> [--tags a,b] [--scope global] [--file <path> | --body -] | list [--query <text>] [--sort used|recent|failing|unused] | delete <name> | files export|import [--scope global] [--dir <path>]   (<on>: "lane enter done", "lane exit in_progress" or an event name like ticket.commented)
 ```
 
+### Daemon events
+
+The bus events the daemon publishes for hooks (`rust/crates/infantry-daemon/src/compose/adapters.rs`; plugins and
+other units publish more, such as `ticket.*`).
+
+- `daemon.started`
+- `mail.sent`
+- `progress.failed`
+- `session.ended`
+- `session.exited`
+- `session.idle`
+- `session.mcp`
+- `session.run_ended`
+- `session.started`
+- `session.turn_ended`
+- `session.turn_started`
+- `session.woken`
+
 ## Bundled scripts
 
 The starter set every install has (`rust/crates/infantry-scripting/global-scripts/`). Each file's first lines say

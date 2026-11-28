@@ -12,6 +12,7 @@
 //! (`plugin_tools` / `plugin_tool_call`) over one tool catalog.
 
 mod adapters;
+pub use adapters::DAEMON_STARTED;
 pub mod remote_ws;
 mod agent_frames;
 mod agent_registry;
@@ -961,7 +962,14 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
 
     // ---- session life -> usage, mail wakes, the done protocol ----------------------------------------------
     daemon.observe(Arc::new(adapters::WorkObserver { dispatcher, usage: usage.clone(), mail: mail.clone(), handle: handle.clone() }));
-    daemon.observe(Arc::new(adapters::RunEvents { bus: bus.clone() }));
+    daemon.observe(Arc::new(adapters::RunEvents::new(bus.clone())));
+    // PARITY-AUDIT-1 #2: `mail.sent` for every mail sent.
+    {
+        let b = bus.clone();
+        mail.on_sent(move |m| {
+            b.emit(adapters::MAIL_SENT, adapters::mail_sent_payload(m));
+        });
+    }
 
     // ---- RUST-SESS-2: the watchdog (never fails a session) and the done-worker reaper -----------------------
     daemon.start_watchdog(Arc::new(watch::Ports { daemon: daemon.clone(), mail: mail.clone(), attention: attention.clone(), settings: settings::SettingsUnit { db: db.clone() }, prompts: prompts.clone(), bus: bus.clone(), ticket_status: Some({ let b = board.clone(); Arc::new(move |t: &str| b.get(t).ok().map(|t| t.status)) }) }), crate::sessions::WatchConfig::default());

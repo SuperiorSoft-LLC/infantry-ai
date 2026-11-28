@@ -238,13 +238,20 @@ pub fn run_checked(a: Vec<String>) -> Result<(), String> {
         daemon.health.started(bound, server::BUILD);
         daemon.set_launch(infantry_daemon::harness::launch::LaunchBase::for_daemon(bound, &state_dir, token.as_deref(), &auth::env));
         // UPDATE-LIVE-1: the first start after a prepared update resumes the agents it cut and says so in one line.
+        let mut resumed: Vec<String> = Vec::new();
         if os_runtime.is_some() {
             if let Some(r) = infantry_daemon::os_update::after_restart(&daemon) {
+                resumed = r.sessions.clone();
                 if let Some(c) = &composed {
                     let body = if r.sessions.is_empty() { String::new() } else { "Every agent continues where it left off; nothing was lost.".to_string() };
                     c.notice(&r.line(), &body, "update");
                 }
             }
+        }
+        // PARITY-AUDIT-1 #2: `daemon.started`, once the port is bound (the bundled resume-after-restart hook runs on it);
+        // the sessions the update path already resumed are left out so none is prompted twice.
+        if let Some(c) = &composed {
+            c.bus.emit(infantry_daemon::compose::DAEMON_STARTED, daemon.daemon_started_payload(&resumed));
         }
         println!("[infantry] listening on ws://{host}:{bound}/ws (health: http://{host}:{bound}/health)");
         println!(

@@ -540,7 +540,15 @@ fn lua_api(root: &Path) -> String {
     }
     s.push_str("\n## Hooks\n\n`infantry script` manages scripts and the hooks that run them:\n\n```text\n");
     s.push_str(hook_usage.trim_end());
-    s.push_str("\n```\n\n## Bundled scripts\n\nThe starter set every install has (`rust/crates/infantry-scripting/global-scripts/`). Each file's first lines say\nwhat it does and which `input.args` it takes.\n\n");
+    s.push_str("\n```\n\n### Daemon events\n\nThe bus events the daemon publishes for hooks (`rust/crates/infantry-daemon/src/compose/adapters.rs`; plugins and\nother units publish more, such as `ticket.*`).\n\n");
+    let adapters = read(root, "rust/crates/infantry-daemon/src/compose/adapters.rs");
+    let mut events: Vec<String> = str_consts(non_test(&adapters), |n| n.starts_with("SESSION_") || n.starts_with("DAEMON_") || n == "MAIL_SENT" || n == "PROGRESS_FAILED").into_iter().map(|(_, v)| v).collect();
+    events.sort();
+    events.dedup();
+    for e in events {
+        s.push_str(&format!("- `{e}`\n"));
+    }
+    s.push_str("\n## Bundled scripts\n\nThe starter set every install has (`rust/crates/infantry-scripting/global-scripts/`). Each file's first lines say\nwhat it does and which `input.args` it takes.\n\n");
     s.push_str("| Script | What it does |\n|---|---|\n");
     let start = store.find("pub const BUNDLED").expect("BUNDLED");
     let body = &store[start..];

@@ -193,6 +193,8 @@ pub trait SessionObserver: Send + Sync {
     /// PIPE-RESTART-1: the process died (a non-zero exit code, or none) while NO turn was running, so no turn end tells
     /// it. Not called for a stop the daemon asked for (that session is already Exited).
     fn on_rest_exit(&self, _rec: &SessionRecord, _code: Option<i32>) {}
+    /// PARITY-AUDIT-1 #2: the record was pushed to the clients (every state change goes through here).
+    fn on_record(&self, _rec: &SessionRecord) {}
 }
 
 /// The other frame units beside the session manager (the composition root's registry): the server sends a frame
@@ -376,6 +378,8 @@ pub struct Daemon {
     /// The other harnesses by provider name; a session runs its record's provider ([`Daemon::harness`] is the default).
     harnesses: Mutex<Vec<Arc<dyn Harness>>>,
     observers: Mutex<Vec<Arc<dyn SessionObserver>>>,
+    /// Sessions whose turn the last stop cut (busy when loaded, resumable); read once for `daemon.started`.
+    cut_turns: Vec<String>,
     units: std::sync::OnceLock<Arc<dyn FrameUnits>>,
     /// The restart journal, the MCP bridges and the bound port (the `health` frame).
     pub health: Arc<crate::health::Health>,
@@ -479,12 +483,17 @@ impl Daemon {
         let mut list = Vec::new();
         let mut cache = Vec::new();
         let mut reattach = Vec::new();
+        let mut cut_turns = Vec::new();
         for mut rec in loaded {
             // RR-8: a remote runner's process outlives this daemon's stop, so its session is re-attached, not reset.
             if rec.runner != infantry_runner_source::LOCAL && rec.runner_proc.is_some() && (rec.is_busy() || rec.is_process_alive) {
                 reattach.push(rec.id.clone());
             }
             if rec.is_busy() {
+                // PARITY-AUDIT-1 #2: a resumable turn the stop cut is named by `daemon.started` (resume-after-restart).
+                if rec.provider_session_id.is_some() && !reattach.contains(&rec.id) {
+                    cut_turns.push(rec.id.clone());
+                }
                 rec.state = if rec.provider_session_id.is_some() { SessionState::Idle } else { SessionState::Exited };
                 rec.last_action = Some(format!("state {}", state_word(rec.state)));
             }
@@ -508,6 +517,7 @@ impl Daemon {
             cache: Mutex::new(cache),
             dirty: AtomicBool::new(false),
             reattach: Mutex::new(reattach),
+            cut_turns,
             store: Mutex::new(store),
             sent: Mutex::new(Default::default()),
             board: Board::new(&cfg_dir),
@@ -599,6 +609,37 @@ impl Daemon {
         let mut out = vec![self.harness.name().to_string()];
         out.extend(self.harnesses.lock().unwrap().iter().map(|h| h.name().to_string()).filter(|n| n != self.harness.name()));
         out
+    }
+
+    /// PARITY-AUDIT-1 #2: the `daemon.started` payload (Kotlin's `DaemonStartedEvent.payload`): `cutTurns` = the sessions
+    /// whose turn the stop cut, less `skip` (already resumed by another path), `orphaned` = [] (no local process outlives
+    /// a Rust stop; remote ones are re-attached). Each session: sessionId, role, agentId, ticketId, projectId, lastAction,
+    /// lastOutputAt, starter.
+    pub fn daemon_started_payload(&self, skip: &[String]) -> serde_json::Value {
+        let cut: Vec<serde_json::Value> = self
+            .cut_turns
+            .iter()
+            .filter(|id| !skip.contains(id))
+            .filter_map(|id| self.record(id))
+            .map(|r| {
+                let mut o = serde_json::json!({ "sessionId": r.id });
+                let m = o.as_object_mut().unwrap();
+                let mut put = |k: &str, v: Option<serde_json::Value>| {
+                    if let Some(v) = v {
+                        m.insert(k.into(), v);
+                    }
+                };
+                put("role", r.role.clone().map(Into::into));
+                put("agentId", r.agent_id.clone().map(Into::into));
+                put("ticketId", r.ticket_id.clone().map(Into::into));
+                put("projectId", r.project_id.clone().map(Into::into));
+                put("lastAction", r.last_action.clone().map(Into::into));
+                put("lastOutputAt", r.last_output_at.map(Into::into));
+                put("starter", r.spawner_session_id.clone().filter(|s| !s.is_empty() && *s != r.id).map(Into::into));
+                o
+            })
+            .collect();
+        serde_json::json!({ "cutTurns": cut, "orphaned": [], "orphanedIds": [] })
     }
 
     pub fn observe(&self, o: Arc<dyn SessionObserver>) {
@@ -859,6 +900,7 @@ impl Daemon {
         }
         let data = serde_json::to_string(&e.rec).unwrap_or_default();
         self.emit(e, wire::SESSION, data);
+        self.notify(|o| o.on_record(&e.rec));
         let mut cache = self.cache.lock().unwrap();
         match cache.iter_mut().find(|r| r.id == e.rec.id) {
             Some(r) => *r = e.rec.clone(),

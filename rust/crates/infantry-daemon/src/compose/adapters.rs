@@ -687,8 +687,39 @@ fn usage_info(r: &SessionRecord) -> UsageSession {
 /// Session life as named bus events, for plugins (a generic seam): `session.run_ended` `{sessionId, outcome, detail,
 /// role, projectId, ticketId}` when a turn ends (`outcome` = SUCCEEDED, FAILED, KILLED_*), `session.exited`
 /// `{sessionId}` when its process is gone.
+///
+/// PARITY-AUDIT-1 #2 (Kotlin's `DaemonEventPublisher`), from each record push: `session.started` on the first state seen,
+/// `session.idle` on a change into IDLE, `session.turn_started` / `session.turn_ended` on the BUSY edges (payload
+/// `{sessionId, state, previous, role, projectId, ticketId, agentId}`), `session.mcp` when the MCP link changes
+/// (`{sessionId, state, previous, at, role, projectId}`), `session.ended` `{sessionId}` on exit and `session.woken`
+/// `{sessionId, reason, ref, projectId}` when a turn starts.
 pub struct RunEvents {
     pub bus: infantry_core::bus::EventBus,
+    seen: std::sync::Mutex<std::collections::HashMap<String, (String, String)>>,
+}
+
+impl RunEvents {
+    pub fn new(bus: infantry_core::bus::EventBus) -> RunEvents {
+        RunEvents { bus, seen: Default::default() }
+    }
+}
+
+pub const SESSION_STARTED: &str = "session.started";
+pub const SESSION_IDLE: &str = "session.idle";
+pub const SESSION_TURN_STARTED: &str = "session.turn_started";
+pub const SESSION_TURN_ENDED: &str = "session.turn_ended";
+pub const SESSION_MCP: &str = "session.mcp";
+pub const SESSION_ENDED: &str = "session.ended";
+pub const SESSION_WOKEN: &str = "session.woken";
+pub const DAEMON_STARTED: &str = "daemon.started";
+pub const MAIL_SENT: &str = "mail.sent";
+pub const PROGRESS_FAILED: &str = "progress.failed";
+/// The `session.mcp` state of a session with no link (no live process).
+const NO_MCP: &str = "none";
+
+/// The `mail.sent` payload: `{id, from, to, subject, threadId}`.
+pub fn mail_sent_payload(m: &infantry_mail::mail::message::Message) -> serde_json::Value {
+    serde_json::json!({"id": m.id, "from": m.from, "to": m.to, "subject": m.subject, "threadId": m.thread_id})
 }
 
 /// Pods start their node sessions through the session manager's own `new` frame (unattended).
@@ -736,6 +767,45 @@ impl SessionObserver for RunEvents {
     }
     fn on_exit(&self, rec: &SessionRecord) {
         self.bus.emit(SESSION_EXITED, serde_json::json!({"sessionId": rec.id}));
+        if self.seen.lock().unwrap_or_else(|e| e.into_inner()).remove(&rec.id).is_some() {
+            self.bus.emit(SESSION_ENDED, serde_json::json!({"sessionId": rec.id}));
+        }
+    }
+    fn on_turn(&self, rec: &SessionRecord, text: &str) {
+        let reason = crate::compose::timeline::wake_reason(rec, text);
+        self.bus.emit(SESSION_WOKEN, serde_json::json!({"sessionId": rec.id, "reason": reason, "ref": null, "projectId": rec.project_id}));
+    }
+    fn on_record(&self, rec: &SessionRecord) {
+        let state = serde_json::to_value(rec.state).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
+        let mcp = rec.mcp.clone().filter(|m| !m.is_empty()).unwrap_or_else(|| NO_MCP.to_string());
+        let terminal = matches!(rec.state, infantry_protocol::session::SessionState::Exited | infantry_protocol::session::SessionState::Failed | infantry_protocol::session::SessionState::Orphaned);
+        let prev = {
+            let mut seen = self.seen.lock().unwrap_or_else(|e| e.into_inner());
+            let prev = seen.get(&rec.id).cloned();
+            // A late push of an ended session never starts it again.
+            if prev.is_none() && terminal {
+                return;
+            }
+            seen.insert(rec.id.clone(), (state.clone(), mcp.clone()));
+            prev
+        };
+        let (prev_state, prev_mcp) = (prev.as_ref().map(|p| p.0.as_str()), prev.as_ref().map(|p| p.1.as_str()));
+        let p = serde_json::json!({"sessionId": rec.id, "state": state, "role": rec.role, "projectId": rec.project_id, "ticketId": rec.ticket_id, "agentId": rec.agent_id, "previous": prev_state});
+        if prev.is_none() {
+            self.bus.emit(SESSION_STARTED, p.clone());
+        }
+        if state == "IDLE" && prev_state != Some("IDLE") {
+            self.bus.emit(SESSION_IDLE, p.clone());
+        }
+        if state == "BUSY" && prev_state != Some("BUSY") {
+            self.bus.emit(SESSION_TURN_STARTED, p.clone());
+        }
+        if prev_state == Some("BUSY") && state != "BUSY" {
+            self.bus.emit(SESSION_TURN_ENDED, p);
+        }
+        if prev_mcp != Some(mcp.as_str()) && !(prev_mcp.is_none() && mcp == NO_MCP) {
+            self.bus.emit(SESSION_MCP, serde_json::json!({"sessionId": rec.id, "state": mcp, "previous": prev_mcp.filter(|m| *m != NO_MCP), "at": rec.last_event_at, "role": rec.role, "projectId": rec.project_id}));
+        }
     }
 }
 
@@ -816,5 +886,81 @@ mod worker_count_tests {
         assert!(!counts_as_worker(&rec("EXITED", Some("t1"), None)), "exited");
         assert!(!counts_as_worker(&rec("BUSY", None, Some("backend"))), "no ticket");
         assert!(!counts_as_worker(&rec("BUSY", Some("t1"), Some("PM"))), "the pm");
+    }
+}
+
+#[cfg(test)]
+mod session_event_tests {
+    use super::*;
+
+    fn rec(state: &str) -> SessionRecord {
+        serde_json::from_value(serde_json::json!({ "id": "s1", "provider": "claude", "workingDir": ".", "spawnedAt": 0, "lastHeartbeat": 0, "state": state, "ticketId": "t1", "agentId": "a1", "role": "backend" })).expect("record")
+    }
+
+    fn drain(rx: &mut tokio::sync::broadcast::Receiver<infantry_core::bus::NamedEvent>) -> Vec<(String, serde_json::Value)> {
+        let mut out = vec![];
+        while let Ok(e) = rx.try_recv() {
+            out.push((e.name, e.payload));
+        }
+        out
+    }
+
+    fn names(v: &[(String, serde_json::Value)]) -> Vec<&str> {
+        v.iter().map(|(n, _)| n.as_str()).collect()
+    }
+
+    #[test]
+    fn each_session_event_is_published_once_on_its_transition() {
+        let bus = infantry_core::bus::EventBus::new(64);
+        let mut rx = bus.subscribe_events();
+        let ev = RunEvents::new(bus.clone());
+        ev.on_record(&rec("STARTING"));
+        assert_eq!(names(&drain(&mut rx)), vec![SESSION_STARTED]);
+        ev.on_record(&rec("STARTING"));
+        assert!(drain(&mut rx).is_empty(), "no change, no event");
+        ev.on_record(&rec("BUSY"));
+        ev.on_record(&rec("BUSY"));
+        let got = drain(&mut rx);
+        assert_eq!(names(&got), vec![SESSION_TURN_STARTED]);
+        assert_eq!(got[0].1["previous"], "STARTING");
+        assert_eq!(got[0].1["ticketId"], "t1");
+        assert_eq!(got[0].1["agentId"], "a1");
+        ev.on_record(&rec("IDLE"));
+        ev.on_record(&rec("IDLE"));
+        assert_eq!(names(&drain(&mut rx)), vec![SESSION_IDLE, SESSION_TURN_ENDED]);
+        ev.on_turn(&rec("BUSY"), "hello");
+        let got = drain(&mut rx);
+        assert_eq!(names(&got), vec![SESSION_WOKEN]);
+        assert!(got[0].1["reason"].is_string());
+        ev.on_exit(&rec("EXITED"));
+        assert_eq!(names(&drain(&mut rx)), vec![SESSION_EXITED, SESSION_ENDED]);
+        // A late push of the ended session starts nothing.
+        ev.on_record(&rec("EXITED"));
+        assert!(drain(&mut rx).is_empty());
+    }
+
+    #[test]
+    fn run_ended_is_kept() {
+        let bus = infantry_core::bus::EventBus::new(16);
+        let mut rx = bus.subscribe_events();
+        RunEvents::new(bus.clone()).on_turn_end(&rec("IDLE"), "SUCCEEDED", "");
+        assert_eq!(names(&drain(&mut rx)), vec![SESSION_RUN_ENDED]);
+    }
+
+    #[test]
+    fn mcp_changes_are_published() {
+        let bus = infantry_core::bus::EventBus::new(16);
+        let mut rx = bus.subscribe_events();
+        let ev = RunEvents::new(bus.clone());
+        ev.on_record(&rec("IDLE"));
+        drain(&mut rx);
+        let mut r = rec("IDLE");
+        r.mcp = Some("connected".into());
+        ev.on_record(&r);
+        ev.on_record(&r);
+        let got = drain(&mut rx);
+        assert_eq!(names(&got), vec![SESSION_MCP]);
+        assert_eq!(got[0].1["state"], "connected");
+        assert!(got[0].1["previous"].is_null());
     }
 }

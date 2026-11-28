@@ -346,6 +346,11 @@ impl ArmoryUnit {
             o.extend(x.clone());
         }
         self.bus.publish(Envelope::new(ARMORY_PROGRESS, d.to_string()));
+        // PARITY-AUDIT-1 #2: a progress task that ends failed is a bus event (Kotlin's `progress.failed`).
+        if stage == "failed" {
+            d["kind"] = json!("armory_update");
+            self.bus.emit(crate::compose::adapters::PROGRESS_FAILED, d);
+        }
     }
 
     /// Starts the update of app `id` on a background thread; progress and the end are pushed as `armory_progress`.
