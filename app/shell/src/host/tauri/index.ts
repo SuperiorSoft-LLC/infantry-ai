@@ -8,7 +8,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { browserHost, browserTransport, chooseTransport, daemonGetRefusal, parseTransportSetting, withFallback, externalOpener, type Host, type HostEndpoint, type HostWindow, type QrScanner } from "@infantry/client";
+import { browserHost, browserTransport, chooseTransport, daemonGetRefusal, parseTransportSetting, withFallback, externalOpener, type Host, type HostEndpoint, type HostNotifier, type HostWindow, type QrScanner } from "@infantry/client";
 import { tauriTransport } from "./transport";
 import { embeddedRunner } from "./embedded";
 
@@ -47,6 +47,14 @@ const scanner: QrScanner = {
 };
 
 const browser = browserHost();
+
+const desktopNotifier: HostNotifier = {
+  show: (n) => invoke<void>("os_notify", { title: n.title, body: n.body, key: n.key }).catch((e) => console.warn(`[infantry] os_notify: ${message(e)}`)),
+  onClick(fn) {
+    const un = listen<string>("os-notice-click", (e) => fn(e.payload));
+    return () => void un.then((f) => f());
+  },
+};
 
 export function tauriHost(): Host {
   // A phone build connects to a remote daemon and runs none; its `endpoint` says mode `remote` (mobile.rs), which settles
@@ -96,6 +104,10 @@ export function tauriHost(): Host {
       } catch (e) {
         throw new Error(message(e));
       }
+    },
+    // PARITY-AUDIT-1 #5: OS notifications on the desktop (src-tauri os_notice.rs); a click brings the window up there.
+    get notify() {
+      return phone ? null : desktopNotifier;
     },
     reload: () => location.reload(),
     // The system browser on the desktop; the phone keeps the page's own tab.

@@ -20,6 +20,8 @@ mod local;
 #[cfg(desktop)]
 mod login_window;
 #[cfg(desktop)]
+mod os_notice;
+#[cfg(desktop)]
 mod pairing;
 #[cfg(desktop)]
 mod supervisor;

@@ -5,6 +5,7 @@
 // (test/host-guard.test.ts fails on any other import); a plain browser gets [browserHost]. The shell, the web UI plugins
 // (WEBUI-1) and the shell-only app all go through it.
 import { browserTransport, type TransportFactory } from "./connection";
+import type { HostNotifier } from "./toasts";
 
 /** `desktop` (the installed app), `phone` (the mobile app, paired with a remote daemon) or `browser`. */
 export type HostKind = "desktop" | "phone" | "browser";
@@ -109,6 +110,8 @@ export interface Host {
   readonly embedded: EmbeddedRunner | null;
   /** The camera QR reader, where there is one (phone). */
   readonly scanner: QrScanner | null;
+  /** PARITY-AUDIT-1 #5: OS notifications (the desktop app); absent = in-app toasts only. */
+  readonly notify?: HostNotifier | null;
   /** The app's own version ("0.2.0"); null in a browser. */
   version(): Promise<string | null>;
   /** The endpoint the app chose (sidecar, INFANTRY_URL, embedded runner, paired daemon); null = the page decides. */

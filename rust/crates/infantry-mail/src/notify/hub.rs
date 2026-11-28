@@ -126,6 +126,9 @@ pub struct NotificationSettings {
     pub history_max: usize,
     pub title_max_chars: usize,
     pub body_max_chars: usize,
+    /// `notifications.osDesktop` (default on): the pushed frame names the `os` channel so the desktop app raises an
+    /// OS notification for it; off = the frame never names `os` (in-app toast only).
+    pub os_desktop: bool,
 }
 
 impl Default for NotificationSettings {
@@ -135,7 +138,7 @@ impl Default for NotificationSettings {
             routes.insert(l, vec![IN_APP.to_string()]);
         }
         routes.insert(NotificationLevel::Urgent, vec![IN_APP.to_string(), OS.to_string()]);
-        NotificationSettings { routes, presenters: HashMap::new(), quiet_hours: String::new(), dedupe_window_sec: 600, history_max: 100, title_max_chars: 200, body_max_chars: 4000 }
+        NotificationSettings { routes, presenters: HashMap::new(), quiet_hours: String::new(), dedupe_window_sec: 600, history_max: 100, title_max_chars: 200, body_max_chars: 4000, os_desktop: true }
     }
 }
 
@@ -159,6 +162,9 @@ impl NotificationSettings {
         let num = |k: &str| get(k).and_then(|v| v.trim().parse::<i64>().ok());
         if let Some(n) = num("notifications.dedupeWindowSec") {
             s.dedupe_window_sec = n.max(0);
+        }
+        if let Some(v) = get("notifications.osDesktop") {
+            s.os_desktop = !matches!(v.trim().to_ascii_lowercase().as_str(), "false" | "off" | "0" | "no");
         }
         if let Some(n) = num("notifications.historyMax") {
             s.history_max = n.clamp(1, 10_000) as usize;
@@ -294,7 +300,10 @@ impl NotificationHub {
             }
         }
         if channels.iter().any(|c| c == IN_APP) {
-            self.push(NOTIFICATION_PUSH, serde_json::to_string(&n).unwrap_or_default());
+            // The frame carries the channels it was routed to, so a desktop client raises an OS notification for `os`.
+            let mut f = n.clone();
+            f.channels = channels.iter().filter(|c| cfg.os_desktop || c.as_str() != OS).cloned().collect();
+            self.push(NOTIFICATION_PUSH, serde_json::to_string(&f).unwrap_or_default());
         }
         n.id
     }
@@ -371,5 +380,22 @@ mod tests {
         hub.post(Notification { title: "fire".into(), level: NotificationLevel::Urgent, ..Default::default() }, "");
         assert_eq!(os.0.load(Ordering::SeqCst), 1);
         assert_eq!(parse_quiet_hours("7:5-8:00"), Some((425, 480)));
+    }
+
+    #[test]
+    fn the_pushed_frame_names_os_unless_os_desktop_is_off() {
+        for (on, want) in [(true, true), (false, false)] {
+            let hub = NotificationHub::with(Arc::new(move || NotificationSettings { os_desktop: on, ..Default::default() }), Arc::new(|| 1_000), Arc::new(|| None));
+            let pushed = Arc::new(Mutex::new(Vec::<String>::new()));
+            let p = pushed.clone();
+            hub.set_broadcast(move |_, d| p.lock().unwrap().push(d));
+            hub.post(Notification { title: "needs you".into(), level: NotificationLevel::Urgent, ..Default::default() }, "");
+            hub.post(Notification { title: "fyi".into(), ..Default::default() }, "");
+            let got = pushed.lock().unwrap().clone();
+            let n0: Notification = serde_json::from_str(&got[0]).unwrap();
+            let n1: Notification = serde_json::from_str(&got[1]).unwrap();
+            assert_eq!(n0.channels.iter().any(|c| c == OS), want);
+            assert!(!n1.channels.iter().any(|c| c == OS));
+        }
     }
 }

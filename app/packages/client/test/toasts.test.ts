@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
 import { describe, expect, it } from "vitest";
-import { devicePushOf, TOASTS_SHOWN, createToasts, toastOfFrame } from "../src";
+import { devicePushOf, TOASTS_SHOWN, createToasts, toastOfFrame, createOsNotifier, type OsNotice, type Envelope } from "../src";
 
 describe("toasts", () => {
   it("stacks newest first, bumps a repeat, caps the stack and expires", () => {
@@ -36,5 +36,33 @@ describe("toasts", () => {
     expect(devicePushOf(env({ target: "android" }), "desktop")).toBeNull();
     expect(devicePushOf(env({ soundType: "audio/ogg", soundData: "AAA=" }), "desktop")?.sound).toBe("data:audio/ogg;base64,AAA=");
     expect(devicePushOf({ type: "notify", data: "{}" }, "desktop")).toBeNull();
+  });
+});
+
+describe("createOsNotifier (PARITY-AUDIT-1 #5)", () => {
+  const push = (n: object): Envelope => ({ type: "notification_push", data: JSON.stringify(n) }) as Envelope;
+  it("calls the host seam once for an OS-flagged notice, never for one without, and collapses repeats within 60 s", () => {
+    const shown: OsNotice[] = [];
+    let t = 0;
+    const os = createOsNotifier((n) => shown.push(n), () => t);
+    os.frame(push({ title: "Ticket done", channels: ["inApp", "os"], ticketId: "t1" }));
+    expect(shown.length).toBe(1);
+    expect(shown[0]).toMatchObject({ key: "ticket:t1", title: "Ticket done" });
+    os.frame(push({ title: "fyi", channels: ["inApp"], ticketId: "t2" }));
+    os.frame(push({ title: "fyi" }));
+    expect(shown.length).toBe(1);
+    t = 30_000;
+    os.frame(push({ title: "Ticket done again", channels: ["inApp", "os"], ticketId: "t1" }));
+    expect(shown.length).toBe(1);
+    os.frame(push({ title: "Needs input", channels: ["os"], sessionId: "s1" }));
+    expect(shown.length).toBe(2);
+    t = 61_000;
+    os.frame(push({ title: "Ticket failed", channels: ["os"], ticketId: "t1" }));
+    expect(shown.length).toBe(3);
+  });
+  it("setting off: the daemon leaves `os` out of the channels, so nothing is raised", () => {
+    const shown: OsNotice[] = [];
+    createOsNotifier((n) => shown.push(n)).frame(push({ title: "Ticket done", channels: ["inApp"], ticketId: "t1" }));
+    expect(shown).toEqual([]);
   });
 });

@@ -114,3 +114,62 @@ export function toastOfFrame(env: Envelope): { tone: ToastTone; text: string; de
   }
   return null;
 }
+
+/**
+ * PARITY-AUDIT-1 #5: a bus notice the daemon routed to the `os` channel (the `notification_push` frame lists the channels;
+ * `notifications.osDesktop` off = it never lists `os`). [key] collapses repeats: the ticket, else the session, else the title.
+ */
+export interface OsNotice {
+  key: string;
+  title: string;
+  body: string;
+  ticketId?: string;
+  sessionId?: string;
+}
+
+/** The host's OS notification seam (the desktop app); absent where there is none (browser, BattalionOS: toasts only). */
+export interface HostNotifier {
+  show(n: OsNotice): Promise<void>;
+  /** The owner clicked the notice with [key] (the host already brought the window up). Returns the unsubscribe. */
+  onClick(fn: (key: string) => void): () => void;
+}
+
+/** The OS notice of [env], or null when it is not a `notification_push` routed to `os`. */
+export function osNoticeOf(env: Envelope): OsNotice | null {
+  if (env.type !== "notification_push") return null;
+  try {
+    const n = JSON.parse(env.data) as { title?: string; body?: string; channels?: string[]; ticketId?: string; sessionId?: string };
+    if (!n?.title || !n.channels?.includes("os")) return null;
+    const key = n.ticketId ? `ticket:${n.ticketId}` : n.sessionId ? `session:${n.sessionId}` : `title:${n.title}`;
+    return { key, title: n.title, body: n.body ?? "", ticketId: n.ticketId || undefined, sessionId: n.sessionId || undefined };
+  } catch {
+    return null;
+  }
+}
+
+/** Repeats for the same ticket or session inside this window raise one OS notification. */
+export const OS_COLLAPSE_MS = 60_000;
+
+/**
+ * Feeds frames to [show]: one OS notification per notice flagged for the OS, repeats of a key inside [windowMs]
+ * collapsed. Returns the notice shown, or null. [notices] remembers the last shown per key (for the click).
+ */
+export function createOsNotifier(show: (n: OsNotice) => void, now: () => number = Date.now, windowMs: number = OS_COLLAPSE_MS) {
+  const last = new Map<string, number>();
+  const notices = new Map<string, OsNotice>();
+  return {
+    notices,
+    frame(env: Envelope): OsNotice | null {
+      const n = osNoticeOf(env);
+      if (!n) return null;
+      const t = now();
+      const prev = last.get(n.key);
+      if (prev !== undefined && t - prev < windowMs) return null;
+      last.set(n.key, t);
+      notices.set(n.key, n);
+      for (const [k, at] of last) if (t - at >= windowMs) last.delete(k);
+      show(n);
+      return n;
+    },
+  };
+}
