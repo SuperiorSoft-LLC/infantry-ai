@@ -15,6 +15,10 @@ import { Lane } from "./lane";
 import { TicketCardView } from "./ticket-card";
 import { TicketDialog } from "./ticket-dialog";
 import { boardStore, useBoard } from "./use-board";
+import { EpicMoveBar } from "./epic-move-bar";
+import { selectionStore } from "./selection";
+import { useLauncher } from "@/components/dialogs/new-agent-dialog";
+import { daemonStore } from "@/daemon/daemon";
 import "./board.css";
 
 /** The lane a dnd-kit `over` id names: a lane drop zone, or the lane of the ticket under the pointer. */
@@ -36,6 +40,9 @@ export function BoardDialog({ onClose }: { onClose: () => void }) {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overLane, setOverLane] = useState<string | null>(null);
+  // The paired runners the runner badges check against (`runner_admin list`); the selection ends with the board.
+  useLauncher();
+  useEffect(() => () => selectionStore.getState().clear(), []);
   useEffect(() => {
     if (link === "open") boardStore().getState().ensureLoaded();
   }, [link]);
@@ -71,6 +78,9 @@ export function BoardDialog({ onClose }: { onClose: () => void }) {
       const from = full.indexOf(id);
       if (from === to || (overIsLane && from === full.length - 1)) return;
       board.reorder(status, arrayMove(full, from, overIsLane ? full.length - 1 : to));
+    } else if (status === "in_progress" && (t.status === "todo" || t.status === "backlog")) {
+      // PARITY-AUDIT-1 #9 (Kotlin BoardDropSession): a drop into In Progress is the Start action; the daemon moves the card when it starts.
+      daemonStore().getState().sendFrame({ type: "ticket_start", data: JSON.stringify({ id }), requestId: `ui:drop-start:${Date.now().toString(36)}` });
     } else board.move(id, status, to);
   };
 
@@ -103,6 +113,7 @@ export function BoardDialog({ onClose }: { onClose: () => void }) {
           </Button>
         </div>
       )}
+      <EpicMoveBar />
       {!loaded ? (
         <EmptyState icon={<LayoutGrid className="size-6" />} title={link === "open" ? "Loading the board…" : "Waiting for the daemon…"} hint={link === "open" ? undefined : "The board appears when the connection opens."} />
       ) : (
@@ -116,7 +127,7 @@ export function BoardDialog({ onClose }: { onClose: () => void }) {
         </DndContext>
       )}
       <ArchiveDialog open={archiveOpen} onClose={() => setArchiveOpen(false)} />
-      <TicketDialog ticketId={openId} creating={creating} onClose={() => (setOpenId(null), setCreating(false))} />
+      <TicketDialog ticketId={openId} creating={creating} onClose={() => (setOpenId(null), setCreating(false))} onOpenTicket={setOpenId} />
       </div>
     </AppDialog>
   );

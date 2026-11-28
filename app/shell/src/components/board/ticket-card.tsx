@@ -10,6 +10,8 @@ import { daemonStore } from "@/daemon/daemon";
 import { useBoard } from "./use-board";
 import { RoleIcon } from "@/components/agents/role-icon";
 import { PluginSlot, useSlotFills } from "@/plugins/web-plugins";
+import { CardStateChips } from "./card-chips";
+import { useSelection } from "./selection";
 
 const kindTone: Record<string, Tone> = { defect: "red", enhancement: "blue", performance: "amber", hardening: "amber" };
 
@@ -61,17 +63,21 @@ export function TicketCardView({ t, dragging, overlay, ...rest }: { t: BoardTick
   const who = assigneeOf(t);
   // Web UI plugins' badges (the `card.badge` slot, WEBUI-1), after the card's own chips.
   const badges = useSlotFills("card.badge");
+  const selected = useSelection((s) => s.ids.includes(t.id));
   return (
     <article
       {...rest}
       data-dragging={dragging || undefined}
-      className={cn("board-card space-y-2 rounded-lg border bg-card p-3 text-left hover:border-info/40", overlay && "board-overlay", rest.className)}
+      data-selected={(selected && !overlay) || undefined}
+      aria-selected={overlay ? undefined : selected}
+      className={cn("board-card space-y-2 rounded-lg border bg-card p-3 text-left hover:border-info/40", overlay && "board-overlay", selected && !overlay && "ring-2 ring-info", rest.className)}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-[11px] text-info">{shortId(t.id)}</span>
         <Chip tone={kindTone[kindOf(t)] ?? "neutral"}>{kindOf(t)}</Chip>
         {t.wontFix && <Chip>won't fix</Chip>}
         {(t.heldBy?.length ?? 0) > 0 && <Chip tone="amber">held</Chip>}
+        {!overlay && <CardStateChips t={t} />}
         <PluginSlot fills={badges} props={{ ticket: t }} frame="badge" />
       </div>
       <p className="text-[13px] leading-5 font-medium break-words">{t.title}</p>

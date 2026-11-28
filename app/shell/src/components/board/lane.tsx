@@ -10,6 +10,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { BoardTicket } from "@infantry/client";
 import { TicketCardView, shortId } from "./ticket-card";
+import { isSelectClick, selectionStore } from "./selection";
 
 /** Lanes longer than this render only the cards in view. */
 export const VIRTUAL_AFTER = 40;
@@ -47,7 +48,7 @@ function SortableCard({ t, onOpen }: { t: BoardTicket; onOpen: (id: string) => v
       dragging={s.isDragging}
       style={{ transform: CSS.Translate.toString(s.transform), transition: s.transition }}
       aria-label={`${t.title} (${shortId(t.id)})`}
-      onClick={() => onOpen(t.id)}
+      onClick={(e) => (isSelectClick(e) ? selectionStore.getState().toggle(t.id) : onOpen(t.id))}
       {...s.attributes}
       {...s.listeners}
     />

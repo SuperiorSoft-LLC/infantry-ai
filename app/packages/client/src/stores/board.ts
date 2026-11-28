@@ -30,6 +30,9 @@ export interface BoardTicket {
   branch?: string | null;
   sessionId?: string | null;
   updatedAt?: number;
+  /** PARITY-AUDIT-1 #9: the runner pin (`local`, `any` or a runner name; none = the project default) and the ticket links. */
+  runner?: string | null;
+  links?: { type: string; ticketId: string }[];
   /** PARITY-AUDIT-1 #7: the executor pins (provider = harness id) and, on a full ticket, who runs it and why. */
   provider?: string | null;
   model?: string | null;

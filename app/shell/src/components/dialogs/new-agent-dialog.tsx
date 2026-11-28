@@ -34,7 +34,7 @@ export { EMPTY_DRAFT, addBlockedReason };
 export type { NewAgentDraft };
 
 let launcher: LauncherStore | null = null;
-function launcherStore(): LauncherStore {
+export function launcherStore(): LauncherStore {
   return (launcher ??= createLauncherStore(daemonStore().getState()));
 }
 

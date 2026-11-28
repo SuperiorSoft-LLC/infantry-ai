@@ -17,6 +17,7 @@ import { TicketComments } from "./ticket-comments";
 import { TicketNotify } from "./ticket-notify";
 import { epicsStore, useQuery, useQueryOnOpen } from "@/components/panels/use-panels";
 import { useProjects } from "@/components/git/use-projects";
+import { RelatedBlock, relatedItems } from "./related-block";
 import { useRoles, useRolesLoaded } from "@/components/knowledge/use-knowledge";
 import { useLauncher } from "@/components/dialogs/new-agent-dialog";
 import { executorDraft, executorForm, TicketExecutor, type ExecutorForm } from "./ticket-executor";
@@ -32,8 +33,10 @@ const schema = z.object({
 });
 type Form = z.infer<typeof schema>;
 
-export function TicketDialog({ ticketId, creating, onClose }: { ticketId: string | null; creating: boolean; onClose: () => void }) {
+export function TicketDialog({ ticketId, creating, onClose, onOpenTicket }: { ticketId: string | null; creating: boolean; onClose: () => void; onOpenTicket?: (id: string) => void }) {
   const ticket: BoardTicket | undefined = useBoard((s) => (ticketId ? s.tickets[ticketId] : undefined));
+  const allTickets = useBoard((s) => s.tickets);
+  const related = ticket ? relatedItems(ticket.description, ticket.links, allTickets) : [];
   const save = useBoard((s) => s.save);
   const remove = useBoard((s) => s.remove);
   const [confirm, setConfirm] = useState(false);
@@ -117,6 +120,7 @@ export function TicketDialog({ ticketId, creating, onClose }: { ticketId: string
           <Label htmlFor="ticket-desc">Description</Label>
           <Textarea id="ticket-desc" rows={8} className="w-full" {...form.register("description")} />
         </div>
+        {ticket && <RelatedBlock items={related} onOpen={onOpenTicket} />}
         {ticket && <TicketNotify ticketId={ticket.id} />}
         {ticket && <TicketComments ticketId={ticket.id} />}
         <AdvancedSection>
