@@ -5,7 +5,7 @@
 // (`os_window_info`, `os_app_status`, `os_app_health`, `os_close_app_window`, `os_badge`, `os_show_desktop`), the same results. The
 // desktop knows which app this is from the frame that sent the message, never from the message. In a window of its own (the pop out
 // later) the page keeps using the direct commands (`./index.ts`). No Tauri import here.
-import { browserHost, type Host, type HostOs, type LoginWindowHandlers } from "@infantry/client";
+import { bosNotifier, browserHost, type Host, type HostOs, type LoginWindowHandlers } from "@infantry/client";
 import { appIdOfLabel, badgeCount, endpointOf, type OsAppStatus } from "./os";
 
 /** The query the OS adds to the page's url in a frame: `?bos-app=<app id>`. It only tells the page it is in the OS; the OS trusts the frame. */
@@ -87,7 +87,10 @@ function osOf(appId: string, call: ReturnType<typeof frameCaller>): HostOs {
 /** The Host for an OS frame: the page's own socket and fetch, no embedded runner, no frame buttons (the OS draws the window, taskbar and desktop). */
 export function battalionFrameHost(appId: string, link: FrameLink): Host {
   const loginHandlers = new Set<LoginWindowHandlers>();
+  const clickHandlers = new Set<(e: { tag?: unknown; route?: unknown }) => void>();
   const call = frameCaller(link, undefined, (event, data) => {
+    // BOS-NOTIFY-1: the owner clicked a desktop notice of this app (the OS already brought it forward).
+    if (event === "os_notify_click") for (const h of [...clickHandlers]) h(data);
     for (const h of [...loginHandlers]) {
       if (event === "os_login_url" && typeof data.url === "string") h.onUrl(data.url);
       else if (event === "os_login_closed") (loginHandlers.delete(h), h.onClosed());
@@ -98,6 +101,11 @@ export function battalionFrameHost(appId: string, link: FrameLink): Host {
     ...page,
     kind: "desktop",
     os: osOf(appId, call),
+    // BOS-NOTIFY-1: OS notifications through the OS (os_notify, a Windows toast for this app); an older OS refuses and the toast stays in-app.
+    notify: bosNotifier(
+      (cmd, args) => call(cmd, args),
+      (fn) => (clickHandlers.add(fn), () => void clickHandlers.delete(fn)),
+    ),
     version: async () => null,
     async endpoint() {
       const st = await call<OsAppStatus>("os_app_status").catch((e) => Promise.reject(new Error(message(e))));

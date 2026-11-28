@@ -5,7 +5,7 @@
 // With the standalone host, this folder is the only one that imports `@tauri-apps` (packages/client/test/tauri-import-guard.test.ts).
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { browserHost, createWindows, osBackend, osTauriTransport, setPopoutWindows, type Host, type HostOs } from "@infantry/client";
+import { bosNotifier, browserHost, createWindows, osBackend, osTauriTransport, setPopoutWindows, type Host, type HostOs } from "@infantry/client";
 import { appIdOfLabel, badgeCount, endpointOf, type OsAppStatus } from "./os";
 
 export { appIdOfLabel, endpointOf } from "./os";
@@ -69,6 +69,18 @@ export function battalionHost(appId: string): Host {
     ...page,
     kind: "desktop",
     os: osOf(appId),
+    // BOS-NOTIFY-1: os_notify by invoke; a BattalionOS without it refuses and the toast stays in-app. Clicks of this app only.
+    notify: bosNotifier(
+      (cmd, args) => invoke(cmd, args),
+      (fn) => {
+        let off: (() => void) | null = null;
+        let gone = false;
+        void Promise.resolve(listen<{ id?: unknown; tag?: unknown; route?: unknown }>("os://frame-notify-click", (e) => void (e.payload?.id === appId && fn(e.payload))))
+          .then((u) => (gone ? u?.() : (off = u ?? null)))
+          .catch(() => {});
+        return () => ((gone = true), off?.());
+      },
+    ),
     version: async () => null,
     async endpoint() {
       const st = await invoke<OsAppStatus>("os_app_status", { id: appId }).catch((e) => Promise.reject(new Error(message(e))));

@@ -4,6 +4,7 @@
 // it keeps the direct commands. A page draws no title bar, desktop or taskbar of its own under the OS.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { battalionFrameHost, frameAppId, frameCaller, type FrameLink } from "../../../shell/src/host/battalion/frame";
+import { osNoticeOf, toastOfFrame } from "../src/toasts";
 
 /** A desktop that answers like the shell: `answers[cmd]` or a refusal; every request is recorded. */
 function desktop(answers: Record<string, unknown>) {
@@ -159,5 +160,35 @@ describe("host picked by a page in an OS frame that has Tauri internals", () => 
   it("not framed (a Tauri window of its own): still the Tauri side, not the frame host", async () => {
     const { m } = await pick(false);
     expect(m.isTauri).toBe(true);
+  });
+});
+
+describe("BOS-NOTIFY-1: OS notifications under BattalionOS", () => {
+  const frame = { type: "notification_push", requestId: null, data: JSON.stringify({ title: "Ticket done", body: "#7", channels: ["toast", "os"], ticketId: "t 7" }) } as never;
+
+  it("a notice is os_notify with the key as route and a clean tag", async () => {
+    const d = desktop({ os_notify: null });
+    const h = battalionFrameHost("infantry-ai", d.link);
+    const n = osNoticeOf(frame)!;
+    await h.notify!.show(n);
+    expect(d.sent.map((s) => [s.cmd, s.args])).toEqual([["os_notify", { title: "Ticket done", text: "#7", tag: "ticket:t_7", route: "ticket:t 7" }]]);
+  });
+  it("an older BattalionOS refuses: no error, and the in-app toast still comes from the frame", async () => {
+    const d = desktop({});
+    const h = battalionFrameHost("infantry-ai", d.link);
+    await expect(h.notify!.show(osNoticeOf(frame)!)).resolves.toBeUndefined();
+    expect(d.sent.map((s) => s.cmd)).toEqual(["os_notify"]);
+    expect(toastOfFrame(frame)).toMatchObject({ text: "Ticket done", detail: "#7" });
+  });
+  it("a click (os_notify_click from the desktop) hands the route back; another window's message does not count", () => {
+    const d = desktop({});
+    const h = battalionFrameHost("infantry-ai", d.link);
+    const keys: string[] = [];
+    const off = h.notify!.onClick((k) => keys.push(k));
+    d.deliver({ bos: 1, event: "os_notify_click", tag: "ticket:t_7", route: "ticket:t 7" }, d.parent);
+    d.deliver({ bos: 1, event: "os_notify_click", route: "session:x" }, { name: "a stranger" });
+    off();
+    d.deliver({ bos: 1, event: "os_notify_click", route: "session:y" }, d.parent);
+    expect(keys).toEqual(["ticket:t 7"]);
   });
 });

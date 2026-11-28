@@ -134,6 +134,27 @@ export interface HostNotifier {
   onClick(fn: (key: string) => void): () => void;
 }
 
+/** BOS-NOTIFY-1: the `tag` BattalionOS takes (up to 64 of `A-Za-z0-9_.:-`): a repeat with the same tag replaces the toast. */
+export function bosTagOf(key: string): string {
+  return key.replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 64);
+}
+
+/**
+ * BOS-NOTIFY-1: the OS notifier under BattalionOS: `os_notify {title, text, tag, route}` through the OS bridge [call] (a frame
+ * message or `invoke`), the notice key as `route`. A refusal (an older BattalionOS without a desktop `os_notify`, the
+ * per-app rate, no permission) is silent: the in-app toast (ToastHost) is shown for every notice anyway. [onEvent] hears
+ * the OS's `os_notify_click` events (`{tag, route}`); a click hands the route (the key) back.
+ */
+export function bosNotifier(
+  call: (cmd: string, args: Record<string, unknown>) => Promise<unknown>,
+  onEvent: (fn: (e: { tag?: unknown; route?: unknown }) => void) => () => void,
+): HostNotifier {
+  return {
+    show: (n) => call("os_notify", { title: n.title, text: n.body, tag: bosTagOf(n.key), route: n.key }).then(() => undefined, () => undefined),
+    onClick: (fn) => onEvent((e) => void (typeof e.route === "string" && e.route ? fn(e.route) : undefined)),
+  };
+}
+
 /** The OS notice of [env], or null when it is not a `notification_push` routed to `os`. */
 export function osNoticeOf(env: Envelope): OsNotice | null {
   if (env.type !== "notification_push") return null;
