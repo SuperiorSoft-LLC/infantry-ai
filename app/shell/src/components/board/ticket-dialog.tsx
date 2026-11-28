@@ -17,6 +17,9 @@ import { TicketComments } from "./ticket-comments";
 import { TicketNotify } from "./ticket-notify";
 import { epicsStore, useQuery, useQueryOnOpen } from "@/components/panels/use-panels";
 import { useProjects } from "@/components/git/use-projects";
+import { useRoles, useRolesLoaded } from "@/components/knowledge/use-knowledge";
+import { useLauncher } from "@/components/dialogs/new-agent-dialog";
+import { executorDraft, executorForm, TicketExecutor, type ExecutorForm } from "./ticket-executor";
 
 /** TicketType in the Kotlin protocol. */
 const TYPES = ["enhancement", "defect", "restructure", "upkeep", "documentation", "cosmetic", "performance", "testing", "hardening"];
@@ -34,6 +37,10 @@ export function TicketDialog({ ticketId, creating, onClose }: { ticketId: string
   const save = useBoard((s) => s.save);
   const remove = useBoard((s) => s.remove);
   const [confirm, setConfirm] = useState(false);
+  const [executor, setExecutor] = useState<ExecutorForm>(() => executorForm(ticket));
+  useRolesLoaded();
+  const roles = useRoles((s) => s.roles);
+  const { harnesses, catalog } = useLauncher();
   const project = useProjects((s) => s.currentId);
   const epicStore = epicsStore();
   useQueryOnOpen(epicStore, project ?? undefined, !project || !(creating || !!ticketId));
@@ -44,6 +51,7 @@ export function TicketDialog({ ticketId, creating, onClose }: { ticketId: string
   const form = useForm<Form>({ resolver: zodResolver(schema), defaultValues: { title: "", description: "", ticketType: INHERIT, epicId: INHERIT } });
   useEffect(() => {
     setConfirm(false);
+    setExecutor(executorForm(ticket));
     form.reset({ title: ticket?.title ?? "", description: ticket?.description ?? "", ticketType: ticket?.ticketType ?? INHERIT, epicId: ticket?.epicId ?? INHERIT });
   }, [ticket?.id, ticket?.partial, creating]); // eslint-disable-line react-hooks/exhaustive-deps
   const loadFull = useBoard((s) => s.loadFull);
@@ -56,8 +64,8 @@ export function TicketDialog({ ticketId, creating, onClose }: { ticketId: string
     const epicId = v.epicId === INHERIT ? (ticket?.epicId ? "" : undefined) : v.epicId;
     save(
       ticket
-        ? { id: ticket.id, title: v.title, description: v.description, ticketType: type, epicId }
-        : { title: v.title, description: v.description || undefined, ticketType: type, epicId },
+        ? { id: ticket.id, title: v.title, description: v.description, ticketType: type, epicId, ...executorDraft(ticket, executor) }
+        : { title: v.title, description: v.description || undefined, ticketType: type, epicId, ...executorDraft(undefined, executor) },
     );
     onClose();
   });
@@ -129,6 +137,7 @@ export function TicketDialog({ ticketId, creating, onClose }: { ticketId: string
             value={form.watch("epicId")}
             onChange={(v) => form.setValue("epicId", v)}
           />
+          <TicketExecutor value={executor} onChange={setExecutor} roles={roles} harnesses={harnesses} catalog={catalog} effective={ticket?.effectiveExecutor} />
         </AdvancedSection>
       </form>
     </AppDialog>

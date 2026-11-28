@@ -30,6 +30,12 @@ export interface BoardTicket {
   branch?: string | null;
   sessionId?: string | null;
   updatedAt?: number;
+  /** PARITY-AUDIT-1 #7: the executor pins (provider = harness id) and, on a full ticket, who runs it and why. */
+  provider?: string | null;
+  model?: string | null;
+  weight?: number | null;
+  effort?: string | null;
+  effectiveExecutor?: EffectiveExecutor | null;
   /** Set by this client on a ticket that came from the compact list: the description is not loaded yet (`loadFull`). */
   partial?: boolean;
 }
@@ -41,6 +47,26 @@ export interface TicketDraft {
   description?: string;
   ticketType?: string;
   epicId?: string;
+  /** "" clears a pin; weight 0 clears it. */
+  agentId?: string;
+  provider?: string;
+  model?: string;
+  weight?: number;
+  effort?: string;
+}
+
+/** Where one executor part comes from: ticket, rule, weight, profile, role or default. */
+export interface ExecutorField {
+  value?: string | null;
+  source: string;
+}
+/** The daemon's effective executor of a ticket (`effectiveExecutor`). */
+export interface EffectiveExecutor {
+  agentId?: string | null;
+  role?: string | null;
+  provider?: ExecutorField | null;
+  model?: ExecutorField | null;
+  rule?: string | null;
 }
 
 export interface BoardFilter {
