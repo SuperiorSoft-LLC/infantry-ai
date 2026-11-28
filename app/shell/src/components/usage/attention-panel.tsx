@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { AlertOctagon, Bell, CheckCircle2, X } from "lucide-react";
 import { openItems, openQuestions, type OwnerQuestion } from "@infantry/client";
 import { Button, Chip, EmptyState, SectionLabel, cn } from "@infantry/ui";
+import { QuestionHistory } from "./question-history";
 import { DecisionCard, OwnAnswerDialog } from "@/components/mail/decision-card";
 import { useAttention } from "@/components/mail/use-mail";
 
@@ -26,7 +27,8 @@ export function AttentionPanel() {
   const qs = openQuestions(questions);
   const open = openItems(items);
 
-  if (qs.length === 0 && open.length === 0 && notes.length === 0) {
+  const answered = Object.values(questions).some((q) => q.state !== "open");
+  if (qs.length === 0 && open.length === 0 && notes.length === 0 && !answered) {
     return <EmptyState icon={<CheckCircle2 className="size-6" />} title="Nothing needs you" hint="Questions, failures and notices show up here." />;
   }
   return (
@@ -107,6 +109,7 @@ export function AttentionPanel() {
           </ul>
         </section>
       )}
+      {answered && <QuestionHistory questions={questions} />}
       <OwnAnswerDialog question={other} onClose={() => setOther(null)} />
     </div>
   );

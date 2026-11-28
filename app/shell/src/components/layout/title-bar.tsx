@@ -4,7 +4,7 @@
 // Empty areas carry data-tauri-drag-region so the window moves by dragging the bar.
 import type { ReactNode } from "react";
 import { BarChart3, Layers, LifeBuoy, QrCode, PanelLeft, PanelRight, Plus, Wand2, Moon, Sun, Settings, Wrench } from "lucide-react";
-import { attentionCount, hostLabel } from "@infantry/client";
+import { attentionCount, chipQuestionSession, hostLabel } from "@infantry/client";
 import { useAttention } from "@/components/mail/use-mail";
 import { isMobile, useDaemon } from "@/daemon/daemon";
 import { askForConnectScreen } from "@/components/connect/connect-screen";
@@ -20,6 +20,7 @@ import { OsDesktopButton } from "./os-desktop";
 export function TitleBar({ headerActions }: { headerActions?: ReactNode } = {}) {
   const ui = useUi();
   const attention = useAttention(attentionCount);
+  const askingSession = useAttention((s) => chipQuestionSession(s.questions));
   const host = useDaemon((s) => hostLabel(s.connection.url));
   return (
     <header data-tauri-drag-region className="flex h-10 min-w-0 shrink-0 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] border-b bg-background pl-2 select-none sm:gap-2">
@@ -56,6 +57,12 @@ export function TitleBar({ headerActions }: { headerActions?: ReactNode } = {}) 
       {attention > 0 && <button
         type="button"
         onClick={() => {
+          // PARITY-AUDIT-1 #19: one open question opens the chat that asked it; several keep the Attention tab.
+          if (askingSession) {
+            ui.set("selectedAgentId", askingSession);
+            ui.set("sessionTab", "cli");
+            return;
+          }
           ui.set("rightTab", "attention");
           if (!ui.rightOpen) ui.toggle("rightOpen");
         }}

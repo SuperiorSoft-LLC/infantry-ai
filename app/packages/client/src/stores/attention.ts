@@ -34,6 +34,8 @@ export interface OwnerQuestion {
   state: string;
   answer?: string | null;
   otherText?: string | null;
+  /** Who resolved it: owner, auto, asker or orphaned (protocol `question_resolved_by`). */
+  resolvedBy?: string | null;
   createdAt: number;
   resolvedAt?: number | null;
 }
@@ -119,6 +121,28 @@ export function inboxDecisions(qs: Record<string, OwnerQuestion>, now = Date.now
     .filter((q) => q.state !== "open" && (q.resolvedAt ?? q.createdAt) > now - DECIDED_SHOWN_MS)
     .sort((a, b) => (b.resolvedAt ?? b.createdAt) - (a.resolvedAt ?? a.createdAt));
   return [...openQuestions(qs), ...decided];
+}
+
+/**
+ * PARITY-AUDIT-1 #19: the session the attention chip jumps to. With exactly one open question it is the asking
+ * session (the chat opens at the question); otherwise null and the chip opens the Attention tab as before.
+ */
+export function chipQuestionSession(qs: Record<string, OwnerQuestion>): string | null {
+  const open = openQuestions(qs);
+  return open.length === 1 && open[0].sessionId ? open[0].sessionId : null;
+}
+
+/**
+ * PARITY-AUDIT-1 #19: every answered question the daemon has (it keeps them all; no age cut, unlike the Mail
+ * inbox's [DECIDED_SHOWN_MS]), newest first, filtered by a case-blind search over question, answer, role and
+ * who answered.
+ */
+export function questionHistory(qs: Record<string, OwnerQuestion>, query = ""): OwnerQuestion[] {
+  const needle = query.trim().toLowerCase();
+  return Object.values(qs)
+    .filter((q) => q.state !== "open")
+    .filter((q) => !needle || [q.question, decisionAnswer(q), q.role, q.resolvedBy, q.sessionId].some((f) => f?.toLowerCase().includes(needle)))
+    .sort((a, b) => (b.resolvedAt ?? b.createdAt) - (a.resolvedAt ?? a.createdAt));
 }
 
 /** The badge count: open items plus open questions. */
