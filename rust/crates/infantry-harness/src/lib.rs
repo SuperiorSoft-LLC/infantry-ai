@@ -25,6 +25,7 @@ pub mod background;
 pub mod driver;
 pub mod shim;
 pub mod stats;
+pub mod todos;
 pub mod writes;
 
 pub use driver::{DriverError, HarnessDriver};

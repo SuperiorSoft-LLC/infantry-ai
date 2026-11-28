@@ -1926,6 +1926,10 @@ impl Daemon {
                 e.rec.last_output_at = Some(now_ms());
                 self.emit(&mut e, wire::STATUS, wire::status_write(&w));
             }
+            HarnessEvent::Todos(t) => {
+                e.rec.last_output_at = Some(now_ms());
+                self.emit(&mut e, wire::STATUS, wire::status_todos(&t));
+            }
             HarnessEvent::Usage(u) => {
                 e.rec.last_output_at = Some(now_ms());
                 e.stats.usage(u);

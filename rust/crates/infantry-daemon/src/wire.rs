@@ -106,6 +106,12 @@ pub fn status_write(write: &str) -> String {
     json!({"state": "BUSY", "detail": "", "write": w}).to_string()
 }
 
+/// The agent's to-do list (the chat's to-do box): `{"state":"BUSY","detail":"","todos":[...]}`; [todos] is the wire array.
+pub fn status_todos(todos: &str) -> String {
+    let t: Value = serde_json::from_str(todos).unwrap_or(Value::Array(vec![]));
+    json!({"state": "BUSY", "detail": "", "todos": t}).to_string()
+}
+
 /// The run activity (`thinking`, `finished`, `idle`) beside the session state.
 pub fn status_run(state: &str, activity: &str, started_at: i64, turn_started_at: i64) -> String {
     json!({
@@ -141,6 +147,9 @@ mod write_tests {
 
     #[test]
     fn a_write_status_carries_the_file_write_object() {
+        let t: Value = serde_json::from_str(&status_todos(r#"[{"text":"a","status":"pending"}]"#)).unwrap();
+        assert_eq!(t["todos"][0]["text"], "a");
+        assert_eq!(t["state"], "BUSY");
         let s: Value = serde_json::from_str(&status_write(r#"{"path":"a.rs","edits":[{"oldText":"x","newText":"y"}]}"#)).unwrap();
         assert_eq!(s["state"], "BUSY");
         assert_eq!(s["write"]["path"], "a.rs");

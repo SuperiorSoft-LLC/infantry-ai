@@ -356,6 +356,9 @@ impl Worker {
                     for w in writes {
                         self.sink.emit(HarnessEvent::Write(w.to_string()));
                     }
+                    if let Some(t) = infantry_harness::todos::todos(&name, &input) {
+                        self.sink.emit(HarnessEvent::Todos(t.to_string()));
+                    }
                     self.sink.emit(HarnessEvent::Tool { name, input });
                 }
                 Ev::Usage(u) => self.sink.emit(HarnessEvent::Usage(TokenUsage {

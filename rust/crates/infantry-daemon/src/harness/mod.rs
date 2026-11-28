@@ -117,6 +117,8 @@ pub enum HarnessEvent {
     Tool { name: String, input: String },
     /// A tool call changed a file: the wire `FileWrite` JSON (path, content / edits / patch), drawn as a change box.
     Write(String),
+    /// A to-do tool call (Claude `TodoWrite`, OpenCode `todowrite`) set the agent's list: the wire `todos` JSON array.
+    Todos(String),
     /// Token usage of one model request, as the CLI reported it: the session's stats.
     Usage(TokenUsage),
     /// The CLI's view of the session's own MCP server and of every server it reports (G12).
