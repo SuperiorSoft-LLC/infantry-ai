@@ -7,7 +7,8 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as RPointer
 import { Maximize2, Minimize2, Minus, X, Square } from "lucide-react";
 import { IconButton, cn } from "@infantry/ui";
 import { ChatPanel, type ChatVariant } from "./chat-panel";
-import { bindPopout, clampBox, dragBox, minimizeGeometry, minimizeMode, resizeBox, type Box, type Bounds, type PopoutWindow, type WindowBadge } from "@infantry/client";
+import { toast } from "@/components/layout/toast-host";
+import { OS_UPDATE_NOTICE, bindPopout, clampBox, dragBox, minimizeGeometry, minimizeMode, resizeBox, type Box, type Bounds, type PopoutWindow, type WindowBadge } from "@infantry/client";
 
 const KEY = "infantry.popout.";
 // x < 0 means "right". The default starts below the tab bar and tab headers (Sign out, header buttons), so it never covers them.
@@ -83,8 +84,8 @@ export function ChatPopout({ id, title, sessionId, variant = "popout", onClose, 
     if (mode !== "taskbar") return;
     let gone = false;
     let w: PopoutWindow | null = null;
-    // WINDOW-MIN-2: an OS window manager that refuses or does not answer falls back to the in-app dock, not the fold.
-    bindPopout({ key: `infantry.popout.${id}`, title: label }, setHidden)
+    // MIN-TASKBAR-1: under BattalionOS minimize goes only to the OS taskbar; an OS without os_win_* shows the update notice once.
+    bindPopout({ key: `infantry.popout.${id}`, title: label }, setHidden, { onRefused: () => toast("warn", OS_UPDATE_NOTICE) })
       .then((b) => {
         if (gone) void b.close();
         else win.current = w = b;

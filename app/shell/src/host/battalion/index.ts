@@ -5,7 +5,7 @@
 // With the standalone host, this folder is the only one that imports `@tauri-apps` (packages/client/test/tauri-import-guard.test.ts).
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { browserHost, type Host, type HostOs } from "@infantry/client";
+import { browserHost, createWindows, osBackend, osTauriTransport, setPopoutWindows, type Host, type HostOs } from "@infantry/client";
 import { appIdOfLabel, badgeCount, endpointOf, type OsAppStatus } from "./os";
 
 export { appIdOfLabel, endpointOf } from "./os";
@@ -37,9 +37,34 @@ function osOf(appId: string): HostOs {
   };
 }
 
+/**
+ * MIN-TASKBAR-1: the page of an `app-<id>` window is not in a frame, so `pickWindows` would pick the in-page manager (the
+ * in-app dock). Its window calls go to the OS by `invoke` (os_win_*, capability `app-windows`) and its events come on `os://win`.
+ */
+export function bindOsWindows(): void {
+  setPopoutWindows(
+    createWindows(
+      osBackend(
+        osTauriTransport(
+          (cmd, args) => invoke(cmd, args),
+          (event, fn) => {
+            let off: (() => void) | null = null;
+            let gone = false;
+            void Promise.resolve(listen(event, fn))
+              .then((u) => (gone ? u?.() : (off = u ?? null)))
+              .catch(() => {});
+            return () => ((gone = true), off?.());
+          },
+        ),
+      ),
+    ),
+  );
+}
+
 /** The Host for an OS app window: the page's own socket and fetch, no embedded runner, no frame (the OS draws the window). */
 export function battalionHost(appId: string): Host {
   const page = browserHost();
+  bindOsWindows();
   return {
     ...page,
     kind: "desktop",

@@ -2,14 +2,15 @@
 // Copyright (c) SuperiorSoft LLC
 // WINDOW-MIN-1: a floating chat (ChatPopout) as a window of the BattalionOS window manager (OS-WINDOW-1, the vendored
 // WM-5 client in ./bos-windows). Minimize sends it to the OS taskbar (one item per window) under BattalionOS, or to the
-// in-app dock strip (PopoutDock) standalone and in a browser; a click on the item restores it. ChatPopout keeps its own
+// in-app dock strip (PopoutDock) only standalone and in a browser (MIN-TASKBAR-1: never under BattalionOS); a click on the item restores it. ChatPopout keeps its own
 // box, so a restore comes back at the same size and place. The old fold-to-title-bar minimize stays as the "fold" mode.
 import { createWindows, pickWindows, type Windows, type WindowHandle } from "./bos-windows/client";
 import { LocalWindowManager } from "./bos-windows/local-backend";
+import { frameTransport, osBackend, tauriTransport as osTauriTransport } from "./bos-windows/os-backend";
 import type { WindowBadge, WindowInfo, WindowState } from "./bos-windows/types.gen";
 
 export type { Windows, WindowHandle, WindowInfo, WindowBadge };
-export { LocalWindowManager, createWindows };
+export { LocalWindowManager, createWindows, osBackend, osTauriTransport, frameTransport };
 
 /** `taskbar` (default): minimize hides the window into the taskbar / dock. `fold`: the window folds to its title bar. */
 export type MinimizeMode = "taskbar" | "fold";
@@ -50,7 +51,7 @@ export function setPopoutWindows(w: Windows | null) {
 }
 
 const switchers = new Set<() => void>();
-/** WINDOW-MIN-2: told when the page's window manager changes (the OS one did not answer and the in-app dock took over). */
+/** Told when the page's window manager changes (MIN-TASKBAR-1: no longer from a refused OS; kept for setPopoutWindows callers). */
 export function onPopoutWindowsChange(fn: () => void): () => void {
   switchers.add(fn);
   return () => void switchers.delete(fn);
@@ -68,33 +69,61 @@ const bounded = <T>(p: Promise<T>, ms: number) =>
     );
   });
 
+/** MIN-TASKBAR-1: the one-time notice when this BattalionOS has no os_win_* (older than 0.2.0). */
+export const OS_UPDATE_NOTICE = "Update BattalionOS to 0.2.0 to minimize to the taskbar";
+
+let osRefused = false;
+let toldUpdate = false;
+/** Tests: forget that the OS refused and that the notice was shown. */
+export function resetPopoutRefusal() {
+  osRefused = false;
+  toldUpdate = false;
+}
+
 /**
- * WINDOW-MIN-2: binds the popout to the page's window manager; when that is the OS one and it refuses or does not answer
- * within [timeoutMs] (a BattalionOS without os_win_*), the page switches to the local manager (the in-app dock) for good.
- * Minimize then hides into the dock, never the fold.
+ * MIN-TASKBAR-1 (replaces the WINDOW-MIN-2 dock fallback): binds the popout to the page's window manager. Under
+ * BattalionOS the minimized chat goes ONLY to the OS taskbar (os_win_minimize); the in-app dock is never used there.
+ * When the OS refuses or does not answer within [timeoutMs] (a BattalionOS older than 0.2.0), the popout cannot reach
+ * the taskbar: Minimize neither folds nor docks, it calls [onRefused] once per page (the update notice) and the chat
+ * stays open. Standalone and in a browser the local manager (the in-app dock) is used as before.
  */
 export async function bindPopout(
   spec: { key: string; title: string; icon?: string },
   onMinimized: (minimized: boolean) => void,
-  opts: { timeoutMs?: number; fallback?: () => Windows } = {},
+  opts: { timeoutMs?: number; onRefused?: () => void } = {},
 ): Promise<PopoutWindow> {
   const ws = await popoutWindows();
   if (ws.backend.name !== "os") return bindPopoutWindow(ws, spec, onMinimized);
+  if (osRefused) return refusedPopout(opts.onRefused);
   try {
     return await bounded(bindPopoutWindow(ws, spec, onMinimized), opts.timeoutMs ?? POPOUT_OS_TIMEOUT_MS);
   } catch {
-    if (picked && (await picked) === ws) {
-      picked = Promise.resolve(opts.fallback ? opts.fallback() : createWindows(new LocalWindowManager({ storage: null, scope: "infantry.popouts" })));
-      switchers.forEach((f) => f());
-    }
-    return bindPopoutWindow(await popoutWindows(), spec, onMinimized);
+    osRefused = true;
+    return refusedPopout(opts.onRefused);
   }
+}
+
+/** A popout under a BattalionOS without os_win_*: no window, Minimize only tells (once) and leaves the chat open. */
+function refusedPopout(onRefused?: () => void): PopoutWindow {
+  return {
+    handle: null,
+    async minimize() {
+      if (toldUpdate) return;
+      toldUpdate = true;
+      onRefused?.();
+    },
+    async restore() {},
+    async close() {},
+    async set() {},
+    dispose() {},
+  };
 }
 
 const isMin = (s: WindowState) => s === "minimized";
 
 export interface PopoutWindow {
-  readonly handle: WindowHandle;
+  /** null under a BattalionOS without os_win_* (MIN-TASKBAR-1): there is no window to minimize. */
+  readonly handle: WindowHandle | null;
   minimize(): Promise<void>;
   restore(): Promise<void>;
   close(): Promise<void>;

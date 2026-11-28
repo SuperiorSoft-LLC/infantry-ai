@@ -7,6 +7,7 @@ import { Button, Chip } from "@infantry/ui";
 import { MessageSquare } from "lucide-react";
 import { dockItems, LocalWindowManager, onPopoutWindowsChange, popoutWindows, type WindowInfo, type Windows } from "@infantry/client";
 import { useDaemon } from "@/daemon/daemon";
+import { host } from "@/host";
 import { useAgent } from "@/daemon/agents";
 import { useUi } from "@/state/ui-state";
 import { ChatPopout } from "./chat-popout";
@@ -85,6 +86,12 @@ function SessionPopout({ sessionId, z, onFocus }: { sessionId: string; z: number
  * real height and the composer above it is never covered; with no minimized window it renders nothing.
  */
 export function PopoutDock() {
+  // MIN-TASKBAR-1: under BattalionOS (any version) the OS taskbar is the only place a minimized chat goes.
+  if (host.os) return null;
+  return <LocalDock />;
+}
+
+function LocalDock() {
   const [wm, setWm] = useState<LocalWindowManager | null>(null);
   const [items, setItems] = useState<WindowInfo[]>([]);
   useEffect(() => {

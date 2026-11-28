@@ -1,55 +1,59 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) SuperiorSoft LLC
-// WINDOW-MIN-2: a BattalionOS without os_win_* (rejects, or never answers) falls back to the in-app dock, never the fold.
+// MIN-TASKBAR-1 (replaces the WINDOW-MIN-2 dock fallback, which this ticket names to change): under BattalionOS a minimized
+// chat goes ONLY to the OS taskbar. A BattalionOS without os_win_* (refuses or never answers) gets no dock and no fold: the
+// first Minimize shows the update notice once and the chat stays open.
 import { afterEach, describe, expect, it } from "vitest";
-import { bindPopout, bindPopoutWindow, createWindows, dockItems, LocalWindowManager, onPopoutWindowsChange, popoutWindows, setPopoutWindows, type Windows } from "../src/popout-windows";
+import { bindPopout, bindPopoutWindow, createWindows, dockItems, LocalWindowManager, OS_UPDATE_NOTICE, popoutWindows, resetPopoutRefusal, setPopoutWindows, type Windows } from "../src/popout-windows";
 import type { WindowsBackend } from "../src/bos-windows/backend";
 
 const os = (call: WindowsBackend["call"]): Windows => createWindows({ name: "os", call, onEvent: () => () => {} });
-const local = () => new LocalWindowManager({ storage: null, surface: () => ({ w: 1200, h: 800 }) });
 
-afterEach(() => setPopoutWindows(null));
+afterEach(() => {
+  setPopoutWindows(null);
+  resetPopoutRefusal();
+});
 
-describe("WINDOW-MIN-2 popout fallback", () => {
-  it("repro: the OS backend without os_win_open makes bindPopoutWindow reject (the old code then folded)", async () => {
+describe("MIN-TASKBAR-1 under an old BattalionOS (no os_win_*)", () => {
+  it("the OS backend without os_win_open makes bindPopoutWindow reject", async () => {
     await expect(bindPopoutWindow(os(() => Promise.reject(new Error("unknown command"))), { key: "k", title: "t" }, () => {})).rejects.toThrow();
   });
 
-  it("os missing (rejects) -> the in-app dock", async () => {
-    setPopoutWindows(os(() => Promise.reject(new Error("unknown command"))));
-    const wm = local();
-    let switched = 0;
-    const off = onPopoutWindowsChange(() => switched++);
-    const w = await bindPopout({ key: "k", title: "Pm" }, () => {}, { timeoutMs: 50, fallback: () => createWindows(wm) });
-    off();
-    expect(w.handle).toBeTruthy();
-    expect((await popoutWindows()).backend).toBe(wm);
-    expect(switched).toBe(1);
+  it("os refuses -> no dock, no fold: one notice, the chat stays open, the OS backend is kept", async () => {
+    const ws = os(() => Promise.reject(new Error("'os_win_open' is not available to an app's page")));
+    setPopoutWindows(ws);
+    const notices: string[] = [];
+    const states: boolean[] = [];
+    const w = await bindPopout({ key: "k", title: "Pm" }, (m) => states.push(m), { timeoutMs: 50, onRefused: () => notices.push(OS_UPDATE_NOTICE) });
+    expect(w.handle).toBeNull();
     await w.minimize();
-    expect(dockItems(wm.windows()).map((x) => x.title)).toEqual(["Pm"]);
+    await w.minimize();
+    const w2 = await bindPopout({ key: "k2", title: "Pm2" }, () => {}, { timeoutMs: 50, onRefused: () => notices.push(OS_UPDATE_NOTICE) });
+    await w2.minimize();
+    expect(notices).toEqual(["Update BattalionOS to 0.2.0 to minimize to the taskbar"]);
+    expect(states).toEqual([]);
+    expect((await popoutWindows()).backend).toBe(ws.backend);
   });
 
-  it("os hangs -> the in-app dock after the bound", async () => {
+  it("os hangs -> the same after the bound", async () => {
     setPopoutWindows(os(() => new Promise(() => {})));
-    const wm = local();
+    let told = 0;
     const t0 = Date.now();
-    const w = await bindPopout({ key: "k", title: "Pm" }, () => {}, { timeoutMs: 80, fallback: () => createWindows(wm) });
+    const w = await bindPopout({ key: "k", title: "Pm" }, () => {}, { timeoutMs: 80, onRefused: () => told++ });
     expect(Date.now() - t0).toBeGreaterThanOrEqual(70);
     await w.minimize();
-    expect(dockItems(wm.windows())).toHaveLength(1);
-  });
-
-  it("os present -> the taskbar path (OS backend kept)", async () => {
-    const calls: string[] = [];
-    const ws = os(async (cmd) => {
-      calls.push(cmd);
-      return cmd === "os_win_open" ? { wid: "1", key: "k", kind: "inline", title: "Pm", state: "normal", bounds: { x: 0, y: 0, w: 1, h: 1 }, focused: true } : { state: "minimized" };
-    });
-    setPopoutWindows(ws);
-    const w = await bindPopout({ key: "k", title: "Pm" }, () => {}, { timeoutMs: 50, fallback: () => createWindows(local()) });
-    await w.minimize();
+    expect(told).toBe(1);
     expect((await popoutWindows()).backend.name).toBe("os");
-    expect(calls).toContain("os_win_minimize");
+  });
+});
+
+describe("MIN-TASKBAR-1 standalone and in a browser", () => {
+  it("the local manager (the in-app dock) is still used", async () => {
+    const wm = new LocalWindowManager({ storage: null, surface: () => ({ w: 1200, h: 800 }) });
+    setPopoutWindows(createWindows(wm));
+    const w = await bindPopout({ key: "k", title: "Pm" }, () => {});
+    await w.minimize();
+    expect(dockItems(wm.windows()).map((x) => x.title)).toEqual(["Pm"]);
   });
 });
 

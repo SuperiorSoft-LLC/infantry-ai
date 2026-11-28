@@ -18,7 +18,7 @@ describe("WINDOW-MIN-1 popout windows", () => {
     expect(seen).toEqual([true]);
     expect(dockItems(wm.windows()).map((x) => x.title)).toEqual(["Pm · a"]);
     // The dock button: os_win_focus on the item.
-    await wm.call("os_win_focus", { wid: w.handle.wid });
+    await wm.call("os_win_focus", { wid: w.handle!.wid });
     expect(seen).toEqual([true, false]);
     expect(dockItems(wm.windows())).toEqual([]);
   });
