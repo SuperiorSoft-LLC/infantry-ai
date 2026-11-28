@@ -318,13 +318,13 @@ usage: infantry plugin <status|available|search|show|install|uninstall|enable|di
 ### cmd_project (`USAGE`)
 
 ```text
-usage: infantry project list | create <name> [--description <goal>] [--location <dir>] | delete <projectId> [--force]
+usage: infantry project list | create <name> [--description <goal>] [--location <dir>] | delete <projectId> [--force] | find [<query>] | config get <projectId> | config set <projectId> <role|dotted.key|auto-remove-done-workers> <value> | config unset <projectId> <dotted.key> | routing <projectId> [--file <rules.json> | --clear] | branches <projectId> | rename <projectId> <name> | base <projectId> [<branch> | --clear]
 ```
 
 ### cmd_prompt (`USAGE`)
 
 ```text
-usage: infantry prompt answer <promptId> (--answer <label>... [--text <t>] | --text <t> | --escalate)
+usage: infantry prompt <sessionId> "<text>" | prompt answer <promptId> (--answer <label>... [--text <t>] | --text <t> | --escalate)
 ```
 
 ### cmd_runner (`USAGE`)
