@@ -60,6 +60,8 @@ uses when the key is unset, where it sits next to the key; otherwise read the co
 | `limits.runners.linkPort` |  | `rust/crates/infantry-runner-pool/src/serve.rs` |
 | `limits.runners.offlineSessionSec` |  | `rust/crates/infantry-distribution/src/lib.rs` |
 | `limits.runners.orphanGraceSec` |  | `rust/crates/infantry-distribution/src/lib.rs` |
+| `limits.runners.pairAttemptsPerHour` |  | `rust/crates/infantry-distribution/src/lib.rs` |
+| `limits.runners.pairCodeMin` |  | `rust/crates/infantry-distribution/src/lib.rs` |
 | `limits.runners.testTurnSec` | `90` | `rust/crates/infantry-cli/src/cli/cmd_runner.rs` |
 | `limits.runners.upStartSec` | `60` | `rust/crates/infantry-cli/src/cli/cmd_runner.rs` |
 | `limits.runners.updateWaitSec` |  | `rust/crates/infantry-runner-pool/src/update.rs` |

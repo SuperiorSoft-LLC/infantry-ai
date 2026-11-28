@@ -384,6 +384,8 @@ fn serve_runner_link(composed: &Arc<infantry_daemon::compose::Composed>, state_d
         allow_harnesses: env("INFANTRY_RUNNER_ALLOW_HARNESSES").unwrap_or_else(|| "*".into()),
         app_version: env!("CARGO_PKG_VERSION").into(),
         allow_plain: plain_allowed(&|k: &str| setting(k)),
+        pair_code_ms: setting("limits.runners.pairCodeMin").and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))).filter(|m| *m > 0).map_or(infantry_runner_link::agent::PAIR_CODE_MS, |m| m * 60_000),
+        pair_attempts_per_hour: setting("limits.runners.pairAttemptsPerHour").and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))).filter(|n| *n > 0).map_or(infantry_runner_link::agent::PAIR_ATTEMPTS_PER_HOUR, |n| n as usize),
     };
     // RR-6: this runner's owner decides what it takes of the credentials an orchestrator lends: `runner.acceptCredentials`
     // (default true) and, per harness, keeping its own sign-in (`harness.<id>.authMode=subscription-login`). Read per start.

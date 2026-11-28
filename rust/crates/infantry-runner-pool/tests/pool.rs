@@ -164,3 +164,88 @@ fn an_update_to_a_missing_image_reports_its_steps_and_fails_plainly() {
     assert!(u.detail.contains("could not be pulled and is not on this machine"), "{}", u.detail);
     assert!(pool.step_log("test-box").iter().any(|e| e["step"] == "update"), "Details > Setup log has the update steps");
 }
+
+// PARITY-AUDIT-1 #4: the five runner_admin ops the CLI sends (pair, pair_preview, pair_status, rotate, connect).
+
+fn serve_opts() -> infantry_runner_pool::ServeOptions {
+    infantry_runner_pool::ServeOptions {
+        bind_host: "127.0.0.1".into(),
+        port: 0,
+        name: Some("box".into()),
+        public_host: None,
+        public_port: None,
+        advertise_hosts: vec![],
+        allow_projects: "*".into(),
+        allow_harnesses: "*".into(),
+        app_version: "0.0.0-test".into(),
+        allow_plain: false,
+        pair_code_ms: 60_000,
+        pair_attempts_per_hour: 10,
+    }
+}
+
+fn side(u: &infantry_runner_pool::RunnerSideAdmin, body: Value) -> Value {
+    let ctx = FrameCtx { conn_id: 1, owner: true, bus: EventBus::new(8) };
+    serde_json::from_str(&u.handle(&Envelope::new("runner_admin", body.to_string()), &ctx).unwrap()[0].data).unwrap()
+}
+
+#[test]
+fn runner_side_pair_preview_pair_and_status() {
+    let dir = temp("pair");
+    let backend = infantry_runner_link::process::ProcessBackend::new(Arc::new(infantry_runner_local::LocalRunner::default()));
+    let rs = infantry_runner_pool::RunnerServe::start(&dir, Box::new(backend), serve_opts()).unwrap();
+    let u = infantry_runner_pool::RunnerSideAdmin { serve: rs.clone() };
+    assert!(side(&u, json!({"op": "pair_preview"}))["installedHarnesses"].is_array());
+    assert_eq!(side(&u, json!({"op": "pair_status"}))["state"], "expired", "no code issued yet");
+    assert!(side(&u, json!({"op": "pair", "name": "Bad Name"}))["error"].as_str().unwrap().contains("must be"));
+    let p = side(&u, json!({"op": "pair", "name": "box"}));
+    assert_eq!(p["ok"], true, "{p}");
+    let code = p["code"].as_str().unwrap().to_string();
+    assert_eq!((p["port"].as_u64(), p["plain"].as_bool(), p["expiryMin"].as_i64()), (Some(rs.port() as u64), Some(false), Some(1)));
+    assert_eq!(side(&u, json!({"op": "pair_status"}))["state"], "waiting");
+    let url = format!("wss://127.0.0.1:{}", rs.port());
+    let c = infantry_runner_link::LinkClient::new(&url, "inf-orch".to_string(), None).with_pin(p["fingerprint"].as_str().map(str::to_string));
+    assert!(c.pair("WRONG-CODE-XXXX-YYYY", "orch").is_err());
+    let paired = c.pair(&code, "orch").unwrap();
+    assert_eq!(paired.name, "box");
+    let st = side(&u, json!({"op": "pair_status"}));
+    assert_eq!((st["state"].as_str(), st["orchestratorName"].as_str()), (Some("paired"), Some("orch")), "{st}");
+    assert!(c.pair(&code, "orch").is_err(), "the code is single use");
+    assert!(side(&u, json!({"op": "rotate", "name": "x"}))["error"].as_str().unwrap().contains("unknown op"));
+}
+
+#[test]
+fn rotate_refuses_the_old_key_and_unknown_runners() {
+    let (rdir, state) = (temp("rot-runner"), temp("rot-state"));
+    let (serving, bearer) = runner(&rdir);
+    let pool = RunnerPool::open(&state);
+    pool.set_allow_plain(Arc::new(|| true));
+    let unit = AdminUnit { pool: pool.clone(), lend: None };
+    assert!(call(&unit, true, json!({"op": "rotate", "name": "nope"})).unwrap()["error"].as_str().unwrap().contains("no runner named 'nope'"));
+    assert!(call(&unit, true, json!({"op": "rotate"})).unwrap()["error"].as_str().unwrap().contains("needs a runner name"));
+    let url = format!("ws://127.0.0.1:{}", serving.port);
+    assert_eq!(call(&unit, true, json!({"op": "add", "endpoint": url, "bearer": bearer})).unwrap()["ok"], true);
+    let old = pool.store().runner("test-box").unwrap();
+    let r = call(&unit, true, json!({"op": "rotate", "name": "test-box"})).unwrap();
+    assert_eq!((r["ok"].as_bool(), r["name"].as_str()), (Some(true), Some("test-box")), "{r}");
+    assert_ne!(pool.store().runner("test-box").unwrap().credential, old.credential);
+    let stale = infantry_runner_link::LinkClient::of(&old, &pool.orchestrator_id()).allow_plain(true);
+    assert!(stale.hello().is_err(), "the old key is refused after rotate");
+    assert_eq!(call(&unit, true, json!({"op": "check", "name": "test-box"})).unwrap()["state"], "online");
+    // connect: an answering runner is `already`; an unknown one without a bearer is refused.
+    let c = call(&unit, true, json!({"op": "connect", "name": "test-box"})).unwrap();
+    assert_eq!((c["ok"].as_bool(), c["already"].as_bool()), (Some(true), Some(true)), "{c}");
+    assert!(call(&unit, true, json!({"op": "connect", "name": "ghost"})).unwrap()["error"].as_str().unwrap().contains("needs the runner's bearer"));
+    assert!(call(&unit, true, json!({"op": "pair"})).unwrap()["error"].as_str().unwrap().contains("runs on a runner"));
+}
+
+#[test]
+fn connect_pairs_by_bearer_and_host() {
+    let (rdir, state) = (temp("con-runner"), temp("con-state"));
+    let (serving, bearer) = runner(&rdir);
+    let pool = RunnerPool::open(&state);
+    pool.set_allow_plain(Arc::new(|| true));
+    let unit = AdminUnit { pool, lend: None };
+    let c = call(&unit, true, json!({"op": "connect", "name": "test-box", "bearer": bearer, "host": "127.0.0.1", "port": serving.port.to_string()})).unwrap();
+    assert_eq!((c["ok"].as_bool(), c["already"].as_bool(), c["name"].as_str()), (Some(true), Some(false), Some("test-box")), "{c}");
+}

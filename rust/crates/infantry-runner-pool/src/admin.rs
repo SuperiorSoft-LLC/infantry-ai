@@ -272,6 +272,57 @@ impl AdminUnit {
         }
     }
 
+    /// PARITY-AUDIT-1 #4: a fresh credential for runner `name`; the old one is refused from then on.
+    fn rotate(&self, d: &Map<String, Value>) -> Value {
+        let Some(name) = text(d, "name") else { return fail("rotate needs a runner name") };
+        if name == "local" {
+            return fail("the embedded runner is the app itself: it has no link credential");
+        }
+        match self.pool.rotate(name) {
+            Ok(r) => {
+                self.pool.log_step(name, "rotate", "runner rotate", "credential rotated", Some(0), "");
+                json!({"ok": true, "name": r.name, "runnerId": r.runner_id, "issuedAt": r.issued_at})
+            }
+            Err(e) => fail(e),
+        }
+    }
+
+    /// PARITY-AUDIT-1 #4: `connect` a runner by name. One already paired here that answers is `already`; otherwise, with the
+    /// runner's `bearer` and its `host` (and `port`), it pairs as `add` does. Nothing is fetched from the runner machine.
+    fn connect(&self, d: &Map<String, Value>) -> Value {
+        let name = text(d, "name");
+        if let Some(n) = name {
+            if self.pool.store().runner(n).is_some() {
+                if let Some((state, _)) = self.pool.check(n) {
+                    if matches!(state, RunnerState::Online { .. }) {
+                        let r = self.pool.store().runner(n).expect("present");
+                        return json!({"ok": true, "already": true, "name": r.name, "url": r.url, "runnerId": r.runner_id});
+                    }
+                    if text(d, "bearer").is_none() {
+                        return fail(format!("runner '{n}' is paired here but does not answer ({}); fix the link or connect with its newest bearer", state.word()));
+                    }
+                }
+            }
+        }
+        let Some(bearer) = text(d, "bearer") else {
+            return fail(format!("no runner named '{}' answers here; connect needs the runner's bearer (`infantry runner bearer` on the runner) and its host", name.unwrap_or("?")));
+        };
+        let token = match BearerToken::parse(bearer) {
+            Ok(t) => t,
+            Err(why) => return fail(why),
+        };
+        let Some(host) = text(d, "host").and_then(|h| h.split(',').map(str::trim).find(|h| !h.is_empty())) else { return fail("connect needs the runner's host") };
+        let port = text(d, "port").map(str::to_string).unwrap_or_else(|| crate::DEFAULT_LINK_PORT.to_string());
+        let endpoint = format!("{}://{host}:{port}", if token.fingerprint.is_some() { "wss" } else { "ws" });
+        let mut add = d.clone();
+        add.insert("endpoint".into(), json!(endpoint));
+        let mut v = self.add(&add);
+        if v["ok"] == true {
+            v["already"] = json!(false);
+        }
+        v
+    }
+
     fn detach(&self, d: &Map<String, Value>) -> Value {
         let Some(name) = text(d, "name") else { return fail("detach needs a runner name") };
         match self.pool.detach(name) {
@@ -304,7 +355,10 @@ impl FrameUnit for AdminUnit {
             Some("refresh") => self.refresh(),
             Some("update") => self.update(&d),
             Some("update_status") => self.update_status(&d),
-            Some(other) => fail(format!("unknown op '{other}' (add, list, refresh, check, detail, update, update_status, detach)")),
+            Some("rotate") => self.rotate(&d),
+            Some("connect") => self.connect(&d),
+            Some(op @ ("pair" | "pair_preview" | "pair_status")) => fail(format!("{op} runs on a runner: this daemon is an orchestrator. Start the runner (`infantry runner up` or a daemon in --mode runner) and run `infantry runner pair` there, or pair from here with `infantry runner add <endpoint> --bearer <bearer>`")),
+            Some(other) => fail(format!("unknown op '{other}' (add, list, refresh, check, detail, update, update_status, detach, rotate, connect)")),
             None => fail("missing op"),
         };
         let mut out = Envelope::new(ADMIN_FRAME, answer.to_string());

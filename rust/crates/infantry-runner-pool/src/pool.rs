@@ -191,6 +191,17 @@ impl RunnerPool {
         Ok(paired)
     }
 
+    /// Re-keys runner `name` (`runner_link_rekey`): the runner issues a fresh credential and drops the old one; the fresh one is
+    /// kept here. Err when no runner has that name or the runner refused.
+    pub fn rotate(&self, name: &str) -> Result<PairedRunner, String> {
+        let Some(mut r) = self.store.runner(name) else { return Err(format!("no runner named '{name}' (infantry runner list)")) };
+        let a: wire::RekeyAnswer = self.client(&r).typed(wire::REKEY, &serde_json::json!({})).map_err(|e| e.to_string())?;
+        r.credential = a.credential;
+        r.issued_at = a.issued_at;
+        self.store.save_runner(r.clone());
+        Ok(r)
+    }
+
     /// Hello + health (ping/pong) on runner `name`; records and returns the state, with the ping when it answered.
     pub fn check(&self, name: &str) -> Option<(RunnerState, Option<Ping>)> {
         let r = self.store.runner(name)?;

@@ -4,7 +4,8 @@
 //! with the backend the composition root passes (a `ProcessBackend` over the daemon's LocalRunner). The bearer lives in
 //! `<state>/runner-link/bearer` and is printed in an `==== INFANTRY RUNNER <name> ====` block on every start, rotation,
 //! rename and pair. A PAIR carrying the live bearer from another orchestrator takes the runner over (the link server
-//! audits `runner_link_pair_takeover`); a one-time code never moves a paired runner, and this side issues none.
+//! audits `runner_link_pair_takeover`); a one-time code never moves a paired runner. `infantry runner pair` (runner_admin
+//! `pair`) issues one such code on this side; `pair_status` says whether it was used.
 use infantry_core::frames::{Envelope, FrameCtx, FrameUnit, Refusal};
 use infantry_runner_link::pairing::{Bearer, BearerToken};
 use infantry_runner_link::transport::LinkHandler;
@@ -37,6 +38,10 @@ pub struct ServeOptions {
     pub app_version: String,
     /// `runners.allowPlainTailnet`: serve plain `ws://` (no certificate, a plain bearer). Off = wss with the pinned certificate.
     pub allow_plain: bool,
+    /// The one-time pair code's life (`limits.runners.pairCodeMin`, in ms here) and its redeem attempts per hour
+    /// (`limits.runners.pairAttemptsPerHour`).
+    pub pair_code_ms: i64,
+    pub pair_attempts_per_hour: usize,
 }
 
 pub struct RunnerServe {
@@ -49,6 +54,8 @@ pub struct RunnerServe {
     opts: ServeOptions,
     /// Serialises bearer changes with the banner print.
     lock: Mutex<()>,
+    /// When the last `pair` code was issued (ms); None = never on this boot.
+    pair_issued_at: Mutex<Option<i64>>,
 }
 
 /// Parses the setting `runners.advertiseHosts` (a JSON list, or a comma list).
@@ -85,14 +92,14 @@ impl RunnerServe {
         let bearer = Bearer::of(&dir);
         bearer.ensure(opts.name.as_deref(), false).map_err(|e| e.to_string())?;
         let server = Arc::new(
-            LinkServer::new(LinkStore::open(&dir), None, Some(Bearer::of(&dir)), backend, Some(dir.join("audit.jsonl")))
+            LinkServer::new(LinkStore::open(&dir), Some(infantry_runner_link::pairing::PairCodes::new(opts.pair_code_ms, opts.pair_attempts_per_hour)), Some(Bearer::of(&dir)), backend, Some(dir.join("audit.jsonl")))
                 .with_identity("runner", &opts.app_version),
         );
         let handler = Arc::new(Announcing { serve: Default::default(), server: server.clone() });
         let cert = if opts.allow_plain { None } else { Some(RunnerCert::load_or_create(&dir).map_err(|e| e.to_string())?) };
         let tls = cert.as_ref().map(RunnerCert::server_config).transpose()?;
         let serving = serve(handler.clone(), &opts.bind_host, opts.port, tls).map_err(|e| format!("the runner link cannot bind {}:{} ({e})", opts.bind_host, opts.port))?;
-        let this = Arc::new(RunnerServe { bearer, store_dir: dir, server, serving, cert, opts, lock: Mutex::new(()) });
+        let this = Arc::new(RunnerServe { bearer, store_dir: dir, server, serving, cert, opts, lock: Mutex::new(()), pair_issued_at: Mutex::new(None) });
         let _ = handler.serve.set(Arc::downgrade(&this));
         this.print_banner();
         Ok(this)
@@ -158,6 +165,47 @@ impl RunnerServe {
     }
 }
 
+impl RunnerServe {
+    /// `runner_admin` `pair_preview`: the harnesses this runner has, for the pair prompt.
+    pub fn pair_preview(&self) -> Value {
+        let ids: Vec<String> = self.server.info().harnesses.into_iter().map(|h| h.id).collect();
+        json!({"ok": true, "installedHarnesses": ids})
+    }
+
+    /// `runner_admin` `pair`: a fresh one-time code (replacing any live one) for runner `name` (the bearer's name when None).
+    /// The code pairs an orchestrator once (`infantry runner add <name> <endpoint> --code <code>`); it never moves a runner
+    /// already paired elsewhere (the bearer does).
+    pub fn pair_op(&self, name: Option<&str>) -> Value {
+        let name = match name.map(str::trim).filter(|n| !n.is_empty()) {
+            Some(n) if !infantry_runner_link::pairing::valid_name(n) => return json!({"ok": false, "error": format!("runner name '{n}' must be 1-32 of a-z, 0-9 and '-'")}),
+            Some(n) => n.to_string(),
+            None => self.bearer.read().map(|v| v.name).unwrap_or_else(|| "runner".into()),
+        };
+        let Some(code) = self.server.issue_code(&name) else { return json!({"ok": false, "error": "this runner takes no pair codes"}) };
+        *self.pair_issued_at.lock().unwrap_or_else(|e| e.into_inner()) = Some(infantry_runner_link::server::now_ms());
+        let port = self.opts.public_port.unwrap_or(self.serving.port);
+        let mut v = json!({"ok": true, "name": name, "code": code, "expiryMin": self.opts.pair_code_ms / 60_000, "port": port, "plain": self.cert.is_none(), "endpoint": self.endpoint()});
+        if let Some(fp) = self.pin() {
+            v["fingerprint"] = json!(fp);
+        }
+        if let Some(p) = self.last_paired() {
+            v["pairedWith"] = json!(p);
+        }
+        v
+    }
+
+    /// `runner_admin` `pair_status`: `paired` once an orchestrator paired after the last `pair`, `waiting` while that code is
+    /// live, else `expired` (also when no code was issued).
+    pub fn pair_status(&self) -> Value {
+        let since = *self.pair_issued_at.lock().unwrap_or_else(|e| e.into_inner());
+        let paired = self.server.store().orchestrator().filter(|o| since.is_some_and(|t| o.issued_at >= t));
+        if let Some(o) = paired {
+            return json!({"ok": true, "state": "paired", "orchestratorName": o.name, "orchestratorId": o.id});
+        }
+        json!({"ok": true, "state": if since.is_some() && self.server.code_live() { "waiting" } else { "expired" }})
+    }
+}
+
 /// The owner-only `runner_admin` frame of a runner-mode daemon: `bearer` (print it; `rotate: true` makes a new one).
 pub struct RunnerSideAdmin {
     pub serve: Arc<RunnerServe>,
@@ -180,7 +228,10 @@ impl FrameUnit for RunnerSideAdmin {
         let text = |m: &Map<String, Value>, k: &str| m.get(k).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
         let answer = match text(&d, "op").as_deref() {
             Some("bearer") => self.serve.bearer_op(d.get("rotate").and_then(Value::as_bool).unwrap_or(false), text(&d, "name").as_deref()),
-            Some(other) => json!({"ok": false, "error": format!("unknown op '{other}' on a runner (bearer)")}),
+            Some("pair") => self.serve.pair_op(text(&d, "name").as_deref()),
+            Some("pair_preview") => self.serve.pair_preview(),
+            Some("pair_status") => self.serve.pair_status(),
+            Some(other) => json!({"ok": false, "error": format!("unknown op '{other}' on a runner (bearer, pair, pair_preview, pair_status)")}),
             None => json!({"ok": false, "error": "missing op"}),
         };
         let mut out = Envelope::new(crate::ADMIN_FRAME, answer.to_string());
@@ -208,6 +259,8 @@ mod tests {
             allow_harnesses: "*".into(),
             app_version: "0.0.0-test".into(),
             allow_plain: false,
+            pair_code_ms: 60_000,
+            pair_attempts_per_hour: 10,
         }
     }
 

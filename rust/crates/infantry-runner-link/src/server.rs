@@ -189,6 +189,16 @@ impl LinkServer {
         self.codes.as_ref().map(|c| c.lock().unwrap().issue(runner_name, (self.clock)()))
     }
 
+    /// Whether a one-time code is live now (issued, unused, unexpired); false when this server takes no codes.
+    pub fn code_live(&self) -> bool {
+        self.codes.as_ref().is_some_and(|c| c.lock().unwrap().live_name((self.clock)()).is_some())
+    }
+
+    /// What this runner offers (its backend's harnesses, projects, capacity), as the hello carries it.
+    pub fn info(&self) -> RunnerInfo {
+        self.backend.info()
+    }
+
     fn record(&self, seat: &str, op: &str, outcome: &str, from: Option<&str>) {
         let Some(path) = &self.audit else { return };
         if let Some(dir) = path.parent() {

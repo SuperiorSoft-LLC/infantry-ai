@@ -52,6 +52,8 @@ fn opts() -> ServeOptions {
         allow_harnesses: "*".into(),
         app_version: "0.0.0-test".into(),
         allow_plain: false,
+        pair_code_ms: 60_000,
+        pair_attempts_per_hour: 10,
     }
 }
 
