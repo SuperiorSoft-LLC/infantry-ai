@@ -199,11 +199,13 @@ fn epic_id(work: &Dispatcher, project: Option<&str>, want: &str) -> Result<Optio
 fn save_fields(a: &Map<String, Value>, req: &mut TicketSave) -> Result<(), String> {
     req.title = s(a, "title");
     req.description = a.get("description").and_then(|v| v.as_str()).map(str::to_string);
-    if let Some(r) = s(a, "role") {
-        req.agent_id = Some(if r.contains(':') { r } else { format!("role:{r}") });
+    // Pins: an explicit "" clears (as ticket_save does); an absent field leaves the pin unchanged.
+    let pin = |k: &str| s(a, k).or_else(|| a.get(k).and_then(Value::as_str).map(|_| String::new()));
+    if let Some(r) = pin("role") {
+        req.agent_id = Some(if r.is_empty() || r.contains(':') { r } else { format!("role:{r}") });
     }
-    req.provider = s(a, "provider");
-    req.model = s(a, "model");
+    req.provider = pin("provider");
+    req.model = pin("model");
     req.weight = i(a, "weight").map(|w| w as i32);
     req.effort = s(a, "effort");
     req.runner = s(a, "runner");
@@ -564,6 +566,19 @@ mod tests {
         assert_eq!(parse_context_limit("150000").unwrap(), 150_000);
         assert_eq!(parse_context_limit("off").unwrap(), 0);
         assert!(parse_context_limit("lots").is_err());
+    }
+
+    #[test]
+    fn update_explicit_empty_clears_pins_absent_leaves_them() {
+        let a = serde_json::json!({"role": "", "provider": " ", "model": ""});
+        let mut req = TicketSave::default();
+        save_fields(a.as_object().unwrap(), &mut req).unwrap();
+        assert_eq!(req.agent_id.as_deref(), Some(""));
+        assert_eq!(req.provider.as_deref(), Some(""));
+        assert_eq!(req.model.as_deref(), Some(""));
+        let mut req = TicketSave::default();
+        save_fields(&Map::new(), &mut req).unwrap();
+        assert!(req.agent_id.is_none() && req.provider.is_none() && req.model.is_none());
     }
 
     #[test]
