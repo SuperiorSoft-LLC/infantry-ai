@@ -19,6 +19,7 @@ pub mod comments;
 pub mod dispatch;
 pub mod env;
 pub mod epics;
+pub mod epic_move;
 pub mod owner_mail;
 pub mod local;
 pub mod rules;

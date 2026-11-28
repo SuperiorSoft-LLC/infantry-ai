@@ -476,5 +476,67 @@
   {"name": "infantry_ticket_restore", "readOnly": false, "description": "Restore archived tickets to the live board exactly as they were (lane, position, links whose other end is live, branch, project, epic): give ids, or epicId to restore every archived ticket of an epic. PM and owner only.", "inputSchema": {"type": "object", "properties": {"ids": {"type": "array", "items": {"type": "string"}, "description": "Ticket ids (ticket-xxxxxxxx or the 8 char suffix)."}, "epicId": {"type": "string", "description": "Restore every archived ticket of this epic."}, "projectId": {"type": "string", "description": "Limit to this project."}, "dryRun": {"type": "boolean", "description": "Count what would move, move nothing."}}, "required": [], "additionalProperties": false}},
   {"name": "infantry_archive", "readOnly": true, "description": "Read the ticket archive: op list (newest first), show (one id, full text), search (text in title / description / id), count.", "inputSchema": {"type": "object", "properties": {"op": {"type": "string", "description": "list | show | search | count (default list)."}, "ids": {"type": "array", "items": {"type": "string"}, "description": "Ticket ids (ticket-xxxxxxxx or the 8 char suffix)."}, "text": {"type": "string", "description": "Search text."}, "projectId": {"type": "string", "description": "Limit to this project."}, "epicId": {"type": "string", "description": "Limit a list to this epic."}, "limit": {"type": "integer", "description": "Most rows (default 100, max 500)."}, "offset": {"type": "integer", "description": "Skip rows (list)."}}, "required": [], "additionalProperties": false}},
   {"name": "infantry_ticket_files", "readOnly": true, "description": "Files changed by a ticket (status A/M/D/R, +added -removed, path), or with `path` the tickets that changed matching files (glob, `**` ok; no wildcard = any path containing it). Recorded when each ticket went done, kept after its branch is deleted. Cheaper than grepping git history.", "inputSchema": {"type": "object", "properties": {"ticketId": {"type": "string", "description": "ticket id, e.g. ticket-55476f3c or 55476f3c"}, "path": {"type": "string", "description": "path or glob, e.g. **/TicketBoard.kt"}, "limit": {"type": "integer", "description": "most lines (default: limits.ticketFiles.maxLines)"}}, "required": [], "additionalProperties": false}},
-  {"name": "infantry_ticket_related_files", "readOnly": true, "description": "Call this BEFORE grepping: the tickets that changed the same files as this ticket (ranked by overlap), and the union of the files they changed, each with the ticket ids that touched it.", "inputSchema": {"type": "object", "properties": {"ticketId": {"type": "string", "description": "ticket id, e.g. ticket-55476f3c"}, "top": {"type": "integer", "description": "how many related tickets (default: limits.ticketFiles.relatedTop)"}, "limit": {"type": "integer", "description": "most file lines (default: limits.ticketFiles.maxLines)"}}, "required": ["ticketId"], "additionalProperties": false}}
+  {"name": "infantry_ticket_related_files", "readOnly": true, "description": "Call this BEFORE grepping: the tickets that changed the same files as this ticket (ranked by overlap), and the union of the files they changed, each with the ticket ids that touched it.", "inputSchema": {"type": "object", "properties": {"ticketId": {"type": "string", "description": "ticket id, e.g. ticket-55476f3c"}, "top": {"type": "integer", "description": "how many related tickets (default: limits.ticketFiles.relatedTop)"}, "limit": {"type": "integer", "description": "most file lines (default: limits.ticketFiles.maxLines)"}}, "required": ["ticketId"], "additionalProperties": false}},
+ {
+  "name": "infantry_ticket_epic",
+  "readOnly": false,
+  "description": "Move tickets to an epic, or out of every epic (epic=none). One call moves one or many (tickets[] and/or ticketId). The epic is an id or a name of the tickets' project; an unknown name creates it (only when something moves), an unknown epic id refuses. Only the epic changes: status, order, branch and worker are kept. An in_progress ticket whose branch was cut from another base than the new epic's is NOT moved (the answer says why) unless force is true. One unknown ticket id refuses the whole call. Same as `infantry ticket epic <id...> <epic|none> [--force]`.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "tickets": {"type": "array", "items": {"type": "string"}, "description": "Ticket ids (full or 8-char suffix)."},
+    "ticketId": {"type": "string", "description": "One ticket id (full or 8-char suffix); added to tickets."},
+    "epic": {"type": "string", "description": "Epic id, epic name, or none."},
+    "force": {"type": "boolean", "description": "true moves in_progress tickets even when the new epic cuts from another base (their branch keeps its base)."}
+   },
+   "required": ["epic"],
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_ticket_assign",
+  "readOnly": false,
+  "description": "Assign a todo ticket to an EXISTING agent (profile id or unique name). Default starts it on that agent; an agent on another in-progress ticket is refused (use infantry_agent_switch or queue). queue=true adds it to the agent's queue at `at` instead. Same as `infantry ticket assign <id> <agent> [--queue] [--at n]`.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticketId": {"type": "string", "description": "Full ticket id, or its 8-char suffix."},
+    "agentId": {"type": "string", "description": "Agent profile id, or its unique name."},
+    "queue": {"type": "boolean", "description": "Add to the agent's queue instead of starting."},
+    "at": {"type": "integer", "description": "1-based place in the queue (with queue)."},
+    "verbose": {"type": "boolean", "description": "true = answer with the full ticket."}
+   },
+   "required": ["ticketId", "agentId"],
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_ticket_unassign",
+  "readOnly": false,
+  "description": "Take ONE in_progress ticket off its worker: the ticket goes back to the top of todo with its branch and work kept, and a handoff comment (with your note) feeds the next worker's brief. A busy worker finishes its current turn first; now ends it at once. Refused unless the ticket is in_progress. Same as `infantry ticket unassign <id> [--now] [--note <text>]`.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticketId": {"type": "string", "description": "Full ticket id, or its 8-char suffix."},
+    "now": {"type": "boolean", "description": "End the worker at once instead of after its current turn."},
+    "note": {"type": "string", "description": "A note for the next worker, added to the handoff comment."},
+    "verbose": {"type": "boolean", "description": "true = answer with the full ticket."}
+   },
+   "required": ["ticketId"],
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_ticket_delete",
+  "readOnly": false,
+  "description": "Delete ONE ticket (full id or 8-char suffix) with its links. An unknown or ambiguous id is refused and nothing is deleted. A ticket in progress is refused: unassign or close it first.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "ticketId": {"type": "string", "description": "Full ticket id, or its 8-char suffix."}
+   },
+   "required": ["ticketId"],
+   "additionalProperties": false
+  }
+ }
 ]

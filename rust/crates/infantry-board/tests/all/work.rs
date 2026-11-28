@@ -708,3 +708,98 @@ fn the_first_finish_wins_and_later_ones_are_notes() {
         .collect();
     assert!(!kinds.contains(&"done".to_string()), "later finishes are notes: {kinds:?}");
 }
+
+/// PARITY-AUDIT-1 #3: the epic / assign / unassign / delete tools, each a happy path and a refusal.
+mod parity_tools {
+    use super::*;
+    use infantry_board::env::BoardAgent;
+    use infantry_board::tools::{call, Caller, Ctx};
+    use infantry_orchestrator_api::EpicSave;
+    use serde_json::{json, Map, Value};
+
+    fn run(d: &Dispatcher, name: &str, a: Value) -> Result<String, String> {
+        let publish = |_e: infantry_protocol::Envelope| {};
+        let state = |_s: &str| -> Option<String> { None };
+        let ctx = Ctx { work: d, publish: &publish, session_state: &state };
+        let m: Map<String, Value> = a.as_object().cloned().unwrap();
+        call(&ctx, name, &m, &Caller { owner: true, project_id: Some("p1".into()), ..Default::default() }).expect("a board tool")
+    }
+
+    fn project(f: &Fixture) {
+        f.board.db().write(|c| c.execute("INSERT INTO projects(id, name, created_at) VALUES ('p1', 'P', 1)", [])).unwrap();
+    }
+
+    fn env() -> StaticEnv {
+        StaticEnv { lane_cap: 10, agents: vec![BoardAgent { id: Some("agent-1".into()), name: "Bob".into(), role: Some("backend".into()), ..Default::default() }], ..kotlin_daemon_env() }
+    }
+
+    #[test]
+    fn epic_moves_tickets_in_and_out_and_refuses_an_unknown_epic_id() {
+        let (f, _l, d, o) = setup("tool-epic", env(), Duration::ZERO);
+        project(&f);
+        let ids = tickets(&f, 2);
+        let out = run(&d, "infantry_ticket_epic", json!({"tickets": [ids[0], ids[1]], "epic": "Alpha"})).unwrap();
+        let v: Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["created"], true, "{out}");
+        let eid = v["epicId"].as_str().unwrap().to_string();
+        let t = block_on(o.get(ids[0].clone())).unwrap();
+        assert_eq!(t.epic_id.as_deref(), Some(eid.as_str()));
+        assert_eq!(t.status, "todo", "status kept");
+        run(&d, "infantry_ticket_epic", json!({"ticketId": ids[0], "epic": "none"})).unwrap();
+        assert_eq!(block_on(o.get(ids[0].clone())).unwrap().epic_id, None);
+        let e = run(&d, "infantry_ticket_epic", json!({"ticketId": ids[1], "epic": "epic-deadbeef"})).unwrap_err();
+        assert!(e.contains("no epic"), "{e}");
+        // create with epic still files under it
+        f.env.push_ids(&["ticket-00000009"]);
+        run(&d, "infantry_ticket_create", json!({"title": "T", "epic": "Alpha"})).unwrap();
+        assert_eq!(block_on(o.get("ticket-00000009".into())).unwrap().epic_id.as_deref(), Some(eid.as_str()));
+    }
+
+    #[test]
+    fn epic_refuses_an_in_progress_ticket_on_another_base_unless_forced() {
+        let (f, _l, d, o) = setup("tool-epic-base", env(), Duration::ZERO);
+        project(&f);
+        let ids = tickets(&f, 1);
+        let based = d.board().epic_save(EpicSave { project_id: "p1".into(), name: "Based".into(), goal: String::new() }).unwrap();
+        // No repository in the fixture, so epic_base refuses a set: write the base as a resolved set would.
+        f.board.db().write(|c| c.execute("UPDATE epics SET base_branch = 'release' WHERE id = ?1", [&based.id])).unwrap();
+        start(&o, &ids[0]);
+        let e = run(&d, "infantry_ticket_epic", json!({"ticketId": ids[0], "epic": "Based"})).unwrap_err();
+        assert!(e.contains("Not moved"), "{e}");
+        let ok = run(&d, "infantry_ticket_epic", json!({"ticketId": ids[0], "epic": "Based", "force": true})).unwrap();
+        assert!(ok.contains("Warning"), "{ok}");
+        assert_eq!(block_on(o.get(ids[0].clone())).unwrap().status, "in_progress");
+    }
+
+    #[test]
+    fn assign_starts_on_the_agent_and_refuses_an_unknown_agent() {
+        let (f, _l, d, o) = setup("tool-assign", env(), Duration::ZERO);
+        let ids = tickets(&f, 1);
+        let e = run(&d, "infantry_ticket_assign", json!({"ticketId": ids[0], "agentId": "nobody"})).unwrap_err();
+        assert!(e.contains("no agent"), "{e}");
+        let out = run(&d, "infantry_ticket_assign", json!({"ticketId": ids[0], "agentId": "Bob"})).unwrap();
+        assert!(out.starts_with("assigned"), "{out}");
+        assert_eq!(block_on(o.get(ids[0].clone())).unwrap().status, "in_progress");
+    }
+
+    #[test]
+    fn unassign_returns_to_todo_and_refuses_a_todo_ticket() {
+        let (f, _l, d, o) = setup("tool-unassign", env(), Duration::ZERO);
+        let ids = tickets(&f, 1);
+        assert!(run(&d, "infantry_ticket_unassign", json!({"ticketId": ids[0]})).is_err());
+        start(&o, &ids[0]);
+        let out = run(&d, "infantry_ticket_unassign", json!({"ticketId": ids[0], "now": true, "note": "pick up"})).unwrap();
+        assert!(out.ends_with("todo"), "{out}");
+    }
+
+    #[test]
+    fn delete_removes_a_todo_ticket_and_refuses_one_in_progress() {
+        let (f, _l, d, o) = setup("tool-delete", env(), Duration::ZERO);
+        let ids = tickets(&f, 2);
+        start(&o, &ids[1]);
+        let e = run(&d, "infantry_ticket_delete", json!({"ticketId": ids[1]})).unwrap_err();
+        assert!(e.contains("in progress"), "{e}");
+        run(&d, "infantry_ticket_delete", json!({"ticketId": ids[0]})).unwrap();
+        assert!(block_on(o.get(ids[0].clone())).is_err());
+    }
+}

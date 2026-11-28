@@ -7,7 +7,7 @@
 //!
 //! Answers are short text (one line per ticket); `verbose` / `detail=full` add the stored ticket as JSON.
 use infantry_orchestrator_api::dto::{status, AgentSwitch, CommentAdd, EpicBaseRequest, CommentAuthor, CommentQuery, NotifyEdit, Ticket, TicketMove, TicketSave};
-use infantry_orchestrator_api::{AgentQueueRequest, OrchError, StartOrigin, TicketClose, TicketRestart};
+use infantry_orchestrator_api::{AgentQueueRequest, OrchError, StartOrigin, TicketAssign, TicketClose, TicketRestart, TicketUnassign};
 use infantry_protocol::Envelope;
 use serde_json::{Map, Value};
 
@@ -497,6 +497,54 @@ pub fn call(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> Opti
                 }
             }
             Ok(out.join("\n"))
+        })(),
+        "infantry_ticket_epic" => (|| {
+            let mut ids = list(a, "tickets").unwrap_or_default();
+            if let Some(one) = s(a, "ticketId") {
+                ids.push(one);
+            }
+            let target = a.get("epic").and_then(|v| v.as_str()).ok_or("infantry_ticket_epic needs an epic (id, name or none)")?;
+            let o = board.epic_move(&ids, target, b(a, "force"), ctx.publish).map_err(err)?;
+            let json = serde_json::to_string(&o).unwrap_or_default();
+            // Nothing moved and something refused: the call failed.
+            if o.moved.is_empty() && !o.refused.is_empty() {
+                return Err(json);
+            }
+            Ok(json)
+        })(),
+        "infantry_ticket_assign" => (|| {
+            let tid = s(a, "ticketId").ok_or("infantry_ticket_assign needs a ticketId")?;
+            let agent_id = s(a, "agentId").ok_or("infantry_ticket_assign needs an agentId")?;
+            let at = match s(a, "at") {
+                Some(x) => Some(x.parse::<i32>().map_err(|_| "infantry_ticket_assign: at must be a whole number".to_string())?),
+                None => None,
+            };
+            let t = board.find(&tid).map_err(err)?;
+            let got = ctx.work.assign(&TicketAssign { id: t.id.clone(), agent_id, queue: b(a, "queue"), at }).map_err(err)?.ticket;
+            Ok(saved("assigned", &got, b(a, "verbose")))
+        })(),
+        "infantry_ticket_unassign" => (|| {
+            let t = board.find(&s(a, "ticketId").ok_or("infantry_ticket_unassign needs a ticketId")?).map_err(err)?;
+            let moved = ctx.work.unassign(&TicketUnassign { id: t.id.clone(), now: b(a, "now"), note: s(a, "note") }).map_err(err)?.ticket;
+            if b(a, "verbose") {
+                return Ok(serde_json::to_string_pretty(&moved).unwrap_or_default());
+            }
+            Ok(format!("ok {} {}", short(&moved.id), moved.status))
+        })(),
+        "infantry_ticket_delete" => (|| {
+            let t = board.find(&s(a, "ticketId").ok_or("infantry_ticket_delete needs a ticketId")?).map_err(err)?;
+            if t.status == status::IN_PROGRESS {
+                return Err(format!(
+                    "infantry_ticket_delete refused: ticket {} is in progress (worker session {}); unassign or close it first",
+                    short(&t.id),
+                    t.session_id.as_deref().unwrap_or("unknown")
+                ));
+            }
+            let left = board.delete(&t.id, ctx.publish).map_err(err)?.tickets;
+            if left.iter().any(|x| x.id == t.id) {
+                return Err(format!("infantry_ticket_delete: ticket {} is still on the board", short(&t.id)));
+            }
+            Ok(format!("deleted {} \"{}\"", t.id, t.title))
         })(),
         "infantry_ticket_archive" | "infantry_ticket_restore" | "infantry_archive" => archive_tool(ctx, name, a, who),
         "infantry_ticket_files" | "infantry_ticket_related_files" => files_tool(ctx, name, a),
