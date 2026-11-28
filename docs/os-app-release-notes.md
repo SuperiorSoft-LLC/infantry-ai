@@ -1,5 +1,6 @@
-Infantry AI 0.8.13 as a BattalionOS app.
+Infantry AI 0.8.14 as a BattalionOS app.
 
 What changed for you:
-- Minimize goes to an in-app dock when BattalionOS has no window manager.
-- "Open in its own window" for sessions under BattalionOS 0.2.0 or later.
+- Under BattalionOS 0.2.1, a chat pop-out is an OS window that minimizes to the taskbar and can pop out to its own window.
+- No more in-app strip under BattalionOS.
+- The composer is no longer covered.
