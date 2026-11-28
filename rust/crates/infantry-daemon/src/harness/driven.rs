@@ -369,6 +369,7 @@ impl Worker {
                 })),
                 Ev::McpState { state, servers } => self.sink.emit(HarnessEvent::McpState { state, servers }),
                 Ev::Background(c) => self.sink.emit(HarnessEvent::Background(c)),
+                Ev::Compacting(c) => self.sink.emit(HarnessEvent::Compacting(c)),
                 Ev::TurnStarted | Ev::Reasoning(_) | Ev::ToolFinished { .. } | Ev::TaskNotice { .. } => {}
             }
         }

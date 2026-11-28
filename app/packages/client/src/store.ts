@@ -79,6 +79,8 @@ export interface SessionView {
   status: StatusPayload | null;
   /** PARITY-AUDIT-1 #8: the agent's latest to-do list (the last status that carried one; a status without `todos` keeps it). */
   todos?: TodoItem[];
+  /** PARITY-AUDIT-1 #18: the agent is compacting its context (set and cleared by status frames; a finish clears it). */
+  compacting?: boolean;
   usage: Record<string, RunUsage>;
   /** The last line of output, for the sidebar card. */
   lastLine: string;
@@ -702,7 +704,7 @@ function markHoles(sid: string, frames: Envelope[], cursor: number, from?: numbe
 
 /** Apply in-order frames to one session view (items, record, status, usage, last line). */
 export function applyToView(v: SessionView, frames: readonly Envelope[]): SessionView {
-  let record = v.record, status = v.status, usage = v.usage, lastLine = v.lastLine, todos = v.todos;
+  let record = v.record, status = v.status, usage = v.usage, lastLine = v.lastLine, todos = v.todos, compacting = v.compacting;
   let activityAt = v.activityAt ?? record.lastEventAt ?? record.lastHeartbeat, activityLog = v.activityLog ?? [];
   const now = Date.now();
   const live = now > (replayUntil.get(record.id) ?? 0);
@@ -721,6 +723,7 @@ export function applyToView(v: SessionView, frames: readonly Envelope[]): Sessio
         if (s) {
           status = s;
           if (s.todos) todos = s.todos;
+          if (typeof s.compacting === "boolean") compacting = s.compacting;
           if (live && s.write) {
             activityLog = [...activityLog, { at: now, label: `Edit: ${s.write.path}`, write: s.write }].slice(-MAX_ACTIVITY_LOG);
           } else if (live && s.tool && s.activity) {
@@ -745,9 +748,10 @@ export function applyToView(v: SessionView, frames: readonly Envelope[]): Sessio
       case Frame.FINISHED: {
         const p = json<{ outcome: string }>(f.data);
         if (p) lastLine = `finished: ${p.outcome.toLowerCase().replace(/_/g, " ")}`;
+        compacting = false;
         break;
       }
     }
   }
-  return { ...v, record, status, todos, usage, lastLine, activityAt, activityLog, cursor, items: applyFrames(v.items, frames) };
+  return { ...v, record, status, todos, compacting, usage, lastLine, activityAt, activityLog, cursor, items: applyFrames(v.items, frames) };
 }

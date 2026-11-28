@@ -136,6 +136,8 @@ export interface StatusPayload {
   activity?: string | null;
   write?: FileWrite | null;
   todos?: TodoItem[] | null;
+  /** PARITY-AUDIT-1 #18: the CLI is compacting its context (true), or finished (false); absent = unchanged. */
+  compacting?: boolean | null;
   runActivity?: RunActivity | null;
 }
 

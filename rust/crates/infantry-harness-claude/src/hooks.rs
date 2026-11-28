@@ -17,6 +17,8 @@ use serde_json::{json, Map, Value};
 pub const EV_START: &str = "start";
 pub const EV_SUBMIT: &str = "submit";
 pub const EV_STOP: &str = "stop";
+/// PreCompact: the CLI is about to compact its context (the end is the transcript's `compact_boundary`).
+pub const EV_COMPACT: &str = "compact";
 
 pub const PRE_TOOL_USE: &str = "PreToolUse";
 pub const POST_TOOL_USE: &str = "PostToolUse";
@@ -97,7 +99,7 @@ fn watch_hook(url: &str) -> Value {
 pub fn settings(hooks: Option<&HookWiring<'_>>, bypass: bool) -> String {
     let mut h = Map::new();
     if let Some(w) = hooks {
-        for (hook, ev) in [("SessionStart", EV_START), ("UserPromptSubmit", EV_SUBMIT), ("Stop", EV_STOP)] {
+        for (hook, ev) in [("SessionStart", EV_START), ("UserPromptSubmit", EV_SUBMIT), ("Stop", EV_STOP), ("PreCompact", EV_COMPACT)] {
             h.insert(hook.into(), json!([{"hooks": [{"type": "command", "command": (w.event_command)(ev)}]}]));
         }
         if permission_wanted(w.approval) {

@@ -23,7 +23,7 @@
 //!   a grace, so a turn never waits on keys nobody sends.
 //! - **Close:** Esc, `/exit`, Enter.
 
-use crate::hooks::{Answers, EV_START, EV_STOP, EV_SUBMIT};
+use crate::hooks::{Answers, EV_COMPACT, EV_START, EV_STOP, EV_SUBMIT};
 use crate::screen::{self, TrustMenu};
 use crate::stream;
 use crate::transcript::{Signal, TranscriptMapper};
@@ -299,6 +299,7 @@ impl Interactive {
                 }
             }
             EV_STOP => self.stopped(),
+            EV_COMPACT => out.push(HarnessEvent::Compacting(true)),
             _ => {}
         }
     }

@@ -118,6 +118,7 @@ impl EventStream {
             }
             Some("auto_compaction_start") | Some("compaction_start") => {
                 out.push(HarnessEvent::Warning("pi is compacting the conversation".into()));
+                out.push(HarnessEvent::Compacting(true));
             }
             Some("agent_settled") => {
                 self.settled = true;

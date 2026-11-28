@@ -934,6 +934,25 @@ fn interrupts_synthetic_messages_api_errors_own_prompts_and_compaction_are_read(
     assert_eq!(v["compact_metadata"]["pre_tokens"], 1234);
 }
 
+// PARITY-AUDIT-1 #18: recorded compact events become the neutral compacting start / end.
+#[test]
+fn compact_events_start_and_end_the_compacting_status() {
+    let start: Value = serde_json::from_str(r#"{"type":"system","subtype":"status","status":"compacting","session_id":"s"}"#).unwrap();
+    assert_eq!(stream::events(&start), vec![HarnessEvent::Compacting(true)]);
+    let back: Value = serde_json::from_str(r#"{"type":"system","subtype":"status","status":null,"session_id":"s"}"#).unwrap();
+    assert_eq!(stream::events(&back), vec![HarnessEvent::Compacting(false)]);
+    let mut m = TranscriptMapper::new("sid");
+    let boundary = r#"{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"manual","preTokens":99}}"#;
+    let v: Value = serde_json::from_str(line(&m.map(boundary)[0])).unwrap();
+    assert_eq!(stream::events(&v), vec![HarnessEvent::Compacting(false)]);
+    assert!(hooks::settings(None, false).find("PreCompact").is_none(), "no hook channel, no hooks");
+    assert_eq!(hooks::EV_COMPACT, "compact");
+    // The interactive CLI's PreCompact hook starts it.
+    let mut r = Rig::new(ApprovalMode::AllowAll);
+    r.event(hooks::EV_COMPACT);
+    assert!(r.seen.contains(&HarnessEvent::Compacting(true)));
+}
+
 #[test]
 fn a_record_the_cli_only_writes_to_its_transcript_is_no_turn_while_a_real_wake_up_is() {
     let mut m = TranscriptMapper::new("sid");

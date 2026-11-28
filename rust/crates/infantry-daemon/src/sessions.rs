@@ -332,6 +332,8 @@ struct Entry {
     bg_done_held: bool,
     /// The watchdog saw this turn silent past `session.hungKillMinutes`: the child is hung (cleared by any output).
     hung: bool,
+    /// The CLI is compacting its context (a transient status; cleared on its end, the turn's end or the exit).
+    compacting: bool,
 }
 
 impl Entry {
@@ -352,6 +354,7 @@ impl Entry {
             reap_pending: false,
             bg_done_held: false,
             hung: false,
+            compacting: false,
         }
     }
 }
@@ -1927,6 +1930,10 @@ impl Daemon {
                 e.rec.last_output_at = Some(now_ms());
                 self.emit(&mut e, wire::STATUS, wire::status_write(&w));
             }
+            HarnessEvent::Compacting(on) => {
+                e.rec.last_output_at = Some(now_ms());
+                self.set_compacting(&mut e, on);
+            }
             HarnessEvent::Todos(t) => {
                 e.rec.last_output_at = Some(now_ms());
                 self.emit(&mut e, wire::STATUS, wire::status_todos(&t));
@@ -1947,6 +1954,7 @@ impl Daemon {
             }
             HarnessEvent::Exited { code } => {
                 e.hs = None;
+                self.set_compacting(&mut e, false);
                 // Logging only: a session that dies (a remote start that exits at once included) is named in daemon.log.
                 eprintln!("[infantry] session {} ({} on runner {}) exited with code {}", e.rec.id, e.rec.provider, e.rec.runner, code.map_or("none".to_string(), |c| c.to_string()));
                 // Tasks of a CLI that is gone are gone with it.
@@ -1974,7 +1982,19 @@ impl Daemon {
         }
     }
 
+    /// Sets the transient compacting status; a repeat of the current value sends nothing.
+    fn set_compacting(self: &Arc<Self>, e: &mut Entry, on: bool) {
+        if e.compacting == on {
+            return;
+        }
+        e.compacting = on;
+        let state = serde_json::to_value(&e.rec.state).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_else(|| "BUSY".into());
+        self.emit(e, wire::STATUS, wire::status_compacting(&state, on));
+    }
+
     fn end_turn(self: &Arc<Self>, e: &mut Entry, end: TurnEnd, code: Option<i32>, reason: Option<String>, mut alive: bool) {
+        // A compaction never outlives its turn (the CLI may end it without a boundary).
+        self.set_compacting(e, false);
         e.turn_active = false;
         // A failed session ends its process (a failed start left claude running, FAIL-3). The next prompt opens it again and
         // resumes the provider session, so nothing is lost; a process that already exited has no handle to close.

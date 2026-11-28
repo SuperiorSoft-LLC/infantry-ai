@@ -112,6 +112,12 @@ pub fn status_todos(todos: &str) -> String {
     json!({"state": "BUSY", "detail": "", "todos": t}).to_string()
 }
 
+/// Context compaction began (true) or ended (false), with the session's current [state]:
+/// `{"state":"BUSY","detail":"","compacting":true}`.
+pub fn status_compacting(state: &str, on: bool) -> String {
+    json!({"state": state, "detail": "", "compacting": on}).to_string()
+}
+
 /// The run activity (`thinking`, `finished`, `idle`) beside the session state.
 pub fn status_run(state: &str, activity: &str, started_at: i64, turn_started_at: i64) -> String {
     json!({
@@ -147,6 +153,9 @@ mod write_tests {
 
     #[test]
     fn a_write_status_carries_the_file_write_object() {
+        let c: Value = serde_json::from_str(&status_compacting("BUSY", true)).unwrap();
+        assert_eq!(c["compacting"], true);
+        assert_eq!(serde_json::from_str::<Value>(&status_compacting("IDLE", false)).unwrap()["compacting"], false);
         let t: Value = serde_json::from_str(&status_todos(r#"[{"text":"a","status":"pending"}]"#)).unwrap();
         assert_eq!(t["todos"][0]["text"], "a");
         assert_eq!(t["state"], "BUSY");

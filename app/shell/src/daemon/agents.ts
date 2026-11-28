@@ -25,12 +25,17 @@ function statusOf(v: SessionView, ticketStatus?: string): AgentStatus {
   return "idle";
 }
 
+/** The status line while the agent compacts its context (Kotlin `COMPACTING_LABEL`). */
+export const COMPACTING_LABEL = "Compacting…";
+
 function statusLine(v: SessionView): string {
   const r = v.record;
   if (r.heldBy) return `live in ${r.heldBy}`;
   if (r.state === "WAITING_INPUT") return "needs input";
   if (r.watchLabel) return r.watchLabel;
   if (r.waiting?.reason) return `waiting: ${r.waiting.reason}`;
+  // PARITY-AUDIT-1 #18 (Kotlin COMPACTING_LABEL): shown on the card, the header and the chat spinner until it clears.
+  if (v.compacting) return COMPACTING_LABEL;
   const st = v.status;
   if (isRunning(r) && st?.tool) return st.activity ? `${st.tool}: ${st.activity}` : st.tool;
   if (isRunning(r) && st?.runActivity?.label) return st.runActivity.label;

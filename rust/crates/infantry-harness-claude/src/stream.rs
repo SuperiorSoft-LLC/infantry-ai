@@ -22,6 +22,9 @@ pub fn events(v: &Value) -> Vec<HarnessEvent> {
                 vec![HarnessEvent::ProviderSession(id.into())]
             }
         }
+        // Compaction: `status` "compacting" starts it (a status without it ends it); `compact_boundary` marks it done.
+        "system" if s(v, "subtype") == "status" => vec![HarnessEvent::Compacting(s(v, "status") == "compacting")],
+        "system" if s(v, "subtype") == "compact_boundary" => vec![HarnessEvent::Compacting(false)],
         "assistant" => assistant(v.get("message").unwrap_or(&Value::Null)),
         "user" => {
             let mut out = tool_results(v.get("message").unwrap_or(&Value::Null));

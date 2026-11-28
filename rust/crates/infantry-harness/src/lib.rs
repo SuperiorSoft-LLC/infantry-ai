@@ -433,6 +433,9 @@ pub enum HarnessEvent {
     McpState { state: String, servers: Vec<(String, String)> },
     /// The CLI's notice that background task(s) ended (`status`: completed, failed, killed, stopped).
     TaskNotice { ids: Vec<String>, status: String, exit_code: Option<i32> },
+    /// The CLI started (true) or finished (false) compacting its context; the host shows a transient status and clears it
+    /// at the latest when the turn or the process ends.
+    Compacting(bool),
     /// A background task started or ended, from the driver's [`background::BackgroundTracker`] (never from a translator).
     Background(background::BackgroundChange),
 }

@@ -119,6 +119,8 @@ pub enum HarnessEvent {
     Write(String),
     /// A to-do tool call (Claude `TodoWrite`, OpenCode `todowrite`) set the agent's list: the wire `todos` JSON array.
     Todos(String),
+    /// The CLI started (true) or finished (false) compacting its context: a transient session status.
+    Compacting(bool),
     /// Token usage of one model request, as the CLI reported it: the session's stats.
     Usage(TokenUsage),
     /// The CLI's view of the session's own MCP server and of every server it reports (G12).
