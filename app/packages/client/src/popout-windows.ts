@@ -49,6 +49,48 @@ export function setPopoutWindows(w: Windows | null) {
   picked = w ? Promise.resolve(w) : null;
 }
 
+const switchers = new Set<() => void>();
+/** WINDOW-MIN-2: told when the page's window manager changes (the OS one did not answer and the in-app dock took over). */
+export function onPopoutWindowsChange(fn: () => void): () => void {
+  switchers.add(fn);
+  return () => void switchers.delete(fn);
+}
+
+/** How long the OS window manager gets to open a window before the in-app dock takes over (WINDOW-MIN-2). */
+export const POPOUT_OS_TIMEOUT_MS = 1500;
+
+const bounded = <T>(p: Promise<T>, ms: number) =>
+  new Promise<T>((ok, fail) => {
+    const t = setTimeout(() => fail(new Error("no answer from the window manager")), ms);
+    p.then(
+      (v) => (clearTimeout(t), ok(v)),
+      (e) => (clearTimeout(t), fail(e)),
+    );
+  });
+
+/**
+ * WINDOW-MIN-2: binds the popout to the page's window manager; when that is the OS one and it refuses or does not answer
+ * within [timeoutMs] (a BattalionOS without os_win_*), the page switches to the local manager (the in-app dock) for good.
+ * Minimize then hides into the dock, never the fold.
+ */
+export async function bindPopout(
+  spec: { key: string; title: string; icon?: string },
+  onMinimized: (minimized: boolean) => void,
+  opts: { timeoutMs?: number; fallback?: () => Windows } = {},
+): Promise<PopoutWindow> {
+  const ws = await popoutWindows();
+  if (ws.backend.name !== "os") return bindPopoutWindow(ws, spec, onMinimized);
+  try {
+    return await bounded(bindPopoutWindow(ws, spec, onMinimized), opts.timeoutMs ?? POPOUT_OS_TIMEOUT_MS);
+  } catch {
+    if (picked && (await picked) === ws) {
+      picked = Promise.resolve(opts.fallback ? opts.fallback() : createWindows(new LocalWindowManager({ storage: null, scope: "infantry.popouts" })));
+      switchers.forEach((f) => f());
+    }
+    return bindPopoutWindow(await popoutWindows(), spec, onMinimized);
+  }
+}
+
 const isMin = (s: WindowState) => s === "minimized";
 
 export interface PopoutWindow {

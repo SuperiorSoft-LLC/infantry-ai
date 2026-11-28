@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as RPointer
 import { Maximize2, Minimize2, Minus, X, Square } from "lucide-react";
 import { IconButton, cn } from "@infantry/ui";
 import { ChatPanel, type ChatVariant } from "./chat-panel";
-import { bindPopoutWindow, clampBox, dragBox, minimizeGeometry, minimizeMode, popoutWindows, resizeBox, type Box, type Bounds, type PopoutWindow, type WindowBadge } from "@infantry/client";
+import { bindPopout, clampBox, dragBox, minimizeGeometry, minimizeMode, resizeBox, type Box, type Bounds, type PopoutWindow, type WindowBadge } from "@infantry/client";
 
 const KEY = "infantry.popout.";
 // x < 0 means "right". The default starts below the tab bar and tab headers (Sign out, header buttons), so it never covers them.
@@ -83,14 +83,14 @@ export function ChatPopout({ id, title, sessionId, variant = "popout", onClose, 
     if (mode !== "taskbar") return;
     let gone = false;
     let w: PopoutWindow | null = null;
-    popoutWindows()
-      .then((ws) => bindPopoutWindow(ws, { key: `infantry.popout.${id}`, title: label }, setHidden))
+    // WINDOW-MIN-2: an OS window manager that refuses or does not answer falls back to the in-app dock, not the fold.
+    bindPopout({ key: `infantry.popout.${id}`, title: label }, setHidden)
       .then((b) => {
         if (gone) void b.close();
         else win.current = w = b;
       })
       .catch(() => {
-        /* no window manager: Minimize falls back to the fold */
+        /* not even the local dock: Minimize does nothing rather than fold */
       });
     return () => {
       gone = true;
@@ -104,8 +104,9 @@ export function ChatPopout({ id, title, sessionId, variant = "popout", onClose, 
     void win.current?.set({ title: label, badge: taskBadge ?? null, attention: attention ?? false }).catch(() => {});
   }, [label, taskBadge, attention, hidden]);
   const onMinimize = () => {
-    if (mode === "taskbar" && win.current) void win.current.minimize();
-    else patch(minimizeGeometry(saved, "fold"));
+    // WINDOW-MIN-2: fold only when the setting says fold; in taskbar mode a not-yet-bound window waits for its dock binding.
+    if (mode === "fold") patch(minimizeGeometry(saved, "fold"));
+    else void win.current?.minimize();
   };
 
   // The work area is the parent (below the title bar); measure it and keep the box inside when it shrinks.

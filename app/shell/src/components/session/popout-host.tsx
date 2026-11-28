@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { Button, Chip } from "@infantry/ui";
 import { MessageSquare } from "lucide-react";
-import { dockItems, LocalWindowManager, popoutWindows, type WindowInfo, type Windows } from "@infantry/client";
+import { dockItems, LocalWindowManager, onPopoutWindowsChange, popoutWindows, type WindowInfo, type Windows } from "@infantry/client";
 import { useDaemon } from "@/daemon/daemon";
 import { useAgent } from "@/daemon/agents";
 import { useUi } from "@/state/ui-state";
@@ -88,17 +88,23 @@ export function PopoutDock() {
   useEffect(() => {
     let off = () => {};
     let gone = false;
-    void popoutWindows().then((ws: Windows) => {
-      if (gone || !(ws.backend instanceof LocalWindowManager)) return;
-      const local = ws.backend;
-      setWm(local);
-      const read = () => setItems(dockItems(local.windows()));
-      read();
-      off = local.onChange(read);
-    });
+    const attach = () =>
+      void popoutWindows().then((ws: Windows) => {
+        if (gone || !(ws.backend instanceof LocalWindowManager)) return;
+        off();
+        const local = ws.backend;
+        setWm(local);
+        const read = () => setItems(dockItems(local.windows()));
+        read();
+        off = local.onChange(read);
+      });
+    attach();
+    // WINDOW-MIN-2: the OS window manager did not answer and the in-app dock took over.
+    const offSwitch = onPopoutWindowsChange(attach);
     return () => {
       gone = true;
       off();
+      offSwitch();
     };
   }, []);
   if (!wm || items.length === 0) return null;
