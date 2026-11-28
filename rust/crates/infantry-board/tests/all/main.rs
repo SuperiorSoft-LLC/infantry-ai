@@ -8,4 +8,5 @@ mod board;
 mod features;
 mod kotlin_xcheck;
 mod schema_vs_kotlin;
+mod ticket_files;
 mod work;

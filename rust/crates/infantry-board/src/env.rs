@@ -312,7 +312,12 @@ pub trait BoardEnv: Send + Sync {
     fn brief_sections(&self, _project_id: Option<&str>, _role: Option<&str>, _agent_id: Option<&str>, _ticket_id: &str) -> Vec<(String, String)> {
         Vec::new()
     }
-    /// The files a ticket touched (for the RELATED block), most relevant first.
+    /// TICKET-FILES: runs `git <args>` in the project's repository; the stdout bytes on success, None when the host has
+    /// no repository for the project or git failed.
+    fn git(&self, _project_id: Option<&str>, _args: &[&str]) -> Option<Vec<u8>> {
+        None
+    }
+    /// The files a ticket touched (for the RELATED block), most relevant first; the board's own `ticket_files` rows win.
     fn ticket_files(&self, _ticket_id: &str) -> Vec<String> {
         Vec::new()
     }

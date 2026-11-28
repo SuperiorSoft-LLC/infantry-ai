@@ -577,7 +577,9 @@ impl Dispatcher {
             }
         }
         let comments = self.board.comment_store().and_then(|c| c.read(id, "all", None, None)).unwrap_or_default();
+        let board_files = |id: &str| self.board.ticket_file_paths(id);
         let input = BriefInput {
+            ticket_files: Some(&board_files),
             row: &row,
             rows: &rows,
             links: &links,
@@ -1579,6 +1581,10 @@ impl Dispatcher {
 
     /// One line to the ticket's starter: id, title, the done comment's first line, the branch and the merge target.
     fn report_done(&self, row: &TicketRow, summary: Option<&str>) {
+        // TICKET-FILES: the files the ticket changed, recorded once when it goes done (a git failure records nothing).
+        if let Err(e) = self.board.record_ticket_files(row, None) {
+            eprintln!("[board] ticket_files: recording {} failed: {e}", row.id);
+        }
         if !self.auto_report() {
             return;
         }

@@ -499,6 +499,7 @@ pub fn call(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> Opti
             Ok(out.join("\n"))
         })(),
         "infantry_ticket_archive" | "infantry_ticket_restore" | "infantry_archive" => archive_tool(ctx, name, a, who),
+        "infantry_ticket_files" | "infantry_ticket_related_files" => files_tool(ctx, name, a),
         _ => return None,
     };
     Some(r)
@@ -564,4 +565,23 @@ fn archive_tool(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> 
     let board = ctx.work.board();
     let rep = if read { board.archive_query(&req) } else { board.archive_apply(&req, ctx.publish) }.map_err(err)?;
     Ok(rep.text)
+}
+
+/// TICKET-FILES: `infantry_ticket_files` (a ticket's files, or the tickets that changed a path glob) and
+/// `infantry_ticket_related_files` (the files of the top related tickets), each one `ticket_files` query answered with
+/// the report's text.
+fn files_tool(ctx: &Ctx, name: &str, a: &Map<String, Value>) -> Result<String, String> {
+    use crate::ticket_files::TicketFilesQuery;
+    let id = s(a, "ticketId");
+    let limit = i(a, "limit").filter(|n| *n > 0);
+    let q = if name == "infantry_ticket_related_files" {
+        TicketFilesQuery { ticket_id: Some(id.ok_or("ticketId is required")?), related: true, limit, top: i(a, "top").filter(|n| *n > 0), ..Default::default() }
+    } else {
+        let paths = list(a, "path").unwrap_or_default();
+        if id.is_some() == !paths.is_empty() {
+            return Err("give exactly one of ticketId or path".into());
+        }
+        TicketFilesQuery { ticket_id: id, paths, limit, ..Default::default() }
+    };
+    ctx.work.board().ticket_files_query(&q).map_err(err)
 }

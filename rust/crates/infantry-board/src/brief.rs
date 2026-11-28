@@ -53,6 +53,8 @@ pub struct BriefInput<'a> {
     pub report_to: Option<String>,
     /// The ticket's linked-tasks switch, resolved.
     pub include_linked: bool,
+    /// TICKET-FILES: the recorded files of a ticket (the board's `ticket_files` rows); None = ask the host.
+    pub ticket_files: Option<&'a dyn Fn(&str) -> Vec<String>>,
 }
 
 /// The description without its stored RELATED block (the live one replaces it).
@@ -98,7 +100,7 @@ fn linked<'a>(id: &str, links: &'a [LinkRow]) -> Vec<(String, &'a str)> {
 }
 
 /// The live RELATED block: linked tickets first, then the ticket's series, each with its top files.
-pub fn related_block(env: &dyn BoardEnv, row: &TicketRow, rows: &HashMap<String, TicketRow>, links: &[LinkRow]) -> Option<String> {
+pub fn related_block(env: &dyn BoardEnv, row: &TicketRow, rows: &HashMap<String, TicketRow>, links: &[LinkRow], files_of: Option<&dyn Fn(&str) -> Vec<String>>) -> Option<String> {
     if opted_out(&row.description) {
         return None;
     }
@@ -132,7 +134,10 @@ pub fn related_block(env: &dyn BoardEnv, row: &TicketRow, rows: &HashMap<String,
         entries.len()
     )];
     for (r, why) in entries {
-        let files = env.ticket_files(&r.id);
+        let mut files = files_of.map(|f| f(&r.id)).unwrap_or_default();
+        if files.is_empty() {
+            files = env.ticket_files(&r.id);
+        }
         let shown: Vec<&str> = files.iter().take(RELATED_MAX_FILES).map(String::as_str).collect();
         let more = files.len().saturating_sub(shown.len());
         let mut line = format!("- {} \"{}\" [{}] ({why})", r.id, take(&one_line(&r.title), 80), r.status);
@@ -214,7 +219,7 @@ pub fn compose(env: &dyn BoardEnv, input: &BriefInput<'_>) -> Brief {
             sections.push((source, text));
         }
     }
-    let related = related_block(env, row, input.rows, input.links);
+    let related = related_block(env, row, input.rows, input.links, input.ticket_files);
     let description = if related.is_some() { strip_related(&row.description) } else { row.description.as_str() };
     sections.push(("ticket".into(), format!("{}\n\n{}", row.title, description)));
     // PIPE-BRIEF-1: a ticket with no DONE-report instruction of its own gets the host's standard block.

@@ -349,6 +349,11 @@ impl BoardEnv for DaemonBoardEnv {
             format!("branch {branch} @ {tip} NOT merged into {target} @ {target_tip} yet")
         })
     }
+    fn git(&self, project_id: Option<&str>, args: &[&str]) -> Option<Vec<u8>> {
+        let dir = super::project_dir(&self.projects, project_id?)?;
+        let o = infantry_proc::command("git").arg("-C").arg(&dir).args(args).output().ok()?;
+        o.status.success().then_some(o.stdout)
+    }
     fn lane_cap(&self, project_id: Option<&str>, role: &str) -> u32 {
         project_id.map(|p| self.projects.store.lane_cap_of(p, role)).unwrap_or(1).max(1) as u32
     }
