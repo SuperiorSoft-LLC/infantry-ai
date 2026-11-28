@@ -70,7 +70,14 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: pnpm, cache-dependency-path: app/pnpm-lock.yaml }
       - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '17' }
+        # ANDROID-CI-CACHE-1: cache ~/.gradle (Maven Central answered 429 on runs 46082677204, 46088609647).
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            app/src-tauri/gen/android/**/*.gradle.kts
+            app/src-tauri/gen/android/gradle/wrapper/gradle-wrapper.properties
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: aarch64-linux-android }
       - uses: Swatinem/rust-cache@v2
@@ -90,7 +97,20 @@ jobs:
       - name: Build the APK (arm64)
         working-directory: app
         env: { CARGO_BUILD_JOBS: '4' }
-        run: pnpm tauri android build --apk --target aarch64 --config "{\"version\":\"$VERSION\"}"
+        # ANDROID-CI-CACHE-1: up to 3 tries, 60 s apart, retried ONLY when the log shows a 429 from a Maven repo.
+        shell: bash
+        run: |
+          set -uo pipefail
+          for try in 1 2 3; do
+            pnpm tauri android build --apk --target aarch64 --config "{\"version\":\"$VERSION\"}" 2>&1 | tee "$RUNNER_TEMP/apk-build.log"
+            rc=${PIPESTATUS[0]}
+            [ "$rc" -eq 0 ] && exit 0
+            if [ "$try" -lt 3 ] && grep -Eq "status code 429|429 Too Many Requests" "$RUNNER_TEMP/apk-build.log"; then
+              echo "::warning::APK build try $try hit HTTP 429; retrying in 60 s"; sleep 60
+            else
+              exit "$rc"
+            fi
+          done
       - name: Sign the APK (release keystore)
         run: |
           set -euo pipefail
