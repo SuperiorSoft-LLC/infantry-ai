@@ -17,8 +17,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+/// A fresh dir per call. The counter keeps it unique: on Windows `SystemTime` ticks in 100ns, so tests that start in
+/// parallel could get the same nanos, share one runner dir and race each other's `Bearer::ensure` (RUNNER-FLAKE-1).
 fn temp(tag: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("rr4-{tag}-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let d = std::env::temp_dir().join(format!(
+        "rr4-{tag}-{}-{n}-{}",
+        std::process::id(),
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+    ));
     std::fs::create_dir_all(&d).unwrap();
     d
 }
