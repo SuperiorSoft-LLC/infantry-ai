@@ -16,7 +16,7 @@ import { StatusBar } from "./status-bar";
 import { usePluginsLoaded } from "@/plugins/use-plugins";
 import { useShortcuts } from "./use-shortcuts";
 import { ToastHost } from "./toast-host";
-import { PopoutHost } from "@/components/session/popout-host";
+import { PopoutDock, PopoutHost } from "@/components/session/popout-host";
 import { LostConnectionBanner } from "@/components/connect/lost-connection-banner";
 import { useAutoSetup } from "@/components/setup/setup-wizard";
 
@@ -75,6 +75,7 @@ export function AppShell({ headerActions, statusLeading }: Pick<ShellProps, "hea
           </Drawer>
         )}
       </div>
+      <PopoutDock />
       <StatusBar leading={statusLeading} />
       <ToastHost />
       <DialogHost />

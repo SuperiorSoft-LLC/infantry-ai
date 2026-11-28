@@ -81,6 +81,8 @@ function SessionPopout({ sessionId, z, onFocus }: { sessionId: string; z: number
 /**
  * WINDOW-MIN-1: the in-app dock, the taskbar of the local window manager (standalone app, browser): one item per minimized
  * floating chat along the bottom edge; a click restores it. Under BattalionOS the OS taskbar shows the items and this is empty.
+ * DOCK-CLIP-1: it is a flex row of the shell column (AppShell mounts it above the status bar), never an overlay, so it takes
+ * real height and the composer above it is never covered; with no minimized window it renders nothing.
  */
 export function PopoutDock() {
   const [wm, setWm] = useState<LocalWindowManager | null>(null);
@@ -109,7 +111,7 @@ export function PopoutDock() {
   }, []);
   if (!wm || items.length === 0) return null;
   return (
-    <nav aria-label="Minimized windows" data-popout-dock className="pointer-events-auto absolute inset-x-0 bottom-0 z-50 flex h-10 items-center gap-1 overflow-x-auto border-t bg-card px-2">
+    <nav aria-label="Minimized windows" data-popout-dock className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-t bg-card px-2">
       {items.map((w) => (
         <Button key={w.wid} data-wid={w.wid} variant="outline" size="sm" className={w.attention ? "max-w-48 border-red-500" : "max-w-48"} title={w.title} onClick={() => void wm.call("os_win_focus", { wid: w.wid })}>
           <MessageSquare className="size-3.5 shrink-0" />
@@ -133,7 +135,6 @@ export function PopoutHost() {
       {ui.popouts.map((id) => (
         <SessionPopout key={id} sessionId={id} z={z(id)} onFocus={() => front(id)} />
       ))}
-      <PopoutDock />
     </>
   );
 }
