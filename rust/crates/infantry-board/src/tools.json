@@ -538,5 +538,35 @@
    "required": ["ticketId"],
    "additionalProperties": false
   }
+ },
+ {
+  "name": "infantry_pipeline",
+  "readOnly": true,
+  "description": "Read the project's verification pipeline: its stages, each commit's current stage (who moved it, when, evidence), and the running checks. configured:false when the project has no pipeline.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "projectId": {"type": "string", "description": "Defaults to this session's project."}
+   },
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "infantry_pipeline_record",
+  "readOnly": false,
+  "description": "Report pipeline state instead of being asked by mail: move a commit to a stage (commit + stage + optional evidence), or start / ping / finish the running check (check + scope; start also needs commit + what).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "projectId": {"type": "string", "description": "Defaults to this session's project."},
+    "commit": {"type": "string", "description": "The commit sha."},
+    "stage": {"type": "string", "description": "One of the project's configured stage names."},
+    "evidence": {"type": "string", "description": "Suite name, counts, log path."},
+    "check": {"type": "string", "description": "start, ping or finish: act on the running check instead of a stage."},
+    "scope": {"type": "string", "description": "The worktree / build dir the check runs in; empty for the default."},
+    "what": {"type": "string", "description": "What the check runs (start only)."}
+   },
+   "additionalProperties": false
+  }
  }
 ]

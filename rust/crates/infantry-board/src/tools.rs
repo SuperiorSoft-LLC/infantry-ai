@@ -466,6 +466,34 @@ pub fn call(ctx: &Ctx, name: &str, a: &Map<String, Value>, who: &Caller) -> Opti
                 .collect::<Vec<_>>()
                 .join("\n"))
         })(),
+        // PIPE-1: the project pipeline (Kotlin PipelineTools); answers the `pipeline_state` JSON.
+        "infantry_pipeline" | "infantry_pipeline_record" => (|| {
+            let project = s(a, "projectId").or_else(|| who.project_id.clone()).ok_or("needs a projectId (or INFANTRY_PROJECT_ID in the environment)")?;
+            let p = board.pipeline().map_err(err)?;
+            let by = who.role.clone().or_else(|| who.agent_id.clone()).or_else(|| who.session_id.clone());
+            let st = if name == "infantry_pipeline" {
+                p.state(&project)
+            } else if let Some(action) = s(a, "check") {
+                let req = crate::pipeline::PipelineCheckRequest {
+                    project_id: project.clone(),
+                    action,
+                    scope: s(a, "scope").unwrap_or_default(),
+                    commit: s(a, "commit"),
+                    what: s(a, "what"),
+                    session_id: None,
+                };
+                p.check(&req, by.as_deref())
+            } else {
+                let commit = s(a, "commit").ok_or("needs a commit")?;
+                let stage = s(a, "stage").ok_or("needs a stage (or check: start|ping|finish)")?;
+                p.record(&project, &commit, &stage, s(a, "evidence").as_deref(), by.as_deref())
+            }
+            .map_err(err)?;
+            if name != "infantry_pipeline" {
+                (ctx.publish)(crate::pipeline::state_envelope(&st));
+            }
+            Ok(serde_json::to_string(&st).unwrap_or_default())
+        })(),
         "infantry_board" => (|| {
             let want = s(a, "projectId");
             let scope = match want.as_deref() {

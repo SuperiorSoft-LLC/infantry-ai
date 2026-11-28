@@ -21,6 +21,7 @@ pub mod env;
 pub mod epics;
 pub mod epic_move;
 pub mod owner_mail;
+pub mod pipeline;
 pub mod local;
 pub mod rules;
 pub mod schema;

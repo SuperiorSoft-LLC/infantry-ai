@@ -733,6 +733,24 @@ mod parity_tools {
         StaticEnv { lane_cap: 10, agents: vec![BoardAgent { id: Some("agent-1".into()), name: "Bob".into(), role: Some("backend".into()), ..Default::default() }], ..kotlin_daemon_env() }
     }
 
+    /// PIPE-1: infantry_pipeline reads, infantry_pipeline_record moves a commit and drives a check.
+    #[test]
+    fn pipeline_tools_read_and_record() {
+        let f = fixture("pipe-tools", env());
+        let d = Dispatcher::new(f.board.clone(), Arc::new(NoWorkspaces), Arc::new(FakeLauncher::default()), f.bus.clone());
+        let st: Value = serde_json::from_str(&run(&d, "infantry_pipeline", json!({})).unwrap()).unwrap();
+        assert_eq!(st["configured"], false);
+        assert!(run(&d, "infantry_pipeline_record", json!({"commit": "abc", "stage": "unit"})).unwrap_err().contains("no_pipeline"));
+        f.board.pipeline().unwrap().configure(&serde_json::from_str(r#"{"projectId":"p1","stages":["unit","qa"]}"#).unwrap()).unwrap();
+        assert!(run(&d, "infantry_pipeline_record", json!({"commit": "abc"})).unwrap_err().contains("needs a stage"));
+        let st: Value = serde_json::from_str(&run(&d, "infantry_pipeline_record", json!({"commit": "abc", "stage": "qa", "evidence": "ok"})).unwrap()).unwrap();
+        assert_eq!(st["commits"][0]["stage"], "qa");
+        let st: Value = serde_json::from_str(&run(&d, "infantry_pipeline_record", json!({"check": "start", "commit": "abc", "what": "suite"})).unwrap()).unwrap();
+        assert_eq!(st["checks"][0]["what"], "suite");
+        let st: Value = serde_json::from_str(&run(&d, "infantry_pipeline", json!({})).unwrap()).unwrap();
+        assert_eq!(st["history"][0]["evidence"], "ok");
+    }
+
     #[test]
     fn epic_moves_tickets_in_and_out_and_refuses_an_unknown_epic_id() {
         let (f, _l, d, o) = setup("tool-epic", env(), Duration::ZERO);

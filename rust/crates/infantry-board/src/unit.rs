@@ -37,6 +37,10 @@ pub const FRAMES: &[&str] = &[
     "archive_query",
     "archive_apply",
     "ticket_files",
+    "pipeline_config",
+    "pipeline_show",
+    "pipeline_record",
+    "pipeline_check",
 ];
 
 /// Every frame of a unit with the work half ([`FRAMES`] plus the work frames).
@@ -55,6 +59,10 @@ pub const ALL_FRAMES: &[&str] = &[
     "archive_query",
     "archive_apply",
     "ticket_files",
+    "pipeline_config",
+    "pipeline_show",
+    "pipeline_record",
+    "pipeline_check",
     "ticket_start",
     "ticket_start_next",
     "ticket_assign",
@@ -230,6 +238,14 @@ impl FrameUnit for BoardUnit {
                 let q: crate::ticket_files::TicketFilesQuery = serde_json::from_str(&env.data).map_err(|e| r(OrchError::Refused(format!("ticket_files payload: {e}"))))?;
                 let text = self.board.ticket_files_query(&q).map_err(r)?;
                 Ok(answer(false, crate::ticket_files::report_envelope(&text)))
+            }
+            // PIPE-1: every pipeline frame answers `pipeline_state`; a change is pushed to every client.
+            "pipeline_config" | "pipeline_show" | "pipeline_record" | "pipeline_check" => {
+                let (e, changed) = self.board.pipeline().map_err(r)?.answer(frame, &env.data, env.session_id.as_deref()).map_err(r)?;
+                if changed {
+                    publish(e.clone());
+                }
+                Ok(answer(changed, e))
             }
             other => Err(Refusal(format!("{other} refused: not a board frame"))),
         }

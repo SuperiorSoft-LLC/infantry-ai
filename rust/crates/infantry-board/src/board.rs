@@ -65,13 +65,21 @@ pub struct Board {
     epics: Epics,
     /// None when its tables could not be created (the comment calls then refuse, like Kotlin).
     comments: Option<Comments>,
+    /// PIPE-1: the project pipelines; None when its tables could not be created (the pipeline frames then refuse).
+    pipeline: Option<crate::pipeline::Pipeline>,
 }
 
 impl Board {
     pub fn new(db: Arc<Db>, env: Arc<dyn BoardEnv>) -> Board {
         let epics = Epics::new(db.clone(), env.clone());
         let comments = Comments::new(db.clone(), env.clone()).ok();
-        Board { db, env, lock: Mutex::new(()), epics, comments }
+        let pipeline = crate::pipeline::Pipeline::new(db.clone(), env.clone()).ok();
+        Board { db, env, lock: Mutex::new(()), epics, comments, pipeline }
+    }
+
+    /// PIPE-1: the project pipelines.
+    pub fn pipeline(&self) -> Result<&crate::pipeline::Pipeline, OrchError> {
+        self.pipeline.as_ref().ok_or_else(|| OrchError::Failed("the pipeline tables could not be created".into()))
     }
 
     /// The database the board works on.
