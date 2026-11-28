@@ -274,7 +274,7 @@ impl Plugin for Chat {
     fn handle_frame(frame: Frame, _caller: Caller) -> Result<Option<Frame>, String> {
         let ask = |ty: &str, data: &str, sess: Option<&str>| host::frames::request(ty, data, sess, TIMEOUT_MS);
         let (ok, r) = match frame.type_.as_str() {
-            "image_upload" => ("image", images::upload(&frame.data, &ask)),
+            "image_upload" => ("image", images::upload(&frame.data, &ask, images::limits(|k| host::settings::get(k)))),
             "image_fetch" => ("image_bytes", images::fetch(&frame.data, &ask)),
             other => return Err(format!("this plugin does not answer {other}")),
         };

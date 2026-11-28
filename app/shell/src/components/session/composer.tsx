@@ -45,6 +45,9 @@ import { useProjects } from "@/components/git/use-projects";
 import { useChatDraft, useChatView } from "./use-chat-view";
 import { PromptCards } from "./prompt-cards";
 import { ComposerRound } from "./floating-chip";
+import { PluginSlot, useSlotFills } from "@/plugins/web-plugins";
+import { useChatSetting } from "./chat-settings";
+import { attachLimitBytes, sendNowBlocked, COMPOSER_ACTIONS_SLOT, FILE_MAX_MB, FILE_MAX_MB_KEY, IMAGE_MAX_MB, IMAGE_MAX_MB_KEY } from "./composer-gaps";
 
 const NO_QUEUE: QueuedTurnView[] = [];
 const ENDED = new Set(["EXITED", "FAILED", "ORPHANED"]);
@@ -53,9 +56,6 @@ const LINE = 20;
 const rows = (n: number) => n * LINE + 24;
 /** Kotlin COMPOSER_JOIN_RADIUS_DP / COMPOSER_TAB_RADIUS_DP. */
 const JOIN = 6;
-const IMAGE_MAX = 10 * 1024 * 1024;
-/** The daemon's limit for a non-image attachment (Infantry_Chat images.rs MAX_FILE_BYTES). */
-const FILE_MAX = 20 * 1024 * 1024;
 
 interface Act {
   label: string;
@@ -174,6 +174,9 @@ export function Composer({ sessionId, busy, windowId = "main", topTray }: { sess
   const currentProject = useProjects((p) => p.currentId);
   const project = sessionProject || currentProject;
   const refs = useMemo(() => imageRefs(text).refs, [text]);
+  // The same settings the daemon enforces (Infantry_Chat limits.chat.imageMaxMb / fileMaxMb).
+  const imageMb = useChatSetting(IMAGE_MAX_MB_KEY, IMAGE_MAX_MB);
+  const fileMb = useChatSetting(FILE_MAX_MB_KEY, FILE_MAX_MB);
   const attach = async (files: File[]) => {
     if (!files.length) return;
     setAttachError(null);
@@ -184,7 +187,7 @@ export function Composer({ sessionId, busy, windowId = "main", topTray }: { sess
       const name = f.name || "pasted file";
       // Images go as chat images (shown as thumbnails); any other file (text, logs, PDFs, code) is stored as a file and named by path.
       const image = /^image\/(png|jpeg|gif|webp)$/.test(f.type);
-      const max = image ? IMAGE_MAX : FILE_MAX;
+      const max = attachLimitBytes(image, imageMb, fileMb);
       if (f.size > max) {
         setAttachError(`${name}: the file is over the ${max / (1024 * 1024)} MB limit`);
         continue;
@@ -283,6 +286,9 @@ ${cur}` : back);
   } else {
     tools.push({ label: "New agent", icon: <UserPlus />, enabled: online, run: () => ui.set("dialog", "new-agent") });
   }
+  // Plugin-provided composer actions (Kotlin ChatSurface `chat.composer.actions`): nothing is drawn when none fills it.
+  const pluginActions = useSlotFills(COMPOSER_ACTIONS_SLOT);
+  const sendNowWhy = sendNowBlocked(record?.midTurnInput, busy);
   const sendCount = sessionId ? 2 : 1;
   const groupsRow = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -337,7 +343,7 @@ ${cur}` : back);
                 {i === 0 ? `Queued (${queued.length}): ` : ""}
                 {q.text.split("\n")[0]}
               </span>
-              <QueueAction label="Send now (into the running turn)" disabled={!online} onClick={() => forceQueued(sessionId, q.id)}>
+              <QueueAction label="Send now (into the running turn)" disabled={!online} blocked={sendNowWhy} onClick={() => forceQueued(sessionId, q.id)}>
                 <SendHorizontal />
               </QueueAction>
               <QueueAction label="Remove from queue" disabled={!online} onClick={() => unqueue(sessionId, q.id)}>
@@ -461,6 +467,7 @@ ${cur}` : back);
               </ComposerRound>
             ))}
             {overflow > 0 && <ComposerMore rest={tools.slice(inline)} />}
+            {pluginActions.length > 0 && <PluginSlot fills={pluginActions} props={{ sessionId, projectId: project, busy }} frame="badge" />}
           </HangingGroup>
           <HangingGroup label="Send">
             {sessionId && !gone && (
@@ -480,21 +487,26 @@ ${cur}` : back);
 }
 
 /** A queued row's small action (Kotlin QueueAction): a 24px hit box on desktop, 48px on a phone; the glyph stays small. */
-function QueueAction({ label, disabled, onClick, children }: { label: string; disabled: boolean; onClick: () => void; children: ReactNode }) {
+/** `blocked`: why it cannot act now; the button is greyed but keeps its tooltip (a disabled button shows none). */
+function QueueAction({ label, disabled, blocked, onClick, children }: { label: string; disabled: boolean; blocked?: string | null; onClick: () => void; children: ReactNode }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
           aria-label={label}
+          aria-disabled={blocked ? true : undefined}
           disabled={disabled}
-          onClick={onClick}
-          className="grid size-6 shrink-0 cursor-pointer place-items-center text-foreground disabled:cursor-default disabled:text-muted-foreground/50 max-sm:size-12 [&_svg]:size-3.5"
+          onClick={blocked ? undefined : onClick}
+          className={cn(
+            "grid size-6 shrink-0 cursor-pointer place-items-center text-foreground disabled:cursor-default disabled:text-muted-foreground/50 max-sm:size-12 [&_svg]:size-3.5",
+            blocked && "cursor-default text-muted-foreground/50",
+          )}
         >
           {children}
         </button>
       </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
+      <TooltipContent>{blocked ?? label}</TooltipContent>
     </Tooltip>
   );
 }

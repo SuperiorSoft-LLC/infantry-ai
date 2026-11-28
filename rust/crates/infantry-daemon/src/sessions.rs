@@ -1412,7 +1412,10 @@ impl Daemon {
         self.resolve_stored_limit(e);
         if e.hs.is_none() {
             match self.open(e) {
-                Ok(hs) => e.hs = Some(hs),
+                Ok(hs) => {
+                    e.hs = Some(hs);
+                    e.rec.mid_turn_input = self.harness_for(Some(&e.rec.provider)).map(|h| h.mid_turn_input());
+                }
                 Err(err) => return self.fail_start(e, err),
             }
         }

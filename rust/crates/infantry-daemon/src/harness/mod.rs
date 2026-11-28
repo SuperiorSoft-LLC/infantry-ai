@@ -157,6 +157,10 @@ pub trait Harness: Send + Sync {
     /// The provider name on the wire (`ready provider=..`, `SessionRecord.provider`, status `tool`).
     fn name(&self) -> &str;
     fn capabilities(&self) -> Capabilities;
+    /// A running turn of this harness can take a forced queued message (`SessionRecord.midTurnInput`). Default false.
+    fn mid_turn_input(&self) -> bool {
+        false
+    }
     fn open(&self, req: OpenRequest, sink: EventSink) -> Result<Box<dyn HarnessSession>, String>;
     /// The provider's `/` commands (`command_catalog`).
     fn commands(&self) -> Vec<infantry_harness::HarnessCommand> {

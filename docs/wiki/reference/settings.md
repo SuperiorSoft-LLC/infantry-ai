@@ -20,6 +20,8 @@ Declared by the official plugins (`module.json` `daemon.config`); the Settings t
 | `chat.cards` | checkbox | `true` | device | Infantry_Chat / Chat cards | Draw agent cards as cards |
 | `chat.cardUpdateLine` | checkbox | `true` | device | Infantry_Chat / Chat cards | Show a muted line where an agent updated a card |
 | `chat.reasoning` | select | `inline` | device | Infantry_Chat / Agent reasoning | Show reasoning |
+| `limits.chat.imageMaxMb` | number | `10` | daemon | Infantry_Chat / Attachments | Largest image attachment (MB) |
+| `limits.chat.fileMaxMb` | number | `20` | daemon | Infantry_Chat / Attachments | Largest other file attachment (MB) |
 | `chat.changeBox.previewLines` | number | `12` | device | Infantry_Chat / Code changes | Diff lines a collapsed change box previews |
 | `knowledge.globalWriteRoles` | text | `pm` | daemon | Infantry_Notes / Knowledge | Roles that may write global notes. Comma-separated role ids. The owner (no session) may always write. Every agent may read. |
 | `notify.milestoneSound` | select | `none` | daemon | Infantry_Settings / Notification sounds | Milestone sound. The sound of a milestone ticket's notification when the ticket names none. |

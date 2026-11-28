@@ -63,6 +63,10 @@ impl Harness for Driven {
         self.harness.context_window(probe, model)
     }
 
+    fn mid_turn_input(&self) -> bool {
+        self.harness.mid_turn_input()
+    }
+
     fn capabilities(&self) -> Capabilities {
         let c = self.harness.capabilities();
         Capabilities {

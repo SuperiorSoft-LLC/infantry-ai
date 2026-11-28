@@ -266,6 +266,11 @@ impl Harness for ClaudeHarness {
         ID
     }
 
+    /// The interactive CLI takes a pasted message mid-turn; headless runs one process per turn and cannot.
+    fn mid_turn_input(&self) -> bool {
+        self.mode == Mode::Interactive
+    }
+
     fn capabilities(&self) -> Capabilities {
         let interactive = self.mode == Mode::Interactive;
         Capabilities {
@@ -392,5 +397,16 @@ impl Harness for ClaudeHarness {
                 })
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod mid_turn_tests {
+    use super::*;
+
+    #[test]
+    fn only_interactive_claude_takes_input_mid_turn() {
+        assert!(ClaudeHarness::default().mid_turn_input());
+        assert!(!ClaudeHarness::default().headless().mid_turn_input());
     }
 }

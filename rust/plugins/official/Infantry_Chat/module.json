@@ -41,6 +41,13 @@
           { "key": "chat.reasoning", "type": "select", "label": "Show reasoning", "default": "inline", "options": ["inline", "panel", "hidden"],
             "optionLabels": { "inline": "Inline in the chat", "panel": "In a side panel", "hidden": "Hidden" }, "order": 1, "scope": "device" }
         ] },
+      { "node": "infantry.chat", "tab": "Chat", "group": "Attachments", "order": 60, "title": "Attachments",
+        "applies": "Applies to: files attached from the composer (paperclip, paste, drop). Larger files are refused.",
+        "keywords": ["attach", "upload", "file", "image", "size", "limit"],
+        "fields": [
+          { "key": "limits.chat.imageMaxMb", "type": "number", "label": "Largest image attachment (MB)", "default": 10, "min": 1, "max": 1024, "step": 1, "order": 1, "scope": "daemon" },
+          { "key": "limits.chat.fileMaxMb", "type": "number", "label": "Largest other file attachment (MB)", "default": 20, "min": 1, "max": 1024, "step": 1, "order": 2, "scope": "daemon" }
+        ] },
       { "node": "infantry.chat", "tab": "Chat", "group": "Code changes", "order": 50, "title": "Code changes",
         "applies": "Applies to: the change boxes (file edits) in the chat and the activity box. View all and Open full still show every line.",
         "keywords": ["diff", "change", "edit", "preview", "lines"],

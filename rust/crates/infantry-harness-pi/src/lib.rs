@@ -201,6 +201,11 @@ const KEY_VARS: &[&str] = &[
 ];
 
 impl Harness for PiHarness {
+    /// pi's RPC mode steers a running turn ([`rpc`] `inject`).
+    fn mid_turn_input(&self) -> bool {
+        true
+    }
+
     /// PROVIDERS-2: pi has no account of its own; each model provider takes its own key (Kotlin module.json `credentials`).
     fn provider_keys(&self) -> Vec<infantry_harness::ProviderKey> {
         use infantry_harness::ProviderKey as K;

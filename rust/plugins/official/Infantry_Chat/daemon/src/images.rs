@@ -8,9 +8,17 @@ use base64::Engine;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-/// 10 MB decoded; purpose `file` takes 20 MB.
+/// 10 MB decoded; purpose `file` takes 20 MB (Kotlin ChatPanelState's limits). Both are named settings, in MB.
 pub const MAX_BYTES: usize = 10 * 1024 * 1024;
 pub const MAX_FILE_BYTES: usize = 20 * 1024 * 1024;
+pub const IMAGE_MB_KEY: &str = "limits.chat.imageMaxMb";
+pub const FILE_MB_KEY: &str = "limits.chat.fileMaxMb";
+
+/// The (image, file) byte limits from the settings; a missing or invalid value (not 1-1024 MB) = the default.
+pub fn limits(get: impl Fn(&str) -> Option<String>) -> (usize, usize) {
+    let mb = |k: &str, d: usize| get(k).and_then(|v| v.trim().parse::<usize>().ok()).filter(|n| (1..=1024).contains(n)).map_or(d, |n| n * 1024 * 1024);
+    (mb(IMAGE_MB_KEY, MAX_BYTES), mb(FILE_MB_KEY, MAX_FILE_BYTES))
+}
 pub const PURPOSES: [&str; 3] = ["chat", "ticket", "file"];
 const KEYS: [&str; 5] = ["projectId", "purpose", "fileName", "mimeType", "base64"];
 const UPLOADS: &str = "uploads";
@@ -76,7 +84,7 @@ fn files(ask: Ask, body: Value) -> Result<Value, String> {
 }
 
 /// The `image` answer body for an `image_upload` payload; Err = the refusal reason.
-pub fn upload(data: &str, ask: Ask) -> Result<Value, String> {
+pub fn upload(data: &str, ask: Ask, limits: (usize, usize)) -> Result<Value, String> {
     let o: Value = serde_json::from_str(data).map_err(|_| "payload must be a JSON object".to_string())?;
     let o = o.as_object().ok_or("payload must be a JSON object")?;
     if let Some(k) = o.keys().find(|k| !KEYS.contains(&k.as_str())) {
@@ -94,7 +102,7 @@ pub fn upload(data: &str, ask: Ask) -> Result<Value, String> {
     if !PURPOSES.contains(&purpose.as_str()) {
         return Err(format!("purpose '{}' is not accepted; only chat or ticket or file", purpose.chars().take(40).collect::<String>()));
     }
-    let limit = if purpose == "file" { MAX_FILE_BYTES } else { MAX_BYTES };
+    let limit = if purpose == "file" { limits.1 } else { limits.0 };
     let too_large = || format!("the file is over the {} MB limit ({limit} bytes)", limit / (1024 * 1024));
     let enc: String = b64.chars().filter(|c| *c != '\r' && *c != '\n').collect();
     if enc.len() > (limit + 2) / 3 * 4 {
@@ -204,7 +212,7 @@ mod tests {
             Ok(Frame { type_: ty.into(), data: body.to_string(), session_id: None, request_id: None })
         };
         let b64 = base64::engine::general_purpose::STANDARD.encode(PNG);
-        let up = upload(&json!({"projectId": "p1", "purpose": "chat", "mimeType": "image/png", "base64": b64}).to_string(), &ask).unwrap();
+        let up = upload(&json!({"projectId": "p1", "purpose": "chat", "mimeType": "image/png", "base64": b64}).to_string(), &ask, (MAX_BYTES, MAX_FILE_BYTES)).unwrap();
         assert_eq!(up["mimeType"], "image/png");
         assert!(up["relPath"].as_str().unwrap().starts_with(".infantry/uploads/chat/"));
         assert!(disk.borrow().contains_key("p1/uploads/.gitignore"));
@@ -212,11 +220,18 @@ mod tests {
         assert_eq!(fetch(&json!({"id": id}).to_string(), &ask).unwrap()["base64"], b64);
 
         let before = disk.borrow().len();
-        assert!(upload(&json!({"projectId": "p1", "purpose": "chat", "mimeType": "image/gif", "base64": b64}).to_string(), &ask).unwrap_err().contains("contradicts"));
-        assert!(upload(&json!({"projectId": "p1", "purpose": "zip", "base64": "AA=="}).to_string(), &ask).unwrap_err().contains("not accepted"));
-        assert!(upload(&json!({"projectId": "p1", "purpose": "chat", "base64": "AA==", "x": 1}).to_string(), &ask).unwrap_err().contains("unknown field"));
+        assert!(upload(&json!({"projectId": "p1", "purpose": "chat", "mimeType": "image/gif", "base64": b64}).to_string(), &ask, (MAX_BYTES, MAX_FILE_BYTES)).unwrap_err().contains("contradicts"));
+        assert!(upload(&json!({"projectId": "p1", "purpose": "zip", "base64": "AA=="}).to_string(), &ask, (MAX_BYTES, MAX_FILE_BYTES)).unwrap_err().contains("not accepted"));
+        assert!(upload(&json!({"projectId": "p1", "purpose": "chat", "base64": "AA==", "x": 1}).to_string(), &ask, (MAX_BYTES, MAX_FILE_BYTES)).unwrap_err().contains("unknown field"));
         assert_eq!(disk.borrow().len(), before);
         assert_eq!(fetch(&json!({"id": "../x"}).to_string(), &ask).unwrap_err(), "'../x' is not an uploaded image id");
         assert_eq!(file_extension("a/b.TXT"), "txt");
+        // The limits are settings: a 1 MB file limit refuses 2 MB; images keep their own limit.
+        let big = base64::engine::general_purpose::STANDARD.encode(vec![7u8; 2 * 1024 * 1024]);
+        assert!(upload(&json!({"projectId": "p1", "purpose": "file", "fileName": "a.zip", "base64": big}).to_string(), &ask, (MAX_BYTES, 1024 * 1024)).unwrap_err().contains("over the 1 MB limit"));
+        assert!(upload(&json!({"projectId": "p1", "purpose": "file", "fileName": "a.zip", "base64": big}).to_string(), &ask, (MAX_BYTES, MAX_FILE_BYTES)).is_ok());
+        let set = |k: &str| match k { IMAGE_MB_KEY => Some("3".to_string()), FILE_MB_KEY => Some("0".to_string()), _ => None };
+        assert_eq!(limits(set), (3 * 1024 * 1024, MAX_FILE_BYTES));
+        assert_eq!(limits(|_| None), (MAX_BYTES, MAX_FILE_BYTES));
     }
 }

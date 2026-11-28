@@ -285,6 +285,10 @@ session_record! {
     /// RUST-MIGRATE-1 (additive, Rust daemon only): the other app that is running this session right now (a session
     /// migrated from the Kotlin app that is live there). Computed per listing, never stored; a turn is refused while set.
     #[serde(default, skip_serializing_if = "Option::is_none")] held_by: Option<String>,
+    /// PARITY-AUDIT-1 #17 (additive): the session's harness can take a forced queued message into a running turn
+    /// (Kotlin `midTurnInput` / `forcesMidTurn`). Set when the session's harness opens; absent = unknown (clients keep
+    /// "Send now" enabled, as before); false = `queue_force` mid-turn is refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")] mid_turn_input: Option<bool>,
 }
 
 impl SessionRecord {

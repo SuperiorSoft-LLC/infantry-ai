@@ -479,6 +479,11 @@ pub trait Harness: Send + Sync {
     /// The provider id on the wire (`codex`, `claude`, ...).
     fn id(&self) -> &str;
     fn capabilities(&self) -> Capabilities;
+    /// Kotlin `HarnessCapability.MID_TURN_INPUT` / `forcesMidTurn`: a running turn can take a typed message
+    /// ([`Translator::inject`]), so "Send now" can deliver into it. Default false = it cannot.
+    fn mid_turn_input(&self) -> bool {
+        false
+    }
     /// The models it offers on the machine [probe] looks at; empty = only the CLI's default.
     fn models(&self, probe: &dyn Probe) -> Vec<ModelInfo>;
     /// Why the CLI cannot run there (not installed, not signed in); None = fine as far as files and env tell.
