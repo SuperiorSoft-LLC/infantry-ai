@@ -3,7 +3,7 @@
 // The Changes / Git panel on the live wire: the current project's working tree (or one of its worktrees, or what a
 // branch changed since its base), a diff viewer, the history and the branches. Unknown is never shown as clean.
 import { useState, type ReactNode } from "react";
-import { Columns2, FolderGit2, GitBranch, GitCommitHorizontal, GitFork, RefreshCw, Rows3, X } from "lucide-react";
+import { Columns2, FolderGit2, Maximize2, GitBranch, GitCommitHorizontal, GitFork, RefreshCw, Rows3, X } from "lucide-react";
 import {
   changeLetter,
   groupChanges,
@@ -13,6 +13,7 @@ import {
   type GitCommit,
 } from "@infantry/client";
 import {
+  AppDialog,
   Button,
   Chip,
   EmptyState,
@@ -402,6 +403,7 @@ export function ChangesPanel() {
   const loading = useProjects((s) => s.patchLoading);
   const target = useProjects((s) => s.target);
   const error = useProjects((s) => s.error);
+  const [full, setFull] = useState(false);
   if (!loaded) return <p className="p-2 text-xs text-muted-foreground">Loading projects…</p>;
   if (!current) return <EmptyState icon={<FolderGit2 className="size-6" />} title="No project yet" hint="Changes are read from the current project's directory." />;
   return (
@@ -425,10 +427,29 @@ export function ChangesPanel() {
       <ChangesPane />
       {target && (
         <div className="rounded-lg border">
-          <div className="truncate border-b px-2 py-1 font-mono text-[11px]">{target.path}</div>
+          <div className="flex items-center gap-1 border-b px-2 py-1">
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{target.path}</span>
+            <IconButton label="Open full diff" data-testid="changes-open-full" variant="ghost" size="icon" className="size-6" onClick={() => setFull(true)}>
+              <Maximize2 />
+            </IconButton>
+          </div>
           <DiffView patch={patch} loading={loading} mode="unified" />
+          <ChangesDiffModal open={full} onOpenChange={setFull} path={target.path}>
+            <DiffView patch={patch} loading={loading} mode="unified" />
+          </ChangesDiffModal>
         </div>
       )}
     </div>
+  );
+}
+
+/** "Open full" for the Changes panel: the selected file's diff (the same DiffView) in the wide shared modal. */
+export function ChangesDiffModal({ open, onOpenChange, path, children }: { open: boolean; onOpenChange: (o: boolean) => void; path: string; children: ReactNode }) {
+  return (
+    <AppDialog open={open} wide="full" onOpenChange={onOpenChange} title={path} description="Changes against the base">
+      <div data-testid="changes-diff-modal" className="max-h-[75vh] overflow-auto rounded-lg border">
+        {children}
+      </div>
+    </AppDialog>
   );
 }

@@ -20,6 +20,7 @@ Declared by the official plugins (`module.json` `daemon.config`); the Settings t
 | `chat.cards` | checkbox | `true` | device | Infantry_Chat / Chat cards | Draw agent cards as cards |
 | `chat.cardUpdateLine` | checkbox | `true` | device | Infantry_Chat / Chat cards | Show a muted line where an agent updated a card |
 | `chat.reasoning` | select | `inline` | device | Infantry_Chat / Agent reasoning | Show reasoning |
+| `chat.changeBox.previewLines` | number | `12` | device | Infantry_Chat / Code changes | Diff lines a collapsed change box previews |
 | `knowledge.globalWriteRoles` | text | `pm` | daemon | Infantry_Notes / Knowledge | Roles that may write global notes. Comma-separated role ids. The owner (no session) may always write. Every agent may read. |
 | `sites.refreshSeconds` | number | `30` | app | Infantry_Sites / Sites | Re-read the server list every (seconds, 0 = off) |
 | `triggers.at.maxLateMs` | number | `900000` | daemon | Infantry_Triggers / Triggers | A one-shot found this many milliseconds late still fires; later is recorded missed |

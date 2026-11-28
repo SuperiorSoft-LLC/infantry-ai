@@ -40,6 +40,12 @@
         "fields": [
           { "key": "chat.reasoning", "type": "select", "label": "Show reasoning", "default": "inline", "options": ["inline", "panel", "hidden"],
             "optionLabels": { "inline": "Inline in the chat", "panel": "In a side panel", "hidden": "Hidden" }, "order": 1, "scope": "device" }
+        ] },
+      { "node": "infantry.chat", "tab": "Chat", "group": "Code changes", "order": 50, "title": "Code changes",
+        "applies": "Applies to: the change boxes (file edits) in the chat and the activity box. View all and Open full still show every line.",
+        "keywords": ["diff", "change", "edit", "preview", "lines"],
+        "fields": [
+          { "key": "chat.changeBox.previewLines", "type": "number", "label": "Diff lines a collapsed change box previews", "default": 12, "min": 1, "max": 500, "step": 1, "order": 1, "scope": "device" }
         ] }
     ],
     "frames": [

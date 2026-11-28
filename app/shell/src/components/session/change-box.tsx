@@ -4,12 +4,14 @@
 // the same data. Header: icon, path, created / edited, +N -M. Body: numbered diff rows. Collapsed to the preview with a
 // fade, "+N more lines" and "View all (N lines)"; expanded, "Collapse" folds it back.
 import { useState } from "react";
-import { FilePlus2, Pencil } from "lucide-react";
-import { cn } from "@infantry/ui";
+import { FilePlus2, Maximize2, Pencil } from "lucide-react";
+import { AppDialog, IconButton, cn } from "@infantry/ui";
 import { writeToDiff, type DiffLine, type FileWrite } from "@infantry/client";
+import { useChatSetting } from "./chat-settings";
 
-/** Rows a collapsed change box shows (Kotlin `ChangeBox.PREVIEW_LINES`). */
+/** Rows a collapsed change box shows (Kotlin `ChangeBox.PREVIEW_LINES`): the default of setting `chat.changeBox.previewLines`. */
 export const CHANGE_BOX_PREVIEW_LINES = 12;
+export const CHANGE_BOX_PREVIEW_KEY = "chat.changeBox.previewLines";
 
 export function hiddenCount(rows: number, preview = CHANGE_BOX_PREVIEW_LINES): number {
   return Math.max(0, rows - preview);
@@ -50,8 +52,11 @@ export interface ChangeBoxProps {
   previewLines?: number;
 }
 
-export function ChangeBox({ path, created, added, removed, lines, truncated, previewLines = CHANGE_BOX_PREVIEW_LINES }: ChangeBoxProps) {
+export function ChangeBox({ path, created, added, removed, lines, truncated, previewLines: forced }: ChangeBoxProps) {
+  const setting = useChatSetting(CHANGE_BOX_PREVIEW_KEY, CHANGE_BOX_PREVIEW_LINES);
+  const previewLines = Math.max(1, forced ?? setting);
   const [expanded, setExpanded] = useState(false);
+  const [full, setFull] = useState(false);
   const collapsible = lines.length > previewLines;
   const folded = collapsible && !expanded;
   const shown = folded ? lines.slice(0, previewLines) : lines;
@@ -68,6 +73,9 @@ export function ChangeBox({ path, created, added, removed, lines, truncated, pre
           <span className="text-ok">+{added}</span>
           {!created && <span className="text-danger">−{removed}</span>}
         </span>
+        <IconButton label="Open full diff" data-testid="change-box-open-full" variant="ghost" size="icon" className="size-5 shrink-0" onClick={() => setFull(true)}>
+          <Maximize2 className="size-3" />
+        </IconButton>
       </div>
       {truncated && <div className="px-3 py-1 text-[11px] text-muted-foreground">Cut by the daemon: the write is longer than shown.</div>}
       <div className="relative">
@@ -91,7 +99,21 @@ export function ChangeBox({ path, created, added, removed, lines, truncated, pre
           </button>
         </div>
       )}
+      <ChangeBoxFull open={full} onOpenChange={setFull} path={path} created={created} added={added} removed={removed} lines={lines} />
     </div>
+  );
+}
+
+/** "Open full": every row of the change box in the wide shared modal, through the same [DiffRow]. */
+export function ChangeBoxFull({ open, onOpenChange, path, created, added, removed, lines }: { open: boolean; onOpenChange: (o: boolean) => void } & Omit<ChangeBoxProps, "truncated" | "previewLines">) {
+  return (
+    <AppDialog open={open} wide="full" onOpenChange={onOpenChange} title={path} description={`${created ? "created" : "edited"}: +${added}${created ? "" : ` −${removed}`}`}>
+      <div data-testid="change-box-modal" className="max-h-[70vh] overflow-auto rounded-lg border bg-background py-1">
+        {lines.map((l, i) => (
+          <DiffRow key={i} line={l} oldGutter={!created} />
+        ))}
+      </div>
+    </AppDialog>
   );
 }
 
