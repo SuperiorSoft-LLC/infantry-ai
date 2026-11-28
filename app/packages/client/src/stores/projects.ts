@@ -111,6 +111,11 @@ export function editFrames(p: ProjectInfo, e: ProjectEdit): { type: string; body
   return out;
 }
 
+/** The `project_base` frame body for a picked base: a branch name, or null for "clear (use default)". */
+export function baseFrame(projectId: string, branch: string | null): { type: string; body: Record<string, unknown> } {
+  return { type: "project_base", body: branch ? { projectId, branch } : { projectId, clear: true } };
+}
+
 export interface GitStatus {
   projectId: string;
   directory: string;
@@ -257,6 +262,8 @@ export interface ProjectsState {
   status: GitStatus | null;
   history: GitHistory | null;
   branches: GitBranchList | null;
+  /** Branch lists by project (any project, not only the current one), for the base-branch picker. */
+  branchLists: Record<string, GitBranchList>;
   worktrees: GitWorktreeList | null;
   /** The worktree the view reads; null = the project's own directory. */
   worktree: string | null;
@@ -287,6 +294,10 @@ export interface ProjectsActions {
   editProject(projectId: string, edit: ProjectEdit): void;
   /** `project_delete`; the daemon removes it from Infantry AI (never the folder on disk). */
   deleteProject(projectId: string): void;
+  /** `project_git_branches` for one project; the answer lands in `branchLists`. */
+  loadBranches(projectId: string): void;
+  /** `project_base`: set the base new tickets fork from, or null to clear it (daemon default). */
+  setBaseBranch(projectId: string, branch: string | null): void;
   clearError(): void;
   dispose(): void;
 }
@@ -463,6 +474,7 @@ export function createProjectsStore(link: ProjectsLink): ProjectsStore {
         }
         case "project_git_branch_list": {
           const b = json<GitBranchList>(env.data);
+          if (b?.projectId) set({ branchLists: { ...get().branchLists, [b.projectId]: b } });
           if (b && forCurrent(b.projectId)) set({ branches: b });
           return;
         }
@@ -503,6 +515,7 @@ export function createProjectsStore(link: ProjectsLink): ProjectsStore {
       status: null,
       history: null,
       branches: null,
+      branchLists: {},
       worktrees: null,
       worktree: null,
       worktreeStatus: null,
@@ -574,6 +587,13 @@ export function createProjectsStore(link: ProjectsLink): ProjectsStore {
       },
       deleteProject(projectId) {
         send("project_delete", { projectId });
+      },
+      loadBranches(projectId) {
+        send("project_git_branches", { projectId });
+      },
+      setBaseBranch(projectId, branch) {
+        const f = baseFrame(projectId, branch);
+        send(f.type, f.body);
       },
       clearError() {
         set({ error: null });

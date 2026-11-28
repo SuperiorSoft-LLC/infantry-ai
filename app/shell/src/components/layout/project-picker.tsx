@@ -25,6 +25,7 @@ import {
   type ProjectInfo,
 } from "@infantry/client";
 import { projectsStore, useProjects, useProjectsLoaded } from "@/components/git/use-projects";
+import { BaseBranchPicker } from "./base-branch-picker";
 
 export function ProjectIconBadge({ icon, size = 28 }: { icon: { text: string; color: string; image: string | null }; size?: number }) {
   const style = { width: size, height: size, fontSize: Math.round(size * 0.42) };
@@ -267,12 +268,7 @@ function EditProjectDialog({ project, onClose }: { project: ProjectInfo; onClose
               ))}
             </div>
           )}
-          {project.baseBranch && (
-            <div className="flex justify-between gap-3 text-sm">
-              <span className="text-muted-foreground">Base branch</span>
-              <span className="truncate font-mono">{project.baseBranch}</span>
-            </div>
-          )}
+          <BaseBranchPicker project={project} />
           {[...experiments, ...otherData].length > 0 && (
             <div className="space-y-0.5">
               <div className="text-xs text-muted-foreground">Other values (set with infantry project config)</div>
