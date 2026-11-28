@@ -58,3 +58,24 @@ describe("POPOUT-1 native session window", () => {
     expect(nativePopoutAvailable(fakeOs().ws, { inPopout: true })).toBe(false);
   });
 });
+
+describe("FLOAT-ADOPT-1 float session window", () => {
+  it("opens kind float keyed session.<id> with the pop-out route and bounds; a closed event calls back", async () => {
+    let emit: (e: unknown) => void = () => {};
+    const calls: [string, Record<string, unknown>][] = [];
+    const ws: Windows = createWindows({
+      name: "os",
+      onEvent: (fn) => ((emit = fn as (e: unknown) => void), () => {}),
+      async call(cmd, args = {}) {
+        calls.push([cmd, args]);
+        return { wid: "w-1", kind: "float", state: "normal", bounds: { x: 1, y: 2, w: 3, h: 4 }, restored: false };
+      },
+    });
+    let closed = 0;
+    const { openSessionFloat } = await import("../src/native-popout");
+    await openSessionFloat(ws, { sessionId: "s-1", title: "Bob", pathname: "/ui/index.html", search: "?bos-app=infantry-ai", bounds: { x: 1, y: 2, w: 3, h: 4 } }, () => closed++);
+    expect(calls[0]).toEqual(["os_win_open", { key: "session.s-1", kind: "float", title: "Bob", route: "/ui/index.html?bos-app=infantry-ai&popout=session%3As-1", bounds: { x: 1, y: 2, w: 3, h: 4 } }]);
+    emit({ change: "closed", wid: "w-1" });
+    expect(closed).toBe(1);
+  });
+});

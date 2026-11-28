@@ -214,3 +214,9 @@ export function ChatPopout({ id, title, sessionId, variant = "popout", onClose, 
     </div>
   );
 }
+
+/** FLOAT-ADOPT-1: the box an OS float window opens at: the last saved box of [id], or the default (x < 0 = right edge of [viewW]). */
+export function savedFloatBounds(id: string, viewW = typeof window === "undefined" ? 1200 : window.innerWidth): Box {
+  const { box } = load(id);
+  return box.x < 0 ? { ...box, x: Math.max(0, viewW - box.w - 8) } : box;
+}

@@ -42,3 +42,27 @@ export async function openSessionPopout(ws: Windows, spec: { sessionId: string; 
   else await h.focus().catch(() => h.state);
   return h;
 }
+
+/**
+ * FLOAT-ADOPT-1 (WM-8): the first pop-out of a session under BattalionOS. The OS draws a float window in this same webview
+ * (`os_win_open {kind: "float"}`) with its own chrome: minimize to the BOS taskbar, maximize, snap, and "Pop out to its own
+ * window" (native). Same key and route as the native window, so the OS can move it from one kind to the other. Calls
+ * [onClosed] once when the OS closes it. Rejects (or never answers) on a BattalionOS without os_win_*: the caller falls back.
+ */
+export async function openSessionFloat(
+  ws: Windows,
+  spec: { sessionId: string; title: string; pathname: string; search: string; bounds?: { x: number; y: number; w: number; h: number } },
+  onClosed: () => void,
+): Promise<WindowHandle> {
+  const h = await ws.open({
+    key: sessionPopoutKey(spec.sessionId),
+    kind: "float",
+    title: spec.title,
+    route: sessionPopoutRoute(spec.pathname, spec.search, spec.sessionId),
+    ...(spec.bounds ? { bounds: spec.bounds } : {}),
+  });
+  if (h.closed) onClosed();
+  else h.on("closed", onClosed);
+  if (h.state === "minimized") await h.restore();
+  return h;
+}
