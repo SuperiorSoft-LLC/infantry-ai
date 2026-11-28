@@ -7,6 +7,7 @@ import { memo, useMemo, useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 import { cardOf, foldCards, parseMarkdown, type Block, type Span } from "@infantry/client";
 import { CardUpdateLine, ChatCardView } from "./chat-cards";
+import { useChatSetting } from "./chat-settings";
 import { cn } from "@infantry/ui";
 import { ExternalLink } from "@/components/external-link";
 
@@ -136,6 +137,8 @@ function BlockView({ b }: { b: Block }): ReactNode {
 
 /** One message's markdown. Memoised: transcript rows re-render often, the text rarely changes. */
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
+  const cardsOn = useChatSetting("chat.cards", true);
+  const updateLine = useChatSetting("chat.cardUpdateLine", true);
   const { blocks, cards } = useMemo(() => {
     const blocks = parseMarkdown(text);
     return { blocks, cards: foldCards(blocks.map((b) => (b.kind === "code" ? cardOf(b.lang, b.text, b.open) : null))) };
@@ -143,7 +146,8 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
   return (
     <>
       {blocks.map((b, i) => {
-        const c = cards[i];
+        const c = cardsOn ? cards[i] : null;
+        if (c === "update" && !updateLine) return null;
         if (c === "update") return <CardUpdateLine key={i} type={b.kind === "code" ? b.lang.split(/\s+/)[0].slice(5) : ""} />;
         if (c) return <ChatCardView key={i} card={c} />;
         return <BlockView key={i} b={b} />;

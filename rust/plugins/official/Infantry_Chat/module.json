@@ -14,6 +14,34 @@
       "frames",
       "events"
     ],
+    "config": [
+      { "node": "infantry.chat", "tab": "Chat", "group": "Activity box", "order": 10, "title": "Activity box",
+        "applies": "Applies to: the chat's activity log (the clock chip). Toggling the chip still wins for this window.",
+        "keywords": ["activity", "tools", "collapse"],
+        "fields": [
+          { "key": "chat.activityBox.open", "type": "checkbox", "label": "Activity box starts open", "default": false, "order": 1, "scope": "device" }
+        ] },
+      { "node": "infantry.chat", "tab": "Chat", "group": "Long chats", "order": 20, "title": "Long chats",
+        "applies": "Applies to: the chat transcript. A chat opens on its newest turns; older turns load as you scroll up.",
+        "keywords": ["scroll", "page", "history", "long", "performance"],
+        "fields": [
+          { "key": "limits.chat.replayTurns", "type": "number", "label": "Turns a chat opens with (and loads per scroll-up; 0 = all)", "default": 50, "min": 0, "max": 2000, "step": 10, "order": 1, "scope": "device" }
+        ] },
+      { "node": "infantry.chat", "tab": "Chat", "group": "Chat cards", "order": 30, "title": "Chat cards",
+        "applies": "Applies to: rich cards agents post in the chat. Off draws the card's raw block instead.",
+        "keywords": ["card", "cards", "update", "ticker", "graph"],
+        "fields": [
+          { "key": "chat.cards", "type": "checkbox", "label": "Draw agent cards as cards", "default": true, "order": 1, "scope": "device" },
+          { "key": "chat.cardUpdateLine", "type": "checkbox", "label": "Show a muted line where an agent updated a card", "default": true, "order": 2, "scope": "device" }
+        ] },
+      { "node": "infantry.chat", "tab": "Chat", "group": "Agent reasoning", "order": 40, "title": "Agent reasoning",
+        "applies": "Applies to: the agent's thinking in the chat.",
+        "keywords": ["reasoning", "thinking", "thought", "panel", "inline"],
+        "fields": [
+          { "key": "chat.reasoning", "type": "select", "label": "Show reasoning", "default": "inline", "options": ["inline", "panel", "hidden"],
+            "optionLabels": { "inline": "Inline in the chat", "panel": "In a side panel", "hidden": "Hidden" }, "order": 1, "scope": "device" }
+        ] }
+    ],
     "frames": [
       { "type": "image_upload", "action": "images.upload", "kind": "write" },
       { "type": "image_fetch", "action": "images.read", "kind": "read" }

@@ -136,6 +136,8 @@ export interface DaemonActions {
   requestHistory(sessionId: string): void;
   /** ANDROID-REPLAY-1: the page of turns before the oldest one shown (lazy-load when the chat is scrolled to the top). */
   requestOlder(sessionId: string): void;
+  /** The `limits.chat.replayTurns` setting changed: later history pages ask this many turns (0 = all). */
+  setReplayTurns(turns: number): void;
   /** Feed frames as if the daemon sent them (stress mode, tests). */
   ingest(env: Envelope): void;
   /** Send any frame (the board and settings stores use it); false when the link is not open. */
@@ -627,6 +629,9 @@ export function createDaemonStore(opts: { url: string; transport: TransportFacto
         if (!v || v.historyAsked) return;
         set({ sessions: { ...get().sessions, [sessionId]: { ...v, historyAsked: true, loadingHistory: true } } });
         askReplay(sessionId, { lastSequence: v.cursor });
+      },
+      setReplayTurns(turns) {
+        if (Number.isFinite(turns) && turns >= 0) cfg.replayTurns = Math.floor(turns);
       },
       requestOlder(sessionId) {
         const v = get().sessions[sessionId];

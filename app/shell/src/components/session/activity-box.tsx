@@ -4,24 +4,27 @@
 // the host's floaters first (Expand, Minimize, or Restore alone when minimized), then the Search chip (Ctrl+F), then
 // the Activity chip (a clock, icon only, no count; only when the session has activity). The Activity chip toggles the
 // activity lines above the row: newest first, timestamped, monospace, at most ~160px tall, scrolling. It starts
-// collapsed and the choice is remembered for the window.
+// collapsed (setting chat.activityBox.open, PARITY-AUDIT-1 #13) and a toggle is remembered for the window.
 import { useSyncExternalStore, type ReactNode } from "react";
 import { Clock, Search } from "lucide-react";
 import { CHAT_SEARCH_EVENT } from "@infantry/client";
 import { useDaemon } from "@/daemon/daemon";
 import { ChangeBoxOfWrite } from "./change-box";
 import { FloatingChip } from "./floating-chip";
+import { useChatSetting } from "./chat-settings";
 
 // The Activity toggle is shared by the log (here) and its chip, which may sit in the composer's top tray
 // (CHAT-TOOLBAR-TOP-1), so the remembered choice is a tiny module store.
-let remembered = false;
+let remembered: boolean | null = null;
 const listeners = new Set<() => void>();
 function useActivityOpen(): [boolean, (o: boolean) => void] {
-  const open = useSyncExternalStore(
+  const startsOpen = useChatSetting("chat.activityBox.open", false);
+  const toggled = useSyncExternalStore(
     (l) => (listeners.add(l), () => listeners.delete(l)),
     () => remembered,
+    () => remembered,
   );
-  return [open, (o) => ((remembered = o), listeners.forEach((l) => l()))];
+  return [toggled ?? startsOpen, (o) => ((remembered = o), listeners.forEach((l) => l()))];
 }
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });

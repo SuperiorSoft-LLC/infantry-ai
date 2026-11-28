@@ -15,10 +15,11 @@ import type { Agent } from "@/mock/types";
 import { localMode, useDaemon } from "@/daemon/daemon";
 import { AgentAvatar } from "@/components/agents/agent-avatar";
 import { useAutomationItems } from "@/daemon/use-timeline";
-import { AutomationCard, CommsCard, ThinkingSpinner, TranscriptItemView, timeOf } from "./transcript-items";
+import { AutomationCard, CommsCard, ThinkingBlock, ThinkingSpinner, TranscriptItemView, timeOf } from "./transcript-items";
 import { EmptyPaneActions, MessageActions, TodoBox, paneActionOf } from "./chat-extras";
 import { sessionActions } from "./session-actions";
 import { useUi } from "@/state/ui-state";
+import { useReasoningMode, useReplayTurnsSetting } from "./chat-settings";
 
 /** Kinds that start an agent turn and so carry the avatar in the gutter. */
 const startsTurn = new Set<TranscriptItem["kind"]>(["thinking", "text", "note"]);
@@ -95,12 +96,17 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
   const record = useDaemon((s) => s.sessions[sessionId]?.record);
   const spawnWith = useDaemon((s) => s.spawnWith);
   const ui = useUi();
+  useReplayTurnsSetting();
+  // PARITY-AUDIT-1 #13: reasoning inline (today), in a side panel, or hidden. Off-inline, thinking rows leave the list.
+  const reasoning = useReasoningMode();
+  const listed = useMemo(() => (reasoning === "inline" ? items : items?.filter((i) => i.kind !== "thinking")), [items, reasoning]);
+  const thoughts = useMemo(() => (reasoning === "panel" ? (items ?? []).filter((i) => i.kind === "thinking") : []), [items, reasoning]);
   const rows = useMemo<Row[]>(
     () => [
-      ...mergeAutomation<TranscriptItem & { at?: number }>(items ?? [], autos).map((r): Row => (r.auto ? { key: `auto:${r.auto.id}`, auto: r.auto } : { key: r.item.id, item: r.item })),
+      ...mergeAutomation<TranscriptItem & { at?: number }>(listed ?? [], autos).map((r): Row => (r.auto ? { key: `auto:${r.auto.id}`, auto: r.auto } : { key: r.item.id, item: r.item })),
       ...pending.map((p) => ({ key: p.clientId, pending: p })),
     ],
-    [items, autos, pending],
+    [listed, autos, pending],
   );
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -237,6 +243,7 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
           </IconButton>
         </div>
       )}
+      <div className="flex min-h-0 flex-1">
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]" data-testid="transcript-scroll">
         <ol className="relative px-4 py-3" aria-label="Transcript" style={{ height: total + 24 }}>
           {v.getVirtualItems().map((vi) => {
@@ -262,11 +269,33 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
         {/* PHONE-SESSION-UI-1: room for the floating row (Expand, Minimize, Search...) so it never covers the last lines. */}
         <div aria-hidden className="h-14 shrink-0" />
       </div>
+      {reasoning === "panel" && <ReasoningPanel thoughts={thoughts} />}
+      </div>
       {away && (
         <IconButton label="Jump to latest" variant="outline" className="absolute right-5 bottom-16 rounded-full bg-card shadow" onClick={toBottom}>
           <ArrowDown />
         </IconButton>
       )}
     </div>
+  );
+}
+
+/** The reasoning side panel (setting chat.reasoning = panel): the session's thinking, newest last, beside the transcript. */
+export function ReasoningPanel({ thoughts }: { thoughts: TranscriptItem[] }) {
+  return (
+    <aside aria-label="Agent reasoning" className="hidden w-72 shrink-0 overflow-y-auto border-l px-3 py-3 sm:block">
+      <h3 className="mb-2 text-xs font-medium text-muted-foreground">Reasoning</h3>
+      {thoughts.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No reasoning yet.</p>
+      ) : (
+        <ol className="space-y-2">
+          {thoughts.map((t) => t.kind === "thinking" && (
+            <li key={t.id}>
+              <ThinkingBlock count={t.count} text={t.text} />
+            </li>
+          ))}
+        </ol>
+      )}
+    </aside>
   );
 }
