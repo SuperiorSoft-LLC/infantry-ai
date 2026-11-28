@@ -59,3 +59,4 @@ export * from "./account";
 export * from "./tab-redirects";
 export * from "./sites";
 export * from "./popout-windows";
+export * from "./native-popout";

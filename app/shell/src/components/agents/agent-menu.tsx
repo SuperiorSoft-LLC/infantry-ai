@@ -6,7 +6,7 @@
 // profile, so a session with no profile says so instead. Move to project lists the daemon's projects and sends
 // `session_project` {sessionId, projectId}; the session push moves the card, a refusal toasts.
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeftRight, FolderInput, ListPlus, MoreHorizontal, Play, SquareArrowOutUpRight, Ticket, Trash2, Unlink } from "lucide-react";
+import { AppWindow, ArrowLeftRight, FolderInput, ListPlus, MoreHorizontal, Play, SquareArrowOutUpRight, Ticket, Trash2, Unlink } from "lucide-react";
 import {
   AppDialog,
   Button,
@@ -29,6 +29,8 @@ import { openSessionDialog } from "@/components/session/session-actions";
 import { TicketDialog } from "@/components/board/ticket-dialog";
 import { useUi } from "@/state/ui-state";
 import { useProjects } from "@/components/git/use-projects";
+import { useNativePopout } from "@/components/session/use-native-popout";
+import { useAgent } from "@/daemon/agents";
 
 const DORMANT = new Set(["EXITED", "ORPHANED", "FAILED"]);
 let counter = 0;
@@ -46,6 +48,8 @@ export function AgentMenu({ sessionId, open, onOpenChange }: { sessionId: string
   const [picking, setPicking] = useState(false);
   const [viewing, setViewing] = useState(false);
   const projects = useProjects((s) => s.projects);
+  const ownWindow = useNativePopout();
+  const agentName = useAgent(sessionId)?.name;
   if (!r) return null;
   const dormant = DORMANT.has(r.state);
   return (
@@ -68,6 +72,11 @@ export function AgentMenu({ sessionId, open, onOpenChange }: { sessionId: string
           <DropdownMenuItem onSelect={() => (ui.set("selectedAgentId", sessionId), ui.set("sessionTab", "cli"))}>
             <SquareArrowOutUpRight /> Open
           </DropdownMenuItem>
+          {ownWindow && (
+            <DropdownMenuItem title="Each window uses more memory; the taskbar list shows how much" onSelect={() => ownWindow(sessionId, agentName ?? sessionId)}>
+              <AppWindow /> Open in its own window
+            </DropdownMenuItem>
+          )}
           {dormant && (
             <DropdownMenuItem onSelect={() => daemonStore().getState().spawnWith({ resume: sessionId, cwd: r.workingDir ?? undefined })}>
               <Play /> Resume session

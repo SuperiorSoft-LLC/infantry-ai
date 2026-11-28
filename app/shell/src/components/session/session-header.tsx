@@ -9,7 +9,8 @@ import { AgentAvatar } from "@/components/agents/agent-avatar";
 import { Chip } from "@infantry/ui";
 import { useDaemon } from "@/daemon/daemon";
 import { useAutomationStats } from "@/daemon/use-timeline";
-import { ExternalLink } from "lucide-react";
+import { AppWindow, ExternalLink } from "lucide-react";
+import { useNativePopout } from "./use-native-popout";
 import { IconButton } from "@infantry/ui";
 import { useUi } from "@/state/ui-state";
 
@@ -21,6 +22,7 @@ export function SessionHeader({ agent }: { agent: Agent }) {
   const limit = rec?.contextLimit;
   const auto = useAutomationStats(agent.id);
   const ui = useUi();
+  const ownWindow = useNativePopout();
   return (
     <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-3 pb-2 [&_span]:max-w-full [&_span]:break-all">
       <AgentAvatar agent={agent} size="md" />
@@ -62,6 +64,11 @@ export function SessionHeader({ agent }: { agent: Agent }) {
         <IconButton label="Pop out this chat" onClick={() => ui.popOut(agent.id)}>
           <ExternalLink />
         </IconButton>
+        {ownWindow && (
+          <IconButton label="Open in its own window (each window uses more memory)" onClick={() => ownWindow(agent.id, agent.name)}>
+            <AppWindow />
+          </IconButton>
+        )}
       </div>
     </div>
   );
