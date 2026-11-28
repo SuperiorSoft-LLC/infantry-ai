@@ -9,7 +9,7 @@ the overview below; a wrong command prints its own usage line and exits with cod
 
 These commands are served by the binary itself (`registry.rs`); `progress`, `run` and `waiting` also take raw words.
 
-`agent`, `agents`, `archive`, `ask`, `board`, `cancel`, `epics`, `harness-install`, `harness-status`, `harnesses`, `health`, `inbox`, `install-cli`, `issue`, `kill`, `logs`, `plugin`, `pods`, `processes`, `project`, `prompt`, `read`, `remote`, `run-cmd`, `runner`, `runs`, `script`, `secret`, `send`, `session`, `settings`, `submit`, `thread`, `threads`, `ticket`, `tickets`, `uninstall-cli`, `usage`, `waiting`, `watch`, `worktrees`
+`agent`, `agents`, `archive`, `ask`, `board`, `cancel`, `card`, `docs`, `epics`, `event`, `harness-install`, `harness-status`, `harnesses`, `health`, `inbox`, `install-cli`, `issue`, `kill`, `logs`, `mcp`, `memory`, `notify`, `plugin`, `pods`, `processes`, `project`, `prompt`, `read`, `remote`, `role`, `run-cmd`, `runner`, `runs`, `script`, `secret`, `send`, `session`, `settings`, `skill`, `submit`, `thread`, `threads`, `ticket`, `tickets`, `uninstall-cli`, `usage`, `waiting`, `watch`, `worktrees`
 
 ## Overview (`infantry --help`)
 
@@ -298,6 +298,48 @@ Publishes a built BattalionOS app (a folder with app.json) to a private local re
 
 ```text
 usage: infantry ask --question "<question>" --option "<label>[|<description>]" --option ... --recommend <label> --reason "<why>" [--default-after <min>]
+```
+
+### cmd_knowledge (`EVENT_USAGE`)
+
+```text
+usage: infantry event emit <name> [--payload <json object>|-]
+```
+
+### cmd_knowledge (`CARD_USAGE`)
+
+```text
+usage: infantry card list | infantry card show <type>
+```
+
+### cmd_knowledge (`DOCS_USAGE`)
+
+```text
+usage: infantry docs list | infantry docs show <page>
+```
+
+### cmd_knowledge (`ROLE_USAGE`)
+
+```text
+usage: infantry role list | show <id> | notes <id> --body <text|-> | describe <id> --body <text> | delete <id>
+```
+
+### cmd_knowledge (`SKILL_USAGE`)
+
+```text
+usage: infantry skill list|show <name>|create <name>|update <name>|delete <name> --scope global|project|role [--project <id>] [--role <id>] [--description <d>] [--body <text|-> | --file <path>]
+```
+
+### cmd_knowledge (`MEMORY_USAGE`)
+
+```text
+usage: infantry memory index | show <name> | search <text> | delete <name>   (other forms and --scope/--role/--folder use the launcher)
+```
+
+### cmd_knowledge (`NOTIFY_USAGE`)
+
+```text
+usage: infantry notify --title <text> [--body <text>] [--level info|milestone|warning|error|urgent] [--sound <name>|none] [--ticket <id>]
 ```
 
 ### cmd_mail (`WAITING_USAGE`)

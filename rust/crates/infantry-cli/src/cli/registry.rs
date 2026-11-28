@@ -59,6 +59,15 @@ pub static COMMANDS: &[&Command] = &[
     &super::cmd_work::HARNESSES,
     &super::cmd_work::ARCHIVE,
     &super::cmd_work::AGENT,
+    // -- knowledge / admin (PARITY-AUDIT-1 #22) --
+    &super::cmd_knowledge::EVENT,
+    &super::cmd_knowledge::CARD,
+    &super::cmd_knowledge::DOCS,
+    &super::cmd_knowledge::MCP,
+    &super::cmd_knowledge::ROLE,
+    &super::cmd_knowledge::SKILL,
+    &super::cmd_knowledge::MEMORY,
+    &super::cmd_knowledge::NOTIFY,
     // -- runner --
     &super::cmd_runner::RUNNER,
 ];
@@ -77,6 +86,7 @@ pub fn find_for(name: &str, p: &super::args::Parsed) -> Option<&'static Command>
     find(name).filter(|_| match name {
         "ask" => super::cmd_ask::is_native(p),
         "agent" => super::cmd_work::is_native(p),
+        "event" | "card" | "docs" | "mcp" | "role" | "skill" | "memory" | "notify" => super::cmd_knowledge::is_native(name, p),
         _ => true,
     })
 }
