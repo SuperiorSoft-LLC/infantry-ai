@@ -56,11 +56,13 @@ export function AgentAvatar(props: { agentId: string; size?: "xs" | "sm" }): Rea
   return createElement(lent("AgentAvatar"), props);
 }
 
-/** PLUGIN-AGENTS-1: opens [url] outside the app (system browser on desktop); a plain new tab where the app lends no opener. */
+/**
+ * PLUGIN-AGENTS-1: opens [url] outside the app through the host seam (`host.openExternal`: the system browser on desktop
+ * and BattalionOS, a new tab in a browser). A host that predates the seam lends no opener: nothing opens, and the app
+ * webview is never navigated.
+ */
 export function openExternal(url: string): void {
-  const open = host().api.openExternal;
-  if (open) void open(url).catch(() => undefined);
-  else window.open(url, "_blank", "noopener,noreferrer");
+  void host().api.openExternal?.(url).catch(() => undefined);
 }
 
 const cardImages = new Map<string, Promise<string | null>>();
