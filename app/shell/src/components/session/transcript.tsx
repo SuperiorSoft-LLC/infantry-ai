@@ -20,7 +20,7 @@ import { EmptyPaneActions, MessageActions, TodoBox, paneActionOf } from "./chat-
 import { sessionActions } from "./session-actions";
 import { useUi } from "@/state/ui-state";
 import { useReasoningMode, useReplayTurnsSetting } from "./chat-settings";
-import { sentSince } from "./send-follow";
+import { sentSince, shownPending } from "./send-follow";
 
 /** Kinds that start an agent turn and so carry the avatar in the gutter. */
 const startsTurn = new Set<TranscriptItem["kind"]>(["thinking", "text", "note"]);
@@ -83,7 +83,7 @@ function Elapsed({ since }: { since: number }) {
 export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: string }) {
   const items = useDaemon((s) => s.sessions[sessionId]?.items);
   const since = useDaemon((s) => s.sessions[sessionId]?.status?.runActivity?.turnStartedAt ?? s.sessions[sessionId]?.record.lastHeartbeat);
-  const pending = useDaemon(useShallow((s) => Object.values(s.pending).filter((p) => p.sessionId === sessionId && p.state !== "accepted")));
+  const pending = useDaemon(useShallow((s) => shownPending(s.pending, sessionId)));
   const retry = useDaemon((s) => s.retry);
   // ANDROID-REPLAY-1: the history answer is drawn once it ends; older turns load when the reader reaches the top.
   const loading = useDaemon((s) => !!s.sessions[sessionId]?.loadingHistory);
