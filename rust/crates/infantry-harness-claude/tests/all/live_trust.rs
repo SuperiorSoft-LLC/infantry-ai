@@ -29,7 +29,9 @@ async fn first_turn_in_a_new_folder(name: &str, request_term: Option<&str>) {
         panic!("claude cannot run here: {problem}");
     }
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or_default();
-    let root = std::env::temp_dir().join(format!("infantry-harn-claude-trust-{name}-{}-{stamp}", std::process::id()));
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let root = std::env::temp_dir().join(format!("infantry-harn-claude-trust-{name}-{}-{n}-{stamp}", std::process::id()));
     let (dir, state) = (root.join("work"), root.join("state"));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::create_dir_all(&state).unwrap();
