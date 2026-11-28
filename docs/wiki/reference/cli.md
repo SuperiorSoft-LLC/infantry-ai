@@ -9,7 +9,7 @@ the overview below; a wrong command prints its own usage line and exits with cod
 
 These commands are served by the binary itself (`registry.rs`); `progress`, `run` and `waiting` also take raw words.
 
-`agents`, `ask`, `board`, `harness-install`, `harness-status`, `health`, `inbox`, `install-cli`, `issue`, `kill`, `plugin`, `project`, `prompt`, `read`, `remote`, `run-cmd`, `runner`, `script`, `secret`, `send`, `session`, `settings`, `thread`, `threads`, `ticket`, `tickets`, `uninstall-cli`, `usage`, `waiting`, `worktrees`
+`agent`, `agents`, `archive`, `ask`, `board`, `cancel`, `epics`, `harness-install`, `harness-status`, `harnesses`, `health`, `inbox`, `install-cli`, `issue`, `kill`, `logs`, `plugin`, `pods`, `processes`, `project`, `prompt`, `read`, `remote`, `run-cmd`, `runner`, `runs`, `script`, `secret`, `send`, `session`, `settings`, `submit`, `thread`, `threads`, `ticket`, `tickets`, `uninstall-cli`, `usage`, `waiting`, `watch`, `worktrees`
 
 ## Overview (`infantry --help`)
 
@@ -361,6 +361,12 @@ usage: infantry ticket archive <id>... | --epic <id> | --filter <lane>[:<days>] 
 
 ```text
 infantry ticket comments <id|prefix> [--which latestOpen|latest|first|all] [--kind done|issue|note] [--limit N]
+```
+
+### cmd_work (`QUEUE_USAGE`)
+
+```text
+usage: infantry agent queue <agent> [add <id> [--at n] | rm <id> | mv <id> <n> | clear]
 ```
 
 ### local_cmds (`CLI_PATH_USAGE`)

@@ -25,6 +25,8 @@ pub mod usage_settings;
 pub mod cmd_worktrees;
 pub mod cmd_plugin;
 pub mod cmd_project;
+pub mod cmd_pods;
+pub mod cmd_work;
 pub mod health;
 pub mod local_cmds;
 pub mod progress;

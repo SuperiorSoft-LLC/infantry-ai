@@ -47,6 +47,18 @@ pub static COMMANDS: &[&Command] = &[
     &super::issue::ISSUE,
     &super::cmd_harness::HARNESS_STATUS,
     &super::cmd_harness::HARNESS_INSTALL,
+    // -- pods / runs / work (PARITY-AUDIT-1 #21) --
+    &super::cmd_pods::SUBMIT,
+    &super::cmd_pods::WATCH,
+    &super::cmd_pods::PODS,
+    &super::cmd_pods::RUNS,
+    &super::cmd_pods::LOGS,
+    &super::cmd_pods::CANCEL,
+    &super::cmd_work::EPICS,
+    &super::cmd_work::PROCESSES,
+    &super::cmd_work::HARNESSES,
+    &super::cmd_work::ARCHIVE,
+    &super::cmd_work::AGENT,
     // -- runner --
     &super::cmd_runner::RUNNER,
 ];
@@ -62,5 +74,9 @@ pub fn find(name: &str) -> Option<&'static Command> {
 
 /// [find], for these words: a command only partly native leaves its other forms to the launcher.
 pub fn find_for(name: &str, p: &super::args::Parsed) -> Option<&'static Command> {
-    find(name).filter(|_| name != "ask" || super::cmd_ask::is_native(p))
+    find(name).filter(|_| match name {
+        "ask" => super::cmd_ask::is_native(p),
+        "agent" => super::cmd_work::is_native(p),
+        _ => true,
+    })
 }
