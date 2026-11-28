@@ -88,6 +88,12 @@ impl PairCodes {
         self.live.as_ref().filter(|l| now < l.expires_at).map(|l| l.name.as_str())
     }
 
+    /// Whether `presented` has the shape of a one-time code (16 code symbols once normalised as [`PairCodes::redeem`] does).
+    /// A bearer secret (32 symbols) never has it, so a bearer try is never counted against the code limit.
+    pub fn looks_like_code(presented: &str) -> bool {
+        presented.to_uppercase().chars().filter(|c| c.is_ascii() && CODE_ALPHABET.contains(&(*c as u8))).count() == CODE_SIZE
+    }
+
     /// `Ok(())` spends the code; `Err` is the refusal reason.
     pub fn redeem(&mut self, code: &str, now: i64) -> Result<(), String> {
         while self.attempts.front().is_some_and(|t| *t <= now - MS_PER_HOUR) {

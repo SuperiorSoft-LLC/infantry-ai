@@ -3,7 +3,7 @@
 //! The RUNNER side of the link, with no transport: one request in, one answer out ([`LinkServer::handle`]).
 //!
 //! - With no credential only [`wire::PAIR`] is accepted: with the live one-time code or the runner's bearer secret. A code
-//!   cannot move a runner paired with another orchestrator; the bearer can (it is the owner's authority).
+//!   never moves a paired runner (any orchestrator paired, the same id included); the bearer can (it is the owner's authority).
 //! - With the paired orchestrator's id and live credential every `runner_link_*` frame reaches the [`Backend`]; any other
 //!   frame type is refused (a runner credential calls only the link family).
 //! - Every operation, refused ones included, is appended to the audit file (health is not: it is the heartbeat).
@@ -402,6 +402,10 @@ impl LinkServer {
         let mut runner_name = by_bearer.as_ref().map(|b| b.name.clone());
         let redeemed: Result<(), String> = if by_bearer.is_some() {
             Ok(())
+        } else if bearer_exists && !PairCodes::looks_like_code(&req.code) {
+            // Not a code: a bearer try (wrong or typo'd). It is answered as before codes were issued here and never counts
+            // against the code attempt limit (limits.runners.pairAttemptsPerHour applies to code redemption only).
+            Err(WRONG_BEARER.into())
         } else if let Some(codes) = &self.codes {
             let mut c = codes.lock().unwrap();
             runner_name = c.live_name(now).map(str::to_string);
@@ -415,13 +419,15 @@ impl LinkServer {
         if req.orchestrator_id.trim().is_empty() {
             return self.refuse(ANON, p, from, format!("{p} refused: no orchestrator id"));
         }
-        let previous = self.store.orchestrator().filter(|o| o.id != req.orchestrator_id);
-        if let (Some(prev), None) = (&previous, &by_bearer) {
+        // A one-time code never moves a paired runner: refused whenever ANY orchestrator is paired, the same id included (an
+        // orchestrator id is not a secret). Only the bearer replaces a pairing.
+        if let (Some(paired), None) = (self.store.orchestrator(), &by_bearer) {
             return self.refuse(ANON, p, from, format!(
-                "{p} refused: this runner is paired with another orchestrator ({}) and a one-time code cannot move it. Paste the runner's bearer instead (`infantry runner bearer` on the runner prints it): the bearer moves the runner to this app",
-                prev.name
+                "{p} refused: already paired; detach first or use the bearer. This runner is paired with orchestrator {} and a one-time code cannot move it: run `infantry runner detach` on the runner, or paste the runner's bearer instead (`infantry runner bearer` on the runner prints it): the bearer moves the runner to this app",
+                paired.name
             ));
         }
+        let previous = self.store.orchestrator().filter(|o| o.id != req.orchestrator_id);
         let seat = format!("orchestrator:{}", req.orchestrator_id);
         if let Some(prev) = &previous {
             self.record(&seat, "runner_link_pair_takeover", &format!("replaced orchestrator {} ({})", prev.name, prev.id), from);
@@ -498,6 +504,41 @@ mod tests {
         assert_eq!(moved.replaced_orchestrator.as_deref(), Some("inf-a"));
         // The code was spent by the refused move (as on Kotlin), so a wrong secret now reads as a wrong bearer.
         assert!(pair(&s, "wrong", "inf-c").data.contains("wrong bearer"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_code_never_moves_a_paired_runner_even_with_the_same_orchestrator_id() {
+        let s = server().with_log(|_| {});
+        let code = s.issue_code("box").unwrap();
+        let first: PairAnswer = serde_json::from_str(&pair(&s, &code, "inf-a").data).unwrap();
+        // Same id as the paired orchestrator (not a secret): refused, the real credential keeps working.
+        let code = s.issue_code("box").unwrap();
+        let a = pair(&s, &code, "inf-a");
+        assert!(!a.ok() && a.data.contains("already paired; detach first or use the bearer"), "{a:?}");
+        assert!(s.handle(HEALTH, "", Some("inf-a"), Some(&first.credential), None).ok());
+        // A different id: refused too.
+        let code = s.issue_code("box").unwrap();
+        let a = pair(&s, &code, "inf-b");
+        assert!(!a.ok() && a.data.contains("already paired; detach first or use the bearer"), "{a:?}");
+        assert!(s.handle(HEALTH, "", Some("inf-a"), Some(&first.credential), None).ok());
+    }
+
+    #[test]
+    fn the_code_attempt_limit_does_not_throttle_the_bearer() {
+        let dir = std::env::temp_dir().join(format!("link-srv-{}", uuid::Uuid::new_v4()));
+        let v = Bearer::of(&dir).ensure(Some("box"), false).unwrap();
+        let s = LinkServer::new(LinkStore::in_memory(), Some(PairCodes::new(60_000, 10)), Some(Bearer::of(&dir)), Box::new(InfoOnly), None).with_log(|_| {});
+        s.issue_code("box").unwrap();
+        for _ in 0..12 {
+            assert!(!pair(&s, "AAAA-BBBB-CCCC-DDDD", "inf-x").ok());
+        }
+        assert!(pair(&s, "AAAA-BBBB-CCCC-DDDD", "inf-x").data.contains("too many pairing attempts"));
+        let mut typo = v.secret.clone();
+        typo.pop();
+        assert_eq!(pair(&s, &typo, "inf-a").data, format!("runner_link_pair refused: {WRONG_BEARER}"));
+        assert_eq!(pair(&s, "wrong", "inf-a").data, format!("runner_link_pair refused: {WRONG_BEARER}"));
+        assert!(pair(&s, &v.secret, "inf-a").ok());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
