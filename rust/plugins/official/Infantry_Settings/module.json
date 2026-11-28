@@ -14,6 +14,27 @@
     "needs": [
       "frames"
     ],
+    "config": [
+      { "node": "infantry.notify", "tab": "Notifications", "group": "Notification sounds", "order": 10, "title": "Notification sounds",
+        "applies": "Applies to: the sound a notice plays. None (the default) plays nothing.",
+        "keywords": ["notify", "notification", "sound", "milestone", "comms", "mail", "level"],
+        "fields": [
+          { "key": "notify.milestoneSound", "type": "select", "label": "Milestone sound", "default": "none", "options": ["none", "chime", "bell", "alarm"], "optionLabels": { "none": "None", "chime": "Chime", "bell": "Bell", "alarm": "Alarm" }, "order": 1, "scope": "daemon", "description": "The sound of a milestone ticket's notification when the ticket names none." },
+          { "key": "notify.defaultSound", "type": "select", "label": "Default notification sound", "default": "none", "options": ["none", "chime", "bell", "alarm"], "optionLabels": { "none": "None", "chime": "Chime", "bell": "Bell", "alarm": "Alarm" }, "order": 2, "scope": "daemon", "description": "The sound of a notification that names none." },
+          { "key": "notify.commsSound", "type": "select", "label": "Incoming comms sound", "default": "none", "options": ["none", "chime", "bell", "alarm"], "optionLabels": { "none": "None", "chime": "Chime", "bell": "Bell", "alarm": "Alarm" }, "order": 3, "scope": "device", "description": "Played on this device when a mail arrives." },
+          { "key": "notify.levelSound.info", "type": "select", "label": "Info notice sound", "default": "none", "options": ["none", "chime", "bell", "alarm"], "optionLabels": { "none": "None", "chime": "Chime", "bell": "Bell", "alarm": "Alarm" }, "order": 4, "scope": "device", "description": "Played on this device when a info notice arrives." },
+          { "key": "notify.levelSound.success", "type": "select", "label": "Success notice sound", "default": "none", "options": ["none", "chime", "bell", "alarm"], "optionLabels": { "none": "None", "chime": "Chime", "bell": "Bell", "alarm": "Alarm" }, "order": 5, "scope": "device", "description": "Played on this device when a success notice arrives." },
+          { "key": "notify.levelSound.warning", "type": "select", "label": "Warning notice sound", "default": "none", "options": ["none", "chime", "bell", "alarm"], "optionLabels": { "none": "None", "chime": "Chime", "bell": "Bell", "alarm": "Alarm" }, "order": 6, "scope": "device", "description": "Played on this device when a warning notice arrives." },
+          { "key": "notify.levelSound.error", "type": "select", "label": "Error notice sound", "default": "none", "options": ["none", "chime", "bell", "alarm"], "optionLabels": { "none": "None", "chime": "Chime", "bell": "Bell", "alarm": "Alarm" }, "order": 7, "scope": "device", "description": "Played on this device when a error notice arrives." },
+          { "key": "notify.levelSound.urgent", "type": "select", "label": "Urgent notice sound", "default": "none", "options": ["none", "chime", "bell", "alarm"], "optionLabels": { "none": "None", "chime": "Chime", "bell": "Bell", "alarm": "Alarm" }, "order": 8, "scope": "device", "description": "Played on this device when a urgent notice arrives." }
+        ] },
+      { "node": "infantry.notify", "tab": "Notifications", "group": "OS notifications", "order": 20, "title": "OS notifications",
+        "applies": "Applies to: the desktop OS notifications for notices routed to the OS.",
+        "keywords": ["notify", "notification", "background", "focus", "os"],
+        "fields": [
+          { "key": "notify.background", "type": "checkbox", "label": "Only while the app is in the background", "default": false, "order": 1, "scope": "device", "description": "On: no OS notification while the app window has focus (the in-app toast still shows). Off: always." }
+        ] }
+    ],
     "tools": [
       {
         "name": "infantry_project_config_get",

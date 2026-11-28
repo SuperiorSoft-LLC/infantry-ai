@@ -22,6 +22,15 @@ Declared by the official plugins (`module.json` `daemon.config`); the Settings t
 | `chat.reasoning` | select | `inline` | device | Infantry_Chat / Agent reasoning | Show reasoning |
 | `chat.changeBox.previewLines` | number | `12` | device | Infantry_Chat / Code changes | Diff lines a collapsed change box previews |
 | `knowledge.globalWriteRoles` | text | `pm` | daemon | Infantry_Notes / Knowledge | Roles that may write global notes. Comma-separated role ids. The owner (no session) may always write. Every agent may read. |
+| `notify.milestoneSound` | select | `none` | daemon | Infantry_Settings / Notification sounds | Milestone sound. The sound of a milestone ticket's notification when the ticket names none. |
+| `notify.defaultSound` | select | `none` | daemon | Infantry_Settings / Notification sounds | Default notification sound. The sound of a notification that names none. |
+| `notify.commsSound` | select | `none` | device | Infantry_Settings / Notification sounds | Incoming comms sound. Played on this device when a mail arrives. |
+| `notify.levelSound.info` | select | `none` | device | Infantry_Settings / Notification sounds | Info notice sound. Played on this device when a info notice arrives. |
+| `notify.levelSound.success` | select | `none` | device | Infantry_Settings / Notification sounds | Success notice sound. Played on this device when a success notice arrives. |
+| `notify.levelSound.warning` | select | `none` | device | Infantry_Settings / Notification sounds | Warning notice sound. Played on this device when a warning notice arrives. |
+| `notify.levelSound.error` | select | `none` | device | Infantry_Settings / Notification sounds | Error notice sound. Played on this device when a error notice arrives. |
+| `notify.levelSound.urgent` | select | `none` | device | Infantry_Settings / Notification sounds | Urgent notice sound. Played on this device when a urgent notice arrives. |
+| `notify.background` | checkbox | `false` | device | Infantry_Settings / OS notifications | Only while the app is in the background. On: no OS notification while the app window has focus (the in-app toast still shows). Off: always. |
 | `sites.refreshSeconds` | number | `30` | app | Infantry_Sites / Sites | Re-read the server list every (seconds, 0 = off) |
 | `triggers.at.maxLateMs` | number | `900000` | daemon | Infantry_Triggers / Triggers | A one-shot found this many milliseconds late still fires; later is recorded missed |
 | `limits.triggers.skipWhenIdle` | boolean | `true` | daemon | Infantry_Triggers / Triggers | Skip a prompt trigger when its target has no unread mail and the project has no In Progress or To Do ticket |

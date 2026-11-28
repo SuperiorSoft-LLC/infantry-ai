@@ -15,6 +15,7 @@ import { TitleBar } from "./title-bar";
 import { StatusBar } from "./status-bar";
 import { usePluginsLoaded } from "@/plugins/use-plugins";
 import { useShortcuts } from "./use-shortcuts";
+import { NoticeSoundHost } from "./notice-sound-host";
 import { OsNoticeHost } from "./os-notice-host";
 import { ToastHost } from "./toast-host";
 import { PopoutDock, PopoutHost } from "@/components/session/popout-host";
@@ -80,6 +81,7 @@ export function AppShell({ headerActions, statusLeading }: Pick<ShellProps, "hea
       <StatusBar leading={statusLeading} />
       <ToastHost />
       <OsNoticeHost />
+      <NoticeSoundHost />
       <DialogHost />
       <GlobalWorkersHost />
     </div>

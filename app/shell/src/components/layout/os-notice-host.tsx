@@ -5,10 +5,11 @@
 // in-app toast still comes from ToastHost; a host with no notifier (browser, BattalionOS) shows toasts only. A click
 // (the host brings the window up; showing never takes focus) opens the chat or the board the notice names.
 import { useEffect } from "react";
-import { createOsNotifier } from "@infantry/client";
+import { createOsNotifier, osNoticeAllowed } from "@infantry/client";
 import { daemonStore } from "@/daemon/daemon";
 import { host } from "@/host";
 import { useUi } from "@/state/ui-state";
+import { readNotifySetting } from "./notice-sound-host";
 
 export function OsNoticeHost() {
   const ui = useUi();
@@ -16,7 +17,10 @@ export function OsNoticeHost() {
   useEffect(() => {
     const notify = host.notify;
     if (!notify) return;
-    const os = createOsNotifier((n) => void notify.show(n));
+    const os = createOsNotifier((n) => {
+      // NOTIFY-CORE-4: notify.background on = no OS notification while this window has focus (the toast still shows).
+      if (osNoticeAllowed(readNotifySetting, document.hasFocus())) void notify.show(n);
+    });
     const offFrames = daemonStore().getState().onFrame((env) => void os.frame(env));
     const offClicks = notify.onClick((key) => {
       const n = os.notices.get(key);
