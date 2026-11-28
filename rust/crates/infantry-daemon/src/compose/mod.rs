@@ -123,6 +123,7 @@ pub struct Composed {
     pub account: Arc<crate::account::Account>,
     /// The notification hub (the owner's notices and toasts).
     pub hub: Arc<NotificationHub>,
+    pub milestones: Arc<infantry_mail::notify::milestones::MilestoneStore>,
     next_conn: AtomicU64,
 }
 
@@ -406,6 +407,25 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             b.publish(Envelope::new(ty, data));
         });
     }
+    // PARITY-AUDIT-1 #15: a ticket marked with `infantry_notify_milestone` posts ONE milestone notice when it enters done.
+    let milestones = Arc::new(infantry_mail::notify::milestones::MilestoneStore::new(db.clone()).map_err(|e| format!("milestones: {e}"))?);
+    {
+        let (m, h, mut rx) = (milestones.clone(), hub.clone(), bus.subscribe_events());
+        handle.spawn(async move {
+            loop {
+                match rx.recv().await {
+                    Ok(e) if e.name == "ticket.done" => {
+                        let id = e.payload["ticketId"].as_str().unwrap_or_default().to_string();
+                        if m.take(&id).is_some() {
+                            h.post(milestone_notice(&id, e.payload["projectId"].as_str()), "milestone");
+                        }
+                    }
+                    Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(_) => break,
+                }
+            }
+        });
+    }
 
     // ---- knowledge (roles, traits, skills, prompts, avatars) and the secrets vault ------------------------
     // PM-ROLE-1: role texts come from the plugins that ship a catalog (module.json `roleCatalog`); core holds none.
@@ -608,6 +628,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             questions: questions.clone(),
             asker_of: asker_of.clone(),
             hub: hub.clone(),
+            milestones: milestones.clone(),
         }));
     }
     tools.set_knowledge(knowledge.clone());
@@ -963,6 +984,7 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         remote_host,
         account: account.clone(),
         hub: hub.clone(),
+        milestones: milestones.clone(),
         next_conn: AtomicU64::new(1),
     });
     if let Some(p) = &plugin_set {
@@ -1088,6 +1110,19 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
 }
 
 /// The `health` frame over this composition: plugin statuses, hooks, harnesses and a call's session or project paths.
+/// PARITY-AUDIT-1 #15: the notice a milestone ticket posts when it enters done.
+pub(crate) fn milestone_notice(ticket_id: &str, project_id: Option<&str>) -> infantry_mail::notify::hub::Notification {
+    infantry_mail::notify::hub::Notification {
+        title: "Milestone reached".into(),
+        body: format!("{ticket_id} is done"),
+        level: infantry_mail::notify::hub::NotificationLevel::Success,
+        dedupe_key: Some(format!("milestone:{ticket_id}")),
+        ticket_id: Some(ticket_id.into()),
+        project_id: project_id.map(str::to_string),
+        ..Default::default()
+    }
+}
+
 fn health_unit(
     daemon: &Arc<Daemon>,
     projects: &Arc<Projects>,

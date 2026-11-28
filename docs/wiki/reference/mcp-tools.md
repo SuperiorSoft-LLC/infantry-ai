@@ -12,7 +12,7 @@ from the environment the harness inherits (`INFANTRY_URL`, `INFANTRY_SESSION_ID`
 the token; the old `AGENTHQ_*` names are read as fallbacks) and `.infantry/mcp.json` in the working folder. Results longer
 than the setting `limits.mcp.maxResultChars` are cut; a tool takes `detail` and `maxChars` to ask for more.
 
-## Core tools (30)
+## Core tools (32)
 
 From `rust/crates/infantry-daemon/src/compose/agent_tools.json`.
 
@@ -195,6 +195,31 @@ Ask the owner ONE decision: the question in plain words, 2 to 8 answer options (
 - `question` (string, required): The decision, in plain words (max 2000 characters).
 - `reason` (string, required): Why you recommend it, one line (max 200 characters).
 - `recommended` (string, required): The label of the option you recommend.
+
+### `infantry_notification_post`
+
+Post a notification on the core notification bus (in-app toast and OS notification, routed per notifications.route.<level>). level info | success | warning | error | urgent; a dedupeKey repeated within notifications.dedupeWindowSec shows once. Script: ih.call("infantry_notification_post", {title=..., level=...}).
+
+- `actions` (array): 
+- `body` (string): 
+- `channels` (array): inApp and/or os; omitted = the level's route
+- `dedupeKey` (string): repeats with this key within the dedupe window are dropped
+- `id` (string): a fixed id: the same id is shown once
+- `level` (string): info (default) | success | warning | error | urgent
+- `projectId` (string): 
+- `sessionId` (string): 
+- `sticky` (boolean): stays until dismissed
+- `ticketId` (string): 
+- `timeoutMs` (integer): how long the toast shows (0 = the default)
+- `title` (string, required): 
+
+### `infantry_notify_milestone`
+
+Mark a ticket as a milestone: when it enters done, ONE milestone notification is sent to the owner. on=false clears the mark. Without ticketId, lists the marked tickets.
+
+- `on` (boolean): true (default) marks the ticket, false clears the mark
+- `sound` (string): The sound of its notification; omitted = notify.milestoneSound
+- `ticketId` (string): The ticket (full id); omitted = list the marked tickets
 
 ### `infantry_notify`
 

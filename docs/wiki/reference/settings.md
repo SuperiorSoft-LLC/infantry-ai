@@ -15,6 +15,11 @@ Declared by the official plugins (`module.json` `daemon.config`); the Settings t
 | `cards.images.allow` | text | `` | daemon | Infantry_Cards / Chat cards | Extra image hosts for every card type (comma separated; example.com exact, *.example.com any subdomain) |
 | `limits.cards.imageBytes` | number | `2097152` | daemon | Infantry_Cards / Chat cards | Largest card image fetched (bytes) |
 | `cards.specMaxBytes` | number | `16384` | daemon | Infantry_Cards / Chat cards | Largest spec returned by cards.show (bytes) |
+| `chat.activityBox.open` | checkbox | `false` | device | Infantry_Chat / Activity box | Activity box starts open |
+| `limits.chat.replayTurns` | number | `50` | device | Infantry_Chat / Long chats | Turns a chat opens with (and loads per scroll-up; 0 = all) |
+| `chat.cards` | checkbox | `true` | device | Infantry_Chat / Chat cards | Draw agent cards as cards |
+| `chat.cardUpdateLine` | checkbox | `true` | device | Infantry_Chat / Chat cards | Show a muted line where an agent updated a card |
+| `chat.reasoning` | select | `inline` | device | Infantry_Chat / Agent reasoning | Show reasoning |
 | `knowledge.globalWriteRoles` | text | `pm` | daemon | Infantry_Notes / Knowledge | Roles that may write global notes. Comma-separated role ids. The owner (no session) may always write. Every agent may read. |
 | `sites.refreshSeconds` | number | `30` | app | Infantry_Sites / Sites | Re-read the server list every (seconds, 0 = off) |
 | `triggers.at.maxLateMs` | number | `900000` | daemon | Infantry_Triggers / Triggers | A one-shot found this many milliseconds late still fires; later is recorded missed |
@@ -28,7 +33,6 @@ uses when the key is unset, where it sits next to the key; otherwise read the co
 | Key | Default | Read in |
 |---|---|---|
 | `limits.chat.queueMax` | `20` | `rust/crates/infantry-daemon/src/sessions.rs` |
-| `limits.chat.replayTurns` | `50` | `rust/crates/infantry-daemon/src/sessions.rs` |
 | `limits.chat.sentIdsKept` | `500` | `rust/crates/infantry-daemon/src/sessions.rs` |
 | `limits.cli.answerTimeoutMs` | `60_000` | `rust/crates/infantry-cli/src/env.rs` |
 | `limits.cli.connectTimeoutMs` | `10_000` | `rust/crates/infantry-cli/src/env.rs` |

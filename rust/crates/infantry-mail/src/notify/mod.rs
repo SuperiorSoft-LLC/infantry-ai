@@ -5,6 +5,7 @@
 pub mod approvals;
 pub mod attention;
 pub mod hub;
+pub mod milestones;
 pub mod prompts;
 pub mod push;
 pub mod questions;

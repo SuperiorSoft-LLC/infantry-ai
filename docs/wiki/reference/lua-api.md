@@ -42,6 +42,8 @@ setting `scripting.aliases` is unset (a stored JSON object replaces it).
 | `chat_image` | `infantry_chat_image` | built in |
 | `session_act` | `infantry_session_act` | built in |
 | `notify` | `infantry_notify` | built in |
+| `notification_post` | `infantry_notification_post` | built in |
+| `notify_milestone` | `infantry_notify_milestone` | built in |
 | `spawn` | `infantry_spawn` | built in |
 | `prompt_answer` | `infantry_prompt_answer` | built in |
 | `session_read` | `infantry_session_read` | built in |

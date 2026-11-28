@@ -35,6 +35,9 @@ pub const BUILTIN_ALIASES: &[(&str, &str)] = &[
     ("chat_image", "infantry_chat_image"),
     ("session_act", "infantry_session_act"),
     ("notify", "infantry_notify"),
+    // PARITY-AUDIT-1 #15.
+    ("notification_post", "infantry_notification_post"),
+    ("notify_milestone", "infantry_notify_milestone"),
     ("spawn", "infantry_spawn"),
     ("prompt_answer", "infantry_prompt_answer"),
     // PARITY-AUDIT-1 #10.

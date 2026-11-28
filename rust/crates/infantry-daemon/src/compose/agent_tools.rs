@@ -48,6 +48,8 @@ pub struct AgentTools {
     pub asker_of: infantry_mail::notify::units::AskerOf,
     /// SCRIPT-TOOLS-MISSING-1: `infantry_notify` posts the owner's notice here (in-app toast + OS presenters).
     pub hub: Arc<infantry_mail::notify::hub::NotificationHub>,
+    /// PARITY-AUDIT-1 #15: the tickets `infantry_notify_milestone` marked.
+    pub milestones: Arc<infantry_mail::notify::milestones::MilestoneStore>,
 }
 
 fn infos(raw: &str) -> Vec<ToolInfo> {
@@ -733,6 +735,67 @@ impl AgentTools {
                 let id = self.hub.post(n, &inv.label);
                 Ok(json!({ "id": id }).to_string())
             })(),
+            // PARITY-AUDIT-1 #15: the full notification post (id, actions, channels, timeout); a bad level is refused.
+            "infantry_notification_post" => (|| {
+                use infantry_mail::notify::hub::{Notification, NotificationAction, NotificationLevel};
+                let title = s(a, "title").ok_or("needs a title")?;
+                let level = match s(a, "level") {
+                    None => NotificationLevel::Info,
+                    Some(t) => match t.to_ascii_lowercase().as_str() {
+                        "info" | "success" | "warning" | "error" | "urgent" => NotificationLevel::of(&t),
+                        _ => return Err(format!("level must be info, success, warning, error or urgent (got '{t}')")),
+                    },
+                };
+                let arr = |k: &str| a.get(k).and_then(Value::as_array).cloned().unwrap_or_default();
+                let actions = arr("actions")
+                    .iter()
+                    .filter_map(|o| {
+                        let id = o["id"].as_str().map(str::trim).filter(|x| !x.is_empty())?.to_string();
+                        let label = o["label"].as_str().map(str::trim).filter(|x| !x.is_empty()).map(str::to_string).unwrap_or_else(|| id.clone());
+                        Some(NotificationAction { id, label })
+                    })
+                    .collect();
+                let channels = arr("channels").iter().filter_map(|c| c.as_str().map(str::trim).filter(|x| !x.is_empty()).map(str::to_string)).collect();
+                let n = Notification {
+                    title,
+                    body: s(a, "body").unwrap_or_default(),
+                    level,
+                    id: s(a, "id").unwrap_or_default(),
+                    source: "script".into(),
+                    actions,
+                    sticky: flag(a, "sticky"),
+                    timeout_ms: a.get("timeoutMs").and_then(Value::as_i64).unwrap_or(0).max(0),
+                    dedupe_key: s(a, "dedupeKey"),
+                    channels,
+                    ticket_id: s(a, "ticketId"),
+                    session_id: s(a, "sessionId").or_else(|| inv.session_id.clone()),
+                    project_id: s(a, "projectId").or_else(|| inv.project_id.clone()),
+                    ..Default::default()
+                };
+                let id = self.hub.post(n, &inv.label);
+                Ok(json!({ "ok": true, "id": id }).to_string())
+            })(),
+            // PARITY-AUDIT-1 #15: mark a ticket so ONE milestone notice fires when it enters done (compose/mod.rs listens).
+            "infantry_notify_milestone" => (|| {
+                let Some(id) = s(a, "ticketId") else {
+                    let l = self.milestones.list();
+                    return Ok(if l.is_empty() {
+                        "no milestone tickets".to_string()
+                    } else {
+                        l.iter().map(|m| format!("{} sound {}", m.ticket_id, m.sound.as_deref().unwrap_or("(default)"))).collect::<Vec<_>>().join("
+")
+                    });
+                };
+                let on = a.get("on").map(|v| v.as_bool().unwrap_or_else(|| v.as_str().is_some_and(|t| t.eq_ignore_ascii_case("true")))).unwrap_or(true);
+                if on {
+                    self.work.board().get(&id).map_err(|_| format!("no ticket '{id}'"))?;
+                }
+                let sound = s(a, "sound");
+                Ok(match self.milestones.set(&id, on, sound.as_deref(), crate::sessions::now_ms())? {
+                    None => format!("{id}: milestone mark cleared"),
+                    Some(m) => format!("{id}: notifies on done (sound {})", m.sound.as_deref().unwrap_or("notify.milestoneSound")),
+                })
+            })(),
             "infantry_session_act" => (|| {
                 if !pm(inv) {
                     return Err("only the pm, the owner or a script may act on another session".to_string());
@@ -849,6 +912,51 @@ mod wake_route_tests {
         }
         let missing: Vec<String> = named.iter().filter(|(_, t)| !served.contains(t) && !dispatcher_own.contains(&t.as_str())).map(|(w, t)| format!("{w}: {t}")).collect();
         assert!(missing.is_empty(), "named by scripts but served by no daemon tool: {missing:?}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// PARITY-AUDIT-1 #15: infantry_notification_post posts the full notice; a bad level or no title is refused.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn notification_post_posts_on_the_bus_and_refuses_a_bad_level() {
+        let (dir, _daemon, c, _pm) = setup();
+        let inv = ToolInvoker::automation(Some("p1".into()), "script:test");
+        let a = json!({"title": "Build failed", "level": "error", "id": "n-1", "channels": ["inApp"], "actions": [{"id": "open"}], "timeoutMs": 5000});
+        let r = c.tools.invoke("infantry_notification_post", a.as_object().unwrap(), &inv);
+        assert!(!r.is_error, "{}", r.text);
+        let n = c.hub.history().into_iter().find(|n| n.title == "Build failed").expect("notice posted");
+        assert_eq!((n.level.wire(), n.actions[0].label.as_str(), n.timeout_ms), ("error", "open", 5000));
+        assert_eq!(n.project_id.as_deref(), Some("p1"));
+        assert!(c.tools.invoke("infantry_notification_post", json!({"title": "x", "level": "loud"}).as_object().unwrap(), &inv).text.contains("level must be"));
+        assert!(c.tools.invoke("infantry_notification_post", json!({"body": "x"}).as_object().unwrap(), &inv).is_error);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// PARITY-AUDIT-1 #15: a marked ticket posts ONE milestone notice when ticket.done fires; an unknown ticket is refused.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn notify_milestone_marks_and_fires_once_on_done() {
+        let (dir, _daemon, c, _pm) = setup();
+        let inv = ToolInvoker::automation(None, "script:test");
+        let call = |a: Value| c.tools.invoke("infantry_notify_milestone", a.as_object().unwrap(), &inv);
+        assert!(call(json!({"ticketId": "ticket-ghost"})).text.contains("no ticket"));
+        assert_eq!(call(json!({})).text, "no milestone tickets");
+        c.milestones.set("ticket-m", true, Some("bell"), 1).unwrap();
+        assert!(call(json!({})).text.contains("ticket-m sound bell"));
+        assert!(call(json!({"ticketId": "ticket-m", "on": false})).text.contains("cleared"));
+        c.milestones.set("ticket-m", true, None, 1).unwrap();
+        for _ in 0..2 {
+            c.bus.emit(infantry_orchestrator_api::hooks::TICKET_DONE, json!({"ticketId": "ticket-m", "projectId": "p1"}));
+        }
+        let mut seen = 0;
+        for _ in 0..50 {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            seen = c.hub.history().iter().filter(|n| n.title == "Milestone reached" && n.ticket_id.as_deref() == Some("ticket-m")).count();
+            if seen > 0 {
+                break;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        assert_eq!(seen, 1);
+        assert_eq!(c.hub.history().iter().filter(|n| n.title == "Milestone reached").count(), 1, "fires once");
         let _ = std::fs::remove_dir_all(dir);
     }
 

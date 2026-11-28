@@ -586,6 +586,32 @@
   }
  },
  {
+  "name": "infantry_notification_post",
+  "readOnly": false,
+  "description": "Post a notification on the core notification bus (in-app toast and OS notification, routed per notifications.route.<level>). level info | success | warning | error | urgent; a dedupeKey repeated within notifications.dedupeWindowSec shows once. Script: ih.call(\"infantry_notification_post\", {title=..., level=...}).",
+  "inputSchema": {"type": "object", "properties": {
+   "title": {"type": "string"}, "body": {"type": "string"},
+   "level": {"type": "string", "description": "info (default) | success | warning | error | urgent"},
+   "id": {"type": "string", "description": "a fixed id: the same id is shown once"},
+   "dedupeKey": {"type": "string", "description": "repeats with this key within the dedupe window are dropped"},
+   "sticky": {"type": "boolean", "description": "stays until dismissed"},
+   "timeoutMs": {"type": "integer", "description": "how long the toast shows (0 = the default)"},
+   "channels": {"type": "array", "items": {"type": "string"}, "description": "inApp and/or os; omitted = the level's route"},
+   "actions": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "label": {"type": "string"}}}},
+   "ticketId": {"type": "string"}, "sessionId": {"type": "string"}, "projectId": {"type": "string"}},
+   "required": ["title"]}
+ },
+ {
+  "name": "infantry_notify_milestone",
+  "readOnly": false,
+  "description": "Mark a ticket as a milestone: when it enters done, ONE milestone notification is sent to the owner. on=false clears the mark. Without ticketId, lists the marked tickets.",
+  "inputSchema": {"type": "object", "properties": {
+   "ticketId": {"type": "string", "description": "The ticket (full id); omitted = list the marked tickets"},
+   "on": {"type": "boolean", "description": "true (default) marks the ticket, false clears the mark"},
+   "sound": {"type": "string", "description": "The sound of its notification; omitted = notify.milestoneSound"}},
+   "additionalProperties": false}
+ },
+ {
   "name": "infantry_notify",
   "readOnly": false,
   "description": "Post a notice to the owner (in-app toast and OS notification) through the notification hub. For scripts and agents reporting something the owner must see now.",
