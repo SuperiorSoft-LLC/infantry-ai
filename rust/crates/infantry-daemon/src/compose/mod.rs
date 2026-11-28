@@ -474,6 +474,14 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
             })
         }));
     }
+    {
+        // PARITY-AUDIT-1 #28: the start allowlists (app settings; empty = everything allowed).
+        let allow_settings = settings::SettingsUnit { db: db.clone() };
+        daemon.set_start_allow(Arc::new(move || {
+            let p = |k| crate::start_allow::patterns(allow_settings.app(k).as_ref());
+            (p(crate::start_allow::MODELS_KEY), p(crate::start_allow::ROLES_KEY))
+        }));
+    }
     let vault_projects = projects.clone();
     // The harness keys and sign-ins (api key, subscription token) live in the vault; the closures reach the credentials
     // once they exist (they need the vault's keystore).

@@ -33,6 +33,13 @@
         "keywords": ["notify", "notification", "background", "focus", "os"],
         "fields": [
           { "key": "notify.background", "type": "checkbox", "label": "Only while the app is in the background", "default": false, "order": 1, "scope": "device", "description": "On: no OS notification while the app window has focus (the in-app toast still shows). Off: always." }
+        ] },
+      { "node": "infantry.limits", "tab": "Agents", "group": "Allowed models and roles", "order": 30, "title": "Allowed models and roles",
+        "applies": "Applies to: every new session start (local or on a runner). Running sessions are not touched. Empty = everything allowed.",
+        "keywords": ["limits", "allowlist", "model", "role", "restrict", "allowed"],
+        "fields": [
+          { "key": "limits.models.allowed", "type": "text", "label": "Allowed models", "default": "", "order": 1, "scope": "daemon", "description": "Comma-separated model ids; * matches any run of characters (e.g. *-free). Empty = every model. A start on another model is refused." },
+          { "key": "limits.roles.allowed", "type": "text", "label": "Allowed roles", "default": "", "order": 2, "scope": "daemon", "description": "Comma-separated role ids; * matches any run of characters. Empty = every role. A start of another role is refused." }
         ] }
     ],
     "tools": [

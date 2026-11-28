@@ -396,6 +396,8 @@ pub struct Daemon {
     cli_override: std::sync::OnceLock<Arc<dyn Fn(&str) -> Option<String> + Send + Sync>>,
     /// The default context limit for a session the spawn did not pin: `(project, role)` to `(tokens, source)`; 0 tokens = off.
     context_default: std::sync::OnceLock<ContextDefault>,
+    /// PARITY-AUDIT-1 #28: the start allowlists `(models, roles)`, read at each start; unset or empty = everything allowed.
+    start_allow: std::sync::OnceLock<Arc<dyn Fn() -> (Vec<String>, Vec<String>) + Send + Sync>>,
     /// RR-6: what a start on a REMOTE runner lends `(runner, provider, project)`; unset = nothing is lent.
     lender: std::sync::OnceLock<Arc<crate::lender::Lender>>,
     /// RR-7: a ticket's workspace on a remote runner (set by the runners plugin at the composition root).
@@ -536,6 +538,7 @@ impl Daemon {
             provider_env: std::sync::OnceLock::new(),
             cli_override: std::sync::OnceLock::new(),
             context_default: std::sync::OnceLock::new(),
+            start_allow: std::sync::OnceLock::new(),
             lender: std::sync::OnceLock::new(),
             remote_ws: std::sync::OnceLock::new(),
             tunnel: Arc::default(),
@@ -1138,6 +1141,11 @@ impl Daemon {
         rec.ticket_id = some(&opts.ticket_id);
         rec.project_id = some(&opts.project_id);
         rec.agent_id = some(&opts.agent_id);
+        // PARITY-AUDIT-1 #28: the one start check (local and runner starts both come here); empty lists return at once.
+        if let Some(f) = self.start_allow.get() {
+            let (models, roles) = f();
+            crate::start_allow::check(&models, &roles, rec.model.as_deref(), rec.role.as_deref(), verb)?;
+        }
         // Order: the spawn's pin (a ticket's, or the New agent field) > the settings (session > role > project > app > default).
         if let Some(n) = opts.context_limit {
             check_context_limit(n as i64)?;
@@ -1568,6 +1576,11 @@ impl Daemon {
 
     pub fn set_env_extra(&self, f: Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>) {
         let _ = self.env_extra.set(f);
+    }
+
+    /// Sets where a start reads the model and role allowlists (PARITY-AUDIT-1 #28).
+    pub fn set_start_allow(&self, f: Arc<dyn Fn() -> (Vec<String>, Vec<String>) + Send + Sync>) {
+        let _ = self.start_allow.set(f);
     }
 
     /// Sets how a session's role maps to its role-policy env (read at each start, so a setting applies to the next).

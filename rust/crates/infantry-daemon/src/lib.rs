@@ -8,6 +8,7 @@ pub mod auth;
 pub mod gateway;
 pub mod board;
 pub mod role_policy;
+pub mod start_allow;
 pub mod compose;
 pub mod fresh_schema;
 pub mod frame_log;

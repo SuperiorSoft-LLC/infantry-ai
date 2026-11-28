@@ -33,6 +33,8 @@ Declared by the official plugins (`module.json` `daemon.config`); the Settings t
 | `notify.levelSound.error` | select | `none` | device | Infantry_Settings / Notification sounds | Error notice sound. Played on this device when a error notice arrives. |
 | `notify.levelSound.urgent` | select | `none` | device | Infantry_Settings / Notification sounds | Urgent notice sound. Played on this device when a urgent notice arrives. |
 | `notify.background` | checkbox | `false` | device | Infantry_Settings / OS notifications | Only while the app is in the background. On: no OS notification while the app window has focus (the in-app toast still shows). Off: always. |
+| `limits.models.allowed` | text | `` | daemon | Infantry_Settings / Allowed models and roles | Allowed models. Comma-separated model ids; * matches any run of characters (e.g. *-free). Empty = every model. A start on another model is refused. |
+| `limits.roles.allowed` | text | `` | daemon | Infantry_Settings / Allowed models and roles | Allowed roles. Comma-separated role ids; * matches any run of characters. Empty = every role. A start of another role is refused. |
 | `sites.refreshSeconds` | number | `30` | app | Infantry_Sites / Sites | Re-read the server list every (seconds, 0 = off) |
 | `triggers.at.maxLateMs` | number | `900000` | daemon | Infantry_Triggers / Triggers | A one-shot found this many milliseconds late still fires; later is recorded missed |
 | `limits.triggers.skipWhenIdle` | boolean | `true` | daemon | Infantry_Triggers / Triggers | Skip a prompt trigger when its target has no unread mail and the project has no In Progress or To Do ticket |
