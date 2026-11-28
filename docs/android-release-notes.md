@@ -1,12 +1,13 @@
-**What this phone app connects to:** a PC running the normal Infantry AI app, or BattalionOS with Infantry AI 0.8.13 (0.8.1 or later works). It does **not** connect to BattalionOS with Infantry AI 0.8.0.
+**What this phone app connects to:** a PC running the normal Infantry AI app, or BattalionOS with Infantry AI 0.8.14 (0.8.1 or later works). It does **not** connect to BattalionOS with Infantry AI 0.8.0.
 
-**Infantry AI 0.8.10 for Android (arm64).** Built from the same code as Infantry AI 0.8.13 for BattalionOS. The phone is a remote control: it runs no daemon and no agents. It connects to the Infantry AI on your PC and shows your board, sessions and mail.
+**Infantry AI 0.8.11 for Android (arm64).** Built from the same code as Infantry AI 0.8.14 for BattalionOS. The phone is a remote control: it runs no daemon and no agents. It connects to the Infantry AI on your PC and shows your board, sessions and mail.
 
-**What changed since 0.8.9**
-- Minimize goes to an in-app dock when BattalionOS has no window manager.
-- "Open in its own window" for sessions under BattalionOS 0.2.0 or later.
+**What changed since 0.8.10**
+- Under BattalionOS 0.2.1, a chat pop-out is an OS window that minimizes to the taskbar and can pop out to its own window.
+- No more in-app strip under BattalionOS.
+- The composer is no longer covered.
 
-This APK is signed with the same release key as 0.7.2, 0.8.0, 0.8.2, 0.8.4, 0.8.5, 0.8.6, 0.8.7, 0.8.8 and 0.8.9, so it installs over them and keeps your pairing. It is a prerelease and not the app's "latest" update, so the desktop updater does not see it. Check the file against the `.sha256` asset.
+This APK is signed with the same release key as 0.7.2, 0.8.0, 0.8.2, 0.8.4, 0.8.5, 0.8.6, 0.8.7, 0.8.8, 0.8.9 and 0.8.10, so it installs over them and keeps your pairing. It is a prerelease and not the app's "latest" update, so the desktop updater does not see it. Check the file against the `.sha256` asset.
 
 **Pair it**
 1. On the PC app: Settings > Daemon > turn on "Allow phone connections".
