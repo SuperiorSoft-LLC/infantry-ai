@@ -20,6 +20,7 @@ import { EmptyPaneActions, MessageActions, TodoBox, paneActionOf } from "./chat-
 import { sessionActions } from "./session-actions";
 import { useUi } from "@/state/ui-state";
 import { useReasoningMode, useReplayTurnsSetting } from "./chat-settings";
+import { sentSince } from "./send-follow";
 
 /** Kinds that start an agent turn and so carry the avatar in the gutter. */
 const startsTurn = new Set<TranscriptItem["kind"]>(["thinking", "text", "note"]);
@@ -170,6 +171,17 @@ export function Transcript({ agent, sessionId }: { agent: Agent; sessionId: stri
   }, [current, v]);
   const step = (d: 1 | -1) => hits.length && setHit((h) => (Math.min(h, hits.length - 1) + d + hits.length) % hits.length);
   const closeSearch = () => (setSearching(false), setQuery(""));
+
+  // CHAT-ORDER-2: the owner's own send is "go to latest", even when scrolled up; agent output never yanks the view.
+  const seenSends = useRef<Set<string>>(new Set());
+  useLayoutEffect(() => {
+    const keys = pending.map((p) => p.clientId);
+    if (sentSince(seenSends.current, keys)) {
+      stick.current = true;
+      setAway(false);
+    }
+    seenSends.current = new Set(keys);
+  }, [pending]);
 
   // A new session starts at its newest line.
   useLayoutEffect(() => {
