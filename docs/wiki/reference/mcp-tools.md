@@ -12,7 +12,7 @@ from the environment the harness inherits (`INFANTRY_URL`, `INFANTRY_SESSION_ID`
 the token; the old `AGENTHQ_*` names are read as fallbacks) and `.infantry/mcp.json` in the working folder. Results longer
 than the setting `limits.mcp.maxResultChars` are cut; a tool takes `detail` and `maxChars` to ask for more.
 
-## Core tools (26)
+## Core tools (30)
 
 From `rust/crates/infantry-daemon/src/compose/agent_tools.json`.
 
@@ -217,6 +217,43 @@ Act on another session (pm, owner or script only): queue_add holds text as the s
 - `action` (string, required): 
 - `sessionId` (string, required): 
 - `text` (string, required): 
+
+### `infantry_session_read` (read-only)
+
+One session's recent transcript as JSON: {sessionId, state, turn, lastAction, lastError, olderLeftOut, frames:[{seq, type, text}]} (from the daemon's replay buffer, bounded). Same project only.
+
+- `lines` (integer): How many trailing frames (default: limits.tools.sessionTailLines, 5).
+- `sessionId` (string, required): Session id, or a unique prefix of one.
+- `sinceSeq` (integer): Only frames after this sequence number.
+
+### `infantry_progress`
+
+Report progress on your session's card: percent, a label, a plan of steps and the step done, a count (done/total), or state done/failed; clear=true removes the line. A report keeps what it does not name.
+
+- `clear` (boolean): 
+- `done` (integer): 
+- `label` (string): 
+- `percent` (number): 
+- `sessionId` (string): Owner only (a script reports for its hook's session through this).
+- `state` (string): 
+- `step` (string): That step completed (a name from the plan, else the next one).
+- `steps` (array): Declare a plan (starts a fresh line).
+- `total` (integer): 
+
+### `infantry_event_emit`
+
+Emit a named event on the daemon bus: script hooks subscribed to that name fire. The payload gets the caller's projectId (only that project's hooks see it). Daemon event families (session., ticket., mail., run., mcp., modules., timer) are reserved.
+
+- `name` (string, required): Event name: lower-case words joined by '.', '_' or '-' (at most 64 chars).
+- `payload` (object): The event's fields.
+
+### `infantry_capability_call`
+
+Call a plugin capability (an id from infantry_capability_list, runs: daemon) and return its answer. A dotted name in a script (ih["news.headlines"]{}) runs this tool.
+
+- `args` (object): The capability's arguments.
+- `capability` (string, required): The capability id, e.g. news.headlines.
+- `target` (string): Where it runs: daemon (the default and the only host served here).
 
 ## Plugin tools
 

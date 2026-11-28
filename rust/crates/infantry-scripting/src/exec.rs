@@ -7,6 +7,7 @@
 //! process tree. `background=true` answers a run id at once; `exec.done` announces its end on the bus and
 //! `exec.tick` reports each live run. `serial=<key>` runs one command per key at a time, in arrival order.
 //! Off by default: setting `scripting.exec.enabled`; allow-list `scripting.exec.allow`; roles `scripting.exec.roles`.
+use crate::exec_progress::JobProgress;
 use crate::host::{ToolInvoker, ToolResult};
 use infantry_core::bus::EventBus;
 use serde_json::{json, Map, Value};
@@ -15,7 +16,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 pub const EXEC: &str = "infantry_exec";
@@ -162,10 +163,34 @@ struct Run {
     job_state: Mutex<Option<Value>>,
     last_tick_bytes: AtomicU64,
     ended_ms: AtomicU64,
+    /// PARITY-AUDIT-1 #10: the `progress` argument's tracker and where its reports go (the calling session's card).
+    progress: Option<(Mutex<JobProgress>, ProgressSink, String)>,
 }
 
+/// Where a job's progress reports go: `(session, report)` (the composition applies them to the session's card).
+pub type ProgressSink = Arc<dyn Fn(&str, Value) + Send + Sync>;
+
 impl Run {
+    fn report(&self, reports: Vec<Value>) {
+        if let Some((_, sink, to)) = &self.progress {
+            for r in reports {
+                sink(to, r);
+            }
+        }
+    }
+
+    fn progress_end(&self, ok: bool) {
+        if let Some((p, _, _)) = &self.progress {
+            let out = p.lock().unwrap().finish(ok);
+            self.report(out);
+        }
+    }
+
     fn on_line(&self, line: &str) {
+        if let Some((p, _, _)) = &self.progress {
+            let out = p.lock().unwrap().line(line, crate::runlog::now_ms());
+            self.report(out);
+        }
         let mut q = self.new_lines.lock().unwrap();
         q.push_back(line.chars().take(MAX_LINE).collect());
         while q.len() > MAX_NEW_LINES {
@@ -191,6 +216,7 @@ pub struct ExecTools {
     runs: Mutex<HashMap<String, Arc<Run>>>,
     lanes: Mutex<HashMap<String, Arc<Lane>>>,
     seq: AtomicU64,
+    progress_sink: OnceLock<ProgressSink>,
 }
 
 fn s<'a>(a: &'a Map<String, Value>, k: &str) -> Option<&'a str> {
@@ -199,7 +225,12 @@ fn s<'a>(a: &'a Map<String, Value>, k: &str) -> Option<&'a str> {
 
 impl ExecTools {
     pub fn new(config: Config, root_of: Arc<dyn Fn(&str) -> Option<PathBuf> + Send + Sync>, bus: Option<EventBus>, log: Arc<dyn Fn(&str) + Send + Sync>) -> Self {
-        ExecTools { config, root_of, bus, log, runs: Mutex::new(HashMap::new()), lanes: Mutex::new(HashMap::new()), seq: AtomicU64::new(0) }
+        ExecTools { config, root_of, bus, log, runs: Mutex::new(HashMap::new()), lanes: Mutex::new(HashMap::new()), seq: AtomicU64::new(0), progress_sink: OnceLock::new() }
+    }
+
+    /// Where `progress` reports go (set once, at composition). Unset: the argument is accepted and reports nowhere.
+    pub fn set_progress_sink(&self, sink: ProgressSink) {
+        let _ = self.progress_sink.set(sink);
     }
 
     fn emit(&self, name: &str, payload: Value) {
@@ -254,6 +285,16 @@ impl ExecTools {
         let script = a.get("script").and_then(Value::as_str).unwrap_or_default().to_string();
         let background = a.get("background").and_then(Value::as_bool) == Some(true);
         let serial = s(a, "serial").map(str::to_string);
+        let session = inv.active_session.clone().or_else(|| inv.session_id.clone()).unwrap_or_default();
+        let mut opening = Vec::new();
+        let progress = match JobProgress::from_arg(a.get("progress"))? {
+            Some((p, open)) if !session.is_empty() => self.progress_sink.get().map(|sink| {
+                opening = open;
+                (Mutex::new(p), sink.clone(), session.clone())
+            }),
+            Some(_) => return Err("progress needs a session to report on (the caller has none)".into()),
+            None => None,
+        };
         let n = self.seq.fetch_add(1, Ordering::Relaxed);
         let id = format!("{:08x}", (crate::runlog::now_ms() ^ (n.wrapping_mul(0x9E37_79B9))) as u32);
         let label = if script.is_empty() { argv[0].rsplit(['/', '\\']).next().unwrap_or(&argv[0]).to_string() } else { script.clone() };
@@ -273,7 +314,9 @@ impl ExecTools {
             job_state: Mutex::new(None),
             last_tick_bytes: AtomicU64::new(0),
             ended_ms: AtomicU64::new(0),
+            progress,
         });
+        run.report(opening);
         let me = self.clone();
         let r2 = run.clone();
         let tail = st.tail_chars;
@@ -419,6 +462,7 @@ impl ExecTools {
             None => err.text(),
         }));
         result.insert("timedOut".into(), json!(timed_out));
+        run.progress_end(exit == 0 && !timed_out && failure.is_none());
         (self.log)(&format!(
             "exec by session={} role={} script={} cmd=[{}] exit={exit} timedOut={timed_out} ms={ms}",
             if run.session.is_empty() { "-" } else { &run.session },

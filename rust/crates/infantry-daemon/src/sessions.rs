@@ -25,6 +25,7 @@ use tokio::sync::broadcast;
 mod assistant;
 pub mod workspace;
 mod lifecycle;
+pub mod progress;
 pub use workspace::{WorkspaceSpec, KEEP_KEY as WORKSPACE_KEEP_KEY, ROOT_KEY as WORKSPACE_ROOT_KEY};
 pub use infantry_projects::store::HOME_ROOT_ENV;
 pub use assistant::{AssistantSpec, DIR as ASSISTANT_DIR, ROLE as ASSISTANT_ROLE, ROLE_KEY as ASSISTANT_ROLE_KEY};

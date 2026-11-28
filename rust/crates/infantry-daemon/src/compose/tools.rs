@@ -134,6 +134,27 @@ impl Tools {
         }
         Value::Array(out).to_string()
     }
+
+    /// `infantry_capability_call` `{capability, args?, target?}`: runs a daemon capability on the plugin that declares it.
+    fn capability_call(&self, args: &Map<String, Value>, inv: &ToolInvoker) -> ToolResult {
+        let refuse = |why: String| ToolResult::err(format!("{} refused: {why}", infantry_scripting::dispatcher::CAPABILITY_CALL));
+        let Some(id) = args.get("capability").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()) else {
+            return refuse("capability is required (see infantry_capability_list)".into());
+        };
+        if let Some(t) = args.get("target").and_then(Value::as_str).map(str::trim).filter(|t| !t.is_empty() && *t != "daemon") {
+            return refuse(format!("target '{t}' is not served here (only daemon capabilities)"));
+        }
+        let inner = match args.get("args") {
+            None | Some(Value::Null) => json!({}),
+            Some(v @ Value::Object(_)) => v.clone(),
+            Some(_) => return refuse("args must be a JSON object".into()),
+        };
+        let Some(h) = self.plugins() else { return refuse(format!("no plugin answers '{id}' (no plugins loaded)")) };
+        match h.call_capability(id, &inner.to_string(), &plugin_context(inv)) {
+            Ok(text) => ToolResult::ok(text),
+            Err(e) => ToolResult::err(e.message().to_string()),
+        }
+    }
 }
 
 impl ScriptHost for Tools {
@@ -234,10 +255,18 @@ impl ScriptHost for Tools {
         if name == "infantry_capability_list" {
             return ToolResult::ok(self.capability_list());
         }
+        if name == infantry_scripting::dispatcher::CAPABILITY_CALL {
+            return self.capability_call(args, inv);
+        }
         if let Some(r) = self.agents.get().and_then(|a| a.call(name, args, inv)) {
             return r;
         }
         ToolResult::err(format!("{name} refused: no such tool on this daemon"))
+    }
+
+    /// PARITY-AUDIT-1 #10: the dispatcher's `infantry_progress` for a hook's session checks the project through this.
+    fn session_project(&self, session: &str) -> Option<String> {
+        self.daemon.record(session)?.project_id
     }
 }
 
@@ -257,9 +286,6 @@ impl Tools {
         self.descriptors().into_iter().filter(|d| tool_allowed(allow.as_deref(), d.get("name").and_then(Value::as_str).unwrap_or(""))).collect()
     }
 
-    fn session_project(&self, session: &str) -> Option<String> {
-        self.daemon.record(session)?.project_id
-    }
 }
 
 /// `plugin_tools` (the catalog) and `plugin_tool_call` (`{name, arguments, client}` -> `plugin_tool_result`).

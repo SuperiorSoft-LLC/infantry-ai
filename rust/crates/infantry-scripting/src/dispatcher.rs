@@ -37,6 +37,10 @@ pub const BUILTIN_ALIASES: &[(&str, &str)] = &[
     ("notify", "infantry_notify"),
     ("spawn", "infantry_spawn"),
     ("prompt_answer", "infantry_prompt_answer"),
+    // PARITY-AUDIT-1 #10.
+    ("session_read", "infantry_session_read"),
+    ("emit", "infantry_event_emit"),
+    ("capability_call", CAPABILITY_CALL),
 ];
 
 /// The shipped alias table (short name to tool name), used while the `scripting.aliases` setting is unset. Equal to the default the

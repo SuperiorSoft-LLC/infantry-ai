@@ -678,6 +678,15 @@ pub fn build_with_mode(daemon: &Arc<Daemon>, state_dir: &Path, mode: crate::mode
         let p = projects.clone();
         Arc::new(ExecTools::new(script_config.clone(), Arc::new(move |id: &str| project_dir(&p, id)), Some(bus.clone()), Arc::new(log_line)))
     };
+    {
+        // PARITY-AUDIT-1 #10: an exec job's `progress` reports land on the calling session's card.
+        let d = Arc::downgrade(&daemon);
+        exec.set_progress_sink(Arc::new(move |sid: &str, report: serde_json::Value| {
+            if let Some(d) = d.upgrade() {
+                let _ = d.apply_progress(sid, &report);
+            }
+        }));
+    }
     timeline::wire(&run_log, &bus);
     daemon.observe(Arc::new(timeline::WakeObserver { run_log: run_log.clone() }));
     let timeline_unit = timeline::TimelineUnit { run_log: run_log.clone() };

@@ -80,6 +80,18 @@ pub fn agent_catalog() -> Vec<ToolInfo> {
     infos(DESCRIPTORS)
 }
 
+/// PARITY-AUDIT-1 #10: the longest name `infantry_event_emit` takes.
+pub const EVENT_NAME_MAX: usize = 64;
+/// Event families the daemon itself emits: an agent or script may not fake them (the owner may).
+pub const RESERVED_EVENT_PREFIXES: &[&str] = &["session.", "ticket.", "mail.", "run.", "mcp.", "modules.", "timer"];
+
+/// An emitted event's name: lower-case words joined by `.`, `_` or `-`.
+fn event_name_ok(n: &str) -> bool {
+    n.len() <= EVENT_NAME_MAX
+        && n.starts_with(|c: char| c.is_ascii_lowercase())
+        && n.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-'))
+}
+
 fn s(a: &Map<String, Value>, k: &str) -> Option<String> {
     a.get(k).and_then(|v| match v {
         Value::String(x) => Some(x.trim().to_string()),
@@ -262,6 +274,71 @@ impl AgentTools {
                     }
                 }
                 Ok(out.join("\n"))
+            })(),
+            "infantry_session_read" => (|| {
+                let r = self.find(&s(a, "sessionId").unwrap_or_default())?;
+                let mine = self.caller_project(inv);
+                if !inv.owner && mine.is_some() && r.project_id.is_some() && mine != r.project_id {
+                    return Err(format!("session '{}' is not a session of this project", r.id));
+                }
+                let lines = n(a, "lines").map(|k| k.clamp(1, TAIL_LINES_MAX as i64) as usize).unwrap_or(TAIL_LINES);
+                let since = n(a, "sinceSeq");
+                let (tail, cut) = self.daemon.transcript_tail(&r.id, lines).unwrap_or_default();
+                let frames: Vec<Value> = tail
+                    .into_iter()
+                    .filter(|f| since.map(|k| f["sequence"].as_i64().unwrap_or(i64::MAX) > k).unwrap_or(true))
+                    .map(|f| {
+                        let data = f["data"].as_str().map(str::to_string).unwrap_or_else(|| f["data"].to_string());
+                        json!({"seq": f["sequence"], "type": f["type"], "text": data.chars().take(TAIL_LINE_CHARS).collect::<String>()})
+                    })
+                    .collect();
+                let busy = self.daemon.turn_active(&r.id).unwrap_or(false);
+                Ok(json!({
+                    "sessionId": r.id, "state": format!("{:?}", r.state).to_lowercase(), "turn": if busy { "running" } else { "at rest" },
+                    "lastAction": r.last_action, "lastError": r.last_error, "olderLeftOut": cut, "frames": frames,
+                })
+                .to_string())
+            })(),
+            "infantry_progress" => (|| {
+                // The caller's own card; the owner (or a script acting for one) may name a session.
+                let target = match s(a, "sessionId") {
+                    Some(sid) if inv.owner => self.find(&sid)?.id,
+                    Some(sid) if Some(&sid) != inv.active_session.as_ref() && Some(&sid) != inv.session_id.as_ref() => {
+                        return Err("only your own session's progress (a script names sessionId through its hook)".into())
+                    }
+                    _ => inv.active_session.clone().or_else(|| inv.session_id.clone()).ok_or("no session to report on (pass sessionId)")?,
+                };
+                let mut report = Value::Object(a.clone());
+                report.as_object_mut().map(|o| o.remove("sessionId"));
+                let p = self.daemon.apply_progress(&target, &report)?;
+                Ok(crate::sessions::progress::progress_line(p.as_ref()))
+            })(),
+            "infantry_event_emit" => (|| {
+                let ev = s(a, "name").ok_or("name is required")?;
+                if !event_name_ok(&ev) {
+                    return Err(format!("'{ev}' is not an event name (lower-case words joined by '.', '_' or '-', at most {EVENT_NAME_MAX} chars)"));
+                }
+                if !inv.owner && RESERVED_EVENT_PREFIXES.iter().any(|p| ev.starts_with(p)) {
+                    return Err(format!("'{ev}' is a daemon event ({}* are reserved)", RESERVED_EVENT_PREFIXES.join("*, ")));
+                }
+                let mut payload = match a.get("payload") {
+                    None | Some(Value::Null) => Map::new(),
+                    Some(Value::Object(o)) => o.clone(),
+                    Some(Value::String(t)) => match serde_json::from_str::<Value>(t) {
+                        Ok(Value::Object(o)) => o,
+                        _ => return Err("payload must be a JSON object".into()),
+                    },
+                    Some(_) => return Err("payload must be a JSON object".into()),
+                };
+                // Project isolation: the event belongs to the caller's project (hooks of other projects never see it).
+                if let Some(p) = self.caller_project(inv) {
+                    payload.insert("projectId".into(), Value::String(p));
+                }
+                if let Some(sid) = inv.active_session.clone().or_else(|| inv.session_id.clone()) {
+                    payload.entry("emittedBy").or_insert(Value::String(sid));
+                }
+                let n = self.bus.emit(ev.clone(), Value::Object(payload));
+                Ok(format!("emitted {ev} ({n} listener{})", if n == 1 { "" } else { "s" }))
             })(),
             "infantry_spawn" => (|| {
                 if let Some(t) = s(a, "ticketId") {
@@ -885,6 +962,75 @@ mod wake_route_tests {
         // ... so the COMMS mail copy of the same failure does not wake again
         assert!(send(&c, &pm, "worker.failed", "s1:FAILED").starts_with("not sent"));
         assert!(c.mail.mailbox().inbox(&pm).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// PARITY-AUDIT-1 #10: infantry_session_read, infantry_progress, infantry_event_emit and infantry_capability_call.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn session_read_progress_emit_and_capability_call() {
+        let (dir, daemon, c, pm) = setup();
+        let me = ToolInvoker::agent(&pm, "pm", Some("p1"), "agent");
+        let call = |name: &str, a: Value, inv: &ToolInvoker| c.tools.invoke(name, a.as_object().unwrap(), inv);
+
+        let r = call("infantry_session_read", json!({"sessionId": pm, "lines": 3}), &me);
+        assert!(!r.is_error, "{}", r.text);
+        let v: Value = serde_json::from_str(&r.text).unwrap();
+        assert_eq!(v["sessionId"], pm.as_str());
+        assert!(v["frames"].is_array());
+        assert!(call("infantry_session_read", json!({"sessionId": "nope-none"}), &me).is_error);
+        assert!(call("infantry_session_read", json!({}), &me).is_error);
+
+        let r = call("infantry_progress", json!({"percent": 40, "label": "compile"}), &me);
+        assert!(!r.is_error && r.text.contains("40%"), "{}", r.text);
+        let p = daemon.record(&pm).unwrap().progress.unwrap();
+        assert_eq!((p.percent, p.label.as_deref()), (Some(40.0), Some("compile")));
+        assert!(call("infantry_progress", json!({}), &me).is_error, "an empty report is refused");
+        let other = daemon.launch(NewOpts::default()).unwrap();
+        assert!(call("infantry_progress", json!({"percent": 1, "sessionId": other}), &me).text.contains("refused"));
+        assert!(!call("infantry_progress", json!({"clear": true}), &me).is_error);
+        assert!(daemon.record(&pm).unwrap().progress.is_none());
+
+        let mut rx = c.bus.subscribe_events();
+        let r = call("infantry_event_emit", json!({"name": "build.green", "payload": {"n": 1}}), &me);
+        assert!(!r.is_error, "{}", r.text);
+        let e = loop {
+            let e = rx.recv().await.unwrap();
+            if e.name == "build.green" {
+                break e;
+            }
+        };
+        assert_eq!((e.payload["n"].as_i64(), e.payload["projectId"].as_str(), e.payload["emittedBy"].as_str()), (Some(1), Some("p1"), Some(pm.as_str())));
+        assert!(call("infantry_event_emit", json!({"name": "ticket.moved"}), &me).is_error, "a daemon event is reserved");
+        assert!(call("infantry_event_emit", json!({"name": "Bad Name"}), &me).is_error);
+        assert!(call("infantry_event_emit", json!({"name": "x.y", "payload": 3}), &me).is_error);
+
+        // No plugins load here: the call is refused with the reason, never "no such tool".
+        let r = call("infantry_capability_call", json!({"capability": "docs.list"}), &me);
+        assert!(r.is_error && r.text.contains("docs.list"), "{}", r.text);
+        assert!(call("infantry_capability_call", json!({}), &me).text.contains("capability is required"));
+        assert!(call("infantry_capability_call", json!({"capability": "a.b", "target": "client"}), &me).text.contains("not served"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// PARITY-AUDIT-1 #10: an `infantry_exec` job with `progress` puts its marker lines on the calling session's card.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn exec_progress_lands_on_the_callers_card() {
+        let (dir, daemon, c, pm) = setup();
+        let st = crate::compose::settings::SettingsUnit { db: c.db.clone() };
+        st.set("scripting.exec.enabled", Some(&json!(true)), &json!({})).unwrap();
+        let me = ToolInvoker::agent(&pm, "pm", None, "agent");
+        let cmd = if cfg!(windows) {
+            json!(["cmd", "/c", "echo ##infantry plan a^|b& echo ##infantry step a"])
+        } else {
+            json!(["sh", "-c", "echo '##infantry plan a|b'; echo '##infantry step a'"])
+        };
+        let a = json!({"command": cmd, "cwd": dir.display().to_string(), "progress": {"label": "job"}});
+        let r = c.tools.invoke("infantry_exec", a.as_object().unwrap(), &me);
+        assert!(!r.is_error, "{}", r.text);
+        let p = daemon.record(&pm).unwrap().progress.expect("progress on the card");
+        assert_eq!((p.state.as_str(), p.steps_total, p.steps_done, p.label.as_deref()), ("done", Some(2), Some(1), Some("job")));
+        let bad = json!({"command": cmd, "cwd": dir.display().to_string(), "progress": {"percentRegex": "("}});
+        assert!(c.tools.invoke("infantry_exec", bad.as_object().unwrap(), &me).text.contains("not a regex"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

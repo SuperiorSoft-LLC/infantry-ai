@@ -25,6 +25,7 @@ pub mod chat;
 pub mod dispatcher;
 pub mod engine;
 pub mod exec;
+pub mod exec_progress;
 pub mod hooks;
 pub mod host;
 pub mod library;
