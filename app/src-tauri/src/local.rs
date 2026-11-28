@@ -251,6 +251,8 @@ impl Agent {
             // task panel yet, so both are dropped here on purpose. `TaskNotice` is the CLI's own end notice, which the
             // driver already folds into `Background`.
             Ev::TaskNotice { .. } | Ev::Background(_) => {}
+            // Compacting (580d3a15): the daemon shows the "Compacting…" status line; the embedded runner has none yet.
+            Ev::Compacting(_) => {}
         }
     }
 
