@@ -46,9 +46,22 @@ pub fn body_of(p: &Parsed) -> serde_json::Value {
 fn send(ctx: &mut Ctx, p: &Parsed) -> CmdResult {
     let sid = p.args[0].trim().to_string();
     let text = p.args[1..].join(" ").trim().to_string();
-    let mut env = Envelope::new("prompt", text).with_session(Some(sid.clone()));
+    let mut env = Envelope::new("prompt", text.clone()).with_session(Some(sid.clone()));
     env.request_id = Some(format!("send:{}", uuid::Uuid::new_v4()));
-    let ans = ctx.stream().request(&env, "prompt_ack", "prompt", false)?;
+    let ans = match ctx.stream().request(&env, "prompt_ack", "prompt", false) {
+        Ok(a) => a,
+        // HARNESS-GAP 3fd235bb: a busy session refuses the `prompt` frame (`run_in_flight`; the composer queues it
+        // itself). The CLI queues it the way `infantry_prompt` does: next turn, never mid-turn.
+        Err(super::conn::ConnError::Failed(m)) if m.contains("run_in_flight") => {
+            let mut a = serde_json::Map::new();
+            a.insert("sessionId".into(), sid.clone().into());
+            a.insert("prompt".into(), text.into());
+            let (out, is_error) = super::cmd_ticket::plugin_tool_call(ctx, "infantry_prompt", a)?;
+            ctx.out(format!("prompt {out}"));
+            return Ok(if is_error { 1 } else { 0 });
+        }
+        Err(e) => return Err(e.into()),
+    };
     ctx.out(format!("prompt {} to {sid}", if ans.data.trim() == "duplicate" { "already sent" } else { "sent" }));
     Ok(0)
 }

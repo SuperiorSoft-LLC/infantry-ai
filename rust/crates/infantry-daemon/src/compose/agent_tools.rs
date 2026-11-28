@@ -388,7 +388,9 @@ impl AgentTools {
                 }
                 let busy = self.daemon.turn_active(&r.id).unwrap_or(false);
                 self.daemon.deliver(&r.id, &text)?;
-                Ok(format!("{} {}", if busy { "queued for" } else { "sent to" }, r.id))
+                // HARNESS-GAP 3fd235bb: a busy session takes it into the composer's queue (`queued`), as the next turn.
+                let queued = self.daemon.record(&r.id).map(|x| x.queued.len()).unwrap_or(0);
+                Ok(if busy && queued > 0 { format!("queued (position {queued}) for {}", r.id) } else { format!("sent to {}", r.id) })
             })(),
             "infantry_kill" => (|| {
                 let r = self.find(&s(a, "sessionId").unwrap_or_default())?;
@@ -977,6 +979,33 @@ mod wake_route_tests {
         assert!(act(json!({"sessionId": "ghost", "action": "queue_add", "text": "x"}), &inv).is_error);
         let worker = ToolInvoker::agent("w1", "backend", None, "agent");
         assert!(act(json!({"sessionId": pm, "action": "queue_add", "text": "x"}), &worker).text.contains("only the pm"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// HARNESS-GAP 3fd235bb: infantry_prompt to a busy session is queued in `queued` (the composer's queue), answered
+    /// "queued (position N)", and runs as the next turn once the running one ends.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn prompt_to_a_busy_session_queues_and_runs_next_turn() {
+        let (dir, daemon, c, pm) = setup();
+        let inv = ToolInvoker::agent("w1", "pm", None, "agent");
+        let call = |t: &str| c.tools.invoke("infantry_prompt", json!({"sessionId": pm, "prompt": t}).as_object().unwrap(), &inv);
+        let first = call("first turn");
+        assert!(!first.is_error && first.text.starts_with("sent to"), "{}", first.text);
+        assert_eq!(daemon.turn_active(&pm), Some(true));
+        let second = call("second turn");
+        assert!(!second.is_error, "{}", second.text);
+        assert!(second.text.starts_with("queued (position 1)"), "{}", second.text);
+        let rec = daemon.record(&pm).unwrap();
+        assert_eq!(rec.queued.iter().map(|q| q.text.as_str()).collect::<Vec<_>>(), vec!["second turn"]);
+        let mut drained = false;
+        for _ in 0..400 {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            if daemon.record(&pm).unwrap().queued.is_empty() && daemon.turn_active(&pm) == Some(true) {
+                drained = true;
+                break;
+            }
+        }
+        assert!(drained, "the queued prompt runs as the next turn");
         let _ = std::fs::remove_dir_all(dir);
     }
 
