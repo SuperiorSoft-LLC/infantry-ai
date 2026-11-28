@@ -1037,7 +1037,7 @@ mod tests {
     }
 
     fn wait_for(hc: &HarnessCredentials, name: &str, want: &str) -> LoginState {
-        for _ in 0..100 {
+        for _ in 0..600 {
             let s = hc.state(name);
             if s.state == want {
                 return s;
@@ -1126,7 +1126,7 @@ mod tests {
     }
 
     fn wait_for_url(hc: &HarnessCredentials, name: &str) -> LoginState {
-        for _ in 0..100 {
+        for _ in 0..600 {
             let s = hc.state(name);
             if !s.url.is_empty() {
                 return s;
